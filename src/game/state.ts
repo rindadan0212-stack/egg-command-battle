@@ -6,7 +6,7 @@
 
 import { Rng } from '../core/rng.ts'
 import { breed, type BreedOutcome } from './breeding.ts'
-import { award, type Creature } from './creature.ts'
+import { award, wildTotalOf, type Creature } from './creature.ts'
 import { hatch, makeEgg, makeNestDefenders, nestById, type Egg, type Nest } from './nest.ts'
 import { accept, emptyStorage, isFull, release, type Storage } from './storage.ts'
 
@@ -15,6 +15,8 @@ export interface Game {
   storage: Storage
   /** 手に入れてまだ孵していない卵 */
   eggs: Egg[]
+  /** 出撃させる3体の id。⚠️ 空なら素質の高い順に自動で選ぶ */
+  party: string[]
   /** 通し番号。id を一意にするためだけに使う */
   serial: number
   /** 系統ごとの乱数 */
@@ -33,6 +35,7 @@ export function newGame(seed: number): Game {
     seed,
     storage: emptyStorage(),
     eggs: [],
+    party: [],
     serial: 0,
     rng: {
       nest: root.stream('nest'),
@@ -82,6 +85,8 @@ export function hatchEgg(game: Game, eggId: string): Creature {
 
 export function releaseCreature(game: Game, id: string): void {
   game.storage = release(game.storage, id)
+  const at = game.party.indexOf(id)
+  if (at >= 0) game.party.splice(at, 1)
 }
 
 export function creatureById(game: Game, id: string): Creature {
@@ -105,4 +110,35 @@ export function breedPair(game: Game, aId: string, bId: string): BreedOutcome {
 /** 戦闘の報酬。⭐ 出撃していた個体だけがもらう（連れ出すことが育成に直結する）。 */
 export function awardParty(party: readonly Creature[], amount = 1): void {
   for (const creature of party) award(creature, amount)
+}
+
+export const PARTY_SIZE = 3
+
+/** 出撃する3体。⚠️ 選んでいなければ素質の高い順に埋める（遊び始めで詰まらないように）。 */
+export function partyOf(game: Game): Creature[] {
+  const chosen = game.party
+    .map((id) => game.storage.creatures.find((c) => c.id === id))
+    .filter((c): c is Creature => c !== undefined)
+  if (chosen.length >= PARTY_SIZE) return chosen.slice(0, PARTY_SIZE)
+
+  const rest = [...game.storage.creatures]
+    .filter((c) => !chosen.includes(c))
+    .sort((a, b) => wildTotalOf(b) - wildTotalOf(a) || a.id.localeCompare(b.id))
+  return [...chosen, ...rest].slice(0, PARTY_SIZE)
+}
+
+/** 出撃の入り切りを切り替える。⚠️ 上限を超えたら古いものから外す。 */
+export function togglePartyMember(game: Game, id: string): void {
+  const at = game.party.indexOf(id)
+  if (at >= 0) {
+    game.party.splice(at, 1)
+    return
+  }
+  game.party.push(id)
+  while (game.party.length > PARTY_SIZE) game.party.shift()
+}
+
+/** 逃がすときは編成からも外す。⚠️ 外し忘れると居ない個体を出撃させようとする。 */
+export function isInParty(game: Game, id: string): boolean {
+  return game.party.includes(id)
 }

@@ -357,6 +357,136 @@ function runElements() {
   console.log('  行が勝ったか。括弧内は決着までの行動数')
 }
 
+// ── --progress: 輪が本当に1周するか ───────────────────
+async function runProgress() {
+  const { newGame, defendersOf, gainEgg, hatchEgg, breedPair, partyOf, awardParty } = await import(
+    src('game/state.ts')
+  )
+  const { NESTS, makeBossParty, BOSS_NAME } = await import(src('game/nest.ts'))
+  const { wildTotalOf, spendPoint, unspentOf } = await import(src('game/creature.ts'))
+  const { isFull } = await import(src('game/storage.ts'))
+
+  console.log('⭐ 輪が1周するか（初期パーティ → 巣を回す → 配合 → ボス）')
+  console.log('')
+  console.log('  ⚠️ プレイヤーの判断を方針で代用している。')
+  console.log('     編成は **属性を散らして** 各種族の最良を1体ずつ取る。')
+  console.log('     ⚠️ 最初これを「素質合計の上位3体」にしていたら、同種ばかりになって')
+  console.log('     ボス勝率が永久に0%だった。この game が要求しているのは合計ではなく編成。')
+  console.log('')
+
+  const game = newGame(20260816)
+
+  /** 属性を散らした編成。⭐ 同種で固めると 3すくみで永久に勝てない巣が出る */
+  function diversePartyIds() {
+    const bySpecies = new Map()
+    for (const c of [...game.storage.creatures].sort((a, b) => wildTotalOf(b) - wildTotalOf(a))) {
+      if (!bySpecies.has(c.speciesId)) bySpecies.set(c.speciesId, c)
+    }
+    const picked = [...bySpecies.values()]
+    const rest = [...game.storage.creatures]
+      .filter((c) => !picked.includes(c))
+      .sort((a, b) => wildTotalOf(b) - wildTotalOf(a))
+    return [...picked, ...rest].slice(0, 3).map((c) => c.id)
+  }
+
+  function winRateVs(party, makeFoes, n) {
+    let wins = 0
+    for (let i = 0; i < n; i++) {
+      if (runBattle(party, makeFoes()).outcome === 'ally') wins++
+    }
+    return wins / n
+  }
+
+  const CYCLES = 14
+  let cleared = 0
+
+  for (let cycle = 1; cycle <= CYCLES; cycle++) {
+    const party = partyOf(game)
+    const rates = NESTS.map((n) => ({ nest: n, rate: winRateVs(party, () => defendersOf(game, n), 30) }))
+    const boss = winRateVs(party, () => makeBossParty(), 12)
+
+    const best = wildTotalOf(party[0] ?? { wild: {} }) || 0
+    const comp = party.map((c) => SPECIES_LIST.find((s) => s.id === c.speciesId)?.name ?? '?').join('')
+    console.log(
+      `  周${String(cycle).padStart(2)}  ${String(game.storage.creatures.length).padStart(2)}体` +
+        ` 編成${comp.padEnd(9)} 最良${String(best).padStart(3)}  ` +
+        rates.map((r) => `段${r.nest.tier}:${(r.rate * 100).toFixed(0).padStart(3)}%`).join(' ') +
+        `  ボス:${(boss * 100).toFixed(0).padStart(3)}%`,
+    )
+
+    if (boss >= 0.5 && cleared === 0) cleared = cycle
+
+    // ── 一番高い段階で、勝てる見込みのある巣から卵を取る
+    const target = [...rates].reverse().find((r) => r.rate >= 0.5) ?? rates[0]
+    if (target) {
+      gainEgg(game, target.nest, 'defeated')
+      awardParty(party)
+    }
+    // ── 格上からは盗む（勝てない段階の卵も手に入れる）
+    const steal = [...rates].reverse().find((r) => r.rate < 0.5)
+    if (steal) gainEgg(game, steal.nest, 'stolen')
+
+    // ── 孵す（枠が足りなければ素質の低い個体を逃がす）
+    while (game.eggs.length > 0) {
+      if (isFull(game.storage)) {
+        const worst = [...game.storage.creatures].sort((a, b) => wildTotalOf(a) - wildTotalOf(b))[0]
+        game.storage = { ...game.storage, creatures: game.storage.creatures.filter((c) => c !== worst) }
+      }
+      hatchEgg(game, game.eggs[0].id)
+    }
+
+    // ── 最良2体を配合して、その子も孵す
+    const ranked = [...game.storage.creatures].sort((a, b) => wildTotalOf(b) - wildTotalOf(a))
+    if (ranked.length >= 2) {
+      breedPair(game, ranked[0].id, ranked[1].id)
+      while (game.eggs.length > 0) {
+        if (isFull(game.storage)) {
+          const worst = [...game.storage.creatures].sort((a, b) => wildTotalOf(a) - wildTotalOf(b))[0]
+          game.storage = { ...game.storage, creatures: game.storage.creatures.filter((c) => c !== worst) }
+        }
+        hatchEgg(game, game.eggs[0].id)
+      }
+    }
+
+    // ── 育成ポイントを振る（一番高いステに寄せる）
+    for (const c of game.storage.creatures) {
+      while (unspentOf(c) > 0) {
+        const key = STAT_KEYS.reduce((a, b) => (c.wild[a] >= c.wild[b] ? a : b))
+        spendPoint(c, key)
+      }
+    }
+
+    // ── 編成を更新（属性を散らす）
+    game.party = diversePartyIds()
+  }
+
+  console.log('')
+  // ⚠️ 届かなかったときは「何が足りないのか」まで出す。勝率だけでは直せない
+  const { skillsOf, statsOf } = await import(src('game/creature.ts'))
+  console.log('  最終編成:')
+  for (const c of partyOf(game)) {
+    const [s1, s2, s3] = skillsOf(c)
+    console.log(
+      `    ${c.id} ${SPECIES_LIST.find((s) => s.id === c.speciesId)?.name}` +
+        ` 素質${wildTotalOf(c)} 実値${JSON.stringify(statsOf(c))}` +
+        ` ◆${s1.name}·${s2?.name ?? '—'}·${s3?.name ?? '—'}`,
+    )
+  }
+  const bossFight = runBattle(partyOf(game), makeBossParty())
+  console.log('  ボス戦の結末:')
+  console.log(
+    `    ${bossFight.actions}行動 / ${bossFight.outcome} / ` +
+      `敵の残HP ${bossFight.units.filter((u) => u.side === 'enemy').map((u) => `${u.hp}/${u.maxHp}`).join(' ')}`,
+  )
+
+  console.log('')
+  if (cleared > 0) {
+    console.log(`  ⭐ ${cleared} 周目で ${BOSS_NAME} に勝率50%以上。**輪は閉じている**`)
+  } else {
+    console.log(`  ⚠️ ${CYCLES} 周してもボスに届かなかった。壁が高すぎるか、伸びしろが足りない`)
+  }
+}
+
 // ── --random ──────────────────────────────────────────
 function runRandom() {
   const rng = new Rng(777).stream('random-sim')
@@ -395,6 +525,7 @@ const modes = {
   '--pace': runPace,
   '--speed': runSpeedCheck,
   '--party': runParty,
+  '--progress': runProgress,
   '--elements': runElements,
   '--random': runRandom,
 }

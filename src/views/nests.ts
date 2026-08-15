@@ -9,11 +9,18 @@
 
 import type { Outcome } from '../game/battle.ts'
 import { wildTotalOf, type Creature } from '../game/creature.ts'
-import { NESTS, wildTotalForTier, type Egg, type Nest } from '../game/nest.ts'
+import {
+  BOSS_NAME,
+  makeBossParty,
+  NESTS,
+  wildTotalForTier,
+  type Egg,
+  type Nest,
+} from '../game/nest.ts'
 import { skillById } from '../game/skills.ts'
 import { ELEMENT_LABELS, speciesById } from '../game/species.ts'
 import { WILD_TOTAL_MAX } from '../game/stats.ts'
-import { awardParty, defendersOf, gainEgg, hatchEgg, type Game } from '../game/state.ts'
+import { awardParty, defendersOf, gainEgg, hatchEgg, partyOf, type Game } from '../game/state.ts'
 import { isFull } from '../game/storage.ts'
 import { spriteToCanvas } from '../render/sprite.ts'
 import { renderBattle, type BattleView } from './battle.ts'
@@ -91,7 +98,101 @@ export function renderNests(game: Game, onChange: () => void): NestView {
     const list = document.createElement('div')
     list.className = 'nestlist'
     list.append(...NESTS.map(buildNestRow))
-    element.append(list)
+    element.append(list, buildBossRow())
+  }
+
+  /** ⭐ 輪の終点。ここで詰まったとき「何が足りないか」を考えるのが遊びの中心。 */
+  function buildBossRow(): HTMLElement {
+    // ⚠️ 数値を画面に直書きしない。実物から引く
+    //    （変異回数を直書きしていて、ボスを調整した後もずっと古い値を出していた）
+    const [lord] = makeBossParty()
+    const species = speciesById(lord?.speciesId ?? 'nushi')
+    const row = document.createElement('article')
+    row.className = 'nestrow boss'
+    row.id = 'n-boss'
+
+    const art = document.createElement('div')
+    art.className = 'portrait'
+    art.append(spriteToCanvas(species.sprite, species.palettes[0] as string[], 2))
+
+    const ident = document.createElement('div')
+    ident.className = 'ident'
+    const name = document.createElement('span')
+    name.className = 'name'
+    name.textContent = BOSS_NAME
+    const tags = document.createElement('span')
+    tags.className = 'tags'
+    tags.textContent =
+      `${species.name} · ${ELEMENT_LABELS[species.element]}` +
+      ` · 変異${lord?.mutationCounter ?? 0} · 素質${lord ? wildTotalOf(lord) : 0}`
+    const hint = document.createElement('span')
+    hint.className = 'cid mono'
+    // ⚠️ 何を要求してくる相手かを先に見せる。隠すと「運が悪かった」で終わる
+    hint.textContent = `高防御 · 速度を奪う · ◆${skillById(species.skill1).name}（CT${skillById(species.skill1).ct}の全体大技）`
+    ident.append(name, tags, hint)
+
+    const go = document.createElement('div')
+    go.className = 'controls'
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = '挑む'
+    button.addEventListener('click', startBoss)
+    go.append(button)
+
+    row.append(art, ident, go)
+    return row
+  }
+
+  function startBoss(): void {
+    clearBattle()
+    element.replaceChildren()
+
+    const party = partyOf(game)
+    if (party.length === 0) {
+      paintList()
+      return
+    }
+
+    const lead = document.createElement('p')
+    lead.className = 'lead'
+    lead.textContent = BOSS_NAME
+    element.append(lead)
+
+    // ⚠️ ボスからは卵を盗めない（stealRng を渡さない）。倒すしか道が無い
+    const view = renderBattle(party, makeBossParty(), (outcome) => paintBossResult(outcome, party))
+    battle = view
+    element.append(view.element)
+  }
+
+  function paintBossResult(outcome: Outcome, party: readonly Creature[]): void {
+    const box = document.createElement('div')
+    box.className = 'result'
+
+    const line = document.createElement('p')
+    line.className = 'lead'
+    const sub = document.createElement('p')
+    sub.className = 'note'
+
+    if (outcome === 'ally') {
+      line.textContent = `${BOSS_NAME} を倒した`
+      awardParty(party, 3)
+      sub.textContent = `出撃した ${party.map((c) => c.id).join(' / ')} に育成 +3`
+      onChange()
+    } else {
+      line.textContent = '届かなかった'
+      sub.textContent = '何が足りなかったかを考えて、必要な血を奪いに行く。'
+    }
+
+    const back = document.createElement('div')
+    back.className = 'controls'
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = '巣へ戻る'
+    button.addEventListener('click', paintList)
+    back.append(button)
+
+    box.append(line, sub, back)
+    element.append(box)
   }
 
   function buildEggShelf(): HTMLElement {
@@ -179,10 +280,7 @@ export function renderNests(game: Game, onChange: () => void): NestView {
     clearBattle()
     element.replaceChildren()
 
-    const party = [...game.storage.creatures]
-      .sort((a, b) => wildTotalOf(b) - wildTotalOf(a) || a.id.localeCompare(b.id))
-      .slice(0, 3)
-
+    const party = partyOf(game)
     if (party.length === 0) {
       paintList()
       return

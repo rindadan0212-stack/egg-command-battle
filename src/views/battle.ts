@@ -18,6 +18,7 @@ import {
   isAlive,
   isUsable,
   livingOf,
+  needsTarget,
   nextActor,
   performAction,
   skillAt,
@@ -80,6 +81,8 @@ export function renderBattle(
 ): BattleView {
   const state = createBattle(allies, enemies, stealRng)
   let awaiting: Unit | null = null
+  /** ⭐ 対象を選ばせている最中の行動。単体攻撃はここを経由する */
+  let pending: Action | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
 
@@ -104,6 +107,20 @@ export function renderBattle(
     box.id = `b-${unit.key}`
     box.dataset['down'] = String(!isAlive(unit))
     box.dataset['turn'] = String(awaiting === unit)
+
+    // ⭐ 対象を選ばせている間、狙える相手を押せるようにする
+    const selectable = pending !== null && unit.side === 'enemy' && isAlive(unit)
+    box.dataset['selectable'] = String(selectable)
+    if (selectable) {
+      box.addEventListener('click', () => {
+        if (!awaiting || !pending) return
+        performAction(state, awaiting, pending, unit)
+        pending = null
+        awaiting = null
+        paint()
+        schedule()
+      })
+    }
 
     const art = document.createElement('div')
     art.className = 'art'
@@ -165,6 +182,23 @@ export function renderBattle(
     who.textContent = `${awaiting.name}(${awaiting.key}) の番`
     commands.append(who)
 
+    // 対象選択中は、コマンドの代わりに「誰を狙うか」を促す
+    if (pending !== null) {
+      const ask = document.createElement('span')
+      ask.className = 'turnof'
+      ask.textContent = `→ ${actionSkill(awaiting, pending).name}：狙う相手を選ぶ`
+      const cancel = document.createElement('button')
+      cancel.type = 'button'
+      cancel.className = 'steal'
+      cancel.textContent = 'やめる'
+      cancel.addEventListener('click', () => {
+        pending = null
+        paint()
+      })
+      commands.append(ask, cancel)
+      return
+    }
+
     const options: Action[] = [
       { kind: 'basic' },
       { kind: 'skill', slot: 0 },
@@ -194,6 +228,12 @@ export function renderBattle(
 
       button.addEventListener('click', () => {
         if (!awaiting) return
+        // ⭐ 単体攻撃は対象を選ばせる。自動任せだと HP の高い相手が永久に狙われない
+        if (needsTarget(skill) && livingOf(state, 'enemy').length > 1) {
+          pending = action
+          paint()
+          return
+        }
         performAction(state, awaiting, action)
         awaiting = null
         paint()

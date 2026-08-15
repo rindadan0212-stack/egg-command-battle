@@ -307,7 +307,12 @@ export function nextActor(state: BattleState): Unit | null {
   return best
 }
 
-function targetsOf(state: BattleState, actor: Unit, skill: Skill): Unit[] {
+/** その行動が「敵1体を選ぶ」ものか。⭐ プレイヤーに選ばせる必要があるかの判定。 */
+export function needsTarget(skill: Skill): boolean {
+  return skill.target === 'enemyOne'
+}
+
+function targetsOf(state: BattleState, actor: Unit, skill: Skill, chosen?: Unit | null): Unit[] {
   const foes = livingOf(state, actor.side === 'ally' ? 'enemy' : 'ally')
   const friends = livingOf(state, actor.side)
 
@@ -317,8 +322,14 @@ function targetsOf(state: BattleState, actor: Unit, skill: Skill): Unit[] {
     case 'enemyAll':
       return foes
     case 'enemyOne': {
-      // 残 HP の低い相手から倒す。同値は並び順で決める
-      const sorted = [...foes].sort((a, b) => a.hp - b.hp || a.slot - b.slot)
+      // ⭐ 指定があればそれを狙う（プレイヤーの手番）。
+      // ⚠️ 指定が無いとき（AI）だけ「残 HP の低い相手から」に落ちる。
+      // 自動任せだけにしていたら、HP の高いボスが眷属を全滅させるまで
+      // 一度も狙われず、**総ダメージ0** になっていた（実測）。
+      const sorted =
+        chosen && isAlive(chosen) && chosen.side !== actor.side
+          ? [chosen]
+          : [...foes].sort((a, b) => a.hp - b.hp || a.slot - b.slot)
       const picked = sorted[0]
       if (!picked) return []
       // ⭐ かばっている者がいれば、そちらへ逸らす（「壁」の実体）。
@@ -415,8 +426,14 @@ function attemptSteal(state: BattleState, actor: Unit): void {
   state.outcome = decideOutcome(state)
 }
 
-/** その者に行動させる。ゲージを引き、CT を進める。 */
-export function performAction(state: BattleState, actor: Unit, action: Action): void {
+/** その者に行動させる。ゲージを引き、CT を進める。
+ *  `chosen` を渡すと単体攻撃の対象を指定できる（プレイヤーの手番）。 */
+export function performAction(
+  state: BattleState,
+  actor: Unit,
+  action: Action,
+  chosen?: Unit | null,
+): void {
   if (!isUsable(actor, action, state)) {
     throw new Error(`${actor.key} は今その行動を選べない`)
   }
@@ -427,7 +444,7 @@ export function performAction(state: BattleState, actor: Unit, action: Action): 
   const skill = actionSkill(actor, action)
   state.log.push({ kind: 'act', actor: actor.key, skill: skill.name })
 
-  for (const target of targetsOf(state, actor, skill)) {
+  for (const target of targetsOf(state, actor, skill, chosen)) {
     for (const effect of skill.effects) {
       applyEffect(state, actor, target, effect)
     }

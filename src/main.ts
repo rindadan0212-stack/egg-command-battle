@@ -71,7 +71,7 @@ function paint(): void {
   root.replaceChildren(heading, buildNav())
 
   if (ui.view === 'storage') {
-    renderStorage(root, game.storage, ui)
+    renderStorage(root, game, ui)
     return
   }
 

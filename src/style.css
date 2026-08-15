@@ -302,6 +302,16 @@ h1 {
   opacity: 0.28;
 }
 
+/* 対象を選ばせている間だけ、狙える相手を押せる形にする */
+.fighter[data-selectable='true'] {
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--yolk);
+}
+
+.fighter[data-selectable='true']:hover {
+  background: var(--bg-raised);
+}
+
 .fighter .fname {
   font-size: 0.8rem;
   color: var(--ink-dim);

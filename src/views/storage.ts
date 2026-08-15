@@ -17,10 +17,18 @@ import {
 } from '../game/creature.ts'
 import { ELEMENT_LABELS } from '../game/species.ts'
 import { STAT_KEYS, STAT_LABELS, wildStatMaxFor, wildTotalMaxFor } from '../game/stats.ts'
-import { sorted, SORT_KEYS, SORT_LABELS, type SortKey, type Storage } from '../game/storage.ts'
+import { partyOf, togglePartyMember, type Game } from '../game/state.ts'
+import { sorted, SORT_KEYS, SORT_LABELS, type SortKey } from '../game/storage.ts'
 import { spriteToCanvas } from '../render/sprite.ts'
 
-export function buildUnitRow(creature: Creature, onTrain?: () => void): HTMLElement {
+export interface RowActions {
+  readonly onTrain: () => void
+  readonly inParty: boolean
+  readonly onToggleParty: () => void
+}
+
+export function buildUnitRow(creature: Creature, actions?: RowActions): HTMLElement {
+  const onTrain = actions?.onTrain
   const species = speciesOf(creature)
   const actual = statsOf(creature)
   const wildTotal = wildTotalOf(creature)
@@ -29,6 +37,7 @@ export function buildUnitRow(creature: Creature, onTrain?: () => void): HTMLElem
   unit.className = 'unit'
   // 1体ずつ実寸で撮れるようにする（ギャラリーと同じ取っ手）
   unit.id = `u-${creature.id}`
+  if (actions?.inParty) unit.dataset['party'] = 'true'
 
   const portrait = document.createElement('div')
   portrait.className = 'portrait'
@@ -47,6 +56,18 @@ export function buildUnitRow(creature: Creature, onTrain?: () => void): HTMLElem
   idEl.className = 'cid mono'
   idEl.textContent = creature.id
   ident.append(name, tags, idEl)
+
+  if (actions) {
+    const sortie = document.createElement('button')
+    sortie.type = 'button'
+    sortie.className = 'sortie'
+    sortie.dataset['on'] = String(actions.inParty)
+    sortie.textContent = actions.inParty ? '出撃中' : '出撃'
+    // ⭐ 連れ出した個体だけが育成ポイントをもらうので、ここが育成の入口でもある
+    sortie.title = '巣やボスへ連れて行く3体に入れる'
+    sortie.addEventListener('click', actions.onToggleParty)
+    ident.append(sortie)
+  }
 
   const stats = document.createElement('div')
   stats.className = 'stats'
@@ -119,14 +140,16 @@ export function buildUnitRow(creature: Creature, onTrain?: () => void): HTMLElem
   return unit
 }
 
-export function renderStorage(root: HTMLElement, storage: Storage, state: { sort: SortKey }): void {
+export function renderStorage(root: HTMLElement, game: Game, state: { sort: SortKey }): void {
+  const storage = game.storage
+
   const lead = document.createElement('p')
   lead.className = 'lead'
-  lead.textContent = `${storage.creatures.length} / ${storage.slots} 枠`
 
   const note = document.createElement('p')
   note.className = 'note'
-  note.textContent = '◆ が種族固定のスキル1。奪ってこないと手に入らない。'
+  note.textContent =
+    '◆ が種族固定のスキル1。奪ってこないと手に入らない。出撃した3体だけが育成ポイントをもらう。'
 
   const controls = document.createElement('div')
   controls.className = 'controls'
@@ -134,7 +157,22 @@ export function renderStorage(root: HTMLElement, storage: Storage, state: { sort
   list.className = 'roster'
 
   const paint = (): void => {
-    list.replaceChildren(...sorted(storage, state.sort).map((c) => buildUnitRow(c, paint)))
+    const party = partyOf(game).map((c) => c.id)
+    lead.textContent =
+      `${storage.creatures.length} / ${storage.slots} 枠` +
+      `　出撃 ${party.join(' / ') || '（未選択）'}`
+    list.replaceChildren(
+      ...sorted(storage, state.sort).map((c) =>
+        buildUnitRow(c, {
+          onTrain: paint,
+          inParty: party.includes(c.id),
+          onToggleParty: () => {
+            togglePartyMember(game, c.id)
+            paint()
+          },
+        }),
+      ),
+    )
   }
 
   for (const key of SORT_KEYS) {

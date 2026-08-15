@@ -130,6 +130,15 @@ const LIST: readonly Skill[] = [
     effects: [{ kind: 'damage', power: 11, scale: 'atk' }],
   },
   {
+    id: 'quake',
+    name: '震撼',
+    gist: '敵全体に重い一撃。次が遠い',
+    // ⚠️ CT が長いぶん一撃が重い。⭐ 「いつ来るか」を数えさせるための札
+    ct: 7,
+    target: 'enemyAll',
+    effects: [{ kind: 'damage', power: 30, scale: 'atk' }],
+  },
+  {
     id: 'stall',
     name: '足止め',
     gist: '敵1体の行動を大きく遅らせる',
@@ -165,6 +174,8 @@ export const GACHA_POOLS: Readonly<Record<string, readonly SkillId[]>> = {
   tsunoga: ['haste', 'slow', 'sweep', 'guard', 'shellbash'],
   // 羽・撹乱の系統
   haneru: ['haste', 'slow', 'stall', 'mend', 'strike'],
+  // ヌシ。⚠️ 卵は落とさないが、表に無いと数える検査が落ちる
+  nushi: ['slow', 'guard', 'cover', 'stall', 'shellbash'],
 }
 
 /** その種族の卵から出うる技。⚠️ 表に無い種族は黙って空にせず投げる。 */
