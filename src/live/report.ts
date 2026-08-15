@@ -66,6 +66,22 @@ export function startLiveReporting(screen: string, source: LiveSource): void {
   send()
   setInterval(send, INTERVAL_MS)
   document.addEventListener('visibilitychange', send)
+  attachLifeline()
+}
+
+/** サーバーに「この画面はまだ開いている」を接続そのもので示す。
+ *
+ *  ⭐ **心拍では代用できない。** ブラウザは背面タブのタイマーを絞る・凍らせるので、
+ *  「一定時間申告が無い＝閉じた」は**開いているタブを殺す**。
+ *  接続なら、タブを閉じてもブラウザが落ちても切れるが、背面に回っただけでは切れない。
+ *
+ *  切れた側（サーバー）が、.bat から起動されたときだけ自分を終了する。
+ *  普通の `npm run dev` では何も起きない。
+ */
+function attachLifeline(): void {
+  const source = new EventSource('/__live/attach')
+  // 切断は EventSource が自分で繋ぎ直す。ここで騒がない
+  source.onerror = () => {}
 }
 
 /** まだ中身が無い段でも申告できるようにする既定値。段A 以降で実物に差し替える。 */

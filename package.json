@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "stop": "node scripts/stop.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "same": "node scripts/same.mjs",
