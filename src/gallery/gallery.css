@@ -25,11 +25,15 @@
   justify-items: center;
 }
 
+/* ⚠️ 市松は**中間の明度**にする。暗くすると意匠の輪郭（どれも暗色）が
+   背景に沈んで、繋がっている形が「離れた点」に見える。
+   実際にハネルの羽と体が切れて見え、画素を読むまで意匠の不具合と誤診しかけた。
+   （地に置くものは、地の色を引いてから色を決める） */
 .plate .frame {
-  background-color: #262320;
+  background-color: #5a5650;
   background-image:
-    linear-gradient(45deg, #201d1a 25%, transparent 25%, transparent 75%, #201d1a 75%),
-    linear-gradient(45deg, #201d1a 25%, transparent 25%, transparent 75%, #201d1a 75%);
+    linear-gradient(45deg, #4c4842 25%, transparent 25%, transparent 75%, #4c4842 75%),
+    linear-gradient(45deg, #4c4842 25%, transparent 25%, transparent 75%, #4c4842 75%);
   background-size: 16px 16px;
   background-position: 0 0, 8px 8px;
   display: grid;
