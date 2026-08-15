@@ -25,14 +25,48 @@ export type Target =
   | 'allyLowest' // 残 HP 割合が最も低い味方（自分を含む）
   | 'self'
 
+/** 威力の段位。
+ *
+ *  ⭐ **技ごとに数値を置かない。**段位を選ぶだけにする。
+ *  こうすると独立した数値が「技の数」から**4つの定数**に減り、
+ *  較正は表を1つ動かすだけで済む（勘で置いた数値が散らばらない）。
+ *
+ *  ⚠️ **全体攻撃は1段下げて選ぶ。**
+ *  全体の「中」は単体の「中」よりずっと強いので、同じ段位にすると段位が意味を失う。 */
+export const POWER_TIERS = ['小', '中', '大', '特大'] as const
+export type PowerTier = (typeof POWER_TIERS)[number]
+
+/** 攻撃の段位 → 威力。⭐ **ここが威力の唯一の出所。** */
+export const DAMAGE_POWER: Readonly<Record<PowerTier, number>> = {
+  小: 12,
+  中: 20,
+  大: 30,
+  特大: 42,
+}
+
+/** 回復の段位 → 回復量。
+ *  ⚠️ 攻撃と別の表にしてある。攻撃は攻防の式を通るが回復は素通しなので、
+ *  同じ数値でも意味が違う。 */
+export const HEAL_POWER: Readonly<Record<PowerTier, number>> = {
+  小: 12,
+  中: 20,
+  大: 30,
+  特大: 42,
+}
+
 /** 効果のプリミティブ。ここを増やすときは本当に組み合わせで表せないか先に疑う。 */
 export type Effect =
   /** scale が 'def' のものは「防御が高いほど強い一撃」になる */
-  | { readonly kind: 'damage'; readonly power: number; readonly scale: 'atk' | 'def' }
-  | { readonly kind: 'heal'; readonly power: number }
+  | { readonly kind: 'damage'; readonly power: PowerTier; readonly scale: 'atk' | 'def' }
+  | { readonly kind: 'heal'; readonly power: PowerTier }
   | { readonly kind: 'stage'; readonly stat: StatKey; readonly delta: number }
   /** ゲージを進める / 戻す（正で自分が早く動く、負で相手を遅らせる） */
   | { readonly kind: 'gauge'; readonly delta: number }
+  /** ⭐ CT を動かす。負で短縮（自分の大技を早める）、正で延長（相手の大技を遅らせる）。
+   *
+   *  ⚠️ **枠1には効かない。** 枠1は「必ず打てる札」なので、
+   *  そこに CT を乗せると手が無くなる戦闘が生まれる。 */
+  | { readonly kind: 'ct'; readonly delta: number }
   /** ⭐ 味方への単体攻撃を、あと hits 回ぶん自分が肩代わりする。
    *
    *  ⚠️ **これが無いと「壁」という役割が成立しない。**
@@ -53,15 +87,15 @@ export interface Skill {
   readonly effects: readonly Effect[]
 }
 
-/** 通常攻撃。**全員がいつでも使える**ので枠を消費しない。
- *  ⭐ これが無いと、全スキルが CT 中のとき手が無くなって戦闘が止まる。 */
-export const BASIC_ATTACK: Skill = {
-  id: 'basic',
-  name: 'たたかう',
-  gist: '通常攻撃',
-  ct: 0,
-  target: 'enemyOne',
-  effects: [{ kind: 'damage', power: 9, scale: 'atk' }],
+/** ⭐ **枠1（種族固定）の CT は常に 0。**
+ *
+ *  ⚠️ CT は**技ではなく枠の性質**として扱う。
+ *  同じ技が、ある種族では枠1（CTなし）に、別の種族では枠2・3（CTあり）に入りうるため。
+ *
+ *  ⭐ これで「たたかう」が要らなくなった。
+ *  全スキルが CT 中でも枠1は必ず打てるので、手が無くなる戦闘が生まれない。 */
+export function effectiveCt(slot: number, skill: Skill): number {
+  return slot === 0 ? 0 : skill.ct
 }
 
 const LIST: readonly Skill[] = [
@@ -71,7 +105,7 @@ const LIST: readonly Skill[] = [
     gist: '単体に大ダメージ',
     ct: 3,
     target: 'enemyOne',
-    effects: [{ kind: 'damage', power: 20, scale: 'atk' }],
+    effects: [{ kind: 'damage', power: '中', scale: 'atk' }],
   },
   {
     id: 'haste',
@@ -103,7 +137,7 @@ const LIST: readonly Skill[] = [
     gist: '傷ついた味方を回復',
     ct: 4,
     target: 'allyLowest',
-    effects: [{ kind: 'heal', power: 18 }],
+    effects: [{ kind: 'heal', power: '中' }],
   },
   {
     id: 'shellbash',
@@ -111,7 +145,7 @@ const LIST: readonly Skill[] = [
     gist: '防御が高いほど強い一撃',
     ct: 3,
     target: 'enemyOne',
-    effects: [{ kind: 'damage', power: 20, scale: 'def' }],
+    effects: [{ kind: 'damage', power: '中', scale: 'def' }],
   },
   {
     id: 'cover',
@@ -127,7 +161,25 @@ const LIST: readonly Skill[] = [
     gist: '敵全体に小ダメージ',
     ct: 5,
     target: 'enemyAll',
-    effects: [{ kind: 'damage', power: 11, scale: 'atk' }],
+    effects: [{ kind: 'damage', power: '小', scale: 'atk' }],
+  },
+  {
+    id: 'surge',
+    name: '猛り',
+    gist: '自分の技の待ちを縮める',
+    ct: 4,
+    target: 'self',
+    // ⭐ 大技を早く2度撃つための札。CT が芯の戦闘なので、それを操る手が要る
+    effects: [{ kind: 'ct', delta: -2 }],
+  },
+  {
+    id: 'snare',
+    name: '絡み',
+    gist: '敵1体の技の待ちを延ばす',
+    ct: 5,
+    target: 'enemyOne',
+    // ⚠️ 枠1には効かない（相手の手を完全に奪わないため）
+    effects: [{ kind: 'ct', delta: 2 }],
   },
   {
     id: 'quake',
@@ -136,7 +188,7 @@ const LIST: readonly Skill[] = [
     // ⚠️ CT が長いぶん一撃が重い。⭐ 「いつ来るか」を数えさせるための札
     ct: 7,
     target: 'enemyAll',
-    effects: [{ kind: 'damage', power: 30, scale: 'atk' }],
+    effects: [{ kind: 'damage', power: '大', scale: 'atk' }],
   },
   {
     id: 'stall',
@@ -169,13 +221,13 @@ export function skillById(id: SkillId): Skill {
  *  同じ技が2枠を占めると片方が無駄になるため。 */
 export const GACHA_POOLS: Readonly<Record<string, readonly SkillId[]>> = {
   // 鱗・守りの系統
-  tamaru: ['guard', 'cover', 'mend', 'stall', 'strike'],
+  tamaru: ['guard', 'cover', 'mend', 'stall', 'strike', 'snare'],
   // 牙・攻めの系統
-  tsunoga: ['haste', 'slow', 'sweep', 'guard', 'shellbash'],
+  tsunoga: ['haste', 'slow', 'sweep', 'guard', 'shellbash', 'surge'],
   // 羽・撹乱の系統
-  haneru: ['haste', 'slow', 'stall', 'mend', 'strike'],
+  haneru: ['haste', 'slow', 'stall', 'mend', 'strike', 'snare'],
   // ヌシ。⚠️ 卵は落とさないが、表に無いと数える検査が落ちる
-  nushi: ['slow', 'guard', 'cover', 'stall', 'shellbash'],
+  nushi: ['slow', 'guard', 'cover', 'stall', 'shellbash', 'surge'],
 }
 
 /** その種族の卵から出うる技。⚠️ 表に無い種族は黙って空にせず投げる。 */

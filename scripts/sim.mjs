@@ -463,7 +463,8 @@ async function runProgress() {
   console.log('')
   // ⚠️ 届かなかったときは「何が足りないのか」まで出す。勝率だけでは直せない
   const { skillsOf, statsOf } = await import(src('game/creature.ts'))
-  console.log('  最終編成:')
+  // ⚠️ ここは「周14の更新を終えた後」の編成。表の最終行とは別物なので混同しない
+  console.log('  周14を終えた時点の編成:')
   for (const c of partyOf(game)) {
     const [s1, s2, s3] = skillsOf(c)
     console.log(
@@ -473,7 +474,7 @@ async function runProgress() {
     )
   }
   const bossFight = runBattle(partyOf(game), makeBossParty())
-  console.log('  ボス戦の結末:')
+  console.log('  その編成でのボス戦:')
   console.log(
     `    ${bossFight.actions}行動 / ${bossFight.outcome} / ` +
       `敵の残HP ${bossFight.units.filter((u) => u.side === 'enemy').map((u) => `${u.hp}/${u.maxHp}`).join(' ')}`,

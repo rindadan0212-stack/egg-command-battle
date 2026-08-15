@@ -18,7 +18,7 @@
  */
 
 import { parseSprite, type Palette, type Sprite } from '../render/sprite.ts'
-import type { SkillId } from './skills.ts'
+import { skillById, type SkillId } from './skills.ts'
 import { STAT_KEYS, totalOf, type StatBlock } from './stats.ts'
 
 /** 3すくみ。牙 → 羽 → 鱗 → 牙。
@@ -207,7 +207,9 @@ const LIST: readonly Species[] = [
     // ⚠️ 3すくみは 牙 → 羽 → 鱗 → 牙。鱗に有利を取るのは **羽（ハネル）**。
     //    ここを「牙が有利」と読み違えて検証編成を組み、測り損ねた。
     element: 'scale',
-    skill1: 'quake', // CT7 の全体大技
+    // ⚠️ 枠1は CT が無いので、大技を置くと毎回撃ててしまう。
+    //    震撼（CT7 の全体大技）は枠2へ回し、ここは中程度に留める。
+    skill1: 'shellbash',
     base: { hp: 26, atk: 20, def: 24, spd: 10 },
     sprite: NUSHI_SPRITE,
     palettes: NUSHI_PALETTES,
@@ -247,6 +249,17 @@ export function auditSpecies(): void {
       problems.push(
         `${species.id}: 意匠が ${species.sprite.width}×${species.sprite.height}（16×16 に揃える）`,
       )
+    }
+    // ⚠️ 枠1は CT が無いので毎回撃てる。**大技を置くと壊れる。**
+    //    実際にヌシの枠1へ震撼（全体・大）を置いてしまい、決着が8行動になった。
+    const first = skillById(species.skill1)
+    for (const effect of first.effects) {
+      if (effect.kind !== 'damage' && effect.kind !== 'heal') continue
+      if (effect.power === '大' || effect.power === '特大') {
+        problems.push(
+          `${species.id}: 枠1の「${first.name}」が威力${effect.power}。枠1は CT が無いので 小〜中 に留める`,
+        )
+      }
     }
   }
 

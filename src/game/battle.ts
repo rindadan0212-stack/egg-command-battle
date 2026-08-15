@@ -11,7 +11,7 @@
 
 import type { Rng } from '../core/rng.ts'
 import { paletteOf, skillsOf, speciesOf, statsOf, type Creature } from './creature.ts'
-import { BASIC_ATTACK, type Effect, type Skill } from './skills.ts'
+import { DAMAGE_POWER, effectiveCt, HEAL_POWER, type Effect, type Skill } from './skills.ts'
 import { ELEMENT_BEATS, type Element } from './species.ts'
 import { STAT_KEYS, type StatKey } from './stats.ts'
 
@@ -65,8 +65,8 @@ export interface Unit {
   cover: number
 }
 
+/** ⚠️ 「たたかう」は無い。**枠1（種族固定・CTなし）がその役目を兼ねる。** */
 export type Action =
-  | { readonly kind: 'basic' }
   | { readonly kind: 'skill'; readonly slot: number }
   /** ⭐ 巣でだけ選べる。卵を持って離脱する */
   | { readonly kind: 'steal' }
@@ -91,6 +91,7 @@ export type BattleEvent =
   | { kind: 'stage'; unit: string; stat: StatKey; now: number }
   | { kind: 'gauge'; unit: string; delta: number }
   | { kind: 'cover'; unit: string; hits: number }
+  | { kind: 'ct'; unit: string; delta: number }
   | { kind: 'down'; unit: string }
   | { kind: 'steal'; unit: string; chance: number; ok: boolean }
 
@@ -252,15 +253,14 @@ export function skillAt(unit: Unit, slot: number): Skill | null {
 
 /** 今その行動が選べるか（CT が明けているか）。 */
 export function isUsable(unit: Unit, action: Action, state?: BattleState): boolean {
-  if (action.kind === 'basic') return true
   if (action.kind === 'steal') return state ? canSteal(state) : false
   const skill = skillAt(unit, action.slot)
   if (!skill) return false
+  // ⭐ 枠1は CT 0 なので常に使える。これが「たたかう」の代わり
   return (unit.cooldowns[action.slot] ?? 0) === 0
 }
 
 export function actionSkill(unit: Unit, action: Action): Skill {
-  if (action.kind === 'basic') return BASIC_ATTACK
   if (action.kind === 'steal') throw new Error('盗みはスキルではない')
   const skill = skillAt(unit, action.slot)
   if (!skill) throw new Error(`${unit.key} の枠 ${action.slot} は空`)
@@ -288,21 +288,27 @@ export function nextActor(state: BattleState): Unit | null {
   if (state.outcome !== null) return null
 
   const living = state.units.filter(isAlive)
-  let best: Unit | null = null
-  let bestTicks = Infinity
-  for (const unit of living) {
-    const ticks = ticksToAct(unit.gauge, speedOf(unit))
-    if (ticks < bestTicks) {
-      bestTicks = ticks
-      best = unit
-    }
-  }
-  if (!best) return null
+  if (living.length === 0) return null
 
-  if (bestTicks > 0) {
-    for (const unit of living) {
-      unit.gauge += bestTicks * gaugeRate(speedOf(unit))
-    }
+  // 誰かが満ちるまで時間を進める
+  let ticks = Infinity
+  for (const unit of living) {
+    ticks = Math.min(ticks, ticksToAct(unit.gauge, speedOf(unit)))
+  }
+  if (Number.isFinite(ticks) && ticks > 0) {
+    for (const unit of living) unit.gauge += ticks * gaugeRate(speedOf(unit))
+  }
+
+  // ⭐ 満ちた者のうち「**内部ゲージが最も多い**」者が動く。速度ではない。
+  //
+  // ⚠️ 以前は「配列の並び順」で決めていた。根拠が無いうえ、
+  // ゲージは満タンを超えて溜まり越されるのに（`gauge -= GAUGE_MAX`）、
+  // **超過ぶんが一切報われていなかった**。
+  // 速く動いて余分に溜めた者が先に動く、が筋。
+  let best: Unit | null = null
+  for (const unit of living) {
+    if (unit.gauge < GAUGE_MAX) continue
+    if (!best || unit.gauge > best.gauge) best = unit
   }
   return best
 }
@@ -366,7 +372,8 @@ function applyEffect(state: BattleState, actor: Unit, target: Unit, effect: Effe
         speciesOf(actor.creature).element,
         speciesOf(target.creature).element,
       )
-      const amount = damageOf(effect.power, attackStat, defenseStat, mult)
+      // ⭐ 威力は段位から引く。技ごとに数値を持たせない
+      const amount = damageOf(DAMAGE_POWER[effect.power], attackStat, defenseStat, mult)
       target.hp = Math.max(0, target.hp - amount)
       state.log.push({ kind: 'damage', unit: target.key, amount, hp: target.hp })
       if (target.hp === 0) state.log.push({ kind: 'down', unit: target.key })
@@ -374,7 +381,7 @@ function applyEffect(state: BattleState, actor: Unit, target: Unit, effect: Effe
     }
     case 'heal': {
       const before = target.hp
-      target.hp = Math.min(target.maxHp, target.hp + effect.power)
+      target.hp = Math.min(target.maxHp, target.hp + HEAL_POWER[effect.power])
       state.log.push({
         kind: 'heal',
         unit: target.key,
@@ -402,6 +409,14 @@ function applyEffect(state: BattleState, actor: Unit, target: Unit, effect: Effe
       state.log.push({ kind: 'cover', unit: target.key, hits: effect.hits })
       break
     }
+    case 'ct': {
+      // ⚠️ 枠1は触らない。「必ず打てる札」に CT を乗せると手が無くなる戦闘が生まれる
+      for (let i = 1; i < target.cooldowns.length; i++) {
+        target.cooldowns[i] = Math.max(0, (target.cooldowns[i] ?? 0) + effect.delta)
+      }
+      state.log.push({ kind: 'ct', unit: target.key, delta: effect.delta })
+      break
+    }
   }
 }
 
@@ -420,7 +435,7 @@ function attemptSteal(state: BattleState, actor: Unit): void {
     return
   }
   // ⚠️ 失敗にはちゃんと代償を置く。無料で何度も試せると二択が二択でなくなる
-  applyEffect(state, guard, actor, { kind: 'damage', power: 14, scale: 'atk' })
+  applyEffect(state, guard, actor, { kind: 'damage', power: '小', scale: 'atk' })
   actor.gauge = 0
   state.actions++
   state.outcome = decideOutcome(state)
@@ -455,9 +470,8 @@ export function performAction(
   for (let i = 0; i < actor.cooldowns.length; i++) {
     actor.cooldowns[i] = Math.max(0, (actor.cooldowns[i] ?? 0) - 1)
   }
-  if (action.kind === 'skill') {
-    actor.cooldowns[action.slot] = skill.ct
-  }
+  // ⭐ CT は技ではなく**枠**の性質。枠1は常に 0
+  actor.cooldowns[action.slot] = effectiveCt(action.slot, skill)
 
   actor.gauge -= GAUGE_MAX
   state.actions++

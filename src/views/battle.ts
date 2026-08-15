@@ -33,6 +33,7 @@ import {
 } from '../game/battle.ts'
 import { chooseAction } from '../game/ai.ts'
 import { speciesOf, type Creature } from '../game/creature.ts'
+import { effectiveCt, type Skill } from '../game/skills.ts'
 import { ELEMENT_LABELS } from '../game/species.ts'
 import { STAT_LABELS } from '../game/stats.ts'
 import { spriteToCanvas } from '../render/sprite.ts'
@@ -42,8 +43,16 @@ const ENEMY_PAUSE_MS = 420
 
 export interface BattleView {
   readonly element: HTMLElement
-  /** 画面を離れるときに呼ぶ。待ち時間を止める */
+  /** 画面を離れるときに呼ぶ。待ち時間と描画ループを止める */
   dispose(): void
+}
+
+/** その技の威力の段位。⭐ 数値ではなく段位で見せる（企画の決め方に合わせる）。 */
+function tierOf(skill: Skill): string {
+  for (const effect of skill.effects) {
+    if (effect.kind === 'damage' || effect.kind === 'heal') return effect.power
+  }
+  return ''
 }
 
 function describe(state: BattleState, event: BattleEvent): string {
@@ -64,6 +73,8 @@ function describe(state: BattleState, event: BattleEvent): string {
       return `　${nameOf(event.unit)} のゲージ ${event.delta > 0 ? '+' : ''}${event.delta}`
     case 'cover':
       return `　${nameOf(event.unit)} がかばう（あと ${event.hits} 回）`
+    case 'ct':
+      return `　${nameOf(event.unit)} の技の待ちが ${event.delta > 0 ? '延びた' : '縮んだ'}`
     case 'down':
       return `　${nameOf(event.unit)} が倒れた`
     case 'steal':
@@ -85,6 +96,17 @@ export function renderBattle(
   let pending: Action | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
+
+  /** ⭐ ゲージを滑らかに見せるための表示専用の値。
+   *
+   *  ⚠️ **ゲームの状態は決定論のまま。**実時間で状態を進めると、
+   *  同じ種から同じ結果が出るという前提が崩れる。
+   *  だから「状態は整数の刻みで一気に進み、**見た目だけ**が追いつく」形にする。
+   *  ⚠️ 毎フレーム DOM を作り直すとクリックが成立しないので、
+   *  更新するのは棒の幅だけ。 */
+  const shown = new Map<string, number>()
+  const gaugeFills = new Map<string, HTMLElement>()
+  let frame = 0
 
   const element = document.createElement('div')
   element.className = 'battle'
@@ -143,16 +165,18 @@ export function renderBattle(
     const gauge = document.createElement('span')
     gauge.className = 'meter gauge'
     const gFill = document.createElement('i')
-    gFill.style.width = `${Math.min(100, (unit.gauge / GAUGE_MAX) * 100)}%`
+    // ⭐ 幅は描画ループが毎フレーム更新する。ここでは今見えている値から始める
+    gFill.style.width = `${(shown.get(unit.key) ?? 0) * 100}%`
     gauge.append(gFill)
+    gaugeFills.set(unit.key, gFill)
 
     const badges = document.createElement('span')
     badges.className = 'badges mono'
+    // ⚠️ 速度の数値は出さない。ゲージの伸び方で読ませる
     const parts = activeStages(unit).map(
       ([stat, n]) => `${STAT_LABELS[stat]}${n > 0 ? '+' : ''}${n}`,
     )
     if (unit.cover > 0) parts.push(`かばう${unit.cover}`)
-    parts.push(`速${speedOf(unit)}`)
     badges.textContent = parts.join(' ')
 
     box.append(art, label, hp, nums, gauge, badges)
@@ -199,14 +223,14 @@ export function renderBattle(
       return
     }
 
+    // ⚠️ 「たたかう」は無い。枠1（CTなし）がその役目を兼ねる
     const options: Action[] = [
-      { kind: 'basic' },
       { kind: 'skill', slot: 0 },
       { kind: 'skill', slot: 1 },
       { kind: 'skill', slot: 2 },
     ]
     for (const action of options) {
-      if (action.kind === 'skill' && !skillAt(awaiting, action.slot)) continue
+      if (action.kind !== 'skill' || !skillAt(awaiting, action.slot)) continue
       const skill = actionSkill(awaiting, action)
       const usable = isUsable(awaiting, action)
       const button = document.createElement('button')
@@ -218,13 +242,13 @@ export function renderBattle(
       name.textContent = skill.name
       button.append(name)
 
-      if (action.kind === 'skill') {
-        const ct = document.createElement('span')
-        ct.className = 'ct mono'
-        const left = awaiting.cooldowns[action.slot] ?? 0
-        ct.textContent = left > 0 ? `あと${left}` : `CT${skill.ct}`
-        button.append(ct)
-      }
+      const ct = document.createElement('span')
+      ct.className = 'ct mono'
+      const left = awaiting.cooldowns[action.slot] ?? 0
+      const own = effectiveCt(action.slot, skill)
+      // 枠1 は待ちが無いので、CT ではなく威力の段位を出す
+      ct.textContent = left > 0 ? `あと${left}` : own > 0 ? `CT${own}` : tierOf(skill)
+      button.append(ct)
 
       button.addEventListener('click', () => {
         if (!awaiting) return
@@ -267,7 +291,25 @@ export function renderBattle(
     }
   }
 
+  /** 表示だけを実時間で追いつかせる。⚠️ 状態には一切触れない。 */
+  function animate(): void {
+    for (const unit of state.units) {
+      const fill = gaugeFills.get(unit.key)
+      if (!fill) continue
+      // ⭐ 超過ゲージは見た目 100% 止まり（内部では溜まり続けている）
+      const target = isAlive(unit) ? Math.min(1, unit.gauge / GAUGE_MAX) : 0
+      const now = shown.get(unit.key) ?? 0
+      // ⚠️ 速く寄せると一瞬で終わって「伸びている」感じが出ない。
+      //    超過ゲージの繰り越しで複数が同時に満タン付近へ並ぶので、なおさら緩める
+      const next = Math.abs(target - now) < 0.004 ? target : now + (target - now) * 0.09
+      shown.set(unit.key, next)
+      fill.style.width = `${next * 100}%`
+    }
+    frame = requestAnimationFrame(animate)
+  }
+
   function paint(): void {
+    gaugeFills.clear()
     enemyRow.replaceChildren(...state.units.filter((u) => u.side === 'enemy').map(buildFighter))
     allyRow.replaceChildren(...state.units.filter((u) => u.side === 'ally').map(buildFighter))
     buildCommands()
@@ -306,6 +348,7 @@ export function renderBattle(
   }
 
   paint()
+  frame = requestAnimationFrame(animate)
   schedule()
 
   return {
@@ -313,6 +356,8 @@ export function renderBattle(
     dispose() {
       disposed = true
       if (timer !== null) clearTimeout(timer)
+      // ⚠️ 描画ループを必ず止める。放っておくと画面を離れても回り続ける
+      if (frame !== 0) cancelAnimationFrame(frame)
     },
   }
 }
