@@ -33,11 +33,17 @@ function snapshot(screen: string, source: LiveSource): string {
   })
 }
 
-/** 申告を始める。中身が変わったときだけ送る（ファイルの更新時刻を無駄に動かさないため）。 */
+/** 申告を始める。
+ *
+ *  ⚠️ **中身が変わらなくても毎回送る。**
+ *  「変わったときだけ送る」にすると通信は減るが、
+ *  **「変化が無い」と「タブが死んだ」が区別できなくなる**。
+ *  実測: 保管庫の画面は内容が変わらないので一度も申告せず、
+ *  生きているタブが `npm run same` で「閉じている」と報告された。
+ *  生存確認のほうが、書き込み回数を惜しむより価値がある。
+ */
 export function startLiveReporting(screen: string, source: LiveSource): void {
   if (!import.meta.env.DEV) return
-
-  let lastSent = ''
 
   const send = (): void => {
     let body: string
@@ -47,8 +53,6 @@ export function startLiveReporting(screen: string, source: LiveSource): void {
       console.warn('[live] 申告を作れなかった', error)
       return
     }
-    if (body === lastSent) return
-    lastSent = body
     void fetch('/__live', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
