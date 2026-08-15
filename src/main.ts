@@ -7,6 +7,7 @@ import { auditSpecies } from './game/species.ts'
 import { newGame } from './game/state.ts'
 import type { SortKey } from './game/storage.ts'
 import { EMPTY_SOURCE, startLiveReporting } from './live/report.ts'
+import { renderBreed } from './views/breed.ts'
 import { renderNests, type NestView } from './views/nests.ts'
 import { renderStorage } from './views/storage.ts'
 
@@ -19,6 +20,7 @@ const game = newGame(WORLD_SEED)
 
 const VIEWS = [
   ['nests', '巣'],
+  ['breed', '配合'],
   ['storage', '保管庫'],
 ] as const
 type ViewId = (typeof VIEWS)[number][0]
@@ -70,6 +72,11 @@ function paint(): void {
 
   if (ui.view === 'storage') {
     renderStorage(root, game.storage, ui)
+    return
+  }
+
+  if (ui.view === 'breed') {
+    renderBreed(root, game, refreshCounts)
     return
   }
 

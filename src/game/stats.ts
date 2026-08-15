@@ -27,6 +27,25 @@ export const WILD_STAT_MAX = 40
  *  1.5倍なら得意1つ、3倍なら万能個体ができて「全ステSSSをなくす」意図から外れる。 */
 export const WILD_TOTAL_MAX = WILD_STAT_MAX * 2
 
+/** 変異が上限を押し上げられる回数。⚠️ ここが血統全体の天井になる。 */
+export const MUTATION_CAP_STEPS = 20
+
+/** その個体の1ステ上限。**変異1回につき +1。**
+ *
+ *  ⚠️ 変異で +2 されたぶんが上限で即削られると、変異の価値が消える。
+ *  だから上限のほうも一緒に上がる。 */
+export function wildStatMaxFor(mutationCounter: number): number {
+  return WILD_STAT_MAX + Math.min(Math.max(0, mutationCounter), MUTATION_CAP_STEPS)
+}
+
+/** その個体の合計上限。⭐ **常に1ステ上限の2倍**。
+ *
+ *  この比を保つことで、「**得意を2つ作れる**」がどの変異段階でも崩れない。
+ *  比を崩すと、変異を重ねた個体ほど均等に振らざるを得なくなる。 */
+export function wildTotalMaxFor(mutationCounter: number): number {
+  return wildStatMaxFor(mutationCounter) * 2
+}
+
 export function totalOf(stats: StatBlock): number {
   let sum = 0
   for (const key of STAT_KEYS) sum += stats[key]
@@ -40,13 +59,16 @@ export function totalOf(stats: StatBlock): number {
  *
  *  同値のステが複数あるときは順に1ずつ削る（片方だけを掘り下げて偏らせないため）。
  */
-export function applyTotalCap(wild: StatBlock): StatBlock {
+export function applyTotalCap(wild: StatBlock, mutationCounter = 0): StatBlock {
+  const statMax = wildStatMaxFor(mutationCounter)
+  const totalMax = wildTotalMaxFor(mutationCounter)
+
   const out: Record<StatKey, number> = { hp: 0, atk: 0, def: 0, spd: 0 }
   for (const key of STAT_KEYS) {
-    out[key] = Math.min(Math.max(Math.trunc(wild[key]), 0), WILD_STAT_MAX)
+    out[key] = Math.min(Math.max(Math.trunc(wild[key]), 0), statMax)
   }
 
-  let excess = totalOf(out) - WILD_TOTAL_MAX
+  let excess = totalOf(out) - totalMax
   while (excess > 0) {
     let min = Infinity
     for (const key of STAT_KEYS) {

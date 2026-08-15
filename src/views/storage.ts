@@ -8,16 +8,19 @@ import {
   paletteOf,
   skillsOf,
   speciesOf,
+  spendPoint,
   statsOf,
+  TRAIN_MAX,
+  unspentOf,
   wildTotalOf,
   type Creature,
 } from '../game/creature.ts'
 import { ELEMENT_LABELS } from '../game/species.ts'
-import { STAT_KEYS, STAT_LABELS, WILD_STAT_MAX, WILD_TOTAL_MAX } from '../game/stats.ts'
+import { STAT_KEYS, STAT_LABELS, wildStatMaxFor, wildTotalMaxFor } from '../game/stats.ts'
 import { sorted, SORT_KEYS, SORT_LABELS, type SortKey, type Storage } from '../game/storage.ts'
 import { spriteToCanvas } from '../render/sprite.ts'
 
-export function buildUnitRow(creature: Creature): HTMLElement {
+export function buildUnitRow(creature: Creature, onTrain?: () => void): HTMLElement {
   const species = speciesOf(creature)
   const actual = statsOf(creature)
   const wildTotal = wildTotalOf(creature)
@@ -52,7 +55,8 @@ export function buildUnitRow(creature: Creature): HTMLElement {
     const row = document.createElement('div')
     row.className = 'stat'
     // 上限に張り付いているステを目立たせる（厳選の当たりが一目で分かるように）
-    row.dataset['peak'] = String(level >= WILD_STAT_MAX)
+    const statMax = wildStatMaxFor(creature.mutationCounter)
+    row.dataset['peak'] = String(level >= statMax)
 
     const k = document.createElement('span')
     k.className = 'k'
@@ -61,7 +65,7 @@ export function buildUnitRow(creature: Creature): HTMLElement {
     const bar = document.createElement('span')
     bar.className = 'bar'
     const fill = document.createElement('i')
-    fill.style.width = `${(level / WILD_STAT_MAX) * 100}%`
+    fill.style.width = `${(level / statMax) * 100}%`
     bar.append(fill)
 
     const v = document.createElement('span')
@@ -70,9 +74,26 @@ export function buildUnitRow(creature: Creature): HTMLElement {
 
     const real = document.createElement('span')
     real.className = 'real mono'
-    real.textContent = `→ ${actual[key]}`
+    // 育成で振った分は素質と分けて見せる（素質は変えられない、を読ませるため）
+    const put = creature.trained[key]
+    real.textContent = put > 0 ? `→ ${actual[key]} (+${put})` : `→ ${actual[key]}`
 
     row.append(k, bar, v, real)
+
+    // ⭐ 振れるポイントがあるときだけ + を出す。⚠️ 振ったら戻せない
+    if (onTrain && unspentOf(creature) > 0) {
+      const plus = document.createElement('button')
+      plus.type = 'button'
+      plus.className = 'train'
+      plus.textContent = '+'
+      plus.title = `${STAT_LABELS[key]} に育成ポイントを1振る（戻せない）`
+      plus.addEventListener('click', () => {
+        spendPoint(creature, key)
+        onTrain()
+      })
+      row.append(plus)
+    }
+
     stats.append(row)
   }
 
@@ -80,8 +101,13 @@ export function buildUnitRow(creature: Creature): HTMLElement {
   foot.className = 'foot'
   const total = document.createElement('span')
   total.className = 'total mono'
-  total.dataset['capped'] = String(wildTotal >= WILD_TOTAL_MAX)
-  total.textContent = `素質 ${wildTotal}/${WILD_TOTAL_MAX}`
+  // ⚠️ 上限は変異ぶん押し上がるので、個体ごとに違う
+  const cap = wildTotalMaxFor(creature.mutationCounter)
+  total.dataset['capped'] = String(wildTotal >= cap)
+  const left = unspentOf(creature)
+  total.textContent =
+    `素質 ${wildTotal}/${cap} · 育成 ${creature.earned}/${TRAIN_MAX}` +
+    (left > 0 ? ` ⭐ 未使用 ${left}` : '')
   const skills = document.createElement('span')
   skills.className = 'skills'
   // ⭐ 枠1は種族固定。印を付けて「これは奪ってこないと手に入らない」を見せる
@@ -108,7 +134,7 @@ export function renderStorage(root: HTMLElement, storage: Storage, state: { sort
   list.className = 'roster'
 
   const paint = (): void => {
-    list.replaceChildren(...sorted(storage, state.sort).map(buildUnitRow))
+    list.replaceChildren(...sorted(storage, state.sort).map((c) => buildUnitRow(c, paint)))
   }
 
   for (const key of SORT_KEYS) {

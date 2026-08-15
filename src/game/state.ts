@@ -5,7 +5,8 @@
  */
 
 import { Rng } from '../core/rng.ts'
-import type { Creature } from './creature.ts'
+import { breed, type BreedOutcome } from './breeding.ts'
+import { award, type Creature } from './creature.ts'
 import { hatch, makeEgg, makeNestDefenders, nestById, type Egg, type Nest } from './nest.ts'
 import { accept, emptyStorage, isFull, release, type Storage } from './storage.ts'
 
@@ -22,6 +23,7 @@ export interface Game {
     readonly egg: Rng
     readonly hatch: Rng
     readonly steal: Rng
+    readonly breed: Rng
   }
 }
 
@@ -37,6 +39,7 @@ export function newGame(seed: number): Game {
       egg: root.stream('egg'),
       hatch: root.stream('hatch'),
       steal: root.stream('steal'),
+      breed: root.stream('breed'),
     },
   }
 
@@ -79,4 +82,27 @@ export function hatchEgg(game: Game, eggId: string): Creature {
 
 export function releaseCreature(game: Game, id: string): void {
   game.storage = release(game.storage, id)
+}
+
+export function creatureById(game: Game, id: string): Creature {
+  const found = game.storage.creatures.find((c) => c.id === id)
+  if (!found) throw new Error(`${id} は保管庫にいない`)
+  return found
+}
+
+/** 配合する。卵は保管庫ではなく卵の棚に入る（孵すまでが1手間）。 */
+export function breedPair(game: Game, aId: string, bId: string): BreedOutcome {
+  const outcome = breed(
+    game.rng.breed,
+    creatureById(game, aId),
+    creatureById(game, bId),
+    ++game.serial,
+  )
+  game.eggs.push(outcome.egg)
+  return outcome
+}
+
+/** 戦闘の報酬。⭐ 出撃していた個体だけがもらう（連れ出すことが育成に直結する）。 */
+export function awardParty(party: readonly Creature[], amount = 1): void {
+  for (const creature of party) award(creature, amount)
 }

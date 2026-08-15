@@ -13,7 +13,7 @@ import { NESTS, wildTotalForTier, type Egg, type Nest } from '../game/nest.ts'
 import { skillById } from '../game/skills.ts'
 import { ELEMENT_LABELS, speciesById } from '../game/species.ts'
 import { WILD_TOTAL_MAX } from '../game/stats.ts'
-import { defendersOf, gainEgg, hatchEgg, type Game } from '../game/state.ts'
+import { awardParty, defendersOf, gainEgg, hatchEgg, type Game } from '../game/state.ts'
 import { isFull } from '../game/storage.ts'
 import { spriteToCanvas } from '../render/sprite.ts'
 import { renderBattle, type BattleView } from './battle.ts'
@@ -196,27 +196,33 @@ export function renderNests(game: Game, onChange: () => void): NestView {
     const view = renderBattle(
       party,
       defendersOf(game, nest),
-      (outcome) => paintResult(nest, outcome),
+      (outcome) => paintResult(nest, outcome, party),
       game.rng.steal,
     )
     battle = view
     element.append(view.element)
   }
 
-  function paintResult(nest: Nest, outcome: Outcome): void {
+  function paintResult(nest: Nest, outcome: Outcome, party: readonly Creature[]): void {
     const got = outcome === 'ally' ? 'defeated' : outcome === 'stolen' ? 'stolen' : null
     const box = document.createElement('div')
     box.className = 'result'
 
     const line = document.createElement('p')
     line.className = 'lead'
+    const sub = document.createElement('p')
+    sub.className = 'note'
 
     if (got) {
       const egg = gainEgg(game, nest, got)
       line.textContent = `卵を手に入れた（${egg.id} · 素質 ${sumOf(egg)}）`
+      // ⭐ 出撃していた個体だけが育成ポイントをもらう
+      awardParty(party)
+      sub.textContent = `出撃した ${party.map((c) => c.id).join(' / ')} に育成 +1`
       onChange()
     } else {
       line.textContent = outcome === 'enemy' ? '追い返された' : '決着がつかなかった'
+      sub.textContent = '育成ポイントは入らない。'
     }
 
     const back = document.createElement('div')
@@ -227,7 +233,7 @@ export function renderNests(game: Game, onChange: () => void): NestView {
     button.addEventListener('click', paintList)
     back.append(button)
 
-    box.append(line, back)
+    box.append(line, sub, back)
     element.append(box)
   }
 

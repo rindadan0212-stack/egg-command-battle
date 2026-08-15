@@ -84,6 +84,7 @@ export function makeNestDefenders(rng: Rng, nest: Nest): Creature[] {
       speciesId: nest.speciesId,
       wild: spreadWild(rng, Math.round(total * share)),
       trained: { hp: 0, atk: 0, def: 0, spd: 0 },
+      earned: 0,
       mutationCounter: 0,
       skills23: rollSkills23(rng, nest.speciesId, species.skill1),
       paletteIndex: 0,
@@ -93,7 +94,6 @@ export function makeNestDefenders(rng: Rng, nest: Nest): Creature[] {
   })
 }
 
-/** 卵。⭐ **スキルはまだ決まっていない**（孵すときにガチャで決まる）。 */
 export interface Egg {
   readonly id: string
   readonly speciesId: SpeciesId
@@ -103,7 +103,11 @@ export interface Egg {
   readonly parents: readonly [CreatureId, CreatureId] | null
   readonly generation: number
   /** どうやって手に入れたか。盗んだ卵はやや劣る */
-  readonly how: 'defeated' | 'stolen'
+  readonly how: 'defeated' | 'stolen' | 'bred'
+  /** ⭐ **null なら孵すときにガチャで決まる**（野生の卵）。
+   *  値が入っていれば配合で既に決まっている（両親の4枠から抽選済み）。
+   *  ⚠️ ここを区別しないと、配合で狙って引いた技を孵化時に引き直してしまう。 */
+  readonly skills23: readonly [SkillId | null, SkillId | null] | null
 }
 
 /** 親から卵を作る。
@@ -123,10 +127,12 @@ export function makeEgg(rng: Rng, nest: Nest, how: Egg['how'], serial: number): 
     parents: null,
     generation: 1,
     how,
+    skills23: null, // 野生の卵。孵すときにガチャ
   }
 }
 
-/** 孵す。⭐ **ここでスキル2・3のガチャを引く。** */
+/** 孵す。⭐ 野生の卵はここで**スキル2・3のガチャを引く**。
+ *  配合の卵は既に決まっているのでそのまま使う。 */
 export function hatch(rng: Rng, egg: Egg, id: CreatureId): Creature {
   const species = speciesById(egg.speciesId)
   return {
@@ -134,8 +140,9 @@ export function hatch(rng: Rng, egg: Egg, id: CreatureId): Creature {
     speciesId: egg.speciesId,
     wild: egg.wild,
     trained: { hp: 0, atk: 0, def: 0, spd: 0 },
+    earned: 0,
     mutationCounter: egg.mutationCounter,
-    skills23: rollSkills23(rng, egg.speciesId, species.skill1),
+    skills23: egg.skills23 ?? rollSkills23(rng, egg.speciesId, species.skill1),
     paletteIndex: egg.paletteIndex,
     parents: egg.parents,
     generation: egg.generation,
