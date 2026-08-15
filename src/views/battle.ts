@@ -7,10 +7,13 @@
  *  ゲームの状態はそれとは無関係に決定論的に進む。
  */
 
+import type { Rng } from '../core/rng.ts'
 import {
   actionSkill,
   activeStages,
+  canSteal,
   createBattle,
+  fastestGuard,
   GAUGE_MAX,
   isAlive,
   isUsable,
@@ -19,10 +22,12 @@ import {
   performAction,
   skillAt,
   speedOf,
+  stealChance,
   unitPalette,
   type Action,
   type BattleEvent,
   type BattleState,
+  type Outcome,
   type Unit,
 } from '../game/battle.ts'
 import { chooseAction } from '../game/ai.ts'
@@ -60,15 +65,20 @@ function describe(state: BattleState, event: BattleEvent): string {
       return `　${nameOf(event.unit)} がかばう（あと ${event.hits} 回）`
     case 'down':
       return `　${nameOf(event.unit)} が倒れた`
+    case 'steal':
+      return event.ok
+        ? `${nameOf(event.unit)} が卵を持って逃げ切った（${Math.round(event.chance * 100)}%）`
+        : `${nameOf(event.unit)} の盗みは見つかった（${Math.round(event.chance * 100)}%）`
   }
 }
 
 export function renderBattle(
   allies: readonly Creature[],
   enemies: readonly Creature[],
-  onEnd?: (outcome: 'ally' | 'enemy' | 'draw') => void,
+  onEnd?: (outcome: Outcome) => void,
+  stealRng: Rng | null = null,
 ): BattleView {
-  const state = createBattle(allies, enemies)
+  const state = createBattle(allies, enemies, stealRng)
   let awaiting: Unit | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
@@ -138,7 +148,13 @@ export function renderBattle(
       const done = document.createElement('p')
       done.className = 'verdict'
       done.textContent =
-        state.outcome === 'ally' ? '勝った' : state.outcome === 'enemy' ? '負けた' : '決着つかず'
+        state.outcome === 'ally'
+          ? '倒した'
+          : state.outcome === 'stolen'
+            ? '逃げ切った'
+            : state.outcome === 'enemy'
+              ? '負けた'
+              : '決着つかず'
       commands.append(done)
       return
     }
@@ -184,6 +200,30 @@ export function renderBattle(
         schedule()
       })
       commands.append(button)
+    }
+
+    // ⭐ 巣でだけ出る二択のもう一方。成功率をそのまま見せる
+    if (canSteal(state)) {
+      const guard = fastestGuard(state)
+      const chance = guard ? stealChance(speedOf(awaiting), speedOf(guard), state.actions) : 0
+      const steal = document.createElement('button')
+      steal.type = 'button'
+      steal.className = 'steal'
+      steal.title = '卵を持って離脱する。失敗すると見張りの一撃をもらう'
+      const label = document.createElement('span')
+      label.textContent = '盗んで逃げる'
+      const odds = document.createElement('span')
+      odds.className = 'ct mono'
+      odds.textContent = `${Math.round(chance * 100)}%`
+      steal.append(label, odds)
+      steal.addEventListener('click', () => {
+        if (!awaiting) return
+        performAction(state, awaiting, { kind: 'steal' })
+        awaiting = null
+        paint()
+        schedule()
+      })
+      commands.append(steal)
     }
   }
 

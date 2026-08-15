@@ -1,0 +1,240 @@
+/** 巣の画面。輪の入口。
+ *
+ *  ```
+ *  巣を選ぶ → 挑む → 二択（倒す / 盗んで逃げる）→ 卵 → 孵す → 保管庫
+ *  ```
+ *
+ *  ⭐ **強い親ほど良い卵**なので、難易度と報酬が自動で結ばれている。
+ */
+
+import type { Outcome } from '../game/battle.ts'
+import { wildTotalOf, type Creature } from '../game/creature.ts'
+import { NESTS, wildTotalForTier, type Egg, type Nest } from '../game/nest.ts'
+import { skillById } from '../game/skills.ts'
+import { ELEMENT_LABELS, speciesById } from '../game/species.ts'
+import { WILD_TOTAL_MAX } from '../game/stats.ts'
+import { defendersOf, gainEgg, hatchEgg, type Game } from '../game/state.ts'
+import { isFull } from '../game/storage.ts'
+import { spriteToCanvas } from '../render/sprite.ts'
+import { renderBattle, type BattleView } from './battle.ts'
+
+export interface NestView {
+  readonly element: HTMLElement
+  dispose(): void
+}
+
+export function renderNests(game: Game, onChange: () => void): NestView {
+  const element = document.createElement('div')
+  element.className = 'nests'
+  let battle: BattleView | null = null
+
+  function clearBattle(): void {
+    battle?.dispose()
+    battle = null
+  }
+
+  function buildNestRow(nest: Nest): HTMLElement {
+    const species = speciesById(nest.speciesId)
+    const row = document.createElement('article')
+    row.className = 'nestrow'
+    row.id = `n-${nest.id}`
+
+    const art = document.createElement('div')
+    art.className = 'portrait'
+    art.append(spriteToCanvas(species.sprite, species.palettes[0] as string[], 2))
+
+    const ident = document.createElement('div')
+    ident.className = 'ident'
+    const name = document.createElement('span')
+    name.className = 'name'
+    name.textContent = nest.name
+    const tags = document.createElement('span')
+    tags.className = 'tags'
+    tags.textContent = `${species.name} · ${ELEMENT_LABELS[species.element]} · 段階${nest.tier}`
+    const gain = document.createElement('span')
+    gain.className = 'cid mono'
+    // ⭐ 「この巣で何が手に入るか」を先に見せる。輪の駆動力はここから出る
+    gain.textContent = `素質 ~${wildTotalForTier(nest.tier)}/${WILD_TOTAL_MAX} · ◆${skillById(species.skill1).name}`
+    ident.append(name, tags, gain)
+
+    const go = document.createElement('div')
+    go.className = 'controls'
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = '挑む'
+    button.addEventListener('click', () => startBattle(nest))
+    go.append(button)
+
+    row.append(art, ident, go)
+    return row
+  }
+
+  function paintList(): void {
+    clearBattle()
+    element.replaceChildren()
+
+    const lead = document.createElement('p')
+    lead.className = 'lead'
+    lead.textContent = '欲しい卵を奪う。'
+
+    const note = document.createElement('p')
+    note.className = 'note'
+    note.textContent =
+      '倒せば確実に良い卵が手に入る。盗めば格上の巣からも狙えるが、逃げ切れるかは速度しだい。'
+
+    element.append(lead, note)
+
+    if (game.eggs.length > 0) {
+      element.append(buildEggShelf())
+    }
+
+    const list = document.createElement('div')
+    list.className = 'nestlist'
+    list.append(...NESTS.map(buildNestRow))
+    element.append(list)
+  }
+
+  function buildEggShelf(): HTMLElement {
+    const box = document.createElement('div')
+    box.className = 'eggshelf'
+
+    const title = document.createElement('p')
+    title.className = 'shelftitle'
+    title.textContent = `持っている卵 ${game.eggs.length}`
+    box.append(title)
+
+    const full = isFull(game.storage)
+    if (full) {
+      const warn = document.createElement('p')
+      warn.className = 'note'
+      warn.textContent = '⚠️ 保管庫が満杯。先にどれかを逃がさないと孵せない。'
+      box.append(warn)
+    }
+
+    for (const egg of game.eggs) {
+      const species = speciesById(egg.speciesId)
+      const row = document.createElement('div')
+      row.className = 'eggrow'
+      row.id = `e-${egg.id}`
+
+      const label = document.createElement('span')
+      label.className = 'mono'
+      label.textContent =
+        `${egg.id} · ${species.name} · 素質 ${sumOf(egg)}/${WILD_TOTAL_MAX}` +
+        `（${egg.how === 'defeated' ? '倒して奪った' : '盗んだ'}）`
+
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.textContent = '孵す'
+      button.disabled = full
+      button.addEventListener('click', () => {
+        const born = hatchEgg(game, egg.id)
+        onChange()
+        paintHatched(born)
+      })
+
+      row.append(label, button)
+      box.append(row)
+    }
+    return box
+  }
+
+  function sumOf(egg: Egg): number {
+    return Object.values(egg.wild).reduce((s, v) => s + v, 0)
+  }
+
+  function paintHatched(born: Creature): void {
+    element.replaceChildren()
+    const species = speciesById(born.speciesId)
+
+    const lead = document.createElement('p')
+    lead.className = 'lead'
+    lead.textContent = `${species.name} が孵った`
+
+    const art = document.createElement('div')
+    art.className = 'portrait big'
+    art.append(spriteToCanvas(species.sprite, species.palettes[born.paletteIndex] as string[], 4))
+
+    const detail = document.createElement('p')
+    detail.className = 'note mono'
+    const [s1, s2, s3] = [0, 1, 2].map((i) => {
+      const all = [species.skill1, ...born.skills23]
+      const id = all[i]
+      return id ? skillById(id).name : '—'
+    })
+    detail.textContent = `${born.id} · 素質 ${wildTotalOf(born)}/${WILD_TOTAL_MAX} · ◆${s1} · ${s2} · ${s3}`
+
+    const back = document.createElement('div')
+    back.className = 'controls'
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = '巣へ戻る'
+    button.addEventListener('click', paintList)
+    back.append(button)
+
+    element.append(lead, art, detail, back)
+  }
+
+  function startBattle(nest: Nest): void {
+    clearBattle()
+    element.replaceChildren()
+
+    const party = [...game.storage.creatures]
+      .sort((a, b) => wildTotalOf(b) - wildTotalOf(a) || a.id.localeCompare(b.id))
+      .slice(0, 3)
+
+    if (party.length === 0) {
+      paintList()
+      return
+    }
+
+    const lead = document.createElement('p')
+    lead.className = 'lead'
+    lead.textContent = nest.name
+    element.append(lead)
+
+    const view = renderBattle(
+      party,
+      defendersOf(game, nest),
+      (outcome) => paintResult(nest, outcome),
+      game.rng.steal,
+    )
+    battle = view
+    element.append(view.element)
+  }
+
+  function paintResult(nest: Nest, outcome: Outcome): void {
+    const got = outcome === 'ally' ? 'defeated' : outcome === 'stolen' ? 'stolen' : null
+    const box = document.createElement('div')
+    box.className = 'result'
+
+    const line = document.createElement('p')
+    line.className = 'lead'
+
+    if (got) {
+      const egg = gainEgg(game, nest, got)
+      line.textContent = `卵を手に入れた（${egg.id} · 素質 ${sumOf(egg)}）`
+      onChange()
+    } else {
+      line.textContent = outcome === 'enemy' ? '追い返された' : '決着がつかなかった'
+    }
+
+    const back = document.createElement('div')
+    back.className = 'controls'
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = '巣へ戻る'
+    button.addEventListener('click', paintList)
+    back.append(button)
+
+    box.append(line, back)
+    element.append(box)
+  }
+
+  paintList()
+
+  return {
+    element,
+    dispose: clearBattle,
+  }
+}

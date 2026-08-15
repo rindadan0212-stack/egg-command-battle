@@ -150,5 +150,26 @@ export function skillById(id: SkillId): Skill {
 }
 
 /** 卵ガチャ（枠2・3）で出うるスキル。
- *  🚧 種族ごとにプールを分けるかは段C で決める。 */
-export const GACHA_POOL: readonly SkillId[] = LIST.map((s) => s.id)
+ *
+ *  ⭐ **種族ごとにプールを分ける。**
+ *  全体プールにすると、どこで卵を奪っても同じ技が出るので
+ *  「必要な技を持つ親の巣へ行く」という輪の駆動力が消える。
+ *  分けておくと「この技が欲しいならこの種族の巣」という知識が育つ。
+ *
+ *  ⚠️ 枠1（種族固定）と同じ技はプールから外してある。
+ *  同じ技が2枠を占めると片方が無駄になるため。 */
+export const GACHA_POOLS: Readonly<Record<string, readonly SkillId[]>> = {
+  // 鱗・守りの系統
+  tamaru: ['guard', 'cover', 'mend', 'stall', 'strike'],
+  // 牙・攻めの系統
+  tsunoga: ['haste', 'slow', 'sweep', 'guard', 'shellbash'],
+  // 羽・撹乱の系統
+  haneru: ['haste', 'slow', 'stall', 'mend', 'strike'],
+}
+
+/** その種族の卵から出うる技。⚠️ 表に無い種族は黙って空にせず投げる。 */
+export function gachaPoolOf(speciesId: string, skill1: SkillId): readonly SkillId[] {
+  const pool = GACHA_POOLS[speciesId]
+  if (!pool) throw new Error(`卵ガチャの表に ${speciesId} が無い`)
+  return pool.filter((id) => id !== skill1)
+}
