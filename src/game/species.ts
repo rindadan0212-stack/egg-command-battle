@@ -10,6 +10,11 @@
  *  ⚠️ **種族ごとに基礎値の合計を変えない。**
  *  変えると最強種族に全部が集約され、種族の多様性が「どれを使うのが得か」という
  *  最適化問題に潰される。差は**配分と属性**で出す。
+ *
+ *  ⚠️ **スキル1がどのステで伸びるかは、そのステを二重に得にする。**
+ *  タマルの殻打ちは防御スケールなので、防御が「守り」と「攻め」を兼ねる。
+ *  1種族しか無かったとき、これが釣り合いの計測を丸ごと濁らせた（実測で発覚）。
+ *  種族ごとに違うステへ寄せてある。
  */
 
 import { parseSprite, type Palette, type Sprite } from '../render/sprite.ts'
@@ -52,8 +57,11 @@ export interface Species {
   readonly palettes: readonly Palette[]
 }
 
-/** 🚧 段A の1種族目。段E で3〜4種に増やす。
- *  意匠は文字の格子で持つ。テキストのまま人が手で直せて、HMR で即ギャラリーに出る。 */
+// ── 意匠 ───────────────────────────────────────────
+// 文字の格子で持つ。テキストのまま人が手で直せて、HMR で即ギャラリーに出る。
+// 1=輪郭 2=体 3=差し色 4=目
+
+/** タマル — 丸い。殻を思わせる。 */
 const TAMARU_SPRITE = parseSprite([
   '................',
   '................',
@@ -73,7 +81,46 @@ const TAMARU_SPRITE = parseSprite([
   '................',
 ])
 
-/** 1=輪郭 2=体 3=明部 4=目 */
+/** ツノガ — 角がある。輪郭が角張っている。 */
+const TSUNOGA_SPRITE = parseSprite([
+  '................',
+  '..1..........1..',
+  '..11........11..',
+  '...11......11...',
+  '...111....111...',
+  '....11111111....',
+  '...1133222211...',
+  '..113322222211..',
+  '.11244222244211.',
+  '.11244222244211.',
+  '.11222222222211.',
+  '..112222222211..',
+  '...1122222211...',
+  '....11222211....',
+  '.....111111.....',
+  '................',
+])
+
+/** ハネル — 左右に羽。体は小さい。 */
+const HANERU_SPRITE = parseSprite([
+  '................',
+  '................',
+  '......1111......',
+  '.....112211.....',
+  '....11222211....',
+  '...1122222211...',
+  '.33112222221133.',
+  '.33114422441133.',
+  '.33112222221133.',
+  '...1122222211...',
+  '....11222211....',
+  '.....112211.....',
+  '......1111......',
+  '................',
+  '................',
+  '................',
+])
+
 const TAMARU_PALETTES: readonly Palette[] = [
   ['#2e2418', '#8fc96e', '#c8eaa8', '#1a1410'], // 通常
   ['#1c2436', '#6e9ec9', '#a8cbea', '#101418'], // 変異・蒼
@@ -81,15 +128,49 @@ const TAMARU_PALETTES: readonly Palette[] = [
   ['#2e2a18', '#c9bd6e', '#eae0a8', '#1a1810'], // 変異・金
 ]
 
+const TSUNOGA_PALETTES: readonly Palette[] = [
+  ['#2a1a14', '#c97a52', '#eab48c', '#160e0a'], // 通常
+  ['#141a2a', '#5273c9', '#8c9eea', '#0a0e16'], // 変異・蒼
+  ['#2a1420', '#c95293', '#ea8cc4', '#160a12'], // 変異・紅
+  ['#1a2a18', '#63c952', '#98ea8c', '#0e160a'], // 変異・翠
+]
+
+const HANERU_PALETTES: readonly Palette[] = [
+  ['#241c2e', '#a98fc9', '#ded0ea', '#141018'], // 通常
+  ['#1c2e2a', '#8fc9bd', '#d0eae4', '#101816'], // 変異・碧
+  ['#2e2418', '#c9b48f', '#eae0d0', '#181410'], // 変異・砂
+  ['#2e1c1c', '#c98f8f', '#ead0d0', '#181010'], // 変異・灰紅
+]
+
+/** ⚠️ スキル1 のスケール元をわざと散らしてある（防御 / 攻撃 / 攻撃だが全体攻撃）。
+ *  全種族が同じステでスケールすると、そのステだけが二重に得になる。 */
 const LIST: readonly Species[] = [
   {
     id: 'tamaru',
     name: 'タマル',
     element: 'scale',
-    skill1: 'shellbash',
+    skill1: 'shellbash', // 防御スケール
     base: { hp: 24, atk: 18, def: 22, spd: 16 },
     sprite: TAMARU_SPRITE,
     palettes: TAMARU_PALETTES,
+  },
+  {
+    id: 'tsunoga',
+    name: 'ツノガ',
+    element: 'fang',
+    skill1: 'strike', // 攻撃スケール・単体
+    base: { hp: 22, atk: 24, def: 18, spd: 16 },
+    sprite: TSUNOGA_SPRITE,
+    palettes: TSUNOGA_PALETTES,
+  },
+  {
+    id: 'haneru',
+    name: 'ハネル',
+    element: 'plume',
+    skill1: 'sweep', // 攻撃スケール・全体
+    base: { hp: 20, atk: 18, def: 16, spd: 26 },
+    sprite: HANERU_SPRITE,
+    palettes: HANERU_PALETTES,
   },
 ]
 
@@ -122,12 +203,17 @@ export function auditSpecies(): void {
     if (species.palettes.length === 0) {
       problems.push(`${species.id}: パレットが無い`)
     }
+    if (species.sprite.width !== 16 || species.sprite.height !== 16) {
+      problems.push(
+        `${species.id}: 意匠が ${species.sprite.width}×${species.sprite.height}（16×16 に揃える）`,
+      )
+    }
   }
 
   const ids = new Set(LIST.map((s) => s.id))
   if (ids.size !== LIST.length) problems.push('種族 id が重複している')
 
-  // 属性が3すくみを覆えているか（種族が増えたとき片寄りに気づけるように数える）
+  // 属性が3すくみを覆えているか。⚠️ 覆えていないと、有利不利が一方通行になる
   const covered = new Set(LIST.map((s) => s.element))
   const missing = ELEMENTS.filter((e) => !covered.has(e))
   if (missing.length > 0 && LIST.length >= ELEMENTS.length) {

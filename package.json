@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "same": "node scripts/same.mjs",
+    "sim": "node scripts/sim.mjs",
     "check:determinism": "node scripts/check-determinism.mjs"
   },
   "devDependencies": {

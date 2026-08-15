@@ -6,32 +6,141 @@
  *  | 2・3 | 卵ガチャ または 遺伝（配合では両親の4枠から2つ抽選） |
  *
  *  ⭐ 枠1が種族固定なので、種族の意味が構造的に残る。
- *  「この種族のスキル1が欲しい」が卵強奪の動機を保ち続ける。
  *
- *  🚧 **今は名前だけ。** CT の値と効果は段B で決める。
- *  CT を今ここに置くと**根拠の無い数値**になる（自動対戦シミュレータに当てて初めて決まる）。
- *  効果も、少数のプリミティブの組み合わせをデータで表す形にする（段B）。
+ *  ⚠️ **スキルを個別にコードで書かない。**
+ *  少数のプリミティブ（ダメージ / 回復 / 段階 / ゲージ）の組み合わせをデータで表す。
+ *  種類が増えても検証が掛け算にならないようにするため。
+ *
+ *  ⚠️ **CT は行動回数で減衰する。**使った本人が何回行動するまで再使用できないか、を表す。
  */
 
+import type { StatKey } from './stats.ts'
+
 export type SkillId = string
+
+/** 誰に効くか。 */
+export type Target =
+  | 'enemyOne' // 敵1体（AI は残 HP の低い相手を狙う）
+  | 'enemyAll' // 敵全体
+  | 'allyLowest' // 残 HP 割合が最も低い味方（自分を含む）
+  | 'self'
+
+/** 効果のプリミティブ。ここを増やすときは本当に組み合わせで表せないか先に疑う。 */
+export type Effect =
+  /** scale が 'def' のものは「防御が高いほど強い一撃」になる */
+  | { readonly kind: 'damage'; readonly power: number; readonly scale: 'atk' | 'def' }
+  | { readonly kind: 'heal'; readonly power: number }
+  | { readonly kind: 'stage'; readonly stat: StatKey; readonly delta: number }
+  /** ゲージを進める / 戻す（正で自分が早く動く、負で相手を遅らせる） */
+  | { readonly kind: 'gauge'; readonly delta: number }
+  /** ⭐ 味方への単体攻撃を、あと hits 回ぶん自分が肩代わりする。
+   *
+   *  ⚠️ **これが無いと「壁」という役割が成立しない。**
+   *  敵は最も脆い相手から狙うので、守る手段が無いと
+   *  「得意2つ」の脆い個体を入れた瞬間に数的不利になる
+   *  （実測: 役割分担編成の勝率が 23%）。耐久型が「自分が死なない」だけでは
+   *  チームに貢献しない。 */
+  | { readonly kind: 'cover'; readonly hits: number }
 
 export interface Skill {
   readonly id: SkillId
   readonly name: string
-  /** 何をするスキルなのかの短い説明。数値は入れない（まだ決まっていないので） */
+  /** 何をするスキルなのかの短い説明 */
   readonly gist: string
+  /** 使ったあと、自分が何回行動するまで使えないか。0 は毎回使える */
+  readonly ct: number
+  readonly target: Target
+  readonly effects: readonly Effect[]
+}
+
+/** 通常攻撃。**全員がいつでも使える**ので枠を消費しない。
+ *  ⭐ これが無いと、全スキルが CT 中のとき手が無くなって戦闘が止まる。 */
+export const BASIC_ATTACK: Skill = {
+  id: 'basic',
+  name: 'たたかう',
+  gist: '通常攻撃',
+  ct: 0,
+  target: 'enemyOne',
+  effects: [{ kind: 'damage', power: 9, scale: 'atk' }],
 }
 
 const LIST: readonly Skill[] = [
-  { id: 'strike', name: '強撃', gist: '単体に大ダメージ' },
-  { id: 'haste', name: '迅速', gist: '自身の速度を上げる' },
-  { id: 'slow', name: '鈍足', gist: '敵の速度を下げる' },
-  { id: 'guard', name: '守勢', gist: '自身の防御を上げる' },
-  { id: 'mend', name: '手当', gist: '味方1体を回復' },
-  { id: 'shellbash', name: '殻打ち', gist: '防御が高いほど強い一撃' },
+  {
+    id: 'strike',
+    name: '強撃',
+    gist: '単体に大ダメージ',
+    ct: 3,
+    target: 'enemyOne',
+    effects: [{ kind: 'damage', power: 20, scale: 'atk' }],
+  },
+  {
+    id: 'haste',
+    name: '迅速',
+    gist: '自身の速度を上げる',
+    ct: 4,
+    target: 'self',
+    effects: [{ kind: 'stage', stat: 'spd', delta: 1 }],
+  },
+  {
+    id: 'slow',
+    name: '鈍足',
+    gist: '敵の速度を下げる',
+    ct: 4,
+    target: 'enemyOne',
+    effects: [{ kind: 'stage', stat: 'spd', delta: -1 }],
+  },
+  {
+    id: 'guard',
+    name: '守勢',
+    gist: '自身の防御を上げる',
+    ct: 3,
+    target: 'self',
+    effects: [{ kind: 'stage', stat: 'def', delta: 1 }],
+  },
+  {
+    id: 'mend',
+    name: '手当',
+    gist: '傷ついた味方を回復',
+    ct: 4,
+    target: 'allyLowest',
+    effects: [{ kind: 'heal', power: 18 }],
+  },
+  {
+    id: 'shellbash',
+    name: '殻打ち',
+    gist: '防御が高いほど強い一撃',
+    ct: 3,
+    target: 'enemyOne',
+    effects: [{ kind: 'damage', power: 20, scale: 'def' }],
+  },
+  {
+    id: 'cover',
+    name: 'かばう',
+    gist: '味方への攻撃を肩代わりする',
+    ct: 3,
+    target: 'self',
+    effects: [{ kind: 'cover', hits: 3 }],
+  },
+  {
+    id: 'sweep',
+    name: '薙ぎ',
+    gist: '敵全体に小ダメージ',
+    ct: 5,
+    target: 'enemyAll',
+    effects: [{ kind: 'damage', power: 11, scale: 'atk' }],
+  },
+  {
+    id: 'stall',
+    name: '足止め',
+    gist: '敵1体の行動を大きく遅らせる',
+    ct: 5,
+    target: 'enemyOne',
+    effects: [{ kind: 'gauge', delta: -450 }],
+  },
 ]
 
 export const SKILLS: ReadonlyMap<SkillId, Skill> = new Map(LIST.map((s) => [s.id, s]))
+export const SKILL_LIST: readonly Skill[] = LIST
 
 /** 知らない id を黙って握りつぶさない。表に無いものは「効かないだけ」で気づけないため。 */
 export function skillById(id: SkillId): Skill {
@@ -40,5 +149,6 @@ export function skillById(id: SkillId): Skill {
   return skill
 }
 
-/** 卵ガチャ（枠2・3）で出うるスキル。🚧 抽選範囲を種族ごとに分けるかは段C で決める。 */
+/** 卵ガチャ（枠2・3）で出うるスキル。
+ *  🚧 種族ごとにプールを分けるかは段C で決める。 */
 export const GACHA_POOL: readonly SkillId[] = LIST.map((s) => s.id)
