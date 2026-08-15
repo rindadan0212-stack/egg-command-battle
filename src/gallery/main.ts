@@ -4,16 +4,17 @@
  *  全体スクショでは崩れ・被り・見切れが見えないので、**1点ずつ撮れる枠**を用意する。
  *  各点に `#t-<id>` を振ってあるので、Playwright の target 指定でクロップ撮影できる:
  *
- *      browser_take_screenshot({ target: '#t-egg-base', filename: 'egg-base.png' })
+ *      browser_take_screenshot({ target: '#t-tamaru-1', filename: 'tamaru-1.png' })
  *
  *  ⭐ **順序が大事** — 意匠を作り始めてからでは、作った物を検分できない期間が生まれる。
- *  だから中身が無いうちに先に作る。
  */
 
-import { fingerprint, fingerprintAll } from '../core/fingerprint'
-import { EMPTY_SOURCE, startLiveReporting } from '../live/report'
-import { spriteToCanvas, type Palette, type Sprite } from '../render/sprite'
-import { EGG, PALETTES } from './placeholder'
+import { fingerprint, fingerprintAll } from '../core/fingerprint.ts'
+import { auditSpecies, ELEMENT_LABELS, SPECIES_LIST } from '../game/species.ts'
+import { EMPTY_SOURCE, startLiveReporting } from '../live/report.ts'
+import { spriteToCanvas, type Palette, type Sprite } from '../render/sprite.ts'
+
+auditSpecies()
 
 interface Plate {
   id: string
@@ -26,13 +27,18 @@ interface Plate {
 const SCALES = [1, 2, 4, 8] as const
 const DEFAULT_SCALE = 4
 
-const PLATES: readonly Plate[] = PALETTES.map(({ id, label, palette }) => ({
-  id: `egg-${id}`,
-  label: `たまご / ${label}`,
-  sprite: EGG,
-  palette,
-  fingerprint: fingerprint(`${EGG.width}x${EGG.height}:${palette.join(',')}`),
-}))
+/** 種族 × パレット。⭐ 変異は色変化として出るので、パレットの数だけ姿がある。 */
+const PLATES: readonly Plate[] = SPECIES_LIST.flatMap((species) =>
+  species.palettes.map((palette, index) => ({
+    id: `${species.id}-${index}`,
+    label: `${species.name}${index === 0 ? '' : ` / 変異${index}`} · ${ELEMENT_LABELS[species.element]}`,
+    sprite: species.sprite,
+    palette,
+    fingerprint: fingerprint(
+      `${species.id}:${species.sprite.width}x${species.sprite.height}:${palette.join(',')}`,
+    ),
+  })),
+)
 
 function buildPlate(plate: Plate, scale: number): HTMLElement {
   const wrap = document.createElement('div')
@@ -66,7 +72,7 @@ function render(root: HTMLElement): void {
   const note = document.createElement('p')
   note.className = 'note'
   note.textContent =
-    '🚧 まだ仮の絵。ここに出ているのは「パレットを差し替えると変異個体になる」経路の確認。段A で本物に差し替える。'
+    '種族 × パレット。同じドットで色だけ差し替えたものが変異個体になる。意匠は種族の定義ファイルの文字格子を直接書き換えれば直せる。'
 
   const controls = document.createElement('div')
   controls.className = 'controls'

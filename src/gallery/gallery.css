@@ -8,32 +8,7 @@
   padding: 3rem 2rem 6rem;
 }
 
-/* 角丸は「押せるもの」だけに使う */
-.controls {
-  display: flex;
-  gap: 0.4rem;
-  margin: 2rem 0 0;
-}
-
-.controls button {
-  font-family: var(--mono);
-  font-size: 0.8rem;
-  color: var(--ink-dim);
-  background: transparent;
-  border: 0;
-  border-radius: 3px;
-  padding: 0.3rem 0.7rem;
-  cursor: pointer;
-}
-
-.controls button:hover {
-  color: var(--ink);
-}
-
-.controls button[data-on='true'] {
-  background: var(--yolk);
-  color: #1a1408;
-}
+/* .controls は style.css にある（保管庫と共用。2箇所で決めない） */
 
 .shelf {
   display: flex;
