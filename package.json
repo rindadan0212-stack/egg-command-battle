@@ -1,0 +1,18 @@
+{
+  "name": "egg-command-battle",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "same": "node scripts/same.mjs",
+    "check:determinism": "node scripts/check-determinism.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1"
+  }
+}

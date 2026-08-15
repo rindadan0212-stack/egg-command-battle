@@ -1,0 +1,109 @@
+/* 区切りは余白で作る。線は引かない（引くときは一辺だけ）。
+   角丸は「押せるもの」だけ。無彩色を支配的にし、アクセントは黄身の色を点で使う。 */
+
+:root {
+  --bg: #14120f;
+  --bg-raised: #1c1a16;
+  --ink: #e8e4db;
+  --ink-dim: #8a8377;
+  --ink-faint: #56514a;
+  --yolk: #f0b429;
+  --danger: #d1584c;
+
+  --mono: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+  --sans: "Yu Gothic UI", "Hiragino Sans", system-ui, sans-serif;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ドット絵は必ず nearest-neighbor で拡大する */
+canvas,
+img.pixel {
+  image-rendering: pixelated;
+}
+
+#app {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 4.5rem 2rem 6rem;
+}
+
+h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.25rem;
+}
+
+/* 主役は1つだけ。ここではタイトルの下の一文 */
+.lead {
+  color: var(--yolk);
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  margin: 0 0 4rem;
+}
+
+.note {
+  color: var(--ink-dim);
+  max-width: 42rem;
+  margin: 0 0 1.25rem;
+}
+
+/* 数値・ID・指紋は等幅。ここは意図的に効かせる */
+.mono {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--ink-dim);
+}
+
+/* 段の一覧。線でなく余白と明度でまとめる */
+.stages {
+  list-style: none;
+  padding: 0;
+  margin: 3rem 0 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.stages li {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 1.25rem;
+  padding: 0.45rem 0.75rem;
+  color: var(--ink-faint);
+}
+
+.stages li[data-state='now'] {
+  background: var(--bg-raised);
+  color: var(--ink);
+}
+
+.stages .tag {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--ink-faint);
+}
+
+.stages li[data-state='now'] .tag {
+  color: var(--yolk);
+}

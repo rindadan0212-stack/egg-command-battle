@@ -1,0 +1,69 @@
+/* 1体ずつ実寸で切り出して撮るための画面。
+   ⚠️ 全体スクショは縮小されて届くので、被り・見切れの判定には使えない。
+   各点に #t-<id> を振り、Playwright の target 指定でクロップ撮影する。 */
+
+#gallery {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 3rem 2rem 6rem;
+}
+
+/* 角丸は「押せるもの」だけに使う */
+.controls {
+  display: flex;
+  gap: 0.4rem;
+  margin: 2rem 0 0;
+}
+
+.controls button {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+}
+
+.controls button:hover {
+  color: var(--ink);
+}
+
+.controls button[data-on='true'] {
+  background: var(--yolk);
+  color: #1a1408;
+}
+
+.shelf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 2.5rem 2rem;
+  margin: 2.5rem 0 0;
+}
+
+/* 撮影対象。背景は市松にして、透明部分と余白を目で見分けられるようにする */
+.plate {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: center;
+}
+
+.plate .frame {
+  background-color: #262320;
+  background-image:
+    linear-gradient(45deg, #201d1a 25%, transparent 25%, transparent 75%, #201d1a 75%),
+    linear-gradient(45deg, #201d1a 25%, transparent 25%, transparent 75%, #201d1a 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+}
+
+.plate .label {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--ink-dim);
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+
+# 実行中の状態の観測用。git に入れない（§5.0-②）
+.live.json
+
+# Playwright MCP の作業出力（スクショ・ログ）
+.playwright-mcp/
+
+*.local
+Thumbs.db
