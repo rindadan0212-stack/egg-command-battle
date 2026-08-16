@@ -30,9 +30,16 @@ namespace EggCommand.Core
         public readonly PixelSprite Sprite;
         /// <summary>0 = 通常。1以降が変異色（ARK と同じく変異は色変化として出る）。</summary>
         public readonly IReadOnlyList<Palette> Palettes;
+        /// <summary>この種族の卵から枠2・3 に出うる技。
+        ///
+        /// ⭐ **種族の行に置く。** 別表にしていたときは、種族を足すのに2か所を直す必要があり、
+        /// 片方を忘れると「遊んでいる最中に投げる」形で出た（コンパイルは通る）。
+        /// ⚠️ 種族ごとにプールを分けるのは、どこで卵を奪っても同じ技が出ると
+        /// 「必要な技を持つ親の巣へ行く」という輪の駆動力が消えるため。</summary>
+        public readonly IReadOnlyList<string> Gacha;
 
         public Species(string id, string name, Element element, string skill1, StatBlock baseStats,
-            PixelSprite sprite, IReadOnlyList<Palette> palettes)
+            PixelSprite sprite, IReadOnlyList<Palette> palettes, IReadOnlyList<string> gacha)
         {
             Id = id;
             Name = name;
@@ -41,6 +48,7 @@ namespace EggCommand.Core
             Base = baseStats;
             Sprite = sprite;
             Palettes = palettes;
+            Gacha = gacha;
         }
     }
 
@@ -218,15 +226,21 @@ namespace EggCommand.Core
         {
             new Species("tamaru", "タマル", Element.Water,
                 "attack-def", // 防御スケール
-                new StatBlock(24, 18, 22, 16), TamaruSprite, TamaruPalettes),
+                new StatBlock(24, 18, 22, 16), TamaruSprite, TamaruPalettes,
+                // 守りの系統
+                new[] { "def-up", "taunt", "shield", "heal-ratio", "guts", "attack", "ct-long" }),
 
             new Species("tsunoga", "ツノガ", Element.Fire,
                 "attack", // 攻撃スケール・単体
-                new StatBlock(22, 24, 18, 16), TsunogaSprite, TsunogaPalettes),
+                new StatBlock(22, 24, 18, 16), TsunogaSprite, TsunogaPalettes,
+                // 攻めの系統
+                new[] { "atk-up", "def-down", "attack-heavy", "ct-short", "poison", "attack-def", "stun" }),
 
             new Species("haneru", "ハネル", Element.Wood,
                 "attack-all", // 攻撃スケール・全体（全体なので威力は小）
-                new StatBlock(20, 18, 16, 26), HaneruSprite, HaneruPalettes),
+                new StatBlock(20, 18, 16, 26), HaneruSprite, HaneruPalettes,
+                // 撹乱の系統
+                new[] { "spd-up", "spd-down", "atk-down", "stun", "regen", "ct-long", "immune" }),
 
             // ⚠️ ボス専用。巣は持たないので卵からは出ない
             // ⚠️ 3すくみは 炎 → 木 → 水 → 炎。水に有利を取るのは木（ハネル）。
@@ -235,7 +249,9 @@ namespace EggCommand.Core
             //    震撼（CT7 の全体大技）は枠2へ回し、ここは中程度に留める。
             new Species("nushi", "ヌシ", Element.Water,
                 "attack-def",
-                new StatBlock(26, 20, 24, 10), NushiSprite, NushiPalettes),
+                new StatBlock(26, 20, 24, 10), NushiSprite, NushiPalettes,
+                // ⚠️ 卵は落とさないが、数える検査が「プールが無い」で落ちるので置く
+                new[] { "def-up", "spd-down", "taunt", "guts", "immune", "attack-all-heavy" }),
         };
 
         public static IReadOnlyList<Species> All => List;

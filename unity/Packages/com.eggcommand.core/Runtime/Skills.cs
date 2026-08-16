@@ -309,22 +309,6 @@ namespace EggCommand.Core
             return effect.Kind == EffectKind.Poison || effect.Kind == EffectKind.Stun;
         }
 
-        /// <summary>卵ガチャ（枠2・3）で出うるスキル。
-        ///
-        /// ⭐ 種族ごとにプールを分ける。全体プールにすると、どこで卵を奪っても同じ技が出るので
-        /// 「必要な技を持つ親の巣へ行く」という輪の駆動力が消える。</summary>
-        private static readonly Dictionary<string, string[]> GachaPools = new Dictionary<string, string[]>
-        {
-            // 鱗・守りの系統
-            { "tamaru", new[] { "def-up", "taunt", "shield", "heal-ratio", "guts", "attack", "ct-long" } },
-            // 牙・攻めの系統
-            { "tsunoga", new[] { "atk-up", "def-down", "attack-heavy", "ct-short", "poison", "attack-def", "stun" } },
-            // 羽・撹乱の系統
-            { "haneru", new[] { "spd-up", "spd-down", "atk-down", "stun", "regen", "ct-long", "immune" } },
-            // ヌシ。⚠️ 卵は落とさないが、表に無いと数える検査が落ちる
-            { "nushi", new[] { "def-up", "spd-down", "taunt", "guts", "immune", "attack-all-heavy" } },
-        };
-
         /// <summary>技表とガチャプールの整合を数える。
         ///
         /// ⭐ **件数を数えない。** 数えると技を足すたびに落ちるので、
@@ -364,15 +348,15 @@ namespace EggCommand.Core
             {
                 reachable.Add(species.Skill1);
 
-                string[]? pool;
-                if (!GachaPools.TryGetValue(species.Id, out pool))
+                var pool = species.Gacha;
+                if (pool.Count == 0)
                 {
-                    problems.Add($"{species.Id}: 卵ガチャのプールが無い（種族を足したら必ず要る）");
+                    problems.Add($"{species.Id}: 卵ガチャのプールが空（種族を足したら必ず要る）");
                     continue;
                 }
 
                 var inPool = new HashSet<string>();
-                foreach (var id in pool!)
+                foreach (var id in pool)
                 {
                     if (!Index.ContainsKey(id)) problems.Add($"{species.Id} のプールが実在しない技 {id} を指している");
                     if (!inPool.Add(id)) problems.Add($"{species.Id} のプールで {id} が重複している");
@@ -402,15 +386,14 @@ namespace EggCommand.Core
         }
 
         /// <summary>その種族の卵から出うる技。⚠️ 表に無い種族は黙って空にせず投げる。
-        /// 枠1（種族固定）と同じ技はここで外す。</summary>
+        /// 枠1（種族固定）と同じ技はここで外す。
+        /// ⭐ プールの実体は <see cref="Species.Gacha"/>（種族の行）が持つ。ここは絞るだけ。</summary>
         public static List<string> GachaPoolOf(string speciesId, string skill1)
         {
-            string[]? pool;
-            if (!GachaPools.TryGetValue(speciesId, out pool))
-                throw new ArgumentException($"卵ガチャの表に {speciesId} が無い");
+            var pool = SpeciesTable.ById(speciesId).Gacha;
 
-            var result = new List<string>(pool!.Length);
-            foreach (var id in pool!)
+            var result = new List<string>(pool.Count);
+            foreach (var id in pool)
             {
                 if (id != skill1) result.Add(id);
             }
