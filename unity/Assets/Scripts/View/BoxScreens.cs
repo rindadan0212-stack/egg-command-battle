@@ -4,35 +4,6 @@ using EggCommand.Core;
 
 namespace EggCommand.View
 {
-    /// <summary>孵化。⭐ 上の5枠が孵化器、下の棚が手持ちの卵。
-    ///
-    /// ⭐ 実時間で孵る。枠が有限なので「どれを先に温めるか」が選択になる。
-    /// ⭐ 並びは Assets/Resources/Prefabs/HatchScreen.prefab が持つ。ここに座標は無い。
-    /// </summary>
-    public static class HatchScreen
-    {
-        public static void Build(App app, RectTransform body)
-        {
-            var view = app.Put<HatchView>(body, "HatchScreen");
-            if (view == null) return;
-
-            view.Bind(app.Game, app.Now, app.HatchSpeed,
-                onBegin: egg =>
-                {
-                    Hatchery.Begin(app.Game, egg.Id, app.Now(), app.HatchSpeed);
-                    app.Refresh();
-                },
-                onCollect: slot =>
-                {
-                    // ⚠️ 保管庫が満杯なら孵さない（黙って捨てない）
-                    if (Storages.IsFull(app.Game.Storage)) { app.Show(Screen.Box); return; }
-                    var born = Hatchery.Collect(app.Game, slot.Egg.Id, app.Now());
-                    if (born == null) { app.Refresh(); return; }
-                    Fanfare.Born(app.Overlay, born, () => app.Show(Screen.Hatch));
-                });
-        }
-    }
-
     /// <summary>配合。ARK 準拠。⭐ 並びは Prefabs/BreedScreen.prefab が持つ。</summary>
     public static class BreedScreen
     {
@@ -55,7 +26,7 @@ namespace EggCommand.View
                     var outcome = Games.FusePair(app.Game, _a, _b);
                     _a = null;
                     _b = null;
-                    Fanfare.EggGot(app.Overlay, outcome.Egg, () => app.Show(Screen.Hatch));
+                    Fanfare.EggGot(app.Overlay, outcome.Egg, () => app.Show(Screen.Home));
                 },
                 onPick: id =>
                 {
@@ -121,7 +92,8 @@ namespace EggCommand.View
                     Games.FeedCreature(game, creature.Id, food.Id);
                     _food = null;
                     app.Refresh();
-                });
+                },
+                onGrow: () => { Core.Idle.Spend(game.Idle, creature); app.Refresh(); });
         }
     }
 }

@@ -46,11 +46,24 @@ namespace EggCommand.View
             if (_dock != null) _dock.SetActive(home);
         }
 
+        /// <summary>使わない札を隠す。⚠️ 空の札を残すと「押せるのに何も起きない」になる。</summary>
+        public void HidePanelsFrom(int index)
+        {
+            for (int i = index; i < _panels.Length; i++)
+            {
+                if (_panels[i] != null && _panels[i].Button != null)
+                {
+                    _panels[i].Button.gameObject.SetActive(false);
+                }
+            }
+        }
+
         public void BindPanel(int index, string name, string count, Action onGo)
         {
             if (index < 0 || index >= _panels.Length) return;
             var panel = _panels[index];
             if (panel == null) return;
+            if (panel.Button != null) panel.Button.gameObject.SetActive(true);
             if (panel.Name != null) panel.Name.text = name;
             if (panel.Count != null) panel.Count.text = count;
             if (panel.Button != null)

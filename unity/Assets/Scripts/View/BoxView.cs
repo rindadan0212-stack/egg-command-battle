@@ -33,7 +33,7 @@ namespace EggCommand.View
         /// （押すたびに意味が変わると、何が起きるか分からない画面になる）。</summary>
         public void Bind(Game game, Creature creature, SortKey sort, IReadOnlyList<Creature> sorted,
             Action<SortKey> onSort, Action<string> onPick, Action onParty, Action onRelease,
-            Creature food, Action onMarkFood, Action onFeed)
+            Creature food, Action onMarkFood, Action onFeed, Action onGrow)
         {
             bool has = creature != null;
             if (_detail != null) _detail.SetActive(has);
@@ -87,7 +87,14 @@ namespace EggCommand.View
             Repurpose(0, isFood ? "餌を外す" : "餌にする", true, isFood, onMarkFood);
             // ⚠️ 「個体を選んでください」と書かない。⭐ 伸びる数だけ出す
             Repurpose(1, canFeed ? $"合成 ＋{Levels.FeedValueOf(food)}" : "合成", canFeed, false, onFeed);
-            for (int i = 2; i < _spend.Length; i++)
+
+            // ⭐ 放置で溜めた素材で育てる。1回で足りるぶんだけ一気に上限まで
+            int steps = game.Idle.Materials / Core.Idle.MaterialPerLevel;
+            int room = Levels.GrowMax - creature.Earned;
+            if (steps > room) steps = room;
+            Repurpose(2, steps > 0 ? $"そだてる ＋{steps}" : "そだてる", steps > 0, steps > 0, onGrow);
+
+            for (int i = 3; i < _spend.Length; i++)
             {
                 if (_spend[i] != null) _spend[i].gameObject.SetActive(false);
             }

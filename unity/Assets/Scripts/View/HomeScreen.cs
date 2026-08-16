@@ -3,16 +3,32 @@ using EggCommand.Core;
 
 namespace EggCommand.View
 {
-    /// <summary>ホーム。⭐ 輪のハブ。編成が画面の主役。
+    /// <summary>ホーム。⭐ 上半分が放置（素材が溜まる）、下半分が孵化器。
     ///
-    /// ⭐ 並びは Assets/Resources/Prefabs/HomeScreen.prefab が持つ。ここに座標は無い。
+    /// ⚠️ 孵化は独立した画面をやめてここへ集めた。輪の待ち時間が2つ（放置と孵化）
+    /// あるので、同じ画面で両方が進んでいるのが見えるほうが素直。
     /// </summary>
     public static class HomeScreen
     {
         public static void Build(App app, RectTransform body)
         {
             var view = app.Put<HomeView>(body, "HomeScreen");
-            if (view != null) view.Bind(app.Game);
+            if (view == null) return;
+
+            view.Bind(app,
+                onBegin: egg =>
+                {
+                    Hatchery.Begin(app.Game, egg.Id, app.Now(), app.HatchSpeed);
+                    app.Refresh();
+                },
+                onCollect: slot =>
+                {
+                    // ⚠️ 保管庫が満杯なら孵さない（黙って捨てない）
+                    if (Storages.IsFull(app.Game.Storage)) { app.Show(Screen.Box); return; }
+                    var born = Hatchery.Collect(app.Game, slot.Egg.Id, app.Now());
+                    if (born == null) { app.Refresh(); return; }
+                    Fanfare.Born(app.Overlay, born, () => app.Show(Screen.Home));
+                });
         }
     }
 

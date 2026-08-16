@@ -11,7 +11,6 @@ namespace EggCommand.View
         Nests,
         Steal,
         Battle,
-        Hatch,
         Breed,
         Box,
     }
@@ -140,11 +139,12 @@ namespace EggCommand.View
             _sky.raycastTarget = screen != Screen.Steal;
 
             _frame.Bind(home, TitleOf(screen), BadgeOf(screen), () => Show(Screen.Home));
+            // ⚠️ 孵化はホームへ移したのでドックから外した。札は3枚
             _frame.BindPanel(0, "探索", $"{Game.Encounters.Count}", () => Show(Screen.Nests));
-            _frame.BindPanel(1, "孵化", $"{Game.Eggs.Count + Game.Incubating.Count}", () => Show(Screen.Hatch));
-            _frame.BindPanel(2, "配合", $"{Game.Storage.Creatures.Count}体", () => Show(Screen.Breed));
-            _frame.BindPanel(3, "BOX", $"{Game.Storage.Creatures.Count}/{Game.Storage.Slots}",
+            _frame.BindPanel(1, "配合", $"{Game.Storage.Creatures.Count}体", () => Show(Screen.Breed));
+            _frame.BindPanel(2, "BOX", $"{Game.Storage.Creatures.Count}/{Game.Storage.Slots}",
                 () => Show(Screen.Box));
+            _frame.HidePanelsFrom(3);
 
             var body = _frame.Body;
             // ⚠️ Destroy はフレームの終わりまで効かない。
@@ -164,7 +164,6 @@ namespace EggCommand.View
                 case Screen.Nests: NestsScreen.Build(this, body); break;
                 case Screen.Steal: StealScreen.Build(this, body); break;
                 case Screen.Battle: BattleScreen.Build(this, body); break;
-                case Screen.Hatch: HatchScreen.Build(this, body); break;
                 case Screen.Breed: BreedScreen.Build(this, body); break;
                 case Screen.Box: BoxScreen.Build(this, body); break;
             }
@@ -193,7 +192,6 @@ namespace EggCommand.View
                 case Screen.Nests:
                 case Screen.Steal: return Sky.Nest;
                 case Screen.Battle: return Sky.Battle;
-                case Screen.Hatch: return Sky.Hatch;
                 case Screen.Breed: return Sky.Breed;
                 default: return Sky.Box;
             }
@@ -207,7 +205,6 @@ namespace EggCommand.View
                 case Screen.Nests: return "探索";
                 case Screen.Steal: return CurrentNest != null ? CurrentNest.Name : "強奪";
                 case Screen.Battle: return CurrentIsBoss ? Nests.BossName : "戦闘";
-                case Screen.Hatch: return "孵化";
                 case Screen.Breed: return "配合";
                 default: return "BOX";
             }
@@ -218,7 +215,6 @@ namespace EggCommand.View
         {
             switch (screen)
             {
-                case Screen.Hatch: return $"{Game.Incubating.Count}/{Hatchery.Slots}";
                 case Screen.Box:
                 case Screen.Breed: return $"{Game.Storage.Creatures.Count}/{Game.Storage.Slots}";
                 case Screen.Battle: return Battle == null ? "" : $"行動 {Battle.Actions}";

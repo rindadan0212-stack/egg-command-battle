@@ -28,13 +28,11 @@ namespace EggCommand.EditorTools
             made += One("Fanfare", BuildFanfare);
             made += One("Banner", BuildBanner);
             made += One("AppFrame", BuildFrame);
-            made += One("PartyStand", BuildPartyStand);
             made += One("HomeScreen", BuildHome);
             made += One("EncounterCard", BuildEncounterCard);
             made += One("NestsScreen", BuildNests);
             made += One("IncubatorSlot", BuildIncubatorSlot);
             made += One("EggCard", BuildEggCard);
-            made += One("HatchScreen", BuildHatch);
             made += One("CreatureCell", BuildCreatureCell);
             made += One("BoxScreen", BuildBox);
             made += One("BreedScreen", BuildBreed);
@@ -182,85 +180,114 @@ namespace EggCommand.EditorTools
 
         // ── ホーム ──────────────────────────────────────
 
-        private static GameObject BuildPartyStand()
-        {
-            var root = new GameObject("PartyStand", typeof(RectTransform));
-            var rect = (RectTransform)root.transform;
-            Anchor(rect, 480f, 600f);
-
-            var role = Add(root, "Role", 0f, 0f, 480f, 30f);
-            Text(role, "LEADER", 20, Ui.InkFaint, TextAnchor.UpperCenter);
-            var name = Add(root, "Name", 0f, 30f, 480f, 46f);
-            Text(name, "", 30, Ui.Ink, TextAnchor.UpperCenter);
-            var art = Add(root, "Art", 0f, 84f, 480f, 480f);
-            art.gameObject.AddComponent<Image>().preserveAspect = true;
-
-            var view = root.AddComponent<PartyStand>();
-            var so = new SerializedObject(view);
-            so.FindProperty("_art").objectReferenceValue = art.GetComponent<Image>();
-            so.FindProperty("_name").objectReferenceValue = name.GetComponent<UnityEngine.UI.Text>();
-            so.FindProperty("_role").objectReferenceValue = role.GetComponent<UnityEngine.UI.Text>();
-            so.ApplyModifiedPropertiesWithoutUndo();
-            return root;
-        }
-
         private static GameObject BuildHome()
         {
             var root = Screen("HomeScreen");
-            var stand = AssetDatabase.LoadAssetAtPath<GameObject>($"{Dir}/PartyStand.prefab");
+            var slotPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Dir}/IncubatorSlot.prefab");
+            var cardPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Dir}/EggCard.prefab");
+            float h = Ui.H - Ui.TopBarHeight;   // 器の下に入るぶん短い
 
-            // ⚠️ GOAL の行は置かない。目的地を1つ書くと、他の遊びがその準備に見える
+            // ── 一番上: 溜まっている素材 ────────────────
+            var top = Add(root, "Materials", 0f, 0f, Ui.W, 78f);
+            Skin(top, "pill", new Color(1f, 1f, 1f, 0.75f), sliced: true);
+            var matIcon = Add(top.gameObject, "Icon", Ui.Margin, 19f, 40f, 40f);
+            Skin(matIcon, "circle", Ui.Accent);
+            var matText = Add(top.gameObject, "Count", Ui.Margin + 56f, 0f, 400f, 78f);
+            var materials = Text(matText, "0", 40, Ui.Ink, TextAnchor.MiddleLeft);
 
-            // 足元。⭐ 線を引かず面で示す
-            var ground = Add(root, "Ground", 240f, 1108f, 600f, 26f);
+            // ── 上半分: 放置（横スクロール） ──────────────
+            var strip = Add(root, "Idle", 0f, 90f, Ui.W, 470f);
+            // ⚠️ 地面は画面幅の2倍ある。RectMask2D で切らないと画面外へはみ出す
+            //    （検査が「画面外」と言うのはこの帯のこと。意図どおり）
+            strip.gameObject.AddComponent<RectMask2D>();
+
+            // ⭐ 地面は2枚ぶんの幅。左へ流して、1枚ぶん流れたら折り返す
+            var ground = Add(strip.gameObject, "Ground", 0f, 396f, Ui.W * 2f, 40f);
             ground.gameObject.AddComponent<Image>().color = new Color32(0xf2, 0xb3, 0x4b, 0xff);
+            for (int i = 0; i < 8; i++)
+            {
+                var tuft = Add(ground.gameObject, $"Tuft {i}", 90f + 260f * i, -26f, 46f, 26f);
+                tuft.gameObject.AddComponent<Image>().color = new Color32(0x9a, 0xc9, 0x5e, 0xff);
+            }
 
-            var stands = new PartyStand[3];
-            // ⭐ 手前のリーダーが一番大きい。脇は少し上・少し小さく（三角に置く）
-            stands[0] = Stand(root, stand, "Lead", 300f, 520f, 1f);
-            stands[1] = Stand(root, stand, "Side 1", 20f, 610f, 0.62f);
-            stands[2] = Stand(root, stand, "Side 2", 580f, 610f, 0.62f);
-
-            var empty = Add(root, "EmptyStage", 0f, 900f, Ui.W, 60f);
+            var walkers = new Image[3];
             for (int i = 0; i < 3; i++)
             {
-                var block = Add(empty.gameObject, $"Slot {i}", 300f + 168f * i, 14f, 132f, 26f);
-                block.gameObject.AddComponent<Image>().color = new Color32(0xc9, 0xa4, 0x6a, 0xff);
+                var w = Add(strip.gameObject, $"Walker {i}", 0f, 0f, 160f, 160f);
+                w.pivot = new Vector2(0.5f, 0f);
+                w.anchoredPosition = new Vector2(120f + 130f * i, -396f);
+                walkers[i] = w.gameObject.AddComponent<Image>();
+                walkers[i].preserveAspect = true;
             }
-            empty.gameObject.SetActive(false);
 
-            float factTop = 1480f;
-            float factWidth = (Ui.W - Ui.Margin * 2f) / 3f;
-            var values = new UnityEngine.UI.Text[3];
-            string[] labels = { "編成", "スピード合計", "飛距離" };
-            for (int i = 0; i < 3; i++)
+            var slot = Add(strip.gameObject, "Enemy", 0f, 0f, 200f, 200f);
+            slot.pivot = new Vector2(0.5f, 0f);
+            slot.anchoredPosition = new Vector2(880f, -396f);
+            var enemyImage = slot.gameObject.AddComponent<Image>();
+            enemyImage.preserveAspect = true;
+
+            var track = Add(strip.gameObject, "EnemyTrack", 740f, 176f, 280f, 18f);
+            track.gameObject.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.18f);
+            var fill = Add(track.gameObject, "Fill", 0f, 0f, 280f, 18f);
+            var fillImage = fill.gameObject.AddComponent<Image>();
+            fillImage.color = Ui.Danger;
+            fillImage.sprite = Ui.SkinSprite("pill");
+            fillImage.type = Image.Type.Filled;
+            fillImage.fillMethod = Image.FillMethod.Horizontal;
+
+            var idle = strip.gameObject.AddComponent<IdleStrip>();
+            var iso = new SerializedObject(idle);
+            iso.FindProperty("_ground").objectReferenceValue = ground;
+            Fill(iso, "_walkers", walkers);
+            iso.FindProperty("_enemy").objectReferenceValue = enemyImage;
+            iso.FindProperty("_enemyHp").objectReferenceValue = fillImage;
+            iso.FindProperty("_enemySlot").objectReferenceValue = slot;
+            iso.ApplyModifiedPropertiesWithoutUndo();
+
+            // ── 下半分: 孵化器5枠を X に置く ──────────────
+            var slots = new IncubatorSlot[Hatchery.Slots];
+            var at = new Vector2[]
             {
-                var tag = Add(root, $"Fact {i}", Ui.Margin + factWidth * i, factTop, factWidth, 32f);
-                Ui.Knockout(Text(tag, labels[i], 22, Ui.InkDim, TextAnchor.UpperLeft), 3);
-                var value = Add(root, $"Value {i}", Ui.Margin + factWidth * i, factTop + 34f, factWidth, 54f);
-                values[i] = Text(value, "", 42, Ui.Ink, TextAnchor.UpperLeft);
+                new Vector2( 70f, 620f), new Vector2(710f, 620f),
+                new Vector2(390f, 840f),
+                new Vector2( 70f, 1060f), new Vector2(710f, 1060f),
+            };
+            for (int i = 0; i < slots.Length; i++)
+            {
+                var go = (GameObject)PrefabUtility.InstantiatePrefab(slotPrefab, root.transform);
+                go.name = $"Slot {i}";
+                var r = (RectTransform)go.transform;
+                r.sizeDelta = new Vector2(300f, 400f);
+                r.anchoredPosition = new Vector2(at[i].x, -at[i].y);
+                r.localScale = new Vector3(0.8f, 0.8f, 1f);
+                slots[i] = go.GetComponent<IncubatorSlot>();
             }
+
+            // ── 在庫。⚠️ 常設しない。空き枠を押したときだけ開く ─────
+            var picker = Full(root, "Picker");
+            var dim = picker.gameObject.AddComponent<Image>();
+            dim.color = new Color(0.04f, 0.06f, 0.12f, 0.72f);
+            var close = picker.gameObject.AddComponent<Button>();
+            close.transition = Selectable.Transition.None;
+            var shelf = Scroll(picker.gameObject, "Shelf", 0f, 180f, Ui.W, h - 400f,
+                new Vector2(228f, 268f), 4);
+            picker.gameObject.SetActive(false);
+
+            var template = (GameObject)PrefabUtility.InstantiatePrefab(cardPrefab, root.transform);
+            template.name = "EggCard (型)";
+            template.SetActive(false);
 
             var view = root.AddComponent<HomeView>();
             var so = new SerializedObject(view);
-            Fill(so, "_stands", stands);
-            so.FindProperty("_emptyStage").objectReferenceValue = empty.gameObject;
-            so.FindProperty("_partyValue").objectReferenceValue = values[0];
-            so.FindProperty("_speedValue").objectReferenceValue = values[1];
-            so.FindProperty("_reachValue").objectReferenceValue = values[2];
+            so.FindProperty("_materials").objectReferenceValue = materials;
+            so.FindProperty("_idle").objectReferenceValue = idle;
+            Fill(so, "_slots", slots);
+            so.FindProperty("_picker").objectReferenceValue = picker.gameObject;
+            so.FindProperty("_shelf").objectReferenceValue = shelf;
+            so.FindProperty("_eggCard").objectReferenceValue = template.GetComponent<EggCard>();
+            so.FindProperty("_pickerClose").objectReferenceValue = close;
             so.ApplyModifiedPropertiesWithoutUndo();
             return root;
-        }
-
-        private static PartyStand Stand(GameObject parent, GameObject prefab,
-            string name, float left, float top, float scale)
-        {
-            var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent.transform);
-            go.name = name;
-            var rect = (RectTransform)go.transform;
-            rect.anchoredPosition = new Vector2(left, -top);
-            rect.localScale = new Vector3(scale, scale, 1f);
-            return go.GetComponent<PartyStand>();
         }
 
         // ── 探索 ────────────────────────────────────────
@@ -395,43 +422,6 @@ namespace EggCommand.EditorTools
             so.FindProperty("_element").objectReferenceValue = element.GetComponent<Image>();
             so.FindProperty("_wait").objectReferenceValue = wait.GetComponent<UnityEngine.UI.Text>();
             so.FindProperty("_button").objectReferenceValue = button;
-            so.ApplyModifiedPropertiesWithoutUndo();
-            return root;
-        }
-
-        private static GameObject BuildHatch()
-        {
-            var root = Screen("HatchScreen");
-            var slotPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Dir}/IncubatorSlot.prefab");
-            var cardPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Dir}/EggCard.prefab");
-
-            var slots = new IncubatorSlot[Hatchery.Slots];
-            for (int i = 0; i < slots.Length; i++)
-            {
-                var go = (GameObject)PrefabUtility.InstantiatePrefab(slotPrefab, root.transform);
-                go.name = $"Slot {i}";
-                ((RectTransform)go.transform).anchoredPosition =
-                    new Vector2(Ui.Margin + 199f * i, -24f);
-                slots[i] = go.GetComponent<IncubatorSlot>();
-            }
-
-            var shelf = Scroll(root, "Shelf", 0f, 320f, Ui.W, Ui.H - Ui.TopBarHeight - 320f,
-                new Vector2(228f, 268f), 4);
-
-            var empty = Add(root, "ShelfEmpty", 434f, 420f, 212f, 26f);
-            empty.gameObject.AddComponent<Image>().color = new Color32(0xc9, 0xa4, 0x6a, 0xff);
-
-            // 棚に敷く札の型。⚠️ 消さない・有効にしない（Instantiate の元）
-            var template = (GameObject)PrefabUtility.InstantiatePrefab(cardPrefab, root.transform);
-            template.name = "EggCard (型)";
-            template.SetActive(false);
-
-            var view = root.AddComponent<HatchView>();
-            var so = new SerializedObject(view);
-            Fill(so, "_slots", slots);
-            so.FindProperty("_shelf").objectReferenceValue = shelf;
-            so.FindProperty("_eggCard").objectReferenceValue = template.GetComponent<EggCard>();
-            so.FindProperty("_shelfEmpty").objectReferenceValue = empty.gameObject;
             so.ApplyModifiedPropertiesWithoutUndo();
             return root;
         }
