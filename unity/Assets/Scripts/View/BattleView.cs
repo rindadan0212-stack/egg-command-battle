@@ -30,9 +30,30 @@ namespace EggCommand.View
         [SerializeField] private Button _finish;
         [SerializeField] private Button _pick;
 
+        /// <summary>いま出ている戦闘画面。⚠️ 演出が「どの体か」を引くための唯一の窓口。
+        /// GameObject.Find で名前を探すのはやめた。Prefab で名前を変えた瞬間に
+        /// 黙って何も出なくなる（実際それでダメージの数字が消えていた）。</summary>
+        public static BattleView Live { get; private set; }
+
+        private readonly System.Collections.Generic.Dictionary<string, UnitStand> _byKey =
+            new System.Collections.Generic.Dictionary<string, UnitStand>();
+
+        private void OnEnable() => Live = this;
+        private void OnDisable() { if (Live == this) Live = null; }
+
+        /// <summary>体の四角を引く。⚠️ 居なければ null（黙って画面の隅に出さない）。</summary>
+        public RectTransform StandOf(string key)
+        {
+            UnitStand stand;
+            if (!_byKey.TryGetValue(key, out stand) || stand == null) return null;
+            return (RectTransform)stand.transform;
+        }
+
         public void Bind(BattleState state, Unit actor, Unit target,
             Action<int> onSkill, Action onFinish, Action onPick)
         {
+            _byKey.Clear();
+
             // ── 味方 ────────────────────────────────────
             int i = 0;
             foreach (var unit in state.Units)
@@ -42,6 +63,7 @@ namespace EggCommand.View
                 {
                     _allies[i].gameObject.SetActive(true);
                     _allies[i].Bind(unit, actor != null && ReferenceEquals(actor, unit), false);
+                    _byKey[unit.Key] = _allies[i];
                 }
                 i++;
             }
@@ -60,7 +82,11 @@ namespace EggCommand.View
             if (_foe != null)
             {
                 _foe.gameObject.SetActive(foe != null);
-                if (foe != null) _foe.Bind(foe, actor != null && ReferenceEquals(actor, foe), true);
+                if (foe != null)
+                {
+                    _foe.Bind(foe, actor != null && ReferenceEquals(actor, foe), true);
+                    _byKey[foe.Key] = _foe;
+                }
             }
 
             bool over = state.Result != null;

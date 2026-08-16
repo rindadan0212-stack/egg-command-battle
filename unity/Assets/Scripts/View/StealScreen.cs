@@ -20,6 +20,9 @@ namespace EggCommand.View
     {
         private static StealRun _result;
         private static StealStage _stage;
+        /// <summary>告知を出して戦闘へ渡している最中。
+        /// ⚠️ 画面が組み直されるたびに告知を作らないための札。</summary>
+        private static bool _handing;
 
         /// <summary>巣を選んで発射へ。⚠️ 親がどちらへ寄るかだけは巣ごとの乱数で決まる。</summary>
         public static void Enter(App app, Nest nest)
@@ -69,12 +72,31 @@ namespace EggCommand.View
             if (_result == null) return;
 
             // ── 結果 ────────────────────────────────────
-            // ⚠️ 結果を文章で言わない。⭐ 盤の上に残った軌跡が既に語っている。
-            //    ここに残すのは「次にどうするか」の押しどころだけ。配置は Prefab が持つ。
+            if (_result.Outcome != StealOutcome.Success)
+            {
+                // ⭐ 届かなかったら**選ばせない**。見つかったのだから戦うしかない。
+                // ⚠️ ここに「戦闘へ」のボタンを置くと、押したから戦闘になったように見える。
+                //    起きたことを告げて、そのまま戦闘へ渡す。
+                if (_handing) return;
+                _handing = true;
+                var caught = app.CurrentNest;
+                BannerView.Show(app.Overlay, "親に見つかった！", () =>
+                {
+                    _result = null;
+                    _handing = false;
+                    Leave();
+                    // ⭐ 立ちはだかるのも親1体なので、そのまま戦闘へ繋がる
+                    app.EnterBattle(caught, false);
+                });
+                return;
+            }
+
+            // ⚠️ 成功のほうは押させる。持ち帰るかどうかは手番の終わりを自分で切る所作なので、
+            //    ここだけは待ってよい。配置は Prefab が持つ。
             var view = app.Put<StealResultView>(body, "StealResult");
             if (view == null) return;
 
-            view.Bind(_result.Outcome == StealOutcome.Success,
+            view.Bind(true,
                 onTake: () =>
                 {
                     var nest = app.CurrentNest;
@@ -84,14 +106,7 @@ namespace EggCommand.View
                     // ⚠️ 盗んだ卵は素質が落ちる（倒したほうが良い卵）
                     app.GainEgg(nest, EggOrigin.Stolen);
                 },
-                onFight: () =>
-                {
-                    var nest = app.CurrentNest;
-                    _result = null;
-                    Leave();
-                    // ⭐ 立ちはだかるのも親1体なので、そのまま戦闘へ繋がる
-                    app.EnterBattle(nest, false);
-                });
+                onFight: null);
         }
     }
 }

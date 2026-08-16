@@ -13,7 +13,8 @@ namespace EggCommand.View
     {
         [SerializeField] private PartyStand[] _stands;   // 0=リーダー 1,2=脇
         [SerializeField] private GameObject _emptyStage; // 誰も居ないときの空の台座
-        [SerializeField] private Text _goal;
+        // ⚠️ 「ヌシを倒す」の GOAL 表示は外した。輪の目的地を1つに固定すると、
+        //    卵を集めて育てるという遊びが、その1点への準備でしかなくなる。
         [SerializeField] private Text _partyValue;
         [SerializeField] private Text _speedValue;
         [SerializeField] private Text _reachValue;
@@ -30,8 +31,6 @@ namespace EggCommand.View
                 if (has) _stands[i].Bind(party[i]);
             }
             if (_emptyStage != null) _emptyStage.SetActive(party.Count == 0);
-
-            if (_goal != null) { _goal.text = $"{Nests.BossName} を倒す"; Ui.Knockout(_goal); }
 
             int speed = 0;
             foreach (var creature in party) speed += Creatures.StatsOf(creature).Spd;

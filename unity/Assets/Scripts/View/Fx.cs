@@ -61,6 +61,68 @@ namespace EggCommand.View
             rect.gameObject.AddComponent<FloatingNumber>().Begin(label);
         }
 
+        /// <summary>技の名前を頭の上に出す。⭐ 数字より先に、長く、低く出す。
+        /// ⚠️ 数字と同じ速さで飛ばすと、読む前に消える（技名は読ませたい字）。</summary>
+        public void Shout(Vector2 screenPoint, string text, Color color)
+        {
+            var rect = Ui.Rect("Shout", _root);
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(600f, 80f);
+            rect.anchoredPosition = screenPoint;
+
+            var label = rect.gameObject.AddComponent<Text>();
+            label.text = text;
+            label.font = Ui.TheFont;
+            label.fontSize = 42;
+            label.color = color;
+            label.alignment = TextAnchor.MiddleCenter;
+            label.horizontalOverflow = HorizontalWrapMode.Overflow;
+            label.verticalOverflow = VerticalWrapMode.Overflow;
+            // ⭐ 地の色が何であっても読めるように白抜きにする
+            Ui.Knockout(label, 4);
+
+            rect.gameObject.AddComponent<FloatingNumber>().Begin(label, life: 1.0f, rise: 34f);
+        }
+
+        /// <summary>広がる丸。⭐ 構えにも被弾にも同じ形を使う（見るべき場所が1つで済む）。</summary>
+        public void Ring(Vector2 screenPoint, Color color, float from, float to, float life = 0.4f)
+        {
+            var rect = Ui.Rect("Ring", _root);
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(from, from);
+            rect.anchoredPosition = screenPoint;
+
+            var image = rect.gameObject.AddComponent<Image>();
+            image.sprite = Ui.SkinSprite("circle-outline");
+            // ⚠️ 濃く出すと体を塗り潰す。輪は「そこ」を指すだけで、見せたいのは中の絵
+            image.color = new Color(color.r, color.g, color.b, 0.34f);
+            image.raycastTarget = false;
+
+            rect.gameObject.AddComponent<Pulse>().Begin(image, from, to, life);
+        }
+
+        /// <summary>当たった瞬間の光。⚠️ 輪より短く・小さく。長いと「まだ効いている」に見える。</summary>
+        public void Impact(Vector2 screenPoint, Color color)
+        {
+            var rect = Ui.Rect("Impact", _root);
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(60f, 60f);
+            rect.anchoredPosition = screenPoint;
+
+            var image = rect.gameObject.AddComponent<Image>();
+            image.sprite = Ui.SkinSprite("circle");
+            image.color = new Color(color.r, color.g, color.b, 0.75f);
+            image.raycastTarget = false;
+
+            rect.gameObject.AddComponent<Pulse>().Begin(image, 60f, 260f, 0.26f);
+        }
+
         /// <summary>その場の画面座標を、この層の座標に直す。</summary>
         public Vector2 PointOf(RectTransform target, Vector2 offset)
         {

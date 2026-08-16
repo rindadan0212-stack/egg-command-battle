@@ -26,6 +26,7 @@ namespace EggCommand.EditorTools
 
             int made = 0;
             made += One("Fanfare", BuildFanfare);
+            made += One("Banner", BuildBanner);
             made += One("AppFrame", BuildFrame);
             made += One("PartyStand", BuildPartyStand);
             made += One("HomeScreen", BuildHome);
@@ -96,6 +97,28 @@ namespace EggCommand.EditorTools
             so.FindProperty("_stars").objectReferenceValue = stars.GetComponent<UnityEngine.UI.Text>();
             so.FindProperty("_line").objectReferenceValue = lineText;
             so.FindProperty("_close").objectReferenceValue = close;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            return root;
+        }
+
+        private static GameObject BuildBanner()
+        {
+            var root = Screen("Banner");
+            // ⚠️ 全面は覆わない。後ろで何が起きたか（盤に残った軌跡）を隠さない
+            var strip = Add(root, "Strip", 0f, 780f, Ui.W, 240f);
+            strip.pivot = new Vector2(0.5f, 1f);
+            strip.anchoredPosition = new Vector2(Ui.W / 2f, -780f);
+            var image = strip.gameObject.AddComponent<Image>();
+            image.color = new Color(0.04f, 0.06f, 0.12f, 0.72f);
+            image.raycastTarget = true;   // ⭐ この間は下を押させない
+
+            var line = Add(strip.gameObject, "Line", -Ui.W / 2f, 0f, Ui.W, 240f);
+            Text(line, "", 58, Ui.Ink, TextAnchor.MiddleCenter);
+
+            var view = root.AddComponent<BannerView>();
+            var so = new SerializedObject(view);
+            so.FindProperty("_strip").objectReferenceValue = strip;
+            so.FindProperty("_line").objectReferenceValue = line.GetComponent<UnityEngine.UI.Text>();
             so.ApplyModifiedPropertiesWithoutUndo();
             return root;
         }
@@ -186,10 +209,7 @@ namespace EggCommand.EditorTools
             var root = Screen("HomeScreen");
             var stand = AssetDatabase.LoadAssetAtPath<GameObject>($"{Dir}/PartyStand.prefab");
 
-            var goalTag = Add(root, "GoalTag", Ui.Margin, 32f, 300f, 32f);
-            Ui.Knockout(Text(goalTag, "GOAL", 24, Ui.Accent, TextAnchor.UpperLeft), 3);
-            var goal = Add(root, "Goal", Ui.Margin, 68f, Ui.W - Ui.Margin * 2f, 60f);
-            Text(goal, "", 42, Ui.Ink, TextAnchor.UpperLeft);
+            // ⚠️ GOAL の行は置かない。目的地を1つ書くと、他の遊びがその準備に見える
 
             // 足元。⭐ 線を引かず面で示す
             var ground = Add(root, "Ground", 240f, 1108f, 600f, 26f);
@@ -225,7 +245,6 @@ namespace EggCommand.EditorTools
             var so = new SerializedObject(view);
             Fill(so, "_stands", stands);
             so.FindProperty("_emptyStage").objectReferenceValue = empty.gameObject;
-            so.FindProperty("_goal").objectReferenceValue = goal.GetComponent<UnityEngine.UI.Text>();
             so.FindProperty("_partyValue").objectReferenceValue = values[0];
             so.FindProperty("_speedValue").objectReferenceValue = values[1];
             so.FindProperty("_reachValue").objectReferenceValue = values[2];

@@ -54,12 +54,9 @@ namespace EggCommand.View
                     if (actor == null) return;
                     var skill = Core.Battle.SkillAt(actor, slot);
                     var chosen = skill != null && Core.Battle.NeedsTarget(skill) ? _target : null;
-                    int before = state.Log.Count;
-                    Core.Battle.PerformAction(state, actor, slot, chosen);
-                    _driver.ShowSince(state, before);
                     _target = null;
-                    _driver.HandOff();
-                    app.Refresh();
+                    // ⚠️ ここで計算しない。名乗り → 着弾 → 間 の3拍は Driver が持つ
+                    _driver.Queue(actor, slot, chosen);
                 },
                 onFinish: () => { Leave(); app.FinishBattle(); },
                 onPick: () =>
