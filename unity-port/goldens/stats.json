@@ -1,0 +1,1120 @@
+{
+  "statKeys": [
+    "hp",
+    "atk",
+    "def",
+    "spd"
+  ],
+  "wildStatMax": 40,
+  "wildTotalMax": 80,
+  "mutationCapSteps": 20,
+  "maxFor": [
+    {
+      "mutation": 0,
+      "statMax": 40,
+      "totalMax": 80
+    },
+    {
+      "mutation": 1,
+      "statMax": 41,
+      "totalMax": 82
+    },
+    {
+      "mutation": 2,
+      "statMax": 42,
+      "totalMax": 84
+    },
+    {
+      "mutation": 3,
+      "statMax": 43,
+      "totalMax": 86
+    },
+    {
+      "mutation": 4,
+      "statMax": 44,
+      "totalMax": 88
+    },
+    {
+      "mutation": 5,
+      "statMax": 45,
+      "totalMax": 90
+    },
+    {
+      "mutation": 6,
+      "statMax": 46,
+      "totalMax": 92
+    },
+    {
+      "mutation": 7,
+      "statMax": 47,
+      "totalMax": 94
+    },
+    {
+      "mutation": 8,
+      "statMax": 48,
+      "totalMax": 96
+    },
+    {
+      "mutation": 9,
+      "statMax": 49,
+      "totalMax": 98
+    },
+    {
+      "mutation": 10,
+      "statMax": 50,
+      "totalMax": 100
+    },
+    {
+      "mutation": 11,
+      "statMax": 51,
+      "totalMax": 102
+    },
+    {
+      "mutation": 12,
+      "statMax": 52,
+      "totalMax": 104
+    },
+    {
+      "mutation": 13,
+      "statMax": 53,
+      "totalMax": 106
+    },
+    {
+      "mutation": 14,
+      "statMax": 54,
+      "totalMax": 108
+    },
+    {
+      "mutation": 15,
+      "statMax": 55,
+      "totalMax": 110
+    },
+    {
+      "mutation": 16,
+      "statMax": 56,
+      "totalMax": 112
+    },
+    {
+      "mutation": 17,
+      "statMax": 57,
+      "totalMax": 114
+    },
+    {
+      "mutation": 18,
+      "statMax": 58,
+      "totalMax": 116
+    },
+    {
+      "mutation": 19,
+      "statMax": 59,
+      "totalMax": 118
+    },
+    {
+      "mutation": 20,
+      "statMax": 60,
+      "totalMax": 120
+    },
+    {
+      "mutation": 21,
+      "statMax": 60,
+      "totalMax": 120
+    },
+    {
+      "mutation": 22,
+      "statMax": 60,
+      "totalMax": 120
+    },
+    {
+      "mutation": 23,
+      "statMax": 60,
+      "totalMax": 120
+    },
+    {
+      "mutation": 24,
+      "statMax": 60,
+      "totalMax": 120
+    },
+    {
+      "mutation": 25,
+      "statMax": 60,
+      "totalMax": 120
+    }
+  ],
+  "totalOf": [
+    {
+      "block": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "total": 0
+    },
+    {
+      "block": {
+        "hp": 40,
+        "atk": 40,
+        "def": 40,
+        "spd": 40
+      },
+      "total": 160
+    },
+    {
+      "block": {
+        "hp": 40,
+        "atk": 40,
+        "def": 0,
+        "spd": 0
+      },
+      "total": 80
+    },
+    {
+      "block": {
+        "hp": 30,
+        "atk": 30,
+        "def": 30,
+        "spd": 10
+      },
+      "total": 100
+    },
+    {
+      "block": {
+        "hp": 25,
+        "atk": 25,
+        "def": 25,
+        "spd": 25
+      },
+      "total": 100
+    },
+    {
+      "block": {
+        "hp": 1,
+        "atk": 2,
+        "def": 3,
+        "spd": 4
+      },
+      "total": 10
+    },
+    {
+      "block": {
+        "hp": 39,
+        "atk": 38,
+        "def": 37,
+        "spd": 36
+      },
+      "total": 150
+    },
+    {
+      "block": {
+        "hp": 100,
+        "atk": -5,
+        "def": 12,
+        "spd": 7
+      },
+      "total": 114
+    },
+    {
+      "block": {
+        "hp": 12,
+        "atk": 12,
+        "def": 11,
+        "spd": 11
+      },
+      "total": 46
+    }
+  ],
+  "applyTotalCap": [
+    {
+      "wild": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "mutation": 0,
+      "out": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "total": 0
+    },
+    {
+      "wild": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "mutation": 1,
+      "out": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "total": 0
+    },
+    {
+      "wild": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "mutation": 3,
+      "out": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "total": 0
+    },
+    {
+      "wild": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "mutation": 7,
+      "out": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "total": 0
+    },
+    {
+      "wild": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "mutation": 20,
+      "out": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "total": 0
+    },
+    {
+      "wild": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "mutation": 25,
+      "out": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "total": 0
+    },
+    {
+      "wild": {
+        "hp": 40,
+        "atk": 40,
+        "def": 40,
+        "spd": 40
+      },
+      "mutation": 0,
+      "out": {
+        "hp": 20,
+        "atk": 20,
+        "def": 20,
+        "spd": 20
+      },
+      "total": 80
+    },
+    {
+      "wild": {
+        "hp": 40,
+        "atk": 40,
+        "def": 40,
+        "spd": 40
+      },
+      "mutation": 1,
+      "out": {
+        "hp": 20,
+        "atk": 20,
+        "def": 21,
+        "spd": 21
+      },
+      "total": 82
+    },
+    {
+      "wild": {
+        "hp": 40,
+        "atk": 40,
+        "def": 40,
+        "spd": 40
+      },
+      "mutation": 3,
+      "out": {
+        "hp": 21,
+        "atk": 21,
+        "def": 22,
+        "spd": 22
+      },
+      "total": 86
+    },
+    {
+      "wild": {
+        "hp": 40,
+        "atk": 40,
+        "def": 40,
+        "spd": 40
+      },
+      "mutation": 7,
+      "out": {
+        "hp": 23,
+        "atk": 23,
+        "def": 24,
+        "spd": 24
+      },
+      "total": 94
+    },
+    {
+      "wild": {
+        "hp": 40,
+        "atk": 40,
+        "def": 40,
+        "spd": 40
+      },
+      "mutation": 20,
+      "out": {
+        "hp": 30,
+        "atk": 30,
+        "def": 30,
+        "spd": 30
+      },
+      "total": 120
+    },
+    {
+      "wild": {
+        "hp": 40,
+        "atk": 40,
+        "def": 40,
+        "spd": 40
+      },
+      "mutation": 25,
+      "out": {
+        "hp": 30,
+        "atk": 30,
+        "def": 30,
+        "spd": 30
+      },
+      "total": 120
+    },
+    {
+      "wild": {
+        "hp": 40,
+        "atk": 40,
+        "def": 0,
+        "spd": 0
+      },
+      "mutation": 0,
+      "out": {
+        "hp": 40,
+        "atk": 40,
+        "def": 0,
+        "spd": 0
+      },
+      "total": 80
+    },
+    {
+      "wild": {
+        "hp": 40,
+        "atk": 40,
+        "def": 0,
+        "spd": 0
+      },
+      "mutation": 1,
+      "out": {
+        "hp": 40,
+        "atk": 40,
+        "def": 0,
+        "spd": 0
+      },
+      "total": 80
+    },
+    {
+      "wild": {
+        "hp": 40,
+        "atk": 40,
+        "def": 0,
+        "spd": 0
+      },
+      "mutation": 3,
+      "out": {
+        "hp": 40,
+        "atk": 40,
+        "def": 0,
+        "spd": 0
+      },
+      "total": 80
+    },
+    {
+      "wild": {
+        "hp": 40,
+        "atk": 40,
+        "def": 0,
+        "spd": 0
+      },
+      "mutation": 7,
+      "out": {
+        "hp": 40,
+        "atk": 40,
+        "def": 0,
+        "spd": 0
+      },
+      "total": 80
+    },
+    {
+      "wild": {
+        "hp": 40,
+        "atk": 40,
+        "def": 0,
+        "spd": 0
+      },
+      "mutation": 20,
+      "out": {
+        "hp": 40,
+        "atk": 40,
+        "def": 0,
+        "spd": 0
+      },
+      "total": 80
+    },
+    {
+      "wild": {
+        "hp": 40,
+        "atk": 40,
+        "def": 0,
+        "spd": 0
+      },
+      "mutation": 25,
+      "out": {
+        "hp": 40,
+        "atk": 40,
+        "def": 0,
+        "spd": 0
+      },
+      "total": 80
+    },
+    {
+      "wild": {
+        "hp": 30,
+        "atk": 30,
+        "def": 30,
+        "spd": 10
+      },
+      "mutation": 0,
+      "out": {
+        "hp": 26,
+        "atk": 27,
+        "def": 27,
+        "spd": 0
+      },
+      "total": 80
+    },
+    {
+      "wild": {
+        "hp": 30,
+        "atk": 30,
+        "def": 30,
+        "spd": 10
+      },
+      "mutation": 1,
+      "out": {
+        "hp": 27,
+        "atk": 27,
+        "def": 28,
+        "spd": 0
+      },
+      "total": 82
+    },
+    {
+      "wild": {
+        "hp": 30,
+        "atk": 30,
+        "def": 30,
+        "spd": 10
+      },
+      "mutation": 3,
+      "out": {
+        "hp": 28,
+        "atk": 29,
+        "def": 29,
+        "spd": 0
+      },
+      "total": 86
+    },
+    {
+      "wild": {
+        "hp": 30,
+        "atk": 30,
+        "def": 30,
+        "spd": 10
+      },
+      "mutation": 7,
+      "out": {
+        "hp": 30,
+        "atk": 30,
+        "def": 30,
+        "spd": 4
+      },
+      "total": 94
+    },
+    {
+      "wild": {
+        "hp": 30,
+        "atk": 30,
+        "def": 30,
+        "spd": 10
+      },
+      "mutation": 20,
+      "out": {
+        "hp": 30,
+        "atk": 30,
+        "def": 30,
+        "spd": 10
+      },
+      "total": 100
+    },
+    {
+      "wild": {
+        "hp": 30,
+        "atk": 30,
+        "def": 30,
+        "spd": 10
+      },
+      "mutation": 25,
+      "out": {
+        "hp": 30,
+        "atk": 30,
+        "def": 30,
+        "spd": 10
+      },
+      "total": 100
+    },
+    {
+      "wild": {
+        "hp": 25,
+        "atk": 25,
+        "def": 25,
+        "spd": 25
+      },
+      "mutation": 0,
+      "out": {
+        "hp": 20,
+        "atk": 20,
+        "def": 20,
+        "spd": 20
+      },
+      "total": 80
+    },
+    {
+      "wild": {
+        "hp": 25,
+        "atk": 25,
+        "def": 25,
+        "spd": 25
+      },
+      "mutation": 1,
+      "out": {
+        "hp": 20,
+        "atk": 20,
+        "def": 21,
+        "spd": 21
+      },
+      "total": 82
+    },
+    {
+      "wild": {
+        "hp": 25,
+        "atk": 25,
+        "def": 25,
+        "spd": 25
+      },
+      "mutation": 3,
+      "out": {
+        "hp": 21,
+        "atk": 21,
+        "def": 22,
+        "spd": 22
+      },
+      "total": 86
+    },
+    {
+      "wild": {
+        "hp": 25,
+        "atk": 25,
+        "def": 25,
+        "spd": 25
+      },
+      "mutation": 7,
+      "out": {
+        "hp": 23,
+        "atk": 23,
+        "def": 24,
+        "spd": 24
+      },
+      "total": 94
+    },
+    {
+      "wild": {
+        "hp": 25,
+        "atk": 25,
+        "def": 25,
+        "spd": 25
+      },
+      "mutation": 20,
+      "out": {
+        "hp": 25,
+        "atk": 25,
+        "def": 25,
+        "spd": 25
+      },
+      "total": 100
+    },
+    {
+      "wild": {
+        "hp": 25,
+        "atk": 25,
+        "def": 25,
+        "spd": 25
+      },
+      "mutation": 25,
+      "out": {
+        "hp": 25,
+        "atk": 25,
+        "def": 25,
+        "spd": 25
+      },
+      "total": 100
+    },
+    {
+      "wild": {
+        "hp": 1,
+        "atk": 2,
+        "def": 3,
+        "spd": 4
+      },
+      "mutation": 0,
+      "out": {
+        "hp": 1,
+        "atk": 2,
+        "def": 3,
+        "spd": 4
+      },
+      "total": 10
+    },
+    {
+      "wild": {
+        "hp": 1,
+        "atk": 2,
+        "def": 3,
+        "spd": 4
+      },
+      "mutation": 1,
+      "out": {
+        "hp": 1,
+        "atk": 2,
+        "def": 3,
+        "spd": 4
+      },
+      "total": 10
+    },
+    {
+      "wild": {
+        "hp": 1,
+        "atk": 2,
+        "def": 3,
+        "spd": 4
+      },
+      "mutation": 3,
+      "out": {
+        "hp": 1,
+        "atk": 2,
+        "def": 3,
+        "spd": 4
+      },
+      "total": 10
+    },
+    {
+      "wild": {
+        "hp": 1,
+        "atk": 2,
+        "def": 3,
+        "spd": 4
+      },
+      "mutation": 7,
+      "out": {
+        "hp": 1,
+        "atk": 2,
+        "def": 3,
+        "spd": 4
+      },
+      "total": 10
+    },
+    {
+      "wild": {
+        "hp": 1,
+        "atk": 2,
+        "def": 3,
+        "spd": 4
+      },
+      "mutation": 20,
+      "out": {
+        "hp": 1,
+        "atk": 2,
+        "def": 3,
+        "spd": 4
+      },
+      "total": 10
+    },
+    {
+      "wild": {
+        "hp": 1,
+        "atk": 2,
+        "def": 3,
+        "spd": 4
+      },
+      "mutation": 25,
+      "out": {
+        "hp": 1,
+        "atk": 2,
+        "def": 3,
+        "spd": 4
+      },
+      "total": 10
+    },
+    {
+      "wild": {
+        "hp": 39,
+        "atk": 38,
+        "def": 37,
+        "spd": 36
+      },
+      "mutation": 0,
+      "out": {
+        "hp": 39,
+        "atk": 38,
+        "def": 3,
+        "spd": 0
+      },
+      "total": 80
+    },
+    {
+      "wild": {
+        "hp": 39,
+        "atk": 38,
+        "def": 37,
+        "spd": 36
+      },
+      "mutation": 1,
+      "out": {
+        "hp": 39,
+        "atk": 38,
+        "def": 5,
+        "spd": 0
+      },
+      "total": 82
+    },
+    {
+      "wild": {
+        "hp": 39,
+        "atk": 38,
+        "def": 37,
+        "spd": 36
+      },
+      "mutation": 3,
+      "out": {
+        "hp": 39,
+        "atk": 38,
+        "def": 9,
+        "spd": 0
+      },
+      "total": 86
+    },
+    {
+      "wild": {
+        "hp": 39,
+        "atk": 38,
+        "def": 37,
+        "spd": 36
+      },
+      "mutation": 7,
+      "out": {
+        "hp": 39,
+        "atk": 38,
+        "def": 17,
+        "spd": 0
+      },
+      "total": 94
+    },
+    {
+      "wild": {
+        "hp": 39,
+        "atk": 38,
+        "def": 37,
+        "spd": 36
+      },
+      "mutation": 20,
+      "out": {
+        "hp": 39,
+        "atk": 38,
+        "def": 37,
+        "spd": 6
+      },
+      "total": 120
+    },
+    {
+      "wild": {
+        "hp": 39,
+        "atk": 38,
+        "def": 37,
+        "spd": 36
+      },
+      "mutation": 25,
+      "out": {
+        "hp": 39,
+        "atk": 38,
+        "def": 37,
+        "spd": 6
+      },
+      "total": 120
+    },
+    {
+      "wild": {
+        "hp": 100,
+        "atk": -5,
+        "def": 12,
+        "spd": 7
+      },
+      "mutation": 0,
+      "out": {
+        "hp": 40,
+        "atk": 0,
+        "def": 12,
+        "spd": 7
+      },
+      "total": 59
+    },
+    {
+      "wild": {
+        "hp": 100,
+        "atk": -5,
+        "def": 12,
+        "spd": 7
+      },
+      "mutation": 1,
+      "out": {
+        "hp": 41,
+        "atk": 0,
+        "def": 12,
+        "spd": 7
+      },
+      "total": 60
+    },
+    {
+      "wild": {
+        "hp": 100,
+        "atk": -5,
+        "def": 12,
+        "spd": 7
+      },
+      "mutation": 3,
+      "out": {
+        "hp": 43,
+        "atk": 0,
+        "def": 12,
+        "spd": 7
+      },
+      "total": 62
+    },
+    {
+      "wild": {
+        "hp": 100,
+        "atk": -5,
+        "def": 12,
+        "spd": 7
+      },
+      "mutation": 7,
+      "out": {
+        "hp": 47,
+        "atk": 0,
+        "def": 12,
+        "spd": 7
+      },
+      "total": 66
+    },
+    {
+      "wild": {
+        "hp": 100,
+        "atk": -5,
+        "def": 12,
+        "spd": 7
+      },
+      "mutation": 20,
+      "out": {
+        "hp": 60,
+        "atk": 0,
+        "def": 12,
+        "spd": 7
+      },
+      "total": 79
+    },
+    {
+      "wild": {
+        "hp": 100,
+        "atk": -5,
+        "def": 12,
+        "spd": 7
+      },
+      "mutation": 25,
+      "out": {
+        "hp": 60,
+        "atk": 0,
+        "def": 12,
+        "spd": 7
+      },
+      "total": 79
+    },
+    {
+      "wild": {
+        "hp": 12,
+        "atk": 12,
+        "def": 11,
+        "spd": 11
+      },
+      "mutation": 0,
+      "out": {
+        "hp": 12,
+        "atk": 12,
+        "def": 11,
+        "spd": 11
+      },
+      "total": 46
+    },
+    {
+      "wild": {
+        "hp": 12,
+        "atk": 12,
+        "def": 11,
+        "spd": 11
+      },
+      "mutation": 1,
+      "out": {
+        "hp": 12,
+        "atk": 12,
+        "def": 11,
+        "spd": 11
+      },
+      "total": 46
+    },
+    {
+      "wild": {
+        "hp": 12,
+        "atk": 12,
+        "def": 11,
+        "spd": 11
+      },
+      "mutation": 3,
+      "out": {
+        "hp": 12,
+        "atk": 12,
+        "def": 11,
+        "spd": 11
+      },
+      "total": 46
+    },
+    {
+      "wild": {
+        "hp": 12,
+        "atk": 12,
+        "def": 11,
+        "spd": 11
+      },
+      "mutation": 7,
+      "out": {
+        "hp": 12,
+        "atk": 12,
+        "def": 11,
+        "spd": 11
+      },
+      "total": 46
+    },
+    {
+      "wild": {
+        "hp": 12,
+        "atk": 12,
+        "def": 11,
+        "spd": 11
+      },
+      "mutation": 20,
+      "out": {
+        "hp": 12,
+        "atk": 12,
+        "def": 11,
+        "spd": 11
+      },
+      "total": 46
+    },
+    {
+      "wild": {
+        "hp": 12,
+        "atk": 12,
+        "def": 11,
+        "spd": 11
+      },
+      "mutation": 25,
+      "out": {
+        "hp": 12,
+        "atk": 12,
+        "def": 11,
+        "spd": 11
+      },
+      "total": 46
+    }
+  ],
+  "actualStats": [
+    {
+      "base": {
+        "hp": 24,
+        "atk": 18,
+        "def": 22,
+        "spd": 16
+      },
+      "wild": {
+        "hp": 20,
+        "atk": 10,
+        "def": 30,
+        "spd": 5
+      },
+      "trained": {
+        "hp": 3,
+        "atk": 0,
+        "def": 1,
+        "spd": 2
+      },
+      "out": {
+        "hp": 47,
+        "atk": 28,
+        "def": 53,
+        "spd": 23
+      }
+    }
+  ]
+}

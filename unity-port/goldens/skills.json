@@ -1,0 +1,483 @@
+{
+  "damagePower": {
+    "小": 12,
+    "中": 20,
+    "大": 30,
+    "特大": 42
+  },
+  "buffPercent": 30,
+  "tickPercent": 5,
+  "list": [
+    {
+      "id": "attack",
+      "name": "攻撃",
+      "gist": "敵1体にダメージ",
+      "ct": 3,
+      "target": "enemyOne",
+      "effects": [
+        {
+          "kind": "damage",
+          "power": "中",
+          "scale": "atk"
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 3,
+      "ctSlot2": 3,
+      "harmful": [
+        false
+      ]
+    },
+    {
+      "id": "attack-heavy",
+      "name": "強攻撃",
+      "gist": "敵1体に大きなダメージ。次が遠い",
+      "ct": 6,
+      "target": "enemyOne",
+      "effects": [
+        {
+          "kind": "damage",
+          "power": "大",
+          "scale": "atk"
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 6,
+      "ctSlot2": 6,
+      "harmful": [
+        false
+      ]
+    },
+    {
+      "id": "attack-all",
+      "name": "全体攻撃",
+      "gist": "敵全体にダメージ",
+      "ct": 5,
+      "target": "enemyAll",
+      "effects": [
+        {
+          "kind": "damage",
+          "power": "小",
+          "scale": "atk"
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 5,
+      "ctSlot2": 5,
+      "harmful": [
+        false
+      ]
+    },
+    {
+      "id": "attack-all-heavy",
+      "name": "全体強攻撃",
+      "gist": "敵全体に大きなダメージ。次がとても遠い",
+      "ct": 7,
+      "target": "enemyAll",
+      "effects": [
+        {
+          "kind": "damage",
+          "power": "大",
+          "scale": "atk"
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 7,
+      "ctSlot2": 7,
+      "harmful": [
+        false
+      ]
+    },
+    {
+      "id": "attack-def",
+      "name": "防御依存攻撃",
+      "gist": "防御力が高いほど強い一撃",
+      "ct": 3,
+      "target": "enemyOne",
+      "effects": [
+        {
+          "kind": "damage",
+          "power": "中",
+          "scale": "def"
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 3,
+      "ctSlot2": 3,
+      "harmful": [
+        false
+      ]
+    },
+    {
+      "id": "atk-up",
+      "name": "攻撃力UP",
+      "gist": "自分の攻撃力を上げる",
+      "ct": 4,
+      "target": "self",
+      "effects": [
+        {
+          "kind": "buff",
+          "stat": "atk",
+          "sign": 1,
+          "turns": 3
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 4,
+      "ctSlot2": 4,
+      "harmful": [
+        false
+      ]
+    },
+    {
+      "id": "atk-down",
+      "name": "攻撃力DOWN",
+      "gist": "敵1体の攻撃力を下げる",
+      "ct": 4,
+      "target": "enemyOne",
+      "effects": [
+        {
+          "kind": "buff",
+          "stat": "atk",
+          "sign": -1,
+          "turns": 3
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 4,
+      "ctSlot2": 4,
+      "harmful": [
+        true
+      ]
+    },
+    {
+      "id": "def-up",
+      "name": "防御力UP",
+      "gist": "自分の防御力を上げる",
+      "ct": 4,
+      "target": "self",
+      "effects": [
+        {
+          "kind": "buff",
+          "stat": "def",
+          "sign": 1,
+          "turns": 3
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 4,
+      "ctSlot2": 4,
+      "harmful": [
+        false
+      ]
+    },
+    {
+      "id": "def-down",
+      "name": "防御力DOWN",
+      "gist": "敵1体の防御力を下げる",
+      "ct": 4,
+      "target": "enemyOne",
+      "effects": [
+        {
+          "kind": "buff",
+          "stat": "def",
+          "sign": -1,
+          "turns": 3
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 4,
+      "ctSlot2": 4,
+      "harmful": [
+        true
+      ]
+    },
+    {
+      "id": "spd-up",
+      "name": "スピードUP",
+      "gist": "自分のスピードを上げる",
+      "ct": 4,
+      "target": "self",
+      "effects": [
+        {
+          "kind": "buff",
+          "stat": "spd",
+          "sign": 1,
+          "turns": 3
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 4,
+      "ctSlot2": 4,
+      "harmful": [
+        false
+      ]
+    },
+    {
+      "id": "spd-down",
+      "name": "スピードDOWN",
+      "gist": "敵1体のスピードを下げる",
+      "ct": 4,
+      "target": "enemyOne",
+      "effects": [
+        {
+          "kind": "buff",
+          "stat": "spd",
+          "sign": -1,
+          "turns": 3
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 4,
+      "ctSlot2": 4,
+      "harmful": [
+        true
+      ]
+    },
+    {
+      "id": "poison",
+      "name": "毒",
+      "gist": "敵1体が行動するたびに削れる",
+      "ct": 5,
+      "target": "enemyOne",
+      "effects": [
+        {
+          "kind": "poison",
+          "stacks": 1,
+          "turns": 4
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 5,
+      "ctSlot2": 5,
+      "harmful": [
+        true
+      ]
+    },
+    {
+      "id": "regen",
+      "name": "リジェネ",
+      "gist": "味方1体が行動するたびに回復する",
+      "ct": 5,
+      "target": "allyLowest",
+      "effects": [
+        {
+          "kind": "regen",
+          "stacks": 1,
+          "turns": 4
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 5,
+      "ctSlot2": 5,
+      "harmful": [
+        false
+      ]
+    },
+    {
+      "id": "heal-ratio",
+      "name": "HP割合回復",
+      "gist": "味方1体の HP を最大値の割合ぶん回復",
+      "ct": 4,
+      "target": "allyLowest",
+      "effects": [
+        {
+          "kind": "healRatio",
+          "percent": 30
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 4,
+      "ctSlot2": 4,
+      "harmful": [
+        false
+      ]
+    },
+    {
+      "id": "shield",
+      "name": "シールド",
+      "gist": "味方1体に、HP より先に減る盾を張る",
+      "ct": 4,
+      "target": "allyLowest",
+      "effects": [
+        {
+          "kind": "shield",
+          "count": 2
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 4,
+      "ctSlot2": 4,
+      "harmful": [
+        false
+      ]
+    },
+    {
+      "id": "stun",
+      "name": "スタン",
+      "gist": "敵1体の手番を飛ばす",
+      "ct": 6,
+      "target": "enemyOne",
+      "effects": [
+        {
+          "kind": "stun",
+          "turns": 1
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 6,
+      "ctSlot2": 6,
+      "harmful": [
+        true
+      ]
+    },
+    {
+      "id": "ct-short",
+      "name": "CT短縮",
+      "gist": "自分の技の待ちを縮める",
+      "ct": 4,
+      "target": "self",
+      "effects": [
+        {
+          "kind": "ct",
+          "delta": -2
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 4,
+      "ctSlot2": 4,
+      "harmful": [
+        false
+      ]
+    },
+    {
+      "id": "ct-long",
+      "name": "CT延長",
+      "gist": "敵1体の技の待ちを延ばす",
+      "ct": 5,
+      "target": "enemyOne",
+      "effects": [
+        {
+          "kind": "ct",
+          "delta": 2
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 5,
+      "ctSlot2": 5,
+      "harmful": [
+        false
+      ]
+    },
+    {
+      "id": "taunt",
+      "name": "挑発",
+      "gist": "味方への攻撃を自分が引き受ける",
+      "ct": 3,
+      "target": "self",
+      "effects": [
+        {
+          "kind": "taunt",
+          "hits": 3
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 3,
+      "ctSlot2": 3,
+      "harmful": [
+        false
+      ]
+    },
+    {
+      "id": "guts",
+      "name": "ガッツ",
+      "gist": "致命傷を HP1 で耐える",
+      "ct": 6,
+      "target": "self",
+      "effects": [
+        {
+          "kind": "guts",
+          "turns": 3
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 6,
+      "ctSlot2": 6,
+      "harmful": [
+        false
+      ]
+    },
+    {
+      "id": "immune",
+      "name": "免疫",
+      "gist": "DOWN・毒・スタンを受けなくなる",
+      "ct": 5,
+      "target": "self",
+      "effects": [
+        {
+          "kind": "immune",
+          "turns": 3
+        }
+      ],
+      "ctSlot0": 0,
+      "ctSlot1": 5,
+      "ctSlot2": 5,
+      "harmful": [
+        false
+      ]
+    }
+  ],
+  "gachaPools": [
+    {
+      "species": "tamaru",
+      "skill1": "attack-def",
+      "pool": [
+        "def-up",
+        "taunt",
+        "shield",
+        "heal-ratio",
+        "guts",
+        "attack",
+        "ct-long"
+      ]
+    },
+    {
+      "species": "tsunoga",
+      "skill1": "attack",
+      "pool": [
+        "atk-up",
+        "def-down",
+        "attack-heavy",
+        "ct-short",
+        "poison",
+        "attack-def",
+        "stun"
+      ]
+    },
+    {
+      "species": "haneru",
+      "skill1": "attack-all",
+      "pool": [
+        "spd-up",
+        "spd-down",
+        "atk-down",
+        "stun",
+        "regen",
+        "ct-long",
+        "immune"
+      ]
+    },
+    {
+      "species": "nushi",
+      "skill1": "attack-def",
+      "pool": [
+        "def-up",
+        "spd-down",
+        "taunt",
+        "guts",
+        "immune",
+        "attack-all-heavy"
+      ]
+    }
+  ]
+}

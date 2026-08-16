@@ -4,12 +4,18 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- Unity 6 の C# は 9。ここを 9 に固定して、
-         Unity で通らない構文をコンパイラに止めさせる（覚えている必要をなくす）。 -->
-    <LangVersion>9.0</LangVersion>
+    <RootNamespace>EggCommand.Core</RootNamespace>
     <!-- ⚠️ Unity 6 の C# は 9。ここを 9 に固定して、
          Unity で通らない構文を**コンパイラに止めさせる**（覚えている必要をなくす）。 -->
     <LangVersion>9.0</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
+
+  <!-- ⭐ 唯一の出所は Unity 側の local package。ここへコピーを置かない。
+       Unity は Packages/com.eggcommand.core/Runtime をそのまま読み、
+       dotnet は同じファイルを下の glob で読む。写した瞬間に2つに割れる。 -->
+  <ItemGroup>
+    <Compile Include="..\..\unity\Packages\com.eggcommand.core\Runtime\**\*.cs" />
+  </ItemGroup>
 
 </Project>

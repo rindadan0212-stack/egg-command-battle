@@ -1,0 +1,7 @@
+{
+  "name": "com.eggcommand.core",
+  "version": "0.1.0",
+  "displayName": "Egg Command Core",
+  "description": "ゲームの中身（純粋 C#）。Unity と dotnet test が同じファイルを読む唯一の出所。UnityEngine には依存しない。",
+  "unity": "6000.4"
+}

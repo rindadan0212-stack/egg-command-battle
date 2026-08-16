@@ -11,6 +11,8 @@
     "same": "node scripts/same.mjs",
     "sim": "node scripts/sim.mjs",
     "check:determinism": "node scripts/check-determinism.mjs",
+    "goldens": "node scripts/goldens.mjs",
+    "goldens:check": "node scripts/goldens.mjs --check",
     "shots": "node scripts/shots.mjs"
   },
   "devDependencies": {

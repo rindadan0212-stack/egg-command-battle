@@ -1,10 +1,13 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- xUnit2000 は「定数を expected 側に置け」と言うが、ここでは golden が常に正解側。
+         入れ替えると失敗メッセージの期待と実際が逆に出て読み違える。 -->
+    <NoWarn>$(NoWarn);xUnit2000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,6 +23,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EggCommand.Core\EggCommand.Core.csproj" />
+  </ItemGroup>
+
+  <!-- TS を実走させた「正解」。`node scripts/goldens.mjs` が唯一の出所。
+       ⚠️ ここが無いとテストは落ちる（黙って素通りさせない）。 -->
+  <ItemGroup>
+    <None Include="..\goldens\*.json" Link="goldens\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

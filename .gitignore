@@ -14,4 +14,7 @@ shots/
 
 unity-port/**/bin/
 unity-port/**/obj/
-unity/
+
+# ⚠️ unity/ を丸ごと外さない。ゲームの中身の唯一の出所が
+# unity/Packages/com.eggcommand.core/ にあるので、外すと C# が版管理から消える。
+# 何を外すかは unity/.gitignore（Library/ Temp/ Logs/ obj/ *.csproj など）が持つ。
