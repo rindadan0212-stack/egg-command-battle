@@ -19,6 +19,8 @@ namespace EggCommand.Core
         public readonly List<Incubation> Incubating = new List<Incubation>();
         /// <summary>いま探索に出ている巣。⚠️ 上限は <see cref="Encounters.Shown"/>。</summary>
         public readonly List<Encounter> Encounters = new List<Encounter>();
+        /// <summary>ホームで進み続けている放置。⭐ 素材の唯一の出所。</summary>
+        public readonly IdleRun Idle = new IdleRun();
         /// <summary>出撃させる3体の id。⚠️ 空なら素質の高い順に自動で選ぶ。</summary>
         public readonly List<string> Party = new List<string>();
         /// <summary>通し番号。id を一意にするためだけに使う。</summary>
