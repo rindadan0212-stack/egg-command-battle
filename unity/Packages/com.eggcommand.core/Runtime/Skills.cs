@@ -85,10 +85,19 @@ namespace EggCommand.Core
         public readonly int Delta;
         /// <summary>taunt</summary>
         public readonly int Hits;
+        /// <summary>damage。⭐ **1回の技で何発当てるか。**
+        ///
+        /// ⭐ これを足すだけで「連続攻撃」「追撃」が段位の掛け算で書ける。
+        /// **新しい効果の種類を足さずに**表現が増えるのがこの欄の狙い。
+        /// ⭐ 盾は1発につき1枚剥がれるので、多段は「大きな一撃」と違う役割を持つ。
+        /// ⚠️ 発動率は**作らない**。戦闘に乱数を入れると
+        /// 「1万回の勝率」が戦闘の運を測ってしまい、釣り合いの検算が濁る。</summary>
+        public readonly int Repeat;
 
         private Effect(EffectKind kind, PowerTier power, DamageScale scale, StatKey stat, int sign,
-            int turns, int stacks, int percent, int count, int delta, int hits)
+            int turns, int stacks, int percent, int count, int delta, int hits, int repeat = 1)
         {
+            Repeat = repeat < 1 ? 1 : repeat;
             Kind = kind;
             Power = power;
             Scale = scale;
@@ -103,8 +112,8 @@ namespace EggCommand.Core
         }
 
         /// <summary>scale が Def のものは「防御が高いほど強い一撃」になる。</summary>
-        public static Effect Damage(PowerTier power, DamageScale scale) =>
-            new Effect(EffectKind.Damage, power, scale, default, 0, 0, 0, 0, 0, 0, 0);
+        public static Effect Damage(PowerTier power, DamageScale scale, int repeat = 1) =>
+            new Effect(EffectKind.Damage, power, scale, default, 0, 0, 0, 0, 0, 0, 0, repeat);
 
         /// <summary>攻撃力/防御力/スピードの UP・DOWN。⚠️ 効き目は一律 <see cref="Skills.BuffPercent"/>。段位は使わない。</summary>
         public static Effect Buff(StatKey stat, int sign, int turns)
@@ -272,6 +281,49 @@ namespace EggCommand.Core
                 Effect.Guts(3)),
             new Skill("immune", "免疫", "DOWN・毒・スタンを受けなくなる", 5, Target.Self,
                 Effect.Immune(3)),
+
+            // ── ここから増やしたぶん（2026-08-17）────────────────
+            // ⭐ 新しい効果の種類を1つも足していない。既にある11種の**組み合わせ**と、
+            //    多段（Repeat）の掛け算だけで書いてある。
+            // ⚠️ 足すたびに `sim skills` で「一度も選ばれない技」が出ていないか見る。
+
+            // 多段。⭐ 盾は1発ごとに剥がれるので、大きな一撃と役割が分かれる
+            new Skill("attack-twice", "連撃", "敵1体に小さな一撃を2回", 4, Target.EnemyOne,
+                Effect.Damage(PowerTier.Small, DamageScale.Atk, 2)),
+            new Skill("attack-thrice", "乱打", "敵1体に小さな一撃を3回。盾を剥がす", 6, Target.EnemyOne,
+                Effect.Damage(PowerTier.Small, DamageScale.Atk, 3)),
+            new Skill("attack-def-twice", "堅陣突き", "防御が高いほど強い一撃を2回", 6, Target.EnemyOne,
+                Effect.Damage(PowerTier.Medium, DamageScale.Def, 2)),
+
+            // 複合。⭐ 1手で2つのことをする代わりに CT が長い
+            new Skill("venom-fang", "毒牙", "ダメージを与えて毒も入れる", 5, Target.EnemyOne,
+                Effect.Damage(PowerTier.Small, DamageScale.Atk),
+                Effect.Poison(1, 4)),
+            new Skill("crush", "打ち崩し", "ダメージを与えて防御力を下げる", 5, Target.EnemyOne,
+                Effect.Damage(PowerTier.Small, DamageScale.Atk),
+                Effect.Buff(StatKey.Def, -1, 3)),
+            new Skill("dash", "早駆け", "自分のスピードを上げ、技の待ちも縮める", 5, Target.Self,
+                Effect.Buff(StatKey.Spd, 1, 3),
+                Effect.Ct(-2)),
+            new Skill("harden", "硬化", "防御力を上げ、盾も張る", 5, Target.Self,
+                Effect.Buff(StatKey.Def, 1, 3),
+                Effect.Shield(1)),
+            new Skill("bulwark", "受けの構え", "攻撃を引き受け、防御力も上げる", 4, Target.Self,
+                Effect.Taunt(2),
+                Effect.Buff(StatKey.Def, 1, 3)),
+            new Skill("curse", "呪詛", "敵1体の攻撃力とスピードを下げる", 5, Target.EnemyOne,
+                Effect.Buff(StatKey.Atk, -1, 3),
+                Effect.Buff(StatKey.Spd, -1, 3)),
+
+            // 濃さを変えただけのもの。⭐ 段位ではなくスタック数・割合で差を出す
+            new Skill("venom-heavy", "猛毒", "毒を2重に入れる", 6, Target.EnemyOne,
+                Effect.Poison(2, 4)),
+            new Skill("heal-big", "大回復", "味方1体の HP を大きく回復", 6, Target.AllyLowest,
+                Effect.HealRatio(55)),
+
+            // ⚠️ 全体は1段下げる。全体の弱化は単体よりずっと効く
+            new Skill("slow-all", "鎮めの風", "敵全体のスピードを下げる", 6, Target.EnemyAll,
+                Effect.Buff(StatKey.Spd, -1, 3)),
         };
 
         public static IReadOnlyList<Skill> All => List;

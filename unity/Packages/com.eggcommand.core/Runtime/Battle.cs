@@ -598,8 +598,12 @@ namespace EggCommand.Core
                     double mult = ElementMultiplier(
                         actor.Creature.Element,
                         target.Creature.Element);
-                    DealDamage(state, target,
-                        DamageOf(Skills.DamagePowerOf(effect.Power), attackStat, defenseStat, mult));
+                    int hit = DamageOf(Skills.DamagePowerOf(effect.Power), attackStat, defenseStat, mult);
+                    // ⭐ 多段。⚠️ 途中で倒れたら止める（死体を殴り続けない）
+                    for (int shot = 0; shot < effect.Repeat && IsAlive(target); shot++)
+                    {
+                        DealDamage(state, target, hit);
+                    }
                     break;
                 }
 

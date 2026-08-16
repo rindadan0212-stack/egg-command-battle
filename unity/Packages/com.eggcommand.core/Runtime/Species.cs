@@ -175,6 +175,95 @@ namespace EggCommand.Core
             "................",
         });
 
+        // ── 仮絵（2026-08-17）─────────────────────────────
+        // ⚠️ **これは仮の絵。** 手描きのイラストに差し替える前提で置いてある。
+        // ⭐ 仮でも「輪郭で見分けがつく」ことだけは守る。同じ丸を色違いで並べると、
+        //    種族が増えたことが画面に出ず、増やした意味が確かめられない。
+
+        /// <summary>ノビル — 縦に長い。首が伸びている。</summary>
+        private static readonly PixelSprite NobiruSprite = PixelSprite.Parse(new[]
+        {
+            "......1111......",
+            ".....112211.....",
+            ".....124421.....",
+            ".....112211.....",
+            "......1221......",
+            "......1221......",
+            "......1331......",
+            ".....112211.....",
+            "....11222211....",
+            "...1122222211...",
+            "...1222222221...",
+            "...1222222221...",
+            "...1122222211...",
+            "....11222211....",
+            ".....111111.....",
+            "................",
+        });
+
+        /// <summary>ヒラベ — 平たい。横に広がって沈んでいる。</summary>
+        private static readonly PixelSprite HirabeSprite = PixelSprite.Parse(new[]
+        {
+            "................",
+            "................",
+            "................",
+            "................",
+            "....11111111....",
+            "..112222222211..",
+            ".12233222332221.",
+            "1222442222442221",
+            "1222222222222221",
+            ".12222222222221.",
+            "..112222222211..",
+            "....11111111....",
+            "................",
+            "................",
+            "................",
+            "................",
+        });
+
+        /// <summary>トゲル — 全身が棘。輪郭がぎざぎざ。</summary>
+        private static readonly PixelSprite TogeruSprite = PixelSprite.Parse(new[]
+        {
+            "................",
+            "...1..1..1..1...",
+            "...11.11.11.1...",
+            "....111111111...",
+            "..1113322221111.",
+            "1.11222222221.1.",
+            ".1122442244221..",
+            "1112222222222111",
+            ".1122222222221..",
+            "1.11222222211.1.",
+            "..111222221111..",
+            "...111111111....",
+            "...1.11.11.11...",
+            "...1..1..1..1...",
+            "................",
+            "................",
+        });
+
+        /// <summary>マルミ — 小さくて丸い。枠の中で余白が多い。</summary>
+        private static readonly PixelSprite MarumiSprite = PixelSprite.Parse(new[]
+        {
+            "................",
+            "................",
+            "................",
+            "................",
+            "......1111......",
+            ".....112211.....",
+            "....11222211....",
+            "...1122332211...",
+            "...1244224421...",
+            "...1222222221...",
+            "....11222211....",
+            ".....112211.....",
+            "......1111......",
+            "................",
+            "................",
+            "................",
+        });
+
         /// <summary>ヌシ — 角を持つ重い体。枠いっぱいに構える。</summary>
         private static readonly PixelSprite NushiSprite = PixelSprite.Parse(new[]
         {
@@ -220,6 +309,36 @@ namespace EggCommand.Core
             new Palette("#2e1c1c", "#c98f8f", "#ead0d0", "#181010"), // 変異・灰紅
         };
 
+        /// <summary>⚠️ 仮絵のぶんのパレット。⭐ 通常＋変異2色までに留めてある
+        /// （手描きに差し替えるとき、色数が少ないほうが作り直しが軽い）。</summary>
+        private static readonly Palette[] NobiruPalettes =
+        {
+            new Palette("#1c2e24", "#6ec99a", "#a8eac8", "#101a14"),
+            new Palette("#2e1c24", "#c96e9a", "#eaa8c8", "#1a1014"),
+            new Palette("#2a2e18", "#b4c96e", "#dceaa8", "#181a10"),
+        };
+
+        private static readonly Palette[] HirabePalettes =
+        {
+            new Palette("#182a2e", "#6eb4c9", "#a8dcea", "#101a1c"),
+            new Palette("#2e2818", "#c9b06e", "#eadaa8", "#1a1810"),
+            new Palette("#241c2e", "#9a6ec9", "#c8a8ea", "#141018"),
+        };
+
+        private static readonly Palette[] TogeruPalettes =
+        {
+            new Palette("#2e1818", "#c96e6e", "#eaa8a8", "#1a1010"),
+            new Palette("#18182e", "#6e6ec9", "#a8a8ea", "#10101a"),
+            new Palette("#1c2e18", "#7ec96e", "#b4eaa8", "#101a10"),
+        };
+
+        private static readonly Palette[] MarumiPalettes =
+        {
+            new Palette("#2e2a20", "#e0d0a8", "#f4ecd0", "#1a1810"),
+            new Palette("#202a2e", "#a8d0e0", "#d0ecf4", "#10181a"),
+            new Palette("#2e2028", "#e0a8c4", "#f4d0e4", "#1a1014"),
+        };
+
         /// <summary>⚠️ ボスは重く見せたいので、明部を抑えて沈んだ色にする。</summary>
         private static readonly Palette[] NushiPalettes =
         {
@@ -245,6 +364,32 @@ namespace EggCommand.Core
                 new StatBlock(20, 18, 16, 26), HaneruSprite, HaneruPalettes,
                 // 撹乱の系統
                 new[] { "spd-up", "spd-down", "atk-down", "stun", "regen", "ct-long", "immune" }),
+
+            // ── 増やしたぶん（2026-08-17）。⚠️ 絵は仮 ─────────────
+            // ⭐ 基礎値の合計は全種族 80 で揃える（差は配分だけ）。
+            // ⭐ 枠1のスケール元を散らす。防御スケールが増えすぎると防御が二重に得になる
+            //    （実測で「防御に寄せる型」が突出していた）。新しい4種は攻撃寄りにしてある。
+            // ⚠️ 新しい技は**新しい種族のプールへ**入れる。既にある4種のプールは凍結
+            //    （乱数で引く対象なので、足すと卵の技がずれて照合が落ちる）。
+
+            new Species("nobiru", "ノビル", "attack-twice", // 多段・攻撃スケール
+                new StatBlock(18, 22, 16, 24), NobiruSprite, NobiruPalettes,
+                new[] { "dash", "curse", "attack-thrice", "spd-up", "venom-fang", "ct-short" }),
+
+            // ⚠️ 最初は枠1を防御スケールにしていたら、総合勝率 81.1% で突出した。
+            //    防御寄りの配分と防御スケールが重なって**防御を二重に得**にしていた
+            //    （この罠は上の注意書きどおり）。攻撃スケールに変え、低い攻撃を弱点として効かせる。
+            new Species("hirabe", "ヒラベ", "attack", // 攻撃スケール。硬いが攻めは細い
+                new StatBlock(26, 14, 26, 14), HirabeSprite, HirabePalettes,
+                new[] { "harden", "bulwark", "attack-def-twice", "heal-big", "slow-all", "guts" }),
+
+            new Species("togeru", "トゲル", "venom-fang", // 削って待つ
+                new StatBlock(20, 24, 20, 16), TogeruSprite, TogeruPalettes,
+                new[] { "venom-heavy", "crush", "attack-twice", "curse", "immune", "atk-up" }),
+
+            new Species("marumi", "マルミ", "attack", // 素直。支える側
+                new StatBlock(24, 16, 18, 22), MarumiSprite, MarumiPalettes,
+                new[] { "heal-big", "harden", "slow-all", "regen", "dash", "shield" }),
 
             // ⚠️ ボス専用。巣は持たないので卵からは出ない
             // ⚠️ 3すくみは 炎 → 木 → 水 → 炎。水に有利を取るのは木（ハネル）。

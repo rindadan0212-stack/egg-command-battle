@@ -39,6 +39,13 @@ namespace EggCommand.Core
             return Battle.DamageOf(Skills.DamagePowerOf(tier), attackStat, defenseStat, mult);
         }
 
+        /// <summary>多段ぶんを見込んだ見積り。⚠️ 盾は1発ごとに剥がれるので、
+        /// 盾持ちに対しては多段のほうが通る（そこまでは数えていない — 概算でよい）。</summary>
+        private static int EstimateTotal(Unit actor, Unit target, Effect effect)
+        {
+            return EstimateDamage(actor, target, effect.Power, effect.Scale) * effect.Repeat;
+        }
+
         private static double ScoreOf(BattleState state, Unit actor, int slot)
         {
             var skill = Battle.ActionSkill(actor, slot);
@@ -76,13 +83,13 @@ namespace EggCommand.Core
                             // ⚠️ 過剰打撃を価値に数えない。残 HP で頭打ちにする
                             foreach (var foe in foes)
                             {
-                                int hit = EstimateDamage(actor, foe, effect.Power, effect.Scale);
+                                int hit = EstimateTotal(actor, foe, effect);
                                 score += foe.Hp < hit ? foe.Hp : hit;
                             }
                         }
                         else
                         {
-                            int hit = EstimateDamage(actor, focus, effect.Power, effect.Scale);
+                            int hit = EstimateTotal(actor, focus, effect);
                             score += focus.Hp < hit ? focus.Hp : hit;
                         }
                         break;

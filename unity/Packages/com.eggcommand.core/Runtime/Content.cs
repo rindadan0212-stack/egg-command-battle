@@ -24,6 +24,7 @@ namespace EggCommand.Core
             SpeciesTable.Audit();
             Skills.Audit();
             Nests.Audit();
+            Encounters.Audit();
         }
     }
 }
