@@ -16,16 +16,17 @@ public class NestGoldenTests
         }
     }
 
+    /// <summary>⭐ id で引く。並び順も件数も見ない（巣を足しても落ちない）。
+    /// ⚠️ ただし <c>Nests.All[0]</c> は最初の3体の出所なので、**先頭を入れ替えると game の照合が落ちる**。
+    /// 足すときは後ろへ足す。</summary>
     [Fact]
-    public void 巣の表が一致する()
+    public void 移植した巣が1つも変わっていない()
     {
         var golden = Golden.Load("nest");
         var list = golden.GetProperty("nests");
-        Assert.Equal(list.GetArrayLength(), Nests.All.Length);
-        int i = 0;
         foreach (var entry in list.EnumerateArray())
         {
-            var nest = Nests.All[i++];
+            var nest = Nests.ById(entry.GetProperty("id").GetString()!);
             Assert.Equal(entry.GetProperty("id").GetString(), nest.Id);
             Assert.Equal(entry.GetProperty("name").GetString(), nest.Name);
             Assert.Equal(entry.GetProperty("speciesId").GetString(), nest.SpeciesId);

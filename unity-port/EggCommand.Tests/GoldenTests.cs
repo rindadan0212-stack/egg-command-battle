@@ -154,18 +154,24 @@ public class SkillsGoldenTests
         Assert.Equal(golden.GetProperty("tickPercent").GetInt32(), Skills.TickPercent);
     }
 
+    /// <summary>⭐ **id で引く。並び順も件数も見ない。**
+    ///
+    /// ⚠️ ここを「golden の件数 == 実装の件数」で書いていたため、
+    /// 技を1つ足すだけで落ちる状態だった。落ちれば golden を作り直したくなるが、
+    /// これは TS 実装との一致の記録で、TS 側はもう触っているので**二度と作れない**。
+    ///
+    /// 今の約束: **golden にあるものは実装にもあり、値が1つも違わない。**
+    /// 足すのは自由。消す・変えるのは落ちる。</summary>
     [Fact]
-    public void スキル表が一致する()
+    public void 移植した技が1つも変わっていない()
     {
         var golden = Golden.Load("skills");
         var list = golden.GetProperty("list");
-        Assert.Equal(list.GetArrayLength(), Skills.All.Count);
 
-        int index = 0;
         foreach (var entry in list.EnumerateArray())
         {
-            var skill = Skills.All[index++];
             string id = entry.GetProperty("id").GetString()!;
+            var skill = Skills.ById(id);
 
             Assert.Equal(id, skill.Id);
             Assert.Equal(entry.GetProperty("name").GetString(), skill.Name);
@@ -234,9 +240,16 @@ public class SkillsGoldenTests
         }
     }
 
-    /// <summary>⭐ 種族ごとにプールを分けていること。枠1と同じ技が外れていること。</summary>
+    /// <summary>⭐ 種族ごとにプールを分けていること。枠1と同じ技が外れていること。
+    ///
+    /// ⚠️ **ここだけは「完全に同じ」を要求する。** プールは乱数で引く対象なので、
+    /// 既にある種族のプールに1つ足すと、そこから孵る卵の技が全部ずれ、
+    /// nest / game / breeding の照合がまとめて落ちる。
+    ///
+    /// ⭐ つまり **移植済みの4種のプールは凍結**。新しい技は**新しい種族のプールへ**入れる。
+    /// 既存種族に技を足したくなったら、それは golden を捨てる判断なので、先に決める。</summary>
     [Fact]
-    public void 卵ガチャのプールが一致する()
+    public void 移植した卵ガチャのプールが1つも変わっていない()
     {
         var golden = Golden.Load("skills");
         foreach (var entry in golden.GetProperty("gachaPools").EnumerateArray())
@@ -281,19 +294,18 @@ public class SpeciesGoldenTests
         Assert.Equal(labels.GetProperty("scale").GetString(), SpeciesTable.LabelOf(Element.Scale));
     }
 
+    /// <summary>⭐ id で引く。並び順も件数も見ない（理由は技の側と同じ）。</summary>
     [Fact]
-    public void 種族表が一致する()
+    public void 移植した種族が1つも変わっていない()
     {
         var golden = Golden.Load("species");
         Assert.Equal(golden.GetProperty("baseTotal").GetInt32(), SpeciesTable.BaseTotal);
 
         var list = golden.GetProperty("list");
-        Assert.Equal(list.GetArrayLength(), SpeciesTable.All.Count);
 
-        int index = 0;
         foreach (var entry in list.EnumerateArray())
         {
-            var species = SpeciesTable.All[index++];
+            var species = SpeciesTable.ById(entry.GetProperty("id").GetString()!);
             Assert.Equal(entry.GetProperty("id").GetString(), species.Id);
             Assert.Equal(entry.GetProperty("name").GetString(), species.Name);
             Assert.Equal(Golden.Element(entry.GetProperty("element").GetString()!), species.Element);
@@ -314,10 +326,9 @@ public class SpeciesGoldenTests
     public void ドット絵の添字色が一致する()
     {
         var golden = Golden.Load("species");
-        int index = 0;
         foreach (var entry in golden.GetProperty("list").EnumerateArray())
         {
-            var species = SpeciesTable.All[index++];
+            var species = SpeciesTable.ById(entry.GetProperty("id").GetString()!);
             var sprite = species.Sprite;
 
             Assert.Equal(entry.GetProperty("spriteWidth").GetInt32(), sprite.Width);
@@ -338,10 +349,9 @@ public class SpeciesGoldenTests
     public void パレットが一致する()
     {
         var golden = Golden.Load("species");
-        int index = 0;
         foreach (var entry in golden.GetProperty("list").EnumerateArray())
         {
-            var species = SpeciesTable.All[index++];
+            var species = SpeciesTable.ById(entry.GetProperty("id").GetString()!);
             var palettes = entry.GetProperty("palettes");
             Assert.Equal(palettes.GetArrayLength(), species.Palettes.Count);
 
@@ -355,11 +365,14 @@ public class SpeciesGoldenTests
         }
     }
 
-    /// <summary>種族を足した日に黙って壊れないための、数える検査そのもの。</summary>
+    /// <summary>中身を足した日に黙って壊れないための、数える検査そのもの。
+    ///
+    /// ⭐ **中身が増えるほど守る範囲が広がる側**の検査。golden とは役割が逆で、
+    /// golden が「変えていないこと」を見るのに対し、ここは「足したものが繋がっているか」を見る。</summary>
     [Fact]
-    public void 数える検査が通る()
+    public void 中身の数える検査が通る()
     {
-        SpeciesTable.Audit();
+        Content.Audit();
     }
 
     [Fact]

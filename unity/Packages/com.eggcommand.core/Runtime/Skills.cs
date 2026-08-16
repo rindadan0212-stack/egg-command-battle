@@ -322,6 +322,82 @@ namespace EggCommand.Core
             { "nushi", new[] { "def-up", "spd-down", "taunt", "guts", "immune", "attack-all-heavy" } },
         };
 
+        /// <summary>技表とガチャプールの整合を数える。
+        ///
+        /// ⭐ **件数を数えない。** 数えると技を足すたびに落ちるので、
+        /// 検査を緩める圧力になる（そして緩めたら二度と戻らない）。
+        /// 見るのは「規則を守っているか」と「繋がっているか」だけ。
+        ///
+        /// ⚠️ ここが catch するのは、足した日には気づけない類のものばかり:
+        /// AI が採点しない効果 / どの巣からも出ない技 / 実在しない id を指すプール。
+        /// どれも**コンパイルは通り、遊べてしまう**。</summary>
+        public static void Audit()
+        {
+            var problems = new List<string>();
+
+            var seen = new HashSet<string>();
+            foreach (var skill in List)
+            {
+                if (!seen.Add(skill.Id)) problems.Add($"技 id が重複している: {skill.Id}");
+                if (skill.Effects.Count == 0) problems.Add($"{skill.Id}: 効果が1つも無い");
+                if (skill.Name.Length == 0) problems.Add($"{skill.Id}: 名前が空");
+                if (skill.Gist.Length == 0) problems.Add($"{skill.Id}: 画面に出す短い説明が空");
+                if (skill.Ct < 0) problems.Add($"{skill.Id}: CT が {skill.Ct}");
+
+                foreach (var effect in skill.Effects)
+                {
+                    if (!Ai.Knows(effect.Kind))
+                    {
+                        problems.Add(
+                            $"{skill.Id}: {effect.Kind} を AI が採点しない。" +
+                            "スコア0になって**永久に選ばれない技**になる（Ai.ScoreOf に case を足す）");
+                    }
+                }
+            }
+
+            // ── 卵ガチャ。⭐ ここが「技を手に入れる唯一の経路」なので、切れていると入手不能になる
+            var reachable = new HashSet<string>();
+            foreach (var species in SpeciesTable.All)
+            {
+                reachable.Add(species.Skill1);
+
+                string[]? pool;
+                if (!GachaPools.TryGetValue(species.Id, out pool))
+                {
+                    problems.Add($"{species.Id}: 卵ガチャのプールが無い（種族を足したら必ず要る）");
+                    continue;
+                }
+
+                var inPool = new HashSet<string>();
+                foreach (var id in pool!)
+                {
+                    if (!Index.ContainsKey(id)) problems.Add($"{species.Id} のプールが実在しない技 {id} を指している");
+                    if (!inPool.Add(id)) problems.Add($"{species.Id} のプールで {id} が重複している");
+                    reachable.Add(id);
+                }
+
+                // ⭐ 枠2・3 を別々に引くので、枠1を除いて2件は要る
+                int usable = GachaPoolOf(species.Id, species.Skill1).Count;
+                if (usable < 2)
+                {
+                    problems.Add($"{species.Id}: 枠1を除いたプールが {usable} 件。枠2・3 を別々に引けない");
+                }
+            }
+
+            foreach (var skill in List)
+            {
+                if (!reachable.Contains(skill.Id))
+                {
+                    problems.Add($"{skill.Id}: どの種族の枠1にもプールにも無い。**手に入らない技**になっている");
+                }
+            }
+
+            if (problems.Count > 0)
+            {
+                throw new InvalidOperationException("技表の不備:\n  " + string.Join("\n  ", problems));
+            }
+        }
+
         /// <summary>その種族の卵から出うる技。⚠️ 表に無い種族は黙って空にせず投げる。
         /// 枠1（種族固定）と同じ技はここで外す。</summary>
         public static List<string> GachaPoolOf(string speciesId, string skill1)

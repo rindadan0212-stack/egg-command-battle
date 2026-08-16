@@ -178,9 +178,40 @@ namespace EggCommand.Core
                         // 既に弱化を受けているなら、掛け直しても消えないので価値は低い
                         score += actor.Status.Immune == 0 ? GuardianValue : 0;
                         break;
+
+                    // ⚠️ 効果を足したのにここへ来ないと、その技のスコアは 0 のまま。
+                    //    コンパイルは通り、検査も通り、**AI が永久にその技を選ばない**だけになる。
+                    //    「型は通る・ただ効かなくなる」が一番気づけない形なので必ず投げる。
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(effect.Kind),
+                            $"{effect.Kind} を AI が採点できない。ScoreOf に case を足す");
                 }
             }
             return score;
+        }
+
+        /// <summary>その効果を AI が採点できるか。⭐ 技を足す前に <see cref="Skills.Audit"/> が数える。
+        /// ⚠️ 上の switch に case を足したら、ここにも足す。
+        /// 二重管理だが、実際に打たせてみないと分からない状態よりは良い。</summary>
+        public static bool Knows(EffectKind kind)
+        {
+            switch (kind)
+            {
+                case EffectKind.Damage:
+                case EffectKind.Buff:
+                case EffectKind.Poison:
+                case EffectKind.Regen:
+                case EffectKind.HealRatio:
+                case EffectKind.Shield:
+                case EffectKind.Stun:
+                case EffectKind.Ct:
+                case EffectKind.Taunt:
+                case EffectKind.Guts:
+                case EffectKind.Immune:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>⚠️ 同点は並び順で決める。実行ごとに変わると比較にならない。
