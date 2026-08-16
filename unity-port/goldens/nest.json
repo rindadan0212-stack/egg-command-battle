@@ -1,0 +1,782 @@
+{
+  "tiers": [
+    {
+      "tier": 0,
+      "wildTotal": 24
+    },
+    {
+      "tier": 1,
+      "wildTotal": 24
+    },
+    {
+      "tier": 2,
+      "wildTotal": 38
+    },
+    {
+      "tier": 3,
+      "wildTotal": 52
+    },
+    {
+      "tier": 4,
+      "wildTotal": 66
+    },
+    {
+      "tier": 5,
+      "wildTotal": 80
+    },
+    {
+      "tier": 6,
+      "wildTotal": 80
+    }
+  ],
+  "nests": [
+    {
+      "id": "shallow-scale",
+      "name": "浅瀬の巣",
+      "speciesId": "tamaru",
+      "tier": 1
+    },
+    {
+      "id": "thicket-fang",
+      "name": "藪の巣",
+      "speciesId": "tsunoga",
+      "tier": 2
+    },
+    {
+      "id": "cliff-plume",
+      "name": "崖の巣",
+      "speciesId": "haneru",
+      "tier": 3
+    },
+    {
+      "id": "deep-scale",
+      "name": "深みの巣",
+      "speciesId": "tamaru",
+      "tier": 4
+    },
+    {
+      "id": "peak-fang",
+      "name": "嶺の巣",
+      "speciesId": "tsunoga",
+      "tier": 5
+    }
+  ],
+  "defenders": [
+    {
+      "nest": "shallow-scale",
+      "units": [
+        {
+          "id": "shallow-scale-0",
+          "speciesId": "tamaru",
+          "wild": {
+            "hp": 4,
+            "atk": 8,
+            "def": 2,
+            "spd": 10
+          },
+          "trained": {
+            "hp": 0,
+            "atk": 0,
+            "def": 0,
+            "spd": 0
+          },
+          "earned": 0,
+          "mutationCounter": 0,
+          "skills23": [
+            "attack",
+            "shield"
+          ],
+          "paletteIndex": 0,
+          "generation": 1,
+          "actual": {
+            "hp": 28,
+            "atk": 26,
+            "def": 24,
+            "spd": 26
+          },
+          "wildTotal": 24
+        }
+      ]
+    },
+    {
+      "nest": "thicket-fang",
+      "units": [
+        {
+          "id": "thicket-fang-0",
+          "speciesId": "tsunoga",
+          "wild": {
+            "hp": 12,
+            "atk": 6,
+            "def": 16,
+            "spd": 4
+          },
+          "trained": {
+            "hp": 0,
+            "atk": 0,
+            "def": 0,
+            "spd": 0
+          },
+          "earned": 0,
+          "mutationCounter": 0,
+          "skills23": [
+            "def-down",
+            "attack-heavy"
+          ],
+          "paletteIndex": 0,
+          "generation": 1,
+          "actual": {
+            "hp": 34,
+            "atk": 30,
+            "def": 34,
+            "spd": 20
+          },
+          "wildTotal": 38
+        }
+      ]
+    },
+    {
+      "nest": "cliff-plume",
+      "units": [
+        {
+          "id": "cliff-plume-0",
+          "speciesId": "haneru",
+          "wild": {
+            "hp": 17,
+            "atk": 5,
+            "def": 8,
+            "spd": 22
+          },
+          "trained": {
+            "hp": 0,
+            "atk": 0,
+            "def": 0,
+            "spd": 0
+          },
+          "earned": 0,
+          "mutationCounter": 0,
+          "skills23": [
+            "spd-up",
+            "atk-down"
+          ],
+          "paletteIndex": 0,
+          "generation": 1,
+          "actual": {
+            "hp": 37,
+            "atk": 23,
+            "def": 24,
+            "spd": 48
+          },
+          "wildTotal": 52
+        }
+      ]
+    },
+    {
+      "nest": "deep-scale",
+      "units": [
+        {
+          "id": "deep-scale-0",
+          "speciesId": "tamaru",
+          "wild": {
+            "hp": 6,
+            "atk": 28,
+            "def": 11,
+            "spd": 21
+          },
+          "trained": {
+            "hp": 0,
+            "atk": 0,
+            "def": 0,
+            "spd": 0
+          },
+          "earned": 0,
+          "mutationCounter": 0,
+          "skills23": [
+            "guts",
+            "ct-long"
+          ],
+          "paletteIndex": 0,
+          "generation": 1,
+          "actual": {
+            "hp": 30,
+            "atk": 46,
+            "def": 33,
+            "spd": 37
+          },
+          "wildTotal": 66
+        }
+      ]
+    },
+    {
+      "nest": "peak-fang",
+      "units": [
+        {
+          "id": "peak-fang-0",
+          "speciesId": "tsunoga",
+          "wild": {
+            "hp": 34,
+            "atk": 13,
+            "def": 7,
+            "spd": 26
+          },
+          "trained": {
+            "hp": 0,
+            "atk": 0,
+            "def": 0,
+            "spd": 0
+          },
+          "earned": 0,
+          "mutationCounter": 0,
+          "skills23": [
+            "atk-up",
+            "def-down"
+          ],
+          "paletteIndex": 0,
+          "generation": 1,
+          "actual": {
+            "hp": 56,
+            "atk": 37,
+            "def": 25,
+            "spd": 42
+          },
+          "wildTotal": 80
+        }
+      ]
+    }
+  ],
+  "eggs": [
+    {
+      "nest": "shallow-scale",
+      "how": "defeated",
+      "egg": {
+        "id": "e007",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 2,
+          "atk": 10,
+          "def": 8,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 1,
+        "how": "defeated",
+        "skills23": null
+      },
+      "hatched": {
+        "id": "c007",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 2,
+          "atk": 10,
+          "def": 8,
+          "spd": 4
+        },
+        "trained": {
+          "hp": 0,
+          "atk": 0,
+          "def": 0,
+          "spd": 0
+        },
+        "earned": 0,
+        "mutationCounter": 0,
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ],
+        "paletteIndex": 0,
+        "generation": 1,
+        "actual": {
+          "hp": 26,
+          "atk": 28,
+          "def": 30,
+          "spd": 20
+        },
+        "wildTotal": 24
+      }
+    },
+    {
+      "nest": "shallow-scale",
+      "how": "stolen",
+      "egg": {
+        "id": "e007",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 3,
+          "atk": 7,
+          "def": 2,
+          "spd": 5
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 1,
+        "how": "stolen",
+        "skills23": null
+      },
+      "hatched": {
+        "id": "c007",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 3,
+          "atk": 7,
+          "def": 2,
+          "spd": 5
+        },
+        "trained": {
+          "hp": 0,
+          "atk": 0,
+          "def": 0,
+          "spd": 0
+        },
+        "earned": 0,
+        "mutationCounter": 0,
+        "skills23": [
+          "attack",
+          "guts"
+        ],
+        "paletteIndex": 0,
+        "generation": 1,
+        "actual": {
+          "hp": 27,
+          "atk": 25,
+          "def": 24,
+          "spd": 21
+        },
+        "wildTotal": 17
+      }
+    },
+    {
+      "nest": "thicket-fang",
+      "how": "defeated",
+      "egg": {
+        "id": "e007",
+        "speciesId": "tsunoga",
+        "wild": {
+          "hp": 16,
+          "atk": 4,
+          "def": 6,
+          "spd": 12
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 1,
+        "how": "defeated",
+        "skills23": null
+      },
+      "hatched": {
+        "id": "c007",
+        "speciesId": "tsunoga",
+        "wild": {
+          "hp": 16,
+          "atk": 4,
+          "def": 6,
+          "spd": 12
+        },
+        "trained": {
+          "hp": 0,
+          "atk": 0,
+          "def": 0,
+          "spd": 0
+        },
+        "earned": 0,
+        "mutationCounter": 0,
+        "skills23": [
+          "atk-up",
+          "ct-short"
+        ],
+        "paletteIndex": 0,
+        "generation": 1,
+        "actual": {
+          "hp": 38,
+          "atk": 28,
+          "def": 24,
+          "spd": 28
+        },
+        "wildTotal": 38
+      }
+    },
+    {
+      "nest": "thicket-fang",
+      "how": "stolen",
+      "egg": {
+        "id": "e007",
+        "speciesId": "tsunoga",
+        "wild": {
+          "hp": 3,
+          "atk": 9,
+          "def": 12,
+          "spd": 5
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 1,
+        "how": "stolen",
+        "skills23": null
+      },
+      "hatched": {
+        "id": "c007",
+        "speciesId": "tsunoga",
+        "wild": {
+          "hp": 3,
+          "atk": 9,
+          "def": 12,
+          "spd": 5
+        },
+        "trained": {
+          "hp": 0,
+          "atk": 0,
+          "def": 0,
+          "spd": 0
+        },
+        "earned": 0,
+        "mutationCounter": 0,
+        "skills23": [
+          "poison",
+          "attack-def"
+        ],
+        "paletteIndex": 0,
+        "generation": 1,
+        "actual": {
+          "hp": 25,
+          "atk": 33,
+          "def": 30,
+          "spd": 21
+        },
+        "wildTotal": 29
+      }
+    },
+    {
+      "nest": "cliff-plume",
+      "how": "defeated",
+      "egg": {
+        "id": "e007",
+        "speciesId": "haneru",
+        "wild": {
+          "hp": 23,
+          "atk": 5,
+          "def": 17,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 1,
+        "how": "defeated",
+        "skills23": null
+      },
+      "hatched": {
+        "id": "c007",
+        "speciesId": "haneru",
+        "wild": {
+          "hp": 23,
+          "atk": 5,
+          "def": 17,
+          "spd": 9
+        },
+        "trained": {
+          "hp": 0,
+          "atk": 0,
+          "def": 0,
+          "spd": 0
+        },
+        "earned": 0,
+        "mutationCounter": 0,
+        "skills23": [
+          "spd-down",
+          "stun"
+        ],
+        "paletteIndex": 0,
+        "generation": 1,
+        "actual": {
+          "hp": 43,
+          "atk": 23,
+          "def": 33,
+          "spd": 35
+        },
+        "wildTotal": 54
+      }
+    },
+    {
+      "nest": "cliff-plume",
+      "how": "stolen",
+      "egg": {
+        "id": "e007",
+        "speciesId": "haneru",
+        "wild": {
+          "hp": 18,
+          "atk": 7,
+          "def": 5,
+          "spd": 14
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 1,
+        "how": "stolen",
+        "skills23": null
+      },
+      "hatched": {
+        "id": "c007",
+        "speciesId": "haneru",
+        "wild": {
+          "hp": 18,
+          "atk": 7,
+          "def": 5,
+          "spd": 14
+        },
+        "trained": {
+          "hp": 0,
+          "atk": 0,
+          "def": 0,
+          "spd": 0
+        },
+        "earned": 0,
+        "mutationCounter": 0,
+        "skills23": [
+          "regen",
+          "spd-down"
+        ],
+        "paletteIndex": 0,
+        "generation": 1,
+        "actual": {
+          "hp": 38,
+          "atk": 25,
+          "def": 21,
+          "spd": 40
+        },
+        "wildTotal": 44
+      }
+    },
+    {
+      "nest": "deep-scale",
+      "how": "defeated",
+      "egg": {
+        "id": "e007",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 28,
+          "atk": 21,
+          "def": 6,
+          "spd": 11
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 1,
+        "how": "defeated",
+        "skills23": null
+      },
+      "hatched": {
+        "id": "c007",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 28,
+          "atk": 21,
+          "def": 6,
+          "spd": 11
+        },
+        "trained": {
+          "hp": 0,
+          "atk": 0,
+          "def": 0,
+          "spd": 0
+        },
+        "earned": 0,
+        "mutationCounter": 0,
+        "skills23": [
+          "guts",
+          "ct-long"
+        ],
+        "paletteIndex": 0,
+        "generation": 1,
+        "actual": {
+          "hp": 52,
+          "atk": 39,
+          "def": 28,
+          "spd": 27
+        },
+        "wildTotal": 66
+      }
+    },
+    {
+      "nest": "deep-scale",
+      "how": "stolen",
+      "egg": {
+        "id": "e007",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 9,
+          "atk": 5,
+          "def": 23,
+          "spd": 17
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 1,
+        "how": "stolen",
+        "skills23": null
+      },
+      "hatched": {
+        "id": "c007",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 9,
+          "atk": 5,
+          "def": 23,
+          "spd": 17
+        },
+        "trained": {
+          "hp": 0,
+          "atk": 0,
+          "def": 0,
+          "spd": 0
+        },
+        "earned": 0,
+        "mutationCounter": 0,
+        "skills23": [
+          "guts",
+          "heal-ratio"
+        ],
+        "paletteIndex": 0,
+        "generation": 1,
+        "actual": {
+          "hp": 33,
+          "atk": 23,
+          "def": 45,
+          "spd": 33
+        },
+        "wildTotal": 54
+      }
+    },
+    {
+      "nest": "peak-fang",
+      "how": "defeated",
+      "egg": {
+        "id": "e007",
+        "speciesId": "tsunoga",
+        "wild": {
+          "hp": 33,
+          "atk": 12,
+          "def": 25,
+          "spd": 8
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 1,
+        "how": "defeated",
+        "skills23": null
+      },
+      "hatched": {
+        "id": "c007",
+        "speciesId": "tsunoga",
+        "wild": {
+          "hp": 33,
+          "atk": 12,
+          "def": 25,
+          "spd": 8
+        },
+        "trained": {
+          "hp": 0,
+          "atk": 0,
+          "def": 0,
+          "spd": 0
+        },
+        "earned": 0,
+        "mutationCounter": 0,
+        "skills23": [
+          "def-down",
+          "attack-def"
+        ],
+        "paletteIndex": 0,
+        "generation": 1,
+        "actual": {
+          "hp": 55,
+          "atk": 36,
+          "def": 43,
+          "spd": 24
+        },
+        "wildTotal": 78
+      }
+    },
+    {
+      "nest": "peak-fang",
+      "how": "stolen",
+      "egg": {
+        "id": "e007",
+        "speciesId": "tsunoga",
+        "wild": {
+          "hp": 6,
+          "atk": 19,
+          "def": 25,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 1,
+        "how": "stolen",
+        "skills23": null
+      },
+      "hatched": {
+        "id": "c007",
+        "speciesId": "tsunoga",
+        "wild": {
+          "hp": 6,
+          "atk": 19,
+          "def": 25,
+          "spd": 9
+        },
+        "trained": {
+          "hp": 0,
+          "atk": 0,
+          "def": 0,
+          "spd": 0
+        },
+        "earned": 0,
+        "mutationCounter": 0,
+        "skills23": [
+          "ct-short",
+          "atk-up"
+        ],
+        "paletteIndex": 0,
+        "generation": 1,
+        "actual": {
+          "hp": 28,
+          "atk": 43,
+          "def": 43,
+          "spd": 25
+        },
+        "wildTotal": 59
+      }
+    }
+  ],
+  "bossName": "淵のヌシ",
+  "boss": [
+    {
+      "id": "boss-0",
+      "speciesId": "nushi",
+      "wild": {
+        "hp": 16,
+        "atk": 22,
+        "def": 21,
+        "spd": 3
+      },
+      "trained": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "earned": 0,
+      "mutationCounter": 4,
+      "skills23": [
+        "attack-all-heavy",
+        "spd-down"
+      ],
+      "paletteIndex": 0,
+      "generation": 1,
+      "actual": {
+        "hp": 42,
+        "atk": 42,
+        "def": 45,
+        "spd": 13
+      },
+      "wildTotal": 62
+    }
+  ]
+}

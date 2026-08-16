@@ -1,0 +1,4373 @@
+{
+  "gaugeMax": 1000,
+  "gaugeBase": 55,
+  "maxActions": 300,
+  "hpScale": 3,
+  "elementAdvantage": 1.5,
+  "atkSoften": 20,
+  "defSoften": 110,
+  "damageNormalize": 2.5,
+  "damageOf": [
+    {
+      "power": 12,
+      "atk": 20,
+      "def": 30,
+      "mult": 1,
+      "out": 8
+    },
+    {
+      "power": 20,
+      "atk": 40,
+      "def": 60,
+      "mult": 1,
+      "out": 17
+    },
+    {
+      "power": 30,
+      "atk": 80,
+      "def": 120,
+      "mult": 1.5,
+      "out": 48
+    },
+    {
+      "power": 42,
+      "atk": 10,
+      "def": 200,
+      "mult": 0.6666666666666666,
+      "out": 6
+    },
+    {
+      "power": 20,
+      "atk": 0,
+      "def": 0,
+      "mult": 1,
+      "out": 9
+    },
+    {
+      "power": 12,
+      "atk": 200,
+      "def": 0,
+      "mult": 1.5,
+      "out": 90
+    }
+  ],
+  "effectiveStat": [
+    {
+      "base": 10,
+      "percent": 0,
+      "turns": 0,
+      "out": 10
+    },
+    {
+      "base": 10,
+      "percent": 30,
+      "turns": 3,
+      "out": 13
+    },
+    {
+      "base": 10,
+      "percent": -30,
+      "turns": 3,
+      "out": 7
+    },
+    {
+      "base": 1,
+      "percent": -30,
+      "turns": 3,
+      "out": 1
+    },
+    {
+      "base": 0,
+      "percent": 0,
+      "turns": 0,
+      "out": 1
+    }
+  ],
+  "gaugeRate": [
+    {
+      "speed": 0,
+      "tempo": 1,
+      "out": 55
+    },
+    {
+      "speed": 26,
+      "tempo": 1,
+      "out": 81
+    },
+    {
+      "speed": 10,
+      "tempo": 1.5,
+      "out": 98
+    },
+    {
+      "speed": 3,
+      "tempo": 2,
+      "out": 116
+    }
+  ],
+  "lone": [
+    {
+      "allies": 3,
+      "enemies": 1,
+      "scale": 3,
+      "hp": 3,
+      "tempo": 2
+    },
+    {
+      "allies": 3,
+      "enemies": 2,
+      "scale": 1.5,
+      "hp": 1.5,
+      "tempo": 1.25
+    },
+    {
+      "allies": 3,
+      "enemies": 3,
+      "scale": 1,
+      "hp": 1,
+      "tempo": 1
+    },
+    {
+      "allies": 1,
+      "enemies": 1,
+      "scale": 1,
+      "hp": 1,
+      "tempo": 1
+    }
+  ],
+  "matchups": [
+    {
+      "seed": 1,
+      "name": "boss",
+      "setup": [
+        {
+          "key": "ally-0",
+          "name": "タマル",
+          "maxHp": 105,
+          "tempo": 1,
+          "speed": 20
+        },
+        {
+          "key": "ally-1",
+          "name": "タマル",
+          "maxHp": 78,
+          "tempo": 1,
+          "speed": 26
+        },
+        {
+          "key": "ally-2",
+          "name": "タマル",
+          "maxHp": 99,
+          "tempo": 1,
+          "speed": 23
+        },
+        {
+          "key": "enemy-0",
+          "name": "ヌシ",
+          "maxHp": 378,
+          "tempo": 2,
+          "speed": 13
+        }
+      ],
+      "outcome": "enemy",
+      "actions": 27,
+      "logLength": 59,
+      "logHead": [
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体強攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 33,
+          "hp": 72,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 34,
+          "hp": 44,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 34,
+          "hp": 65,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御力UP"
+        },
+        {
+          "kind": "buff",
+          "unit": "ally-1",
+          "stat": "def",
+          "percent": 30,
+          "turns": 3
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "シールド"
+        },
+        {
+          "kind": "shield",
+          "unit": "ally-1",
+          "amount": 2
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "CT延長"
+        },
+        {
+          "kind": "ct",
+          "unit": "enemy-0",
+          "delta": 2
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 0,
+          "hp": 44,
+          "absorbed": 22
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 0,
+          "hp": 44,
+          "absorbed": 22
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 17,
+          "hp": 361,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-1",
+          "amount": 23,
+          "hp": 67
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 345,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 24,
+          "hp": 41,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 24,
+          "hp": 17,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "挑発"
+        },
+        {
+          "kind": "taunt",
+          "unit": "ally-1",
+          "hits": 3
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 14,
+          "hp": 331,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 315,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 22,
+          "hp": 45,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 14,
+          "hp": 301,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 23,
+          "hp": 22,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 14,
+          "hp": 287,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 271,
+          "absorbed": 0
+        }
+      ],
+      "logTail": [
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 241,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 23,
+          "hp": 49,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 225,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体強攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 33,
+          "hp": 16,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 16,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "ally-0"
+        }
+      ],
+      "finalHp": [
+        {
+          "key": "ally-0",
+          "hp": 0
+        },
+        {
+          "key": "ally-1",
+          "hp": 0
+        },
+        {
+          "key": "ally-2",
+          "hp": 0
+        },
+        {
+          "key": "enemy-0",
+          "hp": 225
+        }
+      ]
+    },
+    {
+      "seed": 1,
+      "name": "shallow-scale",
+      "setup": [
+        {
+          "key": "ally-0",
+          "name": "タマル",
+          "maxHp": 105,
+          "tempo": 1,
+          "speed": 20
+        },
+        {
+          "key": "ally-1",
+          "name": "タマル",
+          "maxHp": 78,
+          "tempo": 1,
+          "speed": 26
+        },
+        {
+          "key": "ally-2",
+          "name": "タマル",
+          "maxHp": 99,
+          "tempo": 1,
+          "speed": 23
+        },
+        {
+          "key": "enemy-0",
+          "name": "タマル",
+          "maxHp": 234,
+          "tempo": 2,
+          "speed": 20
+        }
+      ],
+      "outcome": "ally",
+      "actions": 38,
+      "logLength": 78,
+      "logHead": [
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 19,
+          "hp": 59,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 218,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "シールド"
+        },
+        {
+          "kind": "shield",
+          "unit": "ally-1",
+          "amount": 2
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 0,
+          "hp": 59,
+          "absorbed": 19
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "CT延長"
+        },
+        {
+          "kind": "ct",
+          "unit": "enemy-0",
+          "delta": 2
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 0,
+          "hp": 59,
+          "absorbed": 19
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 202,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 15,
+          "hp": 187,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 19,
+          "hp": 40,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 17,
+          "hp": 170,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 19,
+          "hp": 21,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 154,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-1",
+          "amount": 23,
+          "hp": 44
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 17,
+          "hp": 137,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 19,
+          "hp": 25,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 19,
+          "hp": 6,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 121,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 15,
+          "hp": 106,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "ガッツ"
+        },
+        {
+          "kind": "guts",
+          "unit": "enemy-0"
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 17,
+          "hp": 89,
+          "absorbed": 0
+        }
+      ],
+      "logTail": [
+        {
+          "kind": "heal",
+          "unit": "ally-2",
+          "amount": 29,
+          "hp": 52
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 19,
+          "hp": 33,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 17,
+          "hp": 8,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 19,
+          "hp": 14,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 8,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "enemy-0"
+        }
+      ],
+      "finalHp": [
+        {
+          "key": "ally-0",
+          "hp": 105
+        },
+        {
+          "key": "ally-1",
+          "hp": 0
+        },
+        {
+          "key": "ally-2",
+          "hp": 14
+        },
+        {
+          "key": "enemy-0",
+          "hp": 0
+        }
+      ]
+    },
+    {
+      "seed": 1,
+      "name": "thicket-fang",
+      "setup": [
+        {
+          "key": "ally-0",
+          "name": "タマル",
+          "maxHp": 105,
+          "tempo": 1,
+          "speed": 20
+        },
+        {
+          "key": "ally-1",
+          "name": "タマル",
+          "maxHp": 78,
+          "tempo": 1,
+          "speed": 26
+        },
+        {
+          "key": "ally-2",
+          "name": "タマル",
+          "maxHp": 99,
+          "tempo": 1,
+          "speed": 23
+        },
+        {
+          "key": "enemy-0",
+          "name": "ツノガ",
+          "maxHp": 252,
+          "tempo": 2,
+          "speed": 20
+        }
+      ],
+      "outcome": "ally",
+      "actions": 22,
+      "logLength": 46,
+      "logHead": [
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御力DOWN"
+        },
+        {
+          "kind": "buff",
+          "unit": "ally-1",
+          "stat": "def",
+          "percent": -30,
+          "turns": 3
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 20,
+          "hp": 232,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 23,
+          "hp": 209,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 15,
+          "hp": 63,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 26,
+          "hp": 183,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 15,
+          "hp": 48,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 20,
+          "hp": 163,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 23,
+          "hp": 140,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 15,
+          "hp": 33,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 26,
+          "hp": 114,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 15,
+          "hp": 18,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 24,
+          "hp": 90,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 23,
+          "hp": 67,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 26,
+          "hp": 41,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御力DOWN"
+        },
+        {
+          "kind": "buff",
+          "unit": "ally-1",
+          "stat": "def",
+          "percent": -30,
+          "turns": 3
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 15,
+          "hp": 3,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 20,
+          "hp": 21,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-1",
+          "amount": 23,
+          "hp": 26
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 15,
+          "hp": 11,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "CT延長"
+        },
+        {
+          "kind": "ct",
+          "unit": "enemy-0",
+          "delta": 2
+        }
+      ],
+      "logTail": [
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 15,
+          "hp": 11,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "CT延長"
+        },
+        {
+          "kind": "ct",
+          "unit": "enemy-0",
+          "delta": 2
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 11,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "ally-1"
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 21,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "enemy-0"
+        }
+      ],
+      "finalHp": [
+        {
+          "key": "ally-0",
+          "hp": 105
+        },
+        {
+          "key": "ally-1",
+          "hp": 0
+        },
+        {
+          "key": "ally-2",
+          "hp": 99
+        },
+        {
+          "key": "enemy-0",
+          "hp": 0
+        }
+      ]
+    },
+    {
+      "seed": 1,
+      "name": "cliff-plume",
+      "setup": [
+        {
+          "key": "ally-0",
+          "name": "タマル",
+          "maxHp": 105,
+          "tempo": 1,
+          "speed": 20
+        },
+        {
+          "key": "ally-1",
+          "name": "タマル",
+          "maxHp": 78,
+          "tempo": 1,
+          "speed": 26
+        },
+        {
+          "key": "ally-2",
+          "name": "タマル",
+          "maxHp": 99,
+          "tempo": 1,
+          "speed": 23
+        },
+        {
+          "key": "enemy-0",
+          "name": "ハネル",
+          "maxHp": 225,
+          "tempo": 2,
+          "speed": 48
+        }
+      ],
+      "outcome": "enemy",
+      "actions": 20,
+      "logLength": 61,
+      "logHead": [
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 14,
+          "hp": 91,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 15,
+          "hp": 63,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 84,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 14,
+          "hp": 77,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 15,
+          "hp": 48,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 69,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御力UP"
+        },
+        {
+          "kind": "buff",
+          "unit": "ally-1",
+          "stat": "def",
+          "percent": 30,
+          "turns": 3
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "シールド"
+        },
+        {
+          "kind": "shield",
+          "unit": "ally-1",
+          "amount": 2
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "CT延長"
+        },
+        {
+          "kind": "ct",
+          "unit": "enemy-0",
+          "delta": 2
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 14,
+          "hp": 63,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 0,
+          "hp": 48,
+          "absorbed": 14
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 54,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 14,
+          "hp": 49,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 0,
+          "hp": 48,
+          "absorbed": 14
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 39,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 14,
+          "hp": 35,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 14,
+          "hp": 34,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 24,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "挑発"
+        },
+        {
+          "kind": "taunt",
+          "unit": "ally-1",
+          "hits": 3
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-2",
+          "amount": 29,
+          "hp": 53
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 11,
+          "hp": 214,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 14,
+          "hp": 21,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 14,
+          "hp": 20,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 38,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 14,
+          "hp": 7,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 14,
+          "hp": 6,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 23,
+          "absorbed": 0
+        }
+      ],
+      "logTail": [
+        {
+          "kind": "applied",
+          "unit": "enemy-0",
+          "label": "リジェネ×1",
+          "turns": 4
+        },
+        {
+          "kind": "regen",
+          "unit": "enemy-0",
+          "amount": 11,
+          "hp": 203
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "免疫"
+        },
+        {
+          "kind": "immune",
+          "unit": "enemy-0"
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 10,
+          "hp": 193,
+          "absorbed": 0
+        },
+        {
+          "kind": "regen",
+          "unit": "enemy-0",
+          "amount": 11,
+          "hp": 204
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 8,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "ally-2"
+        }
+      ],
+      "finalHp": [
+        {
+          "key": "ally-0",
+          "hp": 0
+        },
+        {
+          "key": "ally-1",
+          "hp": 0
+        },
+        {
+          "key": "ally-2",
+          "hp": 0
+        },
+        {
+          "key": "enemy-0",
+          "hp": 204
+        }
+      ]
+    },
+    {
+      "seed": 1,
+      "name": "deep-scale",
+      "setup": [
+        {
+          "key": "ally-0",
+          "name": "タマル",
+          "maxHp": 105,
+          "tempo": 1,
+          "speed": 20
+        },
+        {
+          "key": "ally-1",
+          "name": "タマル",
+          "maxHp": 78,
+          "tempo": 1,
+          "speed": 26
+        },
+        {
+          "key": "ally-2",
+          "name": "タマル",
+          "maxHp": 99,
+          "tempo": 1,
+          "speed": 23
+        },
+        {
+          "key": "enemy-0",
+          "name": "タマル",
+          "maxHp": 315,
+          "tempo": 2,
+          "speed": 22
+        }
+      ],
+      "outcome": "enemy",
+      "actions": 31,
+      "logLength": 65,
+      "logHead": [
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 25,
+          "hp": 53,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御力UP"
+        },
+        {
+          "kind": "buff",
+          "unit": "ally-1",
+          "stat": "def",
+          "percent": 30,
+          "turns": 3
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "シールド"
+        },
+        {
+          "kind": "shield",
+          "unit": "ally-1",
+          "amount": 2
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 0,
+          "hp": 53,
+          "absorbed": 24
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "CT延長"
+        },
+        {
+          "kind": "ct",
+          "unit": "enemy-0",
+          "delta": 2
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 0,
+          "hp": 53,
+          "absorbed": 24
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 299,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-1",
+          "amount": 23,
+          "hp": 76
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 24,
+          "hp": 52,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 15,
+          "hp": 284,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 24,
+          "hp": 28,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 268,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 13,
+          "hp": 255,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 24,
+          "hp": 4,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 15,
+          "hp": 240,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 4,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "ally-1"
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 13,
+          "hp": 227,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 26,
+          "hp": 73,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 15,
+          "hp": 212,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        }
+      ],
+      "logTail": [
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 25,
+          "hp": 55,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 25,
+          "hp": 30,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "CT延長"
+        },
+        {
+          "kind": "ct",
+          "unit": "enemy-0",
+          "delta": 2
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 25,
+          "hp": 5,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 5,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "ally-0"
+        }
+      ],
+      "finalHp": [
+        {
+          "key": "ally-0",
+          "hp": 0
+        },
+        {
+          "key": "ally-1",
+          "hp": 0
+        },
+        {
+          "key": "ally-2",
+          "hp": 0
+        },
+        {
+          "key": "enemy-0",
+          "hp": 169
+        }
+      ]
+    },
+    {
+      "seed": 1,
+      "name": "peak-fang",
+      "setup": [
+        {
+          "key": "ally-0",
+          "name": "タマル",
+          "maxHp": 105,
+          "tempo": 1,
+          "speed": 20
+        },
+        {
+          "key": "ally-1",
+          "name": "タマル",
+          "maxHp": 78,
+          "tempo": 1,
+          "speed": 26
+        },
+        {
+          "key": "ally-2",
+          "name": "タマル",
+          "maxHp": 99,
+          "tempo": 1,
+          "speed": 23
+        },
+        {
+          "key": "enemy-0",
+          "name": "ツノガ",
+          "maxHp": 504,
+          "tempo": 2,
+          "speed": 29
+        }
+      ],
+      "outcome": "enemy",
+      "actions": 35,
+      "logLength": 73,
+      "logHead": [
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "強攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 25,
+          "hp": 53,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 17,
+          "hp": 36,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 25,
+          "hp": 479,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 24,
+          "hp": 455,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 27,
+          "hp": 428,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 17,
+          "hp": 19,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 17,
+          "hp": 2,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 25,
+          "hp": 403,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 24,
+          "hp": 379,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 27,
+          "hp": 352,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "CT短縮"
+        },
+        {
+          "kind": "ct",
+          "unit": "enemy-0",
+          "delta": -2
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 2,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "ally-1"
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 24,
+          "hp": 328,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 27,
+          "hp": 301,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "強攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 26,
+          "hp": 73,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 17,
+          "hp": 56,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 24,
+          "hp": 277,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 17,
+          "hp": 39,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 27,
+          "hp": 250,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        }
+      ],
+      "logTail": [
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 16,
+          "hp": 48,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 16,
+          "hp": 32,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 27,
+          "hp": 118,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 16,
+          "hp": 16,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 16,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "ally-0"
+        }
+      ],
+      "finalHp": [
+        {
+          "key": "ally-0",
+          "hp": 0
+        },
+        {
+          "key": "ally-1",
+          "hp": 0
+        },
+        {
+          "key": "ally-2",
+          "hp": 0
+        },
+        {
+          "key": "enemy-0",
+          "hp": 118
+        }
+      ]
+    },
+    {
+      "seed": 20260816,
+      "name": "boss",
+      "setup": [
+        {
+          "key": "ally-0",
+          "name": "タマル",
+          "maxHp": 105,
+          "tempo": 1,
+          "speed": 25
+        },
+        {
+          "key": "ally-1",
+          "name": "タマル",
+          "maxHp": 93,
+          "tempo": 1,
+          "speed": 20
+        },
+        {
+          "key": "ally-2",
+          "name": "タマル",
+          "maxHp": 84,
+          "tempo": 1,
+          "speed": 23
+        },
+        {
+          "key": "enemy-0",
+          "name": "ヌシ",
+          "maxHp": 378,
+          "tempo": 2,
+          "speed": 13
+        }
+      ],
+      "outcome": "enemy",
+      "actions": 41,
+      "logLength": 88,
+      "logHead": [
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体強攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 34,
+          "hp": 71,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 32,
+          "hp": 61,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 34,
+          "hp": 50,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "挑発"
+        },
+        {
+          "kind": "taunt",
+          "unit": "ally-0",
+          "hits": 3
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-2",
+          "amount": 25,
+          "hp": 75
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "シールド"
+        },
+        {
+          "kind": "shield",
+          "unit": "ally-1",
+          "amount": 2
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 24,
+          "hp": 47,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 24,
+          "hp": 23,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 14,
+          "hp": 364,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 15,
+          "hp": 349,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-0",
+          "amount": 31,
+          "hp": 54
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 24,
+          "hp": 30,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 24,
+          "hp": 6,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 14,
+          "hp": 335,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 14,
+          "hp": 321,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 305,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "スピードDOWN"
+        },
+        {
+          "kind": "buff",
+          "unit": "ally-0",
+          "stat": "spd",
+          "percent": -30,
+          "turns": 3
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 14,
+          "hp": 291,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 6,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "ally-0"
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 14,
+          "hp": 277,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        }
+      ],
+      "logTail": [
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 24,
+          "hp": 43,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体強攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 34,
+          "hp": 9,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 14,
+          "hp": 158,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "スピードDOWN"
+        },
+        {
+          "kind": "buff",
+          "unit": "ally-2",
+          "stat": "spd",
+          "percent": -30,
+          "turns": 3
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 9,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "ally-2"
+        }
+      ],
+      "finalHp": [
+        {
+          "key": "ally-0",
+          "hp": 0
+        },
+        {
+          "key": "ally-1",
+          "hp": 0
+        },
+        {
+          "key": "ally-2",
+          "hp": 0
+        },
+        {
+          "key": "enemy-0",
+          "hp": 158
+        }
+      ]
+    },
+    {
+      "seed": 20260816,
+      "name": "shallow-scale",
+      "setup": [
+        {
+          "key": "ally-0",
+          "name": "タマル",
+          "maxHp": 105,
+          "tempo": 1,
+          "speed": 25
+        },
+        {
+          "key": "ally-1",
+          "name": "タマル",
+          "maxHp": 93,
+          "tempo": 1,
+          "speed": 20
+        },
+        {
+          "key": "ally-2",
+          "name": "タマル",
+          "maxHp": 84,
+          "tempo": 1,
+          "speed": 23
+        },
+        {
+          "key": "enemy-0",
+          "name": "タマル",
+          "maxHp": 234,
+          "tempo": 2,
+          "speed": 20
+        }
+      ],
+      "outcome": "ally",
+      "actions": 36,
+      "logLength": 73,
+      "logHead": [
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 19,
+          "hp": 65,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "挑発"
+        },
+        {
+          "kind": "taunt",
+          "unit": "ally-0",
+          "hits": 3
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 218,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 19,
+          "hp": 86,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "シールド"
+        },
+        {
+          "kind": "shield",
+          "unit": "ally-2",
+          "amount": 2
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 19,
+          "hp": 67,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 15,
+          "hp": 203,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-0",
+          "amount": 31,
+          "hp": 98
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 19,
+          "hp": 79,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 18,
+          "hp": 185,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 0,
+          "hp": 65,
+          "absorbed": 19
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 15,
+          "hp": 170,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 15,
+          "hp": 155,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 18,
+          "hp": 137,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 0,
+          "hp": 65,
+          "absorbed": 19
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 19,
+          "hp": 46,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 15,
+          "hp": 122,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 15,
+          "hp": 107,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 19,
+          "hp": 27,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-2",
+          "amount": 25,
+          "hp": 52
+        }
+      ],
+      "logTail": [
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 15,
+          "hp": 28,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-2",
+          "amount": 25,
+          "hp": 39
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 19,
+          "hp": 20,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 18,
+          "hp": 10,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 10,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "enemy-0"
+        }
+      ],
+      "finalHp": [
+        {
+          "key": "ally-0",
+          "hp": 41
+        },
+        {
+          "key": "ally-1",
+          "hp": 93
+        },
+        {
+          "key": "ally-2",
+          "hp": 20
+        },
+        {
+          "key": "enemy-0",
+          "hp": 0
+        }
+      ]
+    },
+    {
+      "seed": 20260816,
+      "name": "thicket-fang",
+      "setup": [
+        {
+          "key": "ally-0",
+          "name": "タマル",
+          "maxHp": 105,
+          "tempo": 1,
+          "speed": 25
+        },
+        {
+          "key": "ally-1",
+          "name": "タマル",
+          "maxHp": 93,
+          "tempo": 1,
+          "speed": 20
+        },
+        {
+          "key": "ally-2",
+          "name": "タマル",
+          "maxHp": 84,
+          "tempo": 1,
+          "speed": 23
+        },
+        {
+          "key": "enemy-0",
+          "name": "ツノガ",
+          "maxHp": 252,
+          "tempo": 2,
+          "speed": 20
+        }
+      ],
+      "outcome": "ally",
+      "actions": 23,
+      "logLength": 47,
+      "logHead": [
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御力DOWN"
+        },
+        {
+          "kind": "buff",
+          "unit": "ally-2",
+          "stat": "def",
+          "percent": -30,
+          "turns": 3
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 24,
+          "hp": 228,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 25,
+          "hp": 203,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 69,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 27,
+          "hp": 176,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 54,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 24,
+          "hp": 152,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 19,
+          "hp": 133,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 39,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 27,
+          "hp": 106,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 24,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 24,
+          "hp": 82,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 23,
+          "hp": 59,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 27,
+          "hp": 32,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御力DOWN"
+        },
+        {
+          "kind": "buff",
+          "unit": "ally-2",
+          "stat": "def",
+          "percent": -30,
+          "turns": 3
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 9,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 24,
+          "hp": 8,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-2",
+          "amount": 25,
+          "hp": 34
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 19,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-2",
+          "amount": 25,
+          "hp": 44
+        }
+      ],
+      "logTail": [
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 19,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-2",
+          "amount": 25,
+          "hp": 44
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 29,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "挑発"
+        },
+        {
+          "kind": "taunt",
+          "unit": "ally-0",
+          "hits": 3
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 8,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "enemy-0"
+        }
+      ],
+      "finalHp": [
+        {
+          "key": "ally-0",
+          "hp": 105
+        },
+        {
+          "key": "ally-1",
+          "hp": 93
+        },
+        {
+          "key": "ally-2",
+          "hp": 29
+        },
+        {
+          "key": "enemy-0",
+          "hp": 0
+        }
+      ]
+    },
+    {
+      "seed": 20260816,
+      "name": "cliff-plume",
+      "setup": [
+        {
+          "key": "ally-0",
+          "name": "タマル",
+          "maxHp": 105,
+          "tempo": 1,
+          "speed": 25
+        },
+        {
+          "key": "ally-1",
+          "name": "タマル",
+          "maxHp": 93,
+          "tempo": 1,
+          "speed": 20
+        },
+        {
+          "key": "ally-2",
+          "name": "タマル",
+          "maxHp": 84,
+          "tempo": 1,
+          "speed": 23
+        },
+        {
+          "key": "enemy-0",
+          "name": "ハネル",
+          "maxHp": 225,
+          "tempo": 2,
+          "speed": 48
+        }
+      ],
+      "outcome": "enemy",
+      "actions": 22,
+      "logLength": 67,
+      "logHead": [
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 15,
+          "hp": 90,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 14,
+          "hp": 79,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 69,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 15,
+          "hp": 75,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 14,
+          "hp": 65,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 54,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "挑発"
+        },
+        {
+          "kind": "taunt",
+          "unit": "ally-0",
+          "hits": 3
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-2",
+          "amount": 25,
+          "hp": 79
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "シールド"
+        },
+        {
+          "kind": "shield",
+          "unit": "ally-1",
+          "amount": 2
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 15,
+          "hp": 60,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 0,
+          "hp": 65,
+          "absorbed": 14
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 64,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 15,
+          "hp": 45,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 0,
+          "hp": 65,
+          "absorbed": 14
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 49,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 15,
+          "hp": 30,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 14,
+          "hp": 51,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 34,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 10,
+          "hp": 215,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 11,
+          "hp": 204,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-0",
+          "amount": 31,
+          "hp": 61
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 15,
+          "hp": 46,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 14,
+          "hp": 37,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 19,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 15,
+          "hp": 31,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 14,
+          "hp": 23,
+          "absorbed": 0
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 15,
+          "hp": 4,
+          "absorbed": 0
+        }
+      ],
+      "logTail": [
+        {
+          "kind": "down",
+          "unit": "ally-1"
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 10,
+          "hp": 173,
+          "absorbed": 0
+        },
+        {
+          "kind": "regen",
+          "unit": "enemy-0",
+          "amount": 11,
+          "hp": 184
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "免疫"
+        },
+        {
+          "kind": "immune",
+          "unit": "enemy-0"
+        },
+        {
+          "kind": "regen",
+          "unit": "enemy-0",
+          "amount": 11,
+          "hp": 195
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "全体攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 1,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "ally-0"
+        }
+      ],
+      "finalHp": [
+        {
+          "key": "ally-0",
+          "hp": 0
+        },
+        {
+          "key": "ally-1",
+          "hp": 0
+        },
+        {
+          "key": "ally-2",
+          "hp": 0
+        },
+        {
+          "key": "enemy-0",
+          "hp": 195
+        }
+      ]
+    },
+    {
+      "seed": 20260816,
+      "name": "deep-scale",
+      "setup": [
+        {
+          "key": "ally-0",
+          "name": "タマル",
+          "maxHp": 105,
+          "tempo": 1,
+          "speed": 25
+        },
+        {
+          "key": "ally-1",
+          "name": "タマル",
+          "maxHp": 93,
+          "tempo": 1,
+          "speed": 20
+        },
+        {
+          "key": "ally-2",
+          "name": "タマル",
+          "maxHp": 84,
+          "tempo": 1,
+          "speed": 23
+        },
+        {
+          "key": "enemy-0",
+          "name": "タマル",
+          "maxHp": 315,
+          "tempo": 2,
+          "speed": 22
+        }
+      ],
+      "outcome": "enemy",
+      "actions": 43,
+      "logLength": 89,
+      "logHead": [
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 26,
+          "hp": 58,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "挑発"
+        },
+        {
+          "kind": "taunt",
+          "unit": "ally-0",
+          "hits": 3
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-2",
+          "amount": 25,
+          "hp": 83
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 25,
+          "hp": 80,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "シールド"
+        },
+        {
+          "kind": "shield",
+          "unit": "ally-0",
+          "amount": 2
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 0,
+          "hp": 80,
+          "absorbed": 25
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 14,
+          "hp": 301,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 15,
+          "hp": 286,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 0,
+          "hp": 80,
+          "absorbed": 25
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 270,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 25,
+          "hp": 55,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 14,
+          "hp": 256,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 13,
+          "hp": 243,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 25,
+          "hp": 30,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "HP割合回復"
+        },
+        {
+          "kind": "heal",
+          "unit": "ally-0",
+          "amount": 31,
+          "hp": 61
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 25,
+          "hp": 36,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 14,
+          "hp": 229,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 13,
+          "hp": 216,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 25,
+          "hp": 11,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 200,
+          "absorbed": 0
+        }
+      ],
+      "logTail": [
+        {
+          "kind": "heal",
+          "unit": "ally-1",
+          "amount": 27,
+          "hp": 72
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 24,
+          "hp": 48,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 24,
+          "hp": 24,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 16,
+          "hp": 95,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 24,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "ally-1"
+        }
+      ],
+      "finalHp": [
+        {
+          "key": "ally-0",
+          "hp": 0
+        },
+        {
+          "key": "ally-1",
+          "hp": 0
+        },
+        {
+          "key": "ally-2",
+          "hp": 0
+        },
+        {
+          "key": "enemy-0",
+          "hp": 95
+        }
+      ]
+    },
+    {
+      "seed": 20260816,
+      "name": "peak-fang",
+      "setup": [
+        {
+          "key": "ally-0",
+          "name": "タマル",
+          "maxHp": 105,
+          "tempo": 1,
+          "speed": 25
+        },
+        {
+          "key": "ally-1",
+          "name": "タマル",
+          "maxHp": 93,
+          "tempo": 1,
+          "speed": 20
+        },
+        {
+          "key": "ally-2",
+          "name": "タマル",
+          "maxHp": 84,
+          "tempo": 1,
+          "speed": 23
+        },
+        {
+          "key": "enemy-0",
+          "name": "ツノガ",
+          "maxHp": 504,
+          "tempo": 2,
+          "speed": 29
+        }
+      ],
+      "outcome": "enemy",
+      "actions": 35,
+      "logLength": 73,
+      "logHead": [
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "強攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 26,
+          "hp": 58,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 17,
+          "hp": 41,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 25,
+          "hp": 479,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 26,
+          "hp": 453,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 28,
+          "hp": 425,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 17,
+          "hp": 24,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 17,
+          "hp": 7,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 25,
+          "hp": 400,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-2",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 24,
+          "hp": 376,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 28,
+          "hp": 348,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "CT短縮"
+        },
+        {
+          "kind": "ct",
+          "unit": "enemy-0",
+          "delta": -2
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-2",
+          "amount": 7,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "ally-2"
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 25,
+          "hp": 323,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 28,
+          "hp": 295,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "強攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 24,
+          "hp": 69,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 16,
+          "hp": 53,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 25,
+          "hp": 270,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-1",
+          "amount": 16,
+          "hp": 37,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-1",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 28,
+          "hp": 242,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        }
+      ],
+      "logTail": [
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 25,
+          "hp": 114,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 17,
+          "hp": 29,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 17,
+          "hp": 12,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "ally-0",
+          "skill": "防御依存攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "enemy-0",
+          "amount": 25,
+          "hp": 89,
+          "absorbed": 0
+        },
+        {
+          "kind": "act",
+          "actor": "enemy-0",
+          "skill": "攻撃"
+        },
+        {
+          "kind": "damage",
+          "unit": "ally-0",
+          "amount": 12,
+          "hp": 0,
+          "absorbed": 0
+        },
+        {
+          "kind": "down",
+          "unit": "ally-0"
+        }
+      ],
+      "finalHp": [
+        {
+          "key": "ally-0",
+          "hp": 0
+        },
+        {
+          "key": "ally-1",
+          "hp": 0
+        },
+        {
+          "key": "ally-2",
+          "hp": 0
+        },
+        {
+          "key": "enemy-0",
+          "hp": 89
+        }
+      ]
+    }
+  ]
+}

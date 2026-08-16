@@ -22,6 +22,14 @@ const src = (p) => new URL(p, SRC).href
 const OUT = fileURLToPath(new URL('../unity-port/goldens/', import.meta.url))
 
 const { Rng, hashString } = await import(src('core/rng.ts'))
+const Nest = await import(src('game/nest.ts'))
+const Breeding = await import(src('game/breeding.ts'))
+const Battle = await import(src('game/battle.ts'))
+const Ai = await import(src('game/ai.ts'))
+const Steal = await import(src('game/steal.ts'))
+const State = await import(src('game/state.ts'))
+const Creature = await import(src('game/creature.ts'))
+const Storage = await import(src('game/storage.ts'))
 const { STAT_KEYS, WILD_STAT_MAX, WILD_TOTAL_MAX, MUTATION_CAP_STEPS, wildStatMaxFor, wildTotalMaxFor, totalOf, applyTotalCap, actualStats } = await import(src('game/stats.ts'))
 const { SKILL_LIST, DAMAGE_POWER, BUFF_PERCENT, TICK_PERCENT, effectiveCt, isHarmful, gachaPoolOf, skillById } = await import(src('game/skills.ts'))
 const { SPECIES_LIST, ELEMENTS, ELEMENT_BEATS, ELEMENT_LABELS, SPECIES_BASE_TOTAL } = await import(src('game/species.ts'))
@@ -175,6 +183,228 @@ if (!checkOnly) mkdirSync(OUT, { recursive: true })
       palettes: s.palettes.map((p) => [...p]),
       skill1Name: skillById(s.skill1).name,
     })),
+  })
+}
+
+// ── 巣・卵・孵化 ────────────────────────────────────
+// ⚠️ 乱数の消費順がそのまま出る。ここがずれたら以降の全部がずれる。
+{
+  const creature = (c) => ({
+    id: c.id, speciesId: c.speciesId, wild: c.wild, trained: c.trained,
+    earned: c.earned, mutationCounter: c.mutationCounter, skills23: c.skills23,
+    paletteIndex: c.paletteIndex, generation: c.generation,
+    actual: Creature.statsOf(c), wildTotal: Creature.wildTotalOf(c),
+  })
+  const eggOf = (e) => ({
+    id: e.id, speciesId: e.speciesId, wild: e.wild, mutationCounter: e.mutationCounter,
+    paletteIndex: e.paletteIndex, generation: e.generation, how: e.how, skills23: e.skills23,
+  })
+
+  const defenders = []
+  const eggs = []
+  for (const nest of Nest.NESTS) {
+    const rng = new Rng(777).stream(nest.id)
+    defenders.push({ nest: nest.id, units: Nest.makeNestDefenders(rng, nest).map(creature) })
+    for (const how of ['defeated', 'stolen']) {
+      const r = new Rng(4242).stream(nest.id + how)
+      const egg = Nest.makeEgg(r, nest, how, 7)
+      eggs.push({ nest: nest.id, how, egg: eggOf(egg), hatched: creature(Nest.hatch(r, egg, 'c007')) })
+    }
+  }
+
+  emit('nest', {
+    tiers: [0, 1, 2, 3, 4, 5, 6].map((t) => ({ tier: t, wildTotal: Nest.wildTotalForTier(t) })),
+    nests: Nest.NESTS.map((n) => ({ id: n.id, name: n.name, speciesId: n.speciesId, tier: n.tier })),
+    defenders,
+    eggs,
+    bossName: Nest.BOSS_NAME,
+    boss: Nest.makeBossParty().map(creature),
+  })
+
+  // ── 配合 ──────────────────────────────────────────
+  // ⭐ 較正済みの「変異 2.5%×3回」がここに乗っている
+  const parents = []
+  const g = State.newGame(20260816)
+  const pool = [...g.storage.creatures]
+  const bred = []
+  // ⚠️ 12件では変異が1度も出ず（7.31%/回）、一番較正に敏感な経路が試されないままだった。
+  //    変異あり・なしの両方が必ず入る件数まで増やす。
+  for (let seed = 0; seed < 150; seed++) {
+    const rng = new Rng(1000 + seed).stream('breed')
+    const a = pool[seed % pool.length]
+    const b = pool[(seed + 1) % pool.length]
+    if (a.id === b.id) continue
+    const outcome = Breeding.breed(rng, a, b, 100 + seed)
+    bred.push({ seed: 1000 + seed, a: a.id, b: b.id, mutations: outcome.mutations, egg: eggOf(outcome.egg) })
+  }
+  for (const c of pool) parents.push(creature(c))
+
+  emit('breeding', {
+    inheritHigher: Breeding.INHERIT_HIGHER,
+    mutationRolls: Breeding.MUTATION_ROLLS,
+    mutationChance: Breeding.MUTATION_CHANCE,
+    mutationStep: Breeding.MUTATION_STEP,
+    mutationCounterLimit: Breeding.MUTATION_COUNTER_LIMIT,
+    parents,
+    bred,
+  })
+}
+
+// ── ゲーム全体の進行 ────────────────────────────────
+// ⭐ newGame から一連の操作までを丸ごと。系統ごとの乱数がずれていないかが出る。
+{
+  const snapshot = (game) => ({
+    serial: game.serial,
+    creatures: game.storage.creatures.map((c) => ({
+      id: c.id, speciesId: c.speciesId, wild: c.wild, skills23: c.skills23,
+      mutationCounter: c.mutationCounter, generation: c.generation, earned: c.earned,
+    })),
+    eggs: game.eggs.map((e) => ({ id: e.id, speciesId: e.speciesId, wild: e.wild, how: e.how })),
+    party: [...game.party],
+    partyOf: State.partyOf(game).map((c) => c.id),
+  })
+
+  const runs = []
+  for (const seed of [1, 20260816, 999999]) {
+    const game = State.newGame(seed)
+    const steps = [{ step: 'newGame', state: snapshot(game) }]
+
+    State.gainEgg(game, Nest.nestById('thicket-fang'), 'defeated')
+    steps.push({ step: 'gainEgg', state: snapshot(game) })
+
+    const eggId = game.eggs[0].id
+    State.hatchEgg(game, eggId)
+    steps.push({ step: 'hatchEgg', state: snapshot(game) })
+
+    const ids = game.storage.creatures.map((c) => c.id)
+    State.breedPair(game, ids[0], ids[1])
+    steps.push({ step: 'breedPair', state: snapshot(game) })
+
+    State.togglePartyMember(game, ids[2])
+    State.togglePartyMember(game, ids[0])
+    steps.push({ step: 'toggleParty', state: snapshot(game) })
+
+    State.awardParty(State.partyOf(game), 2)
+    steps.push({ step: 'awardParty', state: snapshot(game) })
+
+    runs.push({ seed, steps })
+  }
+
+  emit('game', {
+    partySize: State.PARTY_SIZE,
+    storageSlots: Storage.STORAGE_SLOTS,
+    trainMax: Creature.TRAIN_MAX,
+    runs,
+  })
+}
+
+// ── 戦闘 ────────────────────────────────────────────
+// ⭐ 乱数を使わないので、同じ編成からは必ず同じ試合になる。
+//    ここが1手でもずれたら、較正済みの HP3倍 / 手数2倍 が意味を失う。
+{
+  const matchups = []
+  for (const seed of [1, 20260816]) {
+    const game = State.newGame(seed)
+    const allies = State.partyOf(game)
+
+    const cases = [
+      { name: 'boss', enemies: Nest.makeBossParty() },
+      ...Nest.NESTS.map((n) => ({
+        name: n.id,
+        enemies: Nest.makeNestDefenders(new Rng(555).stream(n.id), n),
+      })),
+    ]
+
+    for (const c of cases) {
+      const state = Battle.createBattle(allies, c.enemies)
+      // 開幕の並び。⚠️ tempo と maxHp は体数の比から決まる
+      const setup = state.units.map((u) => ({
+        key: u.key, name: u.name, maxHp: u.maxHp, tempo: u.tempo,
+        speed: Battle.speedOf(u),
+      }))
+
+      let guard = 0
+      while (state.outcome === null && guard++ < Battle.MAX_ACTIONS * 3) {
+        const actor = Battle.nextActor(state)
+        if (!actor) break
+        const action = Ai.chooseAction(state, actor)
+        Battle.performAction(state, actor, action)
+      }
+
+      matchups.push({
+        seed,
+        name: c.name,
+        setup,
+        outcome: state.outcome,
+        actions: state.actions,
+        logLength: state.log.length,
+        // ⭐ 全部は長すぎるので、先頭40件と末尾10件を比べる（ずれれば必ずどちらかに出る）
+        logHead: state.log.slice(0, 40),
+        logTail: state.log.slice(-10),
+        finalHp: state.units.map((u) => ({ key: u.key, hp: u.hp })),
+      })
+    }
+  }
+
+  emit('battle', {
+    gaugeMax: Battle.GAUGE_MAX,
+    gaugeBase: Battle.GAUGE_BASE,
+    maxActions: Battle.MAX_ACTIONS,
+    hpScale: Battle.HP_SCALE,
+    elementAdvantage: Battle.ELEMENT_ADVANTAGE,
+    atkSoften: Battle.ATK_SOFTEN,
+    defSoften: Battle.DEF_SOFTEN,
+    damageNormalize: Battle.DAMAGE_NORMALIZE,
+    // 式そのものを直接
+    damageOf: [
+      [12, 20, 30, 1], [20, 40, 60, 1], [30, 80, 120, 1.5], [42, 10, 200, 1 / 1.5],
+      [20, 0, 0, 1], [12, 200, 0, 1.5],
+    ].map(([p, a, d, m]) => ({ power: p, atk: a, def: d, mult: m, out: Battle.damageOf(p, a, d, m) })),
+    effectiveStat: [[10, 0, 0], [10, 30, 3], [10, -30, 3], [1, -30, 3], [0, 0, 0]]
+      .map(([b, pc, t]) => ({ base: b, percent: pc, turns: t, out: Battle.effectiveStat(b, { percent: pc, turns: t }) })),
+    gaugeRate: [[0, 1], [26, 1], [10, 1.5], [3, 2]]
+      .map(([s, t]) => ({ speed: s, tempo: t, out: Battle.gaugeRate(s, t) })),
+    lone: [[3, 1], [3, 2], [3, 3], [1, 1]]
+      .map(([a, e]) => {
+        const s = Battle.loneScale(a, e)
+        return { allies: a, enemies: e, scale: s, hp: Battle.loneHp(s), tempo: Battle.loneTempo(s) }
+      }),
+    matchups,
+  })
+}
+
+// ── 卵強奪の発射 ────────────────────────────────────
+{
+  const fields = []
+  for (let tier = 1; tier <= 5; tier++) {
+    for (const side of ['left', 'right']) {
+      const field = Steal.makeField(tier, side)
+      const launches = []
+      for (let deg = -80; deg <= 80; deg += 5) {
+        const run = Steal.launch(field, (deg * Math.PI) / 180, 400)
+        launches.push({ deg, outcome: run.outcome, traveled: run.traveled, pathLength: run.path.length })
+      }
+      const solution = Steal.findSolution(field, 400, 180)
+      fields.push({
+        tier, side,
+        height: field.height, gapFrom: field.gapFrom, gapTo: field.gapTo,
+        bandTop: field.bandTop, bandBottom: field.bandBottom,
+        egg: field.egg, start: field.start,
+        spans: Steal.parentSpans(field),
+        launches,
+        solution: solution === null ? null : { traveled: solution.traveled },
+      })
+    }
+  }
+  emit('steal', {
+    fieldWidth: Steal.FIELD_WIDTH,
+    speedToDistance: Steal.SPEED_TO_DISTANCE,
+    gapWidth: Steal.GAP_WIDTH,
+    lean: Steal.LEAN,
+    eggRadius: Steal.EGG_RADIUS,
+    runnerRadius: Steal.RUNNER_RADIUS,
+    depths: [0, 1, 2, 3, 4, 5, 6].map((t) => ({ tier: t, depth: Steal.depthForTier(t) })),
+    fields,
   })
 }
 

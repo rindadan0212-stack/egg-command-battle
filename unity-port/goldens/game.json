@@ -1,0 +1,1576 @@
+{
+  "partySize": 3,
+  "storageSlots": 50,
+  "trainMax": 20,
+  "runs": [
+    {
+      "seed": 1,
+      "steps": [
+        {
+          "step": "newGame",
+          "state": {
+            "serial": 3,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 9,
+                  "atk": 4,
+                  "def": 2,
+                  "spd": 7
+                },
+                "skills23": [
+                  "heal-ratio",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 11,
+                  "atk": 2,
+                  "def": 8,
+                  "spd": 4
+                },
+                "skills23": [
+                  "ct-long",
+                  "attack"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 7,
+                  "def": 4,
+                  "spd": 10
+                },
+                "skills23": [
+                  "taunt",
+                  "def-up"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              }
+            ],
+            "eggs": [],
+            "party": [],
+            "partyOf": [
+              "c002",
+              "c003",
+              "c001"
+            ]
+          }
+        },
+        {
+          "step": "gainEgg",
+          "state": {
+            "serial": 4,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 9,
+                  "atk": 4,
+                  "def": 2,
+                  "spd": 7
+                },
+                "skills23": [
+                  "heal-ratio",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 11,
+                  "atk": 2,
+                  "def": 8,
+                  "spd": 4
+                },
+                "skills23": [
+                  "ct-long",
+                  "attack"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 7,
+                  "def": 4,
+                  "spd": 10
+                },
+                "skills23": [
+                  "taunt",
+                  "def-up"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              }
+            ],
+            "eggs": [
+              {
+                "id": "e004",
+                "speciesId": "tsunoga",
+                "wild": {
+                  "hp": 5,
+                  "atk": 6,
+                  "def": 16,
+                  "spd": 12
+                },
+                "how": "defeated"
+              }
+            ],
+            "party": [],
+            "partyOf": [
+              "c002",
+              "c003",
+              "c001"
+            ]
+          }
+        },
+        {
+          "step": "hatchEgg",
+          "state": {
+            "serial": 5,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 9,
+                  "atk": 4,
+                  "def": 2,
+                  "spd": 7
+                },
+                "skills23": [
+                  "heal-ratio",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 11,
+                  "atk": 2,
+                  "def": 8,
+                  "spd": 4
+                },
+                "skills23": [
+                  "ct-long",
+                  "attack"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 7,
+                  "def": 4,
+                  "spd": 10
+                },
+                "skills23": [
+                  "taunt",
+                  "def-up"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c005",
+                "speciesId": "tsunoga",
+                "wild": {
+                  "hp": 5,
+                  "atk": 6,
+                  "def": 16,
+                  "spd": 12
+                },
+                "skills23": [
+                  "attack-def",
+                  "attack-heavy"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              }
+            ],
+            "eggs": [],
+            "party": [],
+            "partyOf": [
+              "c005",
+              "c002",
+              "c003"
+            ]
+          }
+        },
+        {
+          "step": "breedPair",
+          "state": {
+            "serial": 6,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 9,
+                  "atk": 4,
+                  "def": 2,
+                  "spd": 7
+                },
+                "skills23": [
+                  "heal-ratio",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 11,
+                  "atk": 2,
+                  "def": 8,
+                  "spd": 4
+                },
+                "skills23": [
+                  "ct-long",
+                  "attack"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 7,
+                  "def": 4,
+                  "spd": 10
+                },
+                "skills23": [
+                  "taunt",
+                  "def-up"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c005",
+                "speciesId": "tsunoga",
+                "wild": {
+                  "hp": 5,
+                  "atk": 6,
+                  "def": 16,
+                  "spd": 12
+                },
+                "skills23": [
+                  "attack-def",
+                  "attack-heavy"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              }
+            ],
+            "eggs": [
+              {
+                "id": "e006",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 9,
+                  "atk": 6,
+                  "def": 8,
+                  "spd": 4
+                },
+                "how": "bred"
+              }
+            ],
+            "party": [],
+            "partyOf": [
+              "c005",
+              "c002",
+              "c003"
+            ]
+          }
+        },
+        {
+          "step": "toggleParty",
+          "state": {
+            "serial": 6,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 9,
+                  "atk": 4,
+                  "def": 2,
+                  "spd": 7
+                },
+                "skills23": [
+                  "heal-ratio",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 11,
+                  "atk": 2,
+                  "def": 8,
+                  "spd": 4
+                },
+                "skills23": [
+                  "ct-long",
+                  "attack"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 7,
+                  "def": 4,
+                  "spd": 10
+                },
+                "skills23": [
+                  "taunt",
+                  "def-up"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c005",
+                "speciesId": "tsunoga",
+                "wild": {
+                  "hp": 5,
+                  "atk": 6,
+                  "def": 16,
+                  "spd": 12
+                },
+                "skills23": [
+                  "attack-def",
+                  "attack-heavy"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              }
+            ],
+            "eggs": [
+              {
+                "id": "e006",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 9,
+                  "atk": 6,
+                  "def": 8,
+                  "spd": 4
+                },
+                "how": "bred"
+              }
+            ],
+            "party": [
+              "c003",
+              "c001"
+            ],
+            "partyOf": [
+              "c003",
+              "c001",
+              "c005"
+            ]
+          }
+        },
+        {
+          "step": "awardParty",
+          "state": {
+            "serial": 6,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 9,
+                  "atk": 4,
+                  "def": 2,
+                  "spd": 7
+                },
+                "skills23": [
+                  "heal-ratio",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 2
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 11,
+                  "atk": 2,
+                  "def": 8,
+                  "spd": 4
+                },
+                "skills23": [
+                  "ct-long",
+                  "attack"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 7,
+                  "def": 4,
+                  "spd": 10
+                },
+                "skills23": [
+                  "taunt",
+                  "def-up"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 2
+              },
+              {
+                "id": "c005",
+                "speciesId": "tsunoga",
+                "wild": {
+                  "hp": 5,
+                  "atk": 6,
+                  "def": 16,
+                  "spd": 12
+                },
+                "skills23": [
+                  "attack-def",
+                  "attack-heavy"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 2
+              }
+            ],
+            "eggs": [
+              {
+                "id": "e006",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 9,
+                  "atk": 6,
+                  "def": 8,
+                  "spd": 4
+                },
+                "how": "bred"
+              }
+            ],
+            "party": [
+              "c003",
+              "c001"
+            ],
+            "partyOf": [
+              "c003",
+              "c001",
+              "c005"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "seed": 20260816,
+      "steps": [
+        {
+          "step": "newGame",
+          "state": {
+            "serial": 3,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 7,
+                  "atk": 2,
+                  "def": 10,
+                  "spd": 4
+                },
+                "skills23": [
+                  "shield",
+                  "heal-ratio"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 4,
+                  "atk": 10,
+                  "def": 2,
+                  "spd": 7
+                },
+                "skills23": [
+                  "heal-ratio",
+                  "attack"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 11,
+                  "atk": 4,
+                  "def": 3,
+                  "spd": 9
+                },
+                "skills23": [
+                  "taunt",
+                  "guts"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              }
+            ],
+            "eggs": [],
+            "party": [],
+            "partyOf": [
+              "c003",
+              "c001",
+              "c002"
+            ]
+          }
+        },
+        {
+          "step": "gainEgg",
+          "state": {
+            "serial": 4,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 7,
+                  "atk": 2,
+                  "def": 10,
+                  "spd": 4
+                },
+                "skills23": [
+                  "shield",
+                  "heal-ratio"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 4,
+                  "atk": 10,
+                  "def": 2,
+                  "spd": 7
+                },
+                "skills23": [
+                  "heal-ratio",
+                  "attack"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 11,
+                  "atk": 4,
+                  "def": 3,
+                  "spd": 9
+                },
+                "skills23": [
+                  "taunt",
+                  "guts"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              }
+            ],
+            "eggs": [
+              {
+                "id": "e004",
+                "speciesId": "tsunoga",
+                "wild": {
+                  "hp": 4,
+                  "atk": 17,
+                  "def": 13,
+                  "spd": 7
+                },
+                "how": "defeated"
+              }
+            ],
+            "party": [],
+            "partyOf": [
+              "c003",
+              "c001",
+              "c002"
+            ]
+          }
+        },
+        {
+          "step": "hatchEgg",
+          "state": {
+            "serial": 5,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 7,
+                  "atk": 2,
+                  "def": 10,
+                  "spd": 4
+                },
+                "skills23": [
+                  "shield",
+                  "heal-ratio"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 4,
+                  "atk": 10,
+                  "def": 2,
+                  "spd": 7
+                },
+                "skills23": [
+                  "heal-ratio",
+                  "attack"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 11,
+                  "atk": 4,
+                  "def": 3,
+                  "spd": 9
+                },
+                "skills23": [
+                  "taunt",
+                  "guts"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c005",
+                "speciesId": "tsunoga",
+                "wild": {
+                  "hp": 4,
+                  "atk": 17,
+                  "def": 13,
+                  "spd": 7
+                },
+                "skills23": [
+                  "attack-heavy",
+                  "attack-def"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              }
+            ],
+            "eggs": [],
+            "party": [],
+            "partyOf": [
+              "c005",
+              "c003",
+              "c001"
+            ]
+          }
+        },
+        {
+          "step": "breedPair",
+          "state": {
+            "serial": 6,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 7,
+                  "atk": 2,
+                  "def": 10,
+                  "spd": 4
+                },
+                "skills23": [
+                  "shield",
+                  "heal-ratio"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 4,
+                  "atk": 10,
+                  "def": 2,
+                  "spd": 7
+                },
+                "skills23": [
+                  "heal-ratio",
+                  "attack"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 11,
+                  "atk": 4,
+                  "def": 3,
+                  "spd": 9
+                },
+                "skills23": [
+                  "taunt",
+                  "guts"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c005",
+                "speciesId": "tsunoga",
+                "wild": {
+                  "hp": 4,
+                  "atk": 17,
+                  "def": 13,
+                  "spd": 7
+                },
+                "skills23": [
+                  "attack-heavy",
+                  "attack-def"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              }
+            ],
+            "eggs": [
+              {
+                "id": "e006",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 7,
+                  "atk": 2,
+                  "def": 2,
+                  "spd": 4
+                },
+                "how": "bred"
+              }
+            ],
+            "party": [],
+            "partyOf": [
+              "c005",
+              "c003",
+              "c001"
+            ]
+          }
+        },
+        {
+          "step": "toggleParty",
+          "state": {
+            "serial": 6,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 7,
+                  "atk": 2,
+                  "def": 10,
+                  "spd": 4
+                },
+                "skills23": [
+                  "shield",
+                  "heal-ratio"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 4,
+                  "atk": 10,
+                  "def": 2,
+                  "spd": 7
+                },
+                "skills23": [
+                  "heal-ratio",
+                  "attack"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 11,
+                  "atk": 4,
+                  "def": 3,
+                  "spd": 9
+                },
+                "skills23": [
+                  "taunt",
+                  "guts"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c005",
+                "speciesId": "tsunoga",
+                "wild": {
+                  "hp": 4,
+                  "atk": 17,
+                  "def": 13,
+                  "spd": 7
+                },
+                "skills23": [
+                  "attack-heavy",
+                  "attack-def"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              }
+            ],
+            "eggs": [
+              {
+                "id": "e006",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 7,
+                  "atk": 2,
+                  "def": 2,
+                  "spd": 4
+                },
+                "how": "bred"
+              }
+            ],
+            "party": [
+              "c003",
+              "c001"
+            ],
+            "partyOf": [
+              "c003",
+              "c001",
+              "c005"
+            ]
+          }
+        },
+        {
+          "step": "awardParty",
+          "state": {
+            "serial": 6,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 7,
+                  "atk": 2,
+                  "def": 10,
+                  "spd": 4
+                },
+                "skills23": [
+                  "shield",
+                  "heal-ratio"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 2
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 4,
+                  "atk": 10,
+                  "def": 2,
+                  "spd": 7
+                },
+                "skills23": [
+                  "heal-ratio",
+                  "attack"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 11,
+                  "atk": 4,
+                  "def": 3,
+                  "spd": 9
+                },
+                "skills23": [
+                  "taunt",
+                  "guts"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 2
+              },
+              {
+                "id": "c005",
+                "speciesId": "tsunoga",
+                "wild": {
+                  "hp": 4,
+                  "atk": 17,
+                  "def": 13,
+                  "spd": 7
+                },
+                "skills23": [
+                  "attack-heavy",
+                  "attack-def"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 2
+              }
+            ],
+            "eggs": [
+              {
+                "id": "e006",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 7,
+                  "atk": 2,
+                  "def": 2,
+                  "spd": 4
+                },
+                "how": "bred"
+              }
+            ],
+            "party": [
+              "c003",
+              "c001"
+            ],
+            "partyOf": [
+              "c003",
+              "c001",
+              "c005"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "seed": 999999,
+      "steps": [
+        {
+          "step": "newGame",
+          "state": {
+            "serial": 3,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 4,
+                  "def": 7,
+                  "spd": 10
+                },
+                "skills23": [
+                  "def-up",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 10,
+                  "def": 7,
+                  "spd": 4
+                },
+                "skills23": [
+                  "ct-long",
+                  "heal-ratio"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 8,
+                  "def": 4,
+                  "spd": 10
+                },
+                "skills23": [
+                  "guts",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              }
+            ],
+            "eggs": [],
+            "party": [],
+            "partyOf": [
+              "c003",
+              "c001",
+              "c002"
+            ]
+          }
+        },
+        {
+          "step": "gainEgg",
+          "state": {
+            "serial": 4,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 4,
+                  "def": 7,
+                  "spd": 10
+                },
+                "skills23": [
+                  "def-up",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 10,
+                  "def": 7,
+                  "spd": 4
+                },
+                "skills23": [
+                  "ct-long",
+                  "heal-ratio"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 8,
+                  "def": 4,
+                  "spd": 10
+                },
+                "skills23": [
+                  "guts",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              }
+            ],
+            "eggs": [
+              {
+                "id": "e004",
+                "speciesId": "tsunoga",
+                "wild": {
+                  "hp": 6,
+                  "atk": 3,
+                  "def": 15,
+                  "spd": 11
+                },
+                "how": "defeated"
+              }
+            ],
+            "party": [],
+            "partyOf": [
+              "c003",
+              "c001",
+              "c002"
+            ]
+          }
+        },
+        {
+          "step": "hatchEgg",
+          "state": {
+            "serial": 5,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 4,
+                  "def": 7,
+                  "spd": 10
+                },
+                "skills23": [
+                  "def-up",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 10,
+                  "def": 7,
+                  "spd": 4
+                },
+                "skills23": [
+                  "ct-long",
+                  "heal-ratio"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 8,
+                  "def": 4,
+                  "spd": 10
+                },
+                "skills23": [
+                  "guts",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c005",
+                "speciesId": "tsunoga",
+                "wild": {
+                  "hp": 6,
+                  "atk": 3,
+                  "def": 15,
+                  "spd": 11
+                },
+                "skills23": [
+                  "attack-def",
+                  "def-down"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              }
+            ],
+            "eggs": [],
+            "party": [],
+            "partyOf": [
+              "c005",
+              "c003",
+              "c001"
+            ]
+          }
+        },
+        {
+          "step": "breedPair",
+          "state": {
+            "serial": 6,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 4,
+                  "def": 7,
+                  "spd": 10
+                },
+                "skills23": [
+                  "def-up",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 10,
+                  "def": 7,
+                  "spd": 4
+                },
+                "skills23": [
+                  "ct-long",
+                  "heal-ratio"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 8,
+                  "def": 4,
+                  "spd": 10
+                },
+                "skills23": [
+                  "guts",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c005",
+                "speciesId": "tsunoga",
+                "wild": {
+                  "hp": 6,
+                  "atk": 3,
+                  "def": 15,
+                  "spd": 11
+                },
+                "skills23": [
+                  "attack-def",
+                  "def-down"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              }
+            ],
+            "eggs": [
+              {
+                "id": "e006",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 10,
+                  "def": 7,
+                  "spd": 4
+                },
+                "how": "bred"
+              }
+            ],
+            "party": [],
+            "partyOf": [
+              "c005",
+              "c003",
+              "c001"
+            ]
+          }
+        },
+        {
+          "step": "toggleParty",
+          "state": {
+            "serial": 6,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 4,
+                  "def": 7,
+                  "spd": 10
+                },
+                "skills23": [
+                  "def-up",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 10,
+                  "def": 7,
+                  "spd": 4
+                },
+                "skills23": [
+                  "ct-long",
+                  "heal-ratio"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 8,
+                  "def": 4,
+                  "spd": 10
+                },
+                "skills23": [
+                  "guts",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c005",
+                "speciesId": "tsunoga",
+                "wild": {
+                  "hp": 6,
+                  "atk": 3,
+                  "def": 15,
+                  "spd": 11
+                },
+                "skills23": [
+                  "attack-def",
+                  "def-down"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              }
+            ],
+            "eggs": [
+              {
+                "id": "e006",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 10,
+                  "def": 7,
+                  "spd": 4
+                },
+                "how": "bred"
+              }
+            ],
+            "party": [
+              "c003",
+              "c001"
+            ],
+            "partyOf": [
+              "c003",
+              "c001",
+              "c005"
+            ]
+          }
+        },
+        {
+          "step": "awardParty",
+          "state": {
+            "serial": 6,
+            "creatures": [
+              {
+                "id": "c001",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 4,
+                  "def": 7,
+                  "spd": 10
+                },
+                "skills23": [
+                  "def-up",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 2
+              },
+              {
+                "id": "c002",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 10,
+                  "def": 7,
+                  "spd": 4
+                },
+                "skills23": [
+                  "ct-long",
+                  "heal-ratio"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 0
+              },
+              {
+                "id": "c003",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 8,
+                  "def": 4,
+                  "spd": 10
+                },
+                "skills23": [
+                  "guts",
+                  "shield"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 2
+              },
+              {
+                "id": "c005",
+                "speciesId": "tsunoga",
+                "wild": {
+                  "hp": 6,
+                  "atk": 3,
+                  "def": 15,
+                  "spd": 11
+                },
+                "skills23": [
+                  "attack-def",
+                  "def-down"
+                ],
+                "mutationCounter": 0,
+                "generation": 1,
+                "earned": 2
+              }
+            ],
+            "eggs": [
+              {
+                "id": "e006",
+                "speciesId": "tamaru",
+                "wild": {
+                  "hp": 2,
+                  "atk": 10,
+                  "def": 7,
+                  "spd": 4
+                },
+                "how": "bred"
+              }
+            ],
+            "party": [
+              "c003",
+              "c001"
+            ],
+            "partyOf": [
+              "c003",
+              "c001",
+              "c005"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -88,6 +88,102 @@ internal static class Golden
         _ => throw new ArgumentException($"知らないスケール元: {s}"),
     };
 
+    public static EggOrigin Origin(string s) => s switch
+    {
+        "defeated" => EggOrigin.Defeated,
+        "stolen" => EggOrigin.Stolen,
+        "bred" => EggOrigin.Bred,
+        _ => throw new ArgumentException($"知らない入手経路: {s}"),
+    };
+
+    public static Outcome Result(string s) => s switch
+    {
+        "ally" => Core.Outcome.Ally,
+        "enemy" => Core.Outcome.Enemy,
+        "draw" => Core.Outcome.Draw,
+        _ => throw new ArgumentException($"知らない決着: {s}"),
+    };
+
+    public static FieldSide Side(string s) => s switch
+    {
+        "left" => FieldSide.Left,
+        "right" => FieldSide.Right,
+        _ => throw new ArgumentException($"知らない寄り: {s}"),
+    };
+
+    public static StealOutcome Steal(string s) => s switch
+    {
+        "success" => StealOutcome.Success,
+        "blocked" => StealOutcome.Blocked,
+        "stalled" => StealOutcome.Stalled,
+        _ => throw new ArgumentException($"知らない発射結果: {s}"),
+    };
+
+    public static BattleEventKind Event(string s) => s switch
+    {
+        "act" => BattleEventKind.Act,
+        "damage" => BattleEventKind.Damage,
+        "heal" => BattleEventKind.Heal,
+        "buff" => BattleEventKind.Buff,
+        "poison" => BattleEventKind.Poison,
+        "regen" => BattleEventKind.Regen,
+        "applied" => BattleEventKind.Applied,
+        "shield" => BattleEventKind.Shield,
+        "stun" => BattleEventKind.Stun,
+        "skipped" => BattleEventKind.Skipped,
+        "ct" => BattleEventKind.Ct,
+        "taunt" => BattleEventKind.Taunt,
+        "guts" => BattleEventKind.Guts,
+        "gutsSaved" => BattleEventKind.GutsSaved,
+        "immune" => BattleEventKind.Immune,
+        "blocked" => BattleEventKind.Blocked,
+        "down" => BattleEventKind.Down,
+        _ => throw new ArgumentException($"知らない出来事: {s}"),
+    };
+
+    /// <summary>戦闘の出来事を1つ突き合わせる。⚠️ 種類ごとに見る項目が違う。</summary>
+    public static void SameEvent(JsonElement expected, BattleEvent actual, string where)
+    {
+        var kind = Event(expected.GetProperty("kind").GetString()!);
+        Assert.True(kind == actual.Kind, $"{where}: 種類が {actual.Kind}（期待 {kind}）");
+
+        // act だけ対象の項目名が actor
+        string unitKey = expected.TryGetProperty("actor", out var actor)
+            ? actor.GetString()!
+            : expected.GetProperty("unit").GetString()!;
+        Assert.True(unitKey == actual.Unit, $"{where}: 対象が {actual.Unit}（期待 {unitKey}）");
+
+        if (expected.TryGetProperty("skill", out var skill))
+            Assert.True(skill.GetString() == actual.Label, $"{where}: 技が {actual.Label}");
+        if (expected.TryGetProperty("label", out var label))
+            Assert.True(label.GetString() == actual.Label, $"{where}: 札が {actual.Label}");
+        if (expected.TryGetProperty("amount", out var amount))
+            Assert.True(amount.GetInt32() == actual.Amount, $"{where}: 量が {actual.Amount}（期待 {amount.GetInt32()}）");
+        if (expected.TryGetProperty("hp", out var hp))
+            Assert.True(hp.GetInt32() == actual.Hp, $"{where}: HP が {actual.Hp}（期待 {hp.GetInt32()}）");
+        if (expected.TryGetProperty("absorbed", out var absorbed))
+            Assert.True(absorbed.GetInt32() == actual.Absorbed, $"{where}: 吸収が {actual.Absorbed}");
+        if (expected.TryGetProperty("stat", out var stat))
+            Assert.True(StatKey(stat.GetString()!) == actual.Stat, $"{where}: ステが {actual.Stat}");
+        if (expected.TryGetProperty("percent", out var percent))
+            Assert.True(percent.GetInt32() == actual.Percent, $"{where}: %が {actual.Percent}");
+        if (expected.TryGetProperty("turns", out var turns))
+            Assert.True(turns.GetInt32() == actual.Turns, $"{where}: 残りが {actual.Turns}");
+        if (expected.TryGetProperty("delta", out var delta))
+            Assert.True(delta.GetInt32() == actual.Delta, $"{where}: 増減が {actual.Delta}");
+        if (expected.TryGetProperty("hits", out var hits))
+            Assert.True(hits.GetInt32() == actual.Hits, $"{where}: 回数が {actual.Hits}");
+    }
+
+    /// <summary>スキル2・3 の並び。JSON は [a, b]（null あり）。</summary>
+    public static void SameSkills23(JsonElement array, string? skill2, string? skill3, string where)
+    {
+        string? a = array[0].ValueKind == JsonValueKind.Null ? null : array[0].GetString();
+        string? b = array[1].ValueKind == JsonValueKind.Null ? null : array[1].GetString();
+        Assert.True(a == skill2, $"{where}: 枠2 が {skill2}（期待 {a}）");
+        Assert.True(b == skill3, $"{where}: 枠3 が {skill3}（期待 {b}）");
+    }
+
     public static StatBlock Block(JsonElement e) => new(
         e.GetProperty("hp").GetInt32(),
         e.GetProperty("atk").GetInt32(),

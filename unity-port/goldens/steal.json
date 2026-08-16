@@ -1,0 +1,2300 @@
+{
+  "fieldWidth": 160,
+  "speedToDistance": 3,
+  "gapWidth": 90,
+  "lean": 57,
+  "eggRadius": 13,
+  "runnerRadius": 7,
+  "depths": [
+    {
+      "tier": 0,
+      "depth": 190
+    },
+    {
+      "tier": 1,
+      "depth": 190
+    },
+    {
+      "tier": 2,
+      "depth": 240
+    },
+    {
+      "tier": 3,
+      "depth": 290
+    },
+    {
+      "tier": 4,
+      "depth": 340
+    },
+    {
+      "tier": 5,
+      "depth": 390
+    },
+    {
+      "tier": 6,
+      "depth": 390
+    }
+  ],
+  "fields": [
+    {
+      "tier": 1,
+      "side": "left",
+      "height": 190,
+      "gapFrom": 92,
+      "gapTo": 160,
+      "bandTop": 68,
+      "bandBottom": 98,
+      "egg": {
+        "x": 80,
+        "y": 26
+      },
+      "start": {
+        "x": 80,
+        "y": 176
+      },
+      "spans": [
+        {
+          "from": 0,
+          "to": 92
+        }
+      ],
+      "launches": [
+        {
+          "deg": -80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -75,
+          "outcome": "blocked",
+          "traveled": 284,
+          "pathLength": 285
+        },
+        {
+          "deg": -70,
+          "outcome": "blocked",
+          "traveled": 292,
+          "pathLength": 293
+        },
+        {
+          "deg": -65,
+          "outcome": "blocked",
+          "traveled": 169,
+          "pathLength": 170
+        },
+        {
+          "deg": -60,
+          "outcome": "blocked",
+          "traveled": 142,
+          "pathLength": 143
+        },
+        {
+          "deg": -55,
+          "outcome": "blocked",
+          "traveled": 124,
+          "pathLength": 125
+        },
+        {
+          "deg": -50,
+          "outcome": "blocked",
+          "traveled": 111,
+          "pathLength": 112
+        },
+        {
+          "deg": -45,
+          "outcome": "blocked",
+          "traveled": 101,
+          "pathLength": 102
+        },
+        {
+          "deg": -40,
+          "outcome": "blocked",
+          "traveled": 93,
+          "pathLength": 94
+        },
+        {
+          "deg": -35,
+          "outcome": "blocked",
+          "traveled": 87,
+          "pathLength": 88
+        },
+        {
+          "deg": -30,
+          "outcome": "blocked",
+          "traveled": 82,
+          "pathLength": 83
+        },
+        {
+          "deg": -25,
+          "outcome": "blocked",
+          "traveled": 79,
+          "pathLength": 80
+        },
+        {
+          "deg": -20,
+          "outcome": "blocked",
+          "traveled": 76,
+          "pathLength": 77
+        },
+        {
+          "deg": -15,
+          "outcome": "blocked",
+          "traveled": 74,
+          "pathLength": 75
+        },
+        {
+          "deg": -10,
+          "outcome": "blocked",
+          "traveled": 73,
+          "pathLength": 74
+        },
+        {
+          "deg": -5,
+          "outcome": "blocked",
+          "traveled": 72,
+          "pathLength": 73
+        },
+        {
+          "deg": 0,
+          "outcome": "blocked",
+          "traveled": 71,
+          "pathLength": 72
+        },
+        {
+          "deg": 5,
+          "outcome": "blocked",
+          "traveled": 72,
+          "pathLength": 73
+        },
+        {
+          "deg": 10,
+          "outcome": "blocked",
+          "traveled": 73,
+          "pathLength": 74
+        },
+        {
+          "deg": 15,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 20,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 25,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 30,
+          "outcome": "blocked",
+          "traveled": 259,
+          "pathLength": 260
+        },
+        {
+          "deg": 35,
+          "outcome": "success",
+          "traveled": 223,
+          "pathLength": 224
+        },
+        {
+          "deg": 40,
+          "outcome": "success",
+          "traveled": 197,
+          "pathLength": 198
+        },
+        {
+          "deg": 45,
+          "outcome": "success",
+          "traveled": 190,
+          "pathLength": 191
+        },
+        {
+          "deg": 50,
+          "outcome": "blocked",
+          "traveled": 167,
+          "pathLength": 168
+        },
+        {
+          "deg": 55,
+          "outcome": "blocked",
+          "traveled": 156,
+          "pathLength": 157
+        },
+        {
+          "deg": 60,
+          "outcome": "blocked",
+          "traveled": 148,
+          "pathLength": 149
+        },
+        {
+          "deg": 65,
+          "outcome": "blocked",
+          "traveled": 169,
+          "pathLength": 170
+        },
+        {
+          "deg": 70,
+          "outcome": "blocked",
+          "traveled": 208,
+          "pathLength": 209
+        },
+        {
+          "deg": 75,
+          "outcome": "blocked",
+          "traveled": 275,
+          "pathLength": 276
+        },
+        {
+          "deg": 80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        }
+      ],
+      "solution": {
+        "traveled": 190
+      }
+    },
+    {
+      "tier": 1,
+      "side": "right",
+      "height": 190,
+      "gapFrom": 0,
+      "gapTo": 68,
+      "bandTop": 68,
+      "bandBottom": 98,
+      "egg": {
+        "x": 80,
+        "y": 26
+      },
+      "start": {
+        "x": 80,
+        "y": 176
+      },
+      "spans": [
+        {
+          "from": 68,
+          "to": 160
+        }
+      ],
+      "launches": [
+        {
+          "deg": -80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -75,
+          "outcome": "blocked",
+          "traveled": 275,
+          "pathLength": 276
+        },
+        {
+          "deg": -70,
+          "outcome": "blocked",
+          "traveled": 208,
+          "pathLength": 209
+        },
+        {
+          "deg": -65,
+          "outcome": "blocked",
+          "traveled": 169,
+          "pathLength": 170
+        },
+        {
+          "deg": -60,
+          "outcome": "blocked",
+          "traveled": 148,
+          "pathLength": 149
+        },
+        {
+          "deg": -55,
+          "outcome": "blocked",
+          "traveled": 156,
+          "pathLength": 157
+        },
+        {
+          "deg": -50,
+          "outcome": "blocked",
+          "traveled": 167,
+          "pathLength": 168
+        },
+        {
+          "deg": -45,
+          "outcome": "success",
+          "traveled": 190,
+          "pathLength": 191
+        },
+        {
+          "deg": -40,
+          "outcome": "success",
+          "traveled": 197,
+          "pathLength": 198
+        },
+        {
+          "deg": -35,
+          "outcome": "success",
+          "traveled": 223,
+          "pathLength": 224
+        },
+        {
+          "deg": -30,
+          "outcome": "blocked",
+          "traveled": 259,
+          "pathLength": 260
+        },
+        {
+          "deg": -25,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -20,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -15,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -10,
+          "outcome": "blocked",
+          "traveled": 73,
+          "pathLength": 74
+        },
+        {
+          "deg": -5,
+          "outcome": "blocked",
+          "traveled": 72,
+          "pathLength": 73
+        },
+        {
+          "deg": 0,
+          "outcome": "blocked",
+          "traveled": 71,
+          "pathLength": 72
+        },
+        {
+          "deg": 5,
+          "outcome": "blocked",
+          "traveled": 72,
+          "pathLength": 73
+        },
+        {
+          "deg": 10,
+          "outcome": "blocked",
+          "traveled": 73,
+          "pathLength": 74
+        },
+        {
+          "deg": 15,
+          "outcome": "blocked",
+          "traveled": 74,
+          "pathLength": 75
+        },
+        {
+          "deg": 20,
+          "outcome": "blocked",
+          "traveled": 76,
+          "pathLength": 77
+        },
+        {
+          "deg": 25,
+          "outcome": "blocked",
+          "traveled": 79,
+          "pathLength": 80
+        },
+        {
+          "deg": 30,
+          "outcome": "blocked",
+          "traveled": 82,
+          "pathLength": 83
+        },
+        {
+          "deg": 35,
+          "outcome": "blocked",
+          "traveled": 87,
+          "pathLength": 88
+        },
+        {
+          "deg": 40,
+          "outcome": "blocked",
+          "traveled": 93,
+          "pathLength": 94
+        },
+        {
+          "deg": 45,
+          "outcome": "blocked",
+          "traveled": 101,
+          "pathLength": 102
+        },
+        {
+          "deg": 50,
+          "outcome": "blocked",
+          "traveled": 111,
+          "pathLength": 112
+        },
+        {
+          "deg": 55,
+          "outcome": "blocked",
+          "traveled": 124,
+          "pathLength": 125
+        },
+        {
+          "deg": 60,
+          "outcome": "blocked",
+          "traveled": 142,
+          "pathLength": 143
+        },
+        {
+          "deg": 65,
+          "outcome": "blocked",
+          "traveled": 169,
+          "pathLength": 170
+        },
+        {
+          "deg": 70,
+          "outcome": "blocked",
+          "traveled": 292,
+          "pathLength": 293
+        },
+        {
+          "deg": 75,
+          "outcome": "blocked",
+          "traveled": 284,
+          "pathLength": 285
+        },
+        {
+          "deg": 80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        }
+      ],
+      "solution": {
+        "traveled": 190
+      }
+    },
+    {
+      "tier": 2,
+      "side": "left",
+      "height": 240,
+      "gapFrom": 92,
+      "gapTo": 160,
+      "bandTop": 86,
+      "bandBottom": 116,
+      "egg": {
+        "x": 80,
+        "y": 26
+      },
+      "start": {
+        "x": 80,
+        "y": 226
+      },
+      "spans": [
+        {
+          "from": 0,
+          "to": 92
+        }
+      ],
+      "launches": [
+        {
+          "deg": -80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -75,
+          "outcome": "blocked",
+          "traveled": 398,
+          "pathLength": 399
+        },
+        {
+          "deg": -70,
+          "outcome": "blocked",
+          "traveled": 302,
+          "pathLength": 303
+        },
+        {
+          "deg": -65,
+          "outcome": "blocked",
+          "traveled": 303,
+          "pathLength": 304
+        },
+        {
+          "deg": -60,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -55,
+          "outcome": "blocked",
+          "traveled": 180,
+          "pathLength": 181
+        },
+        {
+          "deg": -50,
+          "outcome": "blocked",
+          "traveled": 161,
+          "pathLength": 162
+        },
+        {
+          "deg": -45,
+          "outcome": "blocked",
+          "traveled": 146,
+          "pathLength": 147
+        },
+        {
+          "deg": -40,
+          "outcome": "blocked",
+          "traveled": 135,
+          "pathLength": 136
+        },
+        {
+          "deg": -35,
+          "outcome": "blocked",
+          "traveled": 126,
+          "pathLength": 127
+        },
+        {
+          "deg": -30,
+          "outcome": "blocked",
+          "traveled": 119,
+          "pathLength": 120
+        },
+        {
+          "deg": -25,
+          "outcome": "blocked",
+          "traveled": 114,
+          "pathLength": 115
+        },
+        {
+          "deg": -20,
+          "outcome": "blocked",
+          "traveled": 110,
+          "pathLength": 111
+        },
+        {
+          "deg": -15,
+          "outcome": "blocked",
+          "traveled": 107,
+          "pathLength": 108
+        },
+        {
+          "deg": -10,
+          "outcome": "blocked",
+          "traveled": 105,
+          "pathLength": 106
+        },
+        {
+          "deg": -5,
+          "outcome": "blocked",
+          "traveled": 104,
+          "pathLength": 105
+        },
+        {
+          "deg": 0,
+          "outcome": "blocked",
+          "traveled": 103,
+          "pathLength": 104
+        },
+        {
+          "deg": 5,
+          "outcome": "blocked",
+          "traveled": 104,
+          "pathLength": 105
+        },
+        {
+          "deg": 10,
+          "outcome": "blocked",
+          "traveled": 105,
+          "pathLength": 106
+        },
+        {
+          "deg": 15,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 20,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 25,
+          "outcome": "blocked",
+          "traveled": 322,
+          "pathLength": 323
+        },
+        {
+          "deg": 30,
+          "outcome": "success",
+          "traveled": 262,
+          "pathLength": 263
+        },
+        {
+          "deg": 35,
+          "outcome": "success",
+          "traveled": 229,
+          "pathLength": 230
+        },
+        {
+          "deg": 40,
+          "outcome": "success",
+          "traveled": 236,
+          "pathLength": 237
+        },
+        {
+          "deg": 45,
+          "outcome": "blocked",
+          "traveled": 181,
+          "pathLength": 182
+        },
+        {
+          "deg": 50,
+          "outcome": "blocked",
+          "traveled": 167,
+          "pathLength": 168
+        },
+        {
+          "deg": 55,
+          "outcome": "blocked",
+          "traveled": 180,
+          "pathLength": 181
+        },
+        {
+          "deg": 60,
+          "outcome": "blocked",
+          "traveled": 206,
+          "pathLength": 207
+        },
+        {
+          "deg": 65,
+          "outcome": "blocked",
+          "traveled": 244,
+          "pathLength": 245
+        },
+        {
+          "deg": 70,
+          "outcome": "blocked",
+          "traveled": 302,
+          "pathLength": 303
+        },
+        {
+          "deg": 75,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        }
+      ],
+      "solution": {
+        "traveled": 228
+      }
+    },
+    {
+      "tier": 2,
+      "side": "right",
+      "height": 240,
+      "gapFrom": 0,
+      "gapTo": 68,
+      "bandTop": 86,
+      "bandBottom": 116,
+      "egg": {
+        "x": 80,
+        "y": 26
+      },
+      "start": {
+        "x": 80,
+        "y": 226
+      },
+      "spans": [
+        {
+          "from": 68,
+          "to": 160
+        }
+      ],
+      "launches": [
+        {
+          "deg": -80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -75,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -70,
+          "outcome": "blocked",
+          "traveled": 302,
+          "pathLength": 303
+        },
+        {
+          "deg": -65,
+          "outcome": "blocked",
+          "traveled": 244,
+          "pathLength": 245
+        },
+        {
+          "deg": -60,
+          "outcome": "blocked",
+          "traveled": 206,
+          "pathLength": 207
+        },
+        {
+          "deg": -55,
+          "outcome": "blocked",
+          "traveled": 180,
+          "pathLength": 181
+        },
+        {
+          "deg": -50,
+          "outcome": "blocked",
+          "traveled": 167,
+          "pathLength": 168
+        },
+        {
+          "deg": -45,
+          "outcome": "blocked",
+          "traveled": 181,
+          "pathLength": 182
+        },
+        {
+          "deg": -40,
+          "outcome": "success",
+          "traveled": 236,
+          "pathLength": 237
+        },
+        {
+          "deg": -35,
+          "outcome": "success",
+          "traveled": 229,
+          "pathLength": 230
+        },
+        {
+          "deg": -30,
+          "outcome": "success",
+          "traveled": 262,
+          "pathLength": 263
+        },
+        {
+          "deg": -25,
+          "outcome": "blocked",
+          "traveled": 322,
+          "pathLength": 323
+        },
+        {
+          "deg": -20,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -15,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -10,
+          "outcome": "blocked",
+          "traveled": 105,
+          "pathLength": 106
+        },
+        {
+          "deg": -5,
+          "outcome": "blocked",
+          "traveled": 104,
+          "pathLength": 105
+        },
+        {
+          "deg": 0,
+          "outcome": "blocked",
+          "traveled": 103,
+          "pathLength": 104
+        },
+        {
+          "deg": 5,
+          "outcome": "blocked",
+          "traveled": 104,
+          "pathLength": 105
+        },
+        {
+          "deg": 10,
+          "outcome": "blocked",
+          "traveled": 105,
+          "pathLength": 106
+        },
+        {
+          "deg": 15,
+          "outcome": "blocked",
+          "traveled": 107,
+          "pathLength": 108
+        },
+        {
+          "deg": 20,
+          "outcome": "blocked",
+          "traveled": 110,
+          "pathLength": 111
+        },
+        {
+          "deg": 25,
+          "outcome": "blocked",
+          "traveled": 114,
+          "pathLength": 115
+        },
+        {
+          "deg": 30,
+          "outcome": "blocked",
+          "traveled": 119,
+          "pathLength": 120
+        },
+        {
+          "deg": 35,
+          "outcome": "blocked",
+          "traveled": 126,
+          "pathLength": 127
+        },
+        {
+          "deg": 40,
+          "outcome": "blocked",
+          "traveled": 135,
+          "pathLength": 136
+        },
+        {
+          "deg": 45,
+          "outcome": "blocked",
+          "traveled": 146,
+          "pathLength": 147
+        },
+        {
+          "deg": 50,
+          "outcome": "blocked",
+          "traveled": 161,
+          "pathLength": 162
+        },
+        {
+          "deg": 55,
+          "outcome": "blocked",
+          "traveled": 180,
+          "pathLength": 181
+        },
+        {
+          "deg": 60,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 65,
+          "outcome": "blocked",
+          "traveled": 303,
+          "pathLength": 304
+        },
+        {
+          "deg": 70,
+          "outcome": "blocked",
+          "traveled": 302,
+          "pathLength": 303
+        },
+        {
+          "deg": 75,
+          "outcome": "blocked",
+          "traveled": 398,
+          "pathLength": 399
+        },
+        {
+          "deg": 80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        }
+      ],
+      "solution": {
+        "traveled": 228
+      }
+    },
+    {
+      "tier": 3,
+      "side": "left",
+      "height": 290,
+      "gapFrom": 92,
+      "gapTo": 160,
+      "bandTop": 104,
+      "bandBottom": 134,
+      "egg": {
+        "x": 80,
+        "y": 26
+      },
+      "start": {
+        "x": 80,
+        "y": 276
+      },
+      "spans": [
+        {
+          "from": 0,
+          "to": 92
+        }
+      ],
+      "launches": [
+        {
+          "deg": -80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -75,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -70,
+          "outcome": "blocked",
+          "traveled": 395,
+          "pathLength": 396
+        },
+        {
+          "deg": -65,
+          "outcome": "blocked",
+          "traveled": 320,
+          "pathLength": 321
+        },
+        {
+          "deg": -60,
+          "outcome": "blocked",
+          "traveled": 317,
+          "pathLength": 318
+        },
+        {
+          "deg": -55,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -50,
+          "outcome": "blocked",
+          "traveled": 211,
+          "pathLength": 212
+        },
+        {
+          "deg": -45,
+          "outcome": "blocked",
+          "traveled": 191,
+          "pathLength": 192
+        },
+        {
+          "deg": -40,
+          "outcome": "blocked",
+          "traveled": 177,
+          "pathLength": 178
+        },
+        {
+          "deg": -35,
+          "outcome": "blocked",
+          "traveled": 165,
+          "pathLength": 166
+        },
+        {
+          "deg": -30,
+          "outcome": "blocked",
+          "traveled": 156,
+          "pathLength": 157
+        },
+        {
+          "deg": -25,
+          "outcome": "blocked",
+          "traveled": 149,
+          "pathLength": 150
+        },
+        {
+          "deg": -20,
+          "outcome": "blocked",
+          "traveled": 144,
+          "pathLength": 145
+        },
+        {
+          "deg": -15,
+          "outcome": "blocked",
+          "traveled": 140,
+          "pathLength": 141
+        },
+        {
+          "deg": -10,
+          "outcome": "blocked",
+          "traveled": 138,
+          "pathLength": 139
+        },
+        {
+          "deg": -5,
+          "outcome": "blocked",
+          "traveled": 136,
+          "pathLength": 137
+        },
+        {
+          "deg": 0,
+          "outcome": "blocked",
+          "traveled": 135,
+          "pathLength": 136
+        },
+        {
+          "deg": 5,
+          "outcome": "blocked",
+          "traveled": 136,
+          "pathLength": 137
+        },
+        {
+          "deg": 10,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 15,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 20,
+          "outcome": "blocked",
+          "traveled": 383,
+          "pathLength": 384
+        },
+        {
+          "deg": 25,
+          "outcome": "success",
+          "traveled": 306,
+          "pathLength": 307
+        },
+        {
+          "deg": 30,
+          "outcome": "success",
+          "traveled": 270,
+          "pathLength": 271
+        },
+        {
+          "deg": 35,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 40,
+          "outcome": "blocked",
+          "traveled": 199,
+          "pathLength": 200
+        },
+        {
+          "deg": 45,
+          "outcome": "blocked",
+          "traveled": 191,
+          "pathLength": 192
+        },
+        {
+          "deg": 50,
+          "outcome": "blocked",
+          "traveled": 211,
+          "pathLength": 212
+        },
+        {
+          "deg": 55,
+          "outcome": "blocked",
+          "traveled": 236,
+          "pathLength": 237
+        },
+        {
+          "deg": 60,
+          "outcome": "blocked",
+          "traveled": 270,
+          "pathLength": 271
+        },
+        {
+          "deg": 65,
+          "outcome": "blocked",
+          "traveled": 320,
+          "pathLength": 321
+        },
+        {
+          "deg": 70,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 75,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        }
+      ],
+      "solution": {
+        "traveled": 270
+      }
+    },
+    {
+      "tier": 3,
+      "side": "right",
+      "height": 290,
+      "gapFrom": 0,
+      "gapTo": 68,
+      "bandTop": 104,
+      "bandBottom": 134,
+      "egg": {
+        "x": 80,
+        "y": 26
+      },
+      "start": {
+        "x": 80,
+        "y": 276
+      },
+      "spans": [
+        {
+          "from": 68,
+          "to": 160
+        }
+      ],
+      "launches": [
+        {
+          "deg": -80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -75,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -70,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -65,
+          "outcome": "blocked",
+          "traveled": 320,
+          "pathLength": 321
+        },
+        {
+          "deg": -60,
+          "outcome": "blocked",
+          "traveled": 270,
+          "pathLength": 271
+        },
+        {
+          "deg": -55,
+          "outcome": "blocked",
+          "traveled": 236,
+          "pathLength": 237
+        },
+        {
+          "deg": -50,
+          "outcome": "blocked",
+          "traveled": 211,
+          "pathLength": 212
+        },
+        {
+          "deg": -45,
+          "outcome": "blocked",
+          "traveled": 191,
+          "pathLength": 192
+        },
+        {
+          "deg": -40,
+          "outcome": "blocked",
+          "traveled": 199,
+          "pathLength": 200
+        },
+        {
+          "deg": -35,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -30,
+          "outcome": "success",
+          "traveled": 270,
+          "pathLength": 271
+        },
+        {
+          "deg": -25,
+          "outcome": "success",
+          "traveled": 306,
+          "pathLength": 307
+        },
+        {
+          "deg": -20,
+          "outcome": "blocked",
+          "traveled": 383,
+          "pathLength": 384
+        },
+        {
+          "deg": -15,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -10,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -5,
+          "outcome": "blocked",
+          "traveled": 136,
+          "pathLength": 137
+        },
+        {
+          "deg": 0,
+          "outcome": "blocked",
+          "traveled": 135,
+          "pathLength": 136
+        },
+        {
+          "deg": 5,
+          "outcome": "blocked",
+          "traveled": 136,
+          "pathLength": 137
+        },
+        {
+          "deg": 10,
+          "outcome": "blocked",
+          "traveled": 138,
+          "pathLength": 139
+        },
+        {
+          "deg": 15,
+          "outcome": "blocked",
+          "traveled": 140,
+          "pathLength": 141
+        },
+        {
+          "deg": 20,
+          "outcome": "blocked",
+          "traveled": 144,
+          "pathLength": 145
+        },
+        {
+          "deg": 25,
+          "outcome": "blocked",
+          "traveled": 149,
+          "pathLength": 150
+        },
+        {
+          "deg": 30,
+          "outcome": "blocked",
+          "traveled": 156,
+          "pathLength": 157
+        },
+        {
+          "deg": 35,
+          "outcome": "blocked",
+          "traveled": 165,
+          "pathLength": 166
+        },
+        {
+          "deg": 40,
+          "outcome": "blocked",
+          "traveled": 177,
+          "pathLength": 178
+        },
+        {
+          "deg": 45,
+          "outcome": "blocked",
+          "traveled": 191,
+          "pathLength": 192
+        },
+        {
+          "deg": 50,
+          "outcome": "blocked",
+          "traveled": 211,
+          "pathLength": 212
+        },
+        {
+          "deg": 55,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 60,
+          "outcome": "blocked",
+          "traveled": 317,
+          "pathLength": 318
+        },
+        {
+          "deg": 65,
+          "outcome": "blocked",
+          "traveled": 320,
+          "pathLength": 321
+        },
+        {
+          "deg": 70,
+          "outcome": "blocked",
+          "traveled": 395,
+          "pathLength": 396
+        },
+        {
+          "deg": 75,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        }
+      ],
+      "solution": {
+        "traveled": 270
+      }
+    },
+    {
+      "tier": 4,
+      "side": "left",
+      "height": 340,
+      "gapFrom": 92,
+      "gapTo": 160,
+      "bandTop": 122,
+      "bandBottom": 152,
+      "egg": {
+        "x": 80,
+        "y": 26
+      },
+      "start": {
+        "x": 80,
+        "y": 326
+      },
+      "spans": [
+        {
+          "from": 0,
+          "to": 92
+        }
+      ],
+      "launches": [
+        {
+          "deg": -80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -75,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -70,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -65,
+          "outcome": "blocked",
+          "traveled": 396,
+          "pathLength": 397
+        },
+        {
+          "deg": -60,
+          "outcome": "blocked",
+          "traveled": 334,
+          "pathLength": 335
+        },
+        {
+          "deg": -55,
+          "outcome": "blocked",
+          "traveled": 335,
+          "pathLength": 336
+        },
+        {
+          "deg": -50,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -45,
+          "outcome": "success",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -40,
+          "outcome": "blocked",
+          "traveled": 219,
+          "pathLength": 220
+        },
+        {
+          "deg": -35,
+          "outcome": "blocked",
+          "traveled": 204,
+          "pathLength": 205
+        },
+        {
+          "deg": -30,
+          "outcome": "blocked",
+          "traveled": 193,
+          "pathLength": 194
+        },
+        {
+          "deg": -25,
+          "outcome": "blocked",
+          "traveled": 185,
+          "pathLength": 186
+        },
+        {
+          "deg": -20,
+          "outcome": "blocked",
+          "traveled": 178,
+          "pathLength": 179
+        },
+        {
+          "deg": -15,
+          "outcome": "blocked",
+          "traveled": 173,
+          "pathLength": 174
+        },
+        {
+          "deg": -10,
+          "outcome": "blocked",
+          "traveled": 170,
+          "pathLength": 171
+        },
+        {
+          "deg": -5,
+          "outcome": "blocked",
+          "traveled": 168,
+          "pathLength": 169
+        },
+        {
+          "deg": 0,
+          "outcome": "blocked",
+          "traveled": 167,
+          "pathLength": 168
+        },
+        {
+          "deg": 5,
+          "outcome": "blocked",
+          "traveled": 168,
+          "pathLength": 169
+        },
+        {
+          "deg": 10,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 15,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 20,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 25,
+          "outcome": "success",
+          "traveled": 315,
+          "pathLength": 316
+        },
+        {
+          "deg": 30,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 35,
+          "outcome": "blocked",
+          "traveled": 223,
+          "pathLength": 224
+        },
+        {
+          "deg": 40,
+          "outcome": "blocked",
+          "traveled": 219,
+          "pathLength": 220
+        },
+        {
+          "deg": 45,
+          "outcome": "blocked",
+          "traveled": 237,
+          "pathLength": 238
+        },
+        {
+          "deg": 50,
+          "outcome": "blocked",
+          "traveled": 260,
+          "pathLength": 261
+        },
+        {
+          "deg": 55,
+          "outcome": "blocked",
+          "traveled": 292,
+          "pathLength": 293
+        },
+        {
+          "deg": 60,
+          "outcome": "blocked",
+          "traveled": 334,
+          "pathLength": 335
+        },
+        {
+          "deg": 65,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 70,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 75,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        }
+      ],
+      "solution": {
+        "traveled": 314
+      }
+    },
+    {
+      "tier": 4,
+      "side": "right",
+      "height": 340,
+      "gapFrom": 0,
+      "gapTo": 68,
+      "bandTop": 122,
+      "bandBottom": 152,
+      "egg": {
+        "x": 80,
+        "y": 26
+      },
+      "start": {
+        "x": 80,
+        "y": 326
+      },
+      "spans": [
+        {
+          "from": 68,
+          "to": 160
+        }
+      ],
+      "launches": [
+        {
+          "deg": -80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -75,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -70,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -65,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -60,
+          "outcome": "blocked",
+          "traveled": 334,
+          "pathLength": 335
+        },
+        {
+          "deg": -55,
+          "outcome": "blocked",
+          "traveled": 292,
+          "pathLength": 293
+        },
+        {
+          "deg": -50,
+          "outcome": "blocked",
+          "traveled": 260,
+          "pathLength": 261
+        },
+        {
+          "deg": -45,
+          "outcome": "blocked",
+          "traveled": 237,
+          "pathLength": 238
+        },
+        {
+          "deg": -40,
+          "outcome": "blocked",
+          "traveled": 219,
+          "pathLength": 220
+        },
+        {
+          "deg": -35,
+          "outcome": "blocked",
+          "traveled": 223,
+          "pathLength": 224
+        },
+        {
+          "deg": -30,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -25,
+          "outcome": "success",
+          "traveled": 315,
+          "pathLength": 316
+        },
+        {
+          "deg": -20,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -15,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -10,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -5,
+          "outcome": "blocked",
+          "traveled": 168,
+          "pathLength": 169
+        },
+        {
+          "deg": 0,
+          "outcome": "blocked",
+          "traveled": 167,
+          "pathLength": 168
+        },
+        {
+          "deg": 5,
+          "outcome": "blocked",
+          "traveled": 168,
+          "pathLength": 169
+        },
+        {
+          "deg": 10,
+          "outcome": "blocked",
+          "traveled": 170,
+          "pathLength": 171
+        },
+        {
+          "deg": 15,
+          "outcome": "blocked",
+          "traveled": 173,
+          "pathLength": 174
+        },
+        {
+          "deg": 20,
+          "outcome": "blocked",
+          "traveled": 178,
+          "pathLength": 179
+        },
+        {
+          "deg": 25,
+          "outcome": "blocked",
+          "traveled": 185,
+          "pathLength": 186
+        },
+        {
+          "deg": 30,
+          "outcome": "blocked",
+          "traveled": 193,
+          "pathLength": 194
+        },
+        {
+          "deg": 35,
+          "outcome": "blocked",
+          "traveled": 204,
+          "pathLength": 205
+        },
+        {
+          "deg": 40,
+          "outcome": "blocked",
+          "traveled": 219,
+          "pathLength": 220
+        },
+        {
+          "deg": 45,
+          "outcome": "success",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 50,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 55,
+          "outcome": "blocked",
+          "traveled": 335,
+          "pathLength": 336
+        },
+        {
+          "deg": 60,
+          "outcome": "blocked",
+          "traveled": 334,
+          "pathLength": 335
+        },
+        {
+          "deg": 65,
+          "outcome": "blocked",
+          "traveled": 396,
+          "pathLength": 397
+        },
+        {
+          "deg": 70,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 75,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        }
+      ],
+      "solution": {
+        "traveled": 314
+      }
+    },
+    {
+      "tier": 5,
+      "side": "left",
+      "height": 390,
+      "gapFrom": 92,
+      "gapTo": 160,
+      "bandTop": 140,
+      "bandBottom": 170,
+      "egg": {
+        "x": 80,
+        "y": 26
+      },
+      "start": {
+        "x": 80,
+        "y": 376
+      },
+      "spans": [
+        {
+          "from": 0,
+          "to": 92
+        }
+      ],
+      "launches": [
+        {
+          "deg": -80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -75,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -70,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -65,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -60,
+          "outcome": "blocked",
+          "traveled": 398,
+          "pathLength": 399
+        },
+        {
+          "deg": -55,
+          "outcome": "blocked",
+          "traveled": 347,
+          "pathLength": 348
+        },
+        {
+          "deg": -50,
+          "outcome": "blocked",
+          "traveled": 358,
+          "pathLength": 359
+        },
+        {
+          "deg": -45,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -40,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -35,
+          "outcome": "blocked",
+          "traveled": 243,
+          "pathLength": 244
+        },
+        {
+          "deg": -30,
+          "outcome": "blocked",
+          "traveled": 230,
+          "pathLength": 231
+        },
+        {
+          "deg": -25,
+          "outcome": "blocked",
+          "traveled": 220,
+          "pathLength": 221
+        },
+        {
+          "deg": -20,
+          "outcome": "blocked",
+          "traveled": 212,
+          "pathLength": 213
+        },
+        {
+          "deg": -15,
+          "outcome": "blocked",
+          "traveled": 207,
+          "pathLength": 208
+        },
+        {
+          "deg": -10,
+          "outcome": "blocked",
+          "traveled": 203,
+          "pathLength": 204
+        },
+        {
+          "deg": -5,
+          "outcome": "blocked",
+          "traveled": 200,
+          "pathLength": 201
+        },
+        {
+          "deg": 0,
+          "outcome": "blocked",
+          "traveled": 199,
+          "pathLength": 200
+        },
+        {
+          "deg": 5,
+          "outcome": "blocked",
+          "traveled": 200,
+          "pathLength": 201
+        },
+        {
+          "deg": 10,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 15,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 20,
+          "outcome": "success",
+          "traveled": 370,
+          "pathLength": 371
+        },
+        {
+          "deg": 25,
+          "outcome": "success",
+          "traveled": 367,
+          "pathLength": 368
+        },
+        {
+          "deg": 30,
+          "outcome": "blocked",
+          "traveled": 256,
+          "pathLength": 257
+        },
+        {
+          "deg": 35,
+          "outcome": "blocked",
+          "traveled": 243,
+          "pathLength": 244
+        },
+        {
+          "deg": 40,
+          "outcome": "blocked",
+          "traveled": 260,
+          "pathLength": 261
+        },
+        {
+          "deg": 45,
+          "outcome": "blocked",
+          "traveled": 282,
+          "pathLength": 283
+        },
+        {
+          "deg": 50,
+          "outcome": "blocked",
+          "traveled": 310,
+          "pathLength": 311
+        },
+        {
+          "deg": 55,
+          "outcome": "blocked",
+          "traveled": 347,
+          "pathLength": 348
+        },
+        {
+          "deg": 60,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 65,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 70,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 75,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        }
+      ],
+      "solution": {
+        "traveled": 360
+      }
+    },
+    {
+      "tier": 5,
+      "side": "right",
+      "height": 390,
+      "gapFrom": 0,
+      "gapTo": 68,
+      "bandTop": 140,
+      "bandBottom": 170,
+      "egg": {
+        "x": 80,
+        "y": 26
+      },
+      "start": {
+        "x": 80,
+        "y": 376
+      },
+      "spans": [
+        {
+          "from": 68,
+          "to": 160
+        }
+      ],
+      "launches": [
+        {
+          "deg": -80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -75,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -70,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -65,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -60,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -55,
+          "outcome": "blocked",
+          "traveled": 347,
+          "pathLength": 348
+        },
+        {
+          "deg": -50,
+          "outcome": "blocked",
+          "traveled": 310,
+          "pathLength": 311
+        },
+        {
+          "deg": -45,
+          "outcome": "blocked",
+          "traveled": 282,
+          "pathLength": 283
+        },
+        {
+          "deg": -40,
+          "outcome": "blocked",
+          "traveled": 260,
+          "pathLength": 261
+        },
+        {
+          "deg": -35,
+          "outcome": "blocked",
+          "traveled": 243,
+          "pathLength": 244
+        },
+        {
+          "deg": -30,
+          "outcome": "blocked",
+          "traveled": 256,
+          "pathLength": 257
+        },
+        {
+          "deg": -25,
+          "outcome": "success",
+          "traveled": 367,
+          "pathLength": 368
+        },
+        {
+          "deg": -20,
+          "outcome": "success",
+          "traveled": 370,
+          "pathLength": 371
+        },
+        {
+          "deg": -15,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -10,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": -5,
+          "outcome": "blocked",
+          "traveled": 200,
+          "pathLength": 201
+        },
+        {
+          "deg": 0,
+          "outcome": "blocked",
+          "traveled": 199,
+          "pathLength": 200
+        },
+        {
+          "deg": 5,
+          "outcome": "blocked",
+          "traveled": 200,
+          "pathLength": 201
+        },
+        {
+          "deg": 10,
+          "outcome": "blocked",
+          "traveled": 203,
+          "pathLength": 204
+        },
+        {
+          "deg": 15,
+          "outcome": "blocked",
+          "traveled": 207,
+          "pathLength": 208
+        },
+        {
+          "deg": 20,
+          "outcome": "blocked",
+          "traveled": 212,
+          "pathLength": 213
+        },
+        {
+          "deg": 25,
+          "outcome": "blocked",
+          "traveled": 220,
+          "pathLength": 221
+        },
+        {
+          "deg": 30,
+          "outcome": "blocked",
+          "traveled": 230,
+          "pathLength": 231
+        },
+        {
+          "deg": 35,
+          "outcome": "blocked",
+          "traveled": 243,
+          "pathLength": 244
+        },
+        {
+          "deg": 40,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 45,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 50,
+          "outcome": "blocked",
+          "traveled": 358,
+          "pathLength": 359
+        },
+        {
+          "deg": 55,
+          "outcome": "blocked",
+          "traveled": 347,
+          "pathLength": 348
+        },
+        {
+          "deg": 60,
+          "outcome": "blocked",
+          "traveled": 398,
+          "pathLength": 399
+        },
+        {
+          "deg": 65,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 70,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 75,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        },
+        {
+          "deg": 80,
+          "outcome": "stalled",
+          "traveled": 400,
+          "pathLength": 401
+        }
+      ],
+      "solution": {
+        "traveled": 360
+      }
+    }
+  ]
+}

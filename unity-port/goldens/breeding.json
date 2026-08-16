@@ -1,0 +1,3704 @@
+{
+  "inheritHigher": 0.55,
+  "mutationRolls": 3,
+  "mutationChance": 0.025,
+  "mutationStep": 2,
+  "mutationCounterLimit": 20,
+  "parents": [
+    {
+      "id": "c001",
+      "speciesId": "tamaru",
+      "wild": {
+        "hp": 7,
+        "atk": 2,
+        "def": 10,
+        "spd": 4
+      },
+      "trained": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "earned": 0,
+      "mutationCounter": 0,
+      "skills23": [
+        "shield",
+        "heal-ratio"
+      ],
+      "paletteIndex": 0,
+      "generation": 1,
+      "actual": {
+        "hp": 31,
+        "atk": 20,
+        "def": 32,
+        "spd": 20
+      },
+      "wildTotal": 23
+    },
+    {
+      "id": "c002",
+      "speciesId": "tamaru",
+      "wild": {
+        "hp": 4,
+        "atk": 10,
+        "def": 2,
+        "spd": 7
+      },
+      "trained": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "earned": 0,
+      "mutationCounter": 0,
+      "skills23": [
+        "heal-ratio",
+        "attack"
+      ],
+      "paletteIndex": 0,
+      "generation": 1,
+      "actual": {
+        "hp": 28,
+        "atk": 28,
+        "def": 24,
+        "spd": 23
+      },
+      "wildTotal": 23
+    },
+    {
+      "id": "c003",
+      "speciesId": "tamaru",
+      "wild": {
+        "hp": 11,
+        "atk": 4,
+        "def": 3,
+        "spd": 9
+      },
+      "trained": {
+        "hp": 0,
+        "atk": 0,
+        "def": 0,
+        "spd": 0
+      },
+      "earned": 0,
+      "mutationCounter": 0,
+      "skills23": [
+        "taunt",
+        "guts"
+      ],
+      "paletteIndex": 0,
+      "generation": 1,
+      "actual": {
+        "hp": 35,
+        "atk": 22,
+        "def": 25,
+        "spd": 25
+      },
+      "wildTotal": 27
+    }
+  ],
+  "bred": [
+    {
+      "seed": 1000,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e100",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 10,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1001,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e101",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 4,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1002,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e102",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 10,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1003,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e103",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 2,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1004,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e104",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 4,
+          "def": 3,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1005,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e105",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1006,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e106",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1007,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e107",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1008,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e108",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1009,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e109",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 2,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1010,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e110",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1011,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e111",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 10,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1012,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e112",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 10,
+          "def": 2,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1013,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e113",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1014,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e114",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 10,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1015,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e115",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1016,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e116",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 4,
+          "def": 2,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1017,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 1,
+      "egg": {
+        "id": "e117",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 1,
+        "paletteIndex": 2,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1018,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e118",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 2,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1019,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e119",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 2,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1020,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e120",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1021,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e121",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1022,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e122",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1023,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e123",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1024,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e124",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1025,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e125",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1026,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e126",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1027,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e127",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 2,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1028,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e128",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 2,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1029,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e129",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1030,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e130",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1031,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e131",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 4,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1032,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e132",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1033,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e133",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1034,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e134",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1035,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e135",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1036,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e136",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 10,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1037,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e137",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1038,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e138",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1039,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e139",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 2,
+          "def": 2,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1040,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e140",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1041,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e141",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1042,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e142",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 2,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1043,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e143",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1044,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e144",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 2,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1045,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e145",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1046,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e146",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1047,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e147",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 2,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1048,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e148",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 10,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1049,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e149",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 2,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1050,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e150",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1051,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e151",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 10,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1052,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e152",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1053,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e153",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 2,
+          "def": 3,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1054,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e154",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1055,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e155",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 3,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1056,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e156",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 3,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1057,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e157",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 2,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1058,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e158",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 3,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1059,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e159",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 3,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1060,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e160",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1061,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e161",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 3,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1062,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e162",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 3,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1063,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e163",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1064,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e164",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 4,
+          "def": 3,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1065,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e165",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 2,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1066,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e166",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 10,
+          "def": 2,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1067,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e167",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1068,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e168",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 10,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1069,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e169",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1070,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e170",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1071,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 1,
+      "egg": {
+        "id": "e171",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 6,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 1,
+        "paletteIndex": 1,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1072,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e172",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1073,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e173",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 2,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1074,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e174",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 3,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1075,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e175",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 2,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1076,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e176",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 3,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1077,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e177",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 2,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1078,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e178",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1079,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e179",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 3,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1080,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e180",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 3,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1081,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e181",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1082,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e182",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1083,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 1,
+      "egg": {
+        "id": "e183",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 2,
+          "def": 10,
+          "spd": 11
+        },
+        "mutationCounter": 1,
+        "paletteIndex": 2,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1084,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e184",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 10,
+          "def": 2,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1085,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e185",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 4,
+          "def": 2,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1086,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e186",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1087,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e187",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 2,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1088,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e188",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 2,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1089,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e189",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 10,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1090,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 1,
+      "egg": {
+        "id": "e190",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 10,
+          "spd": 6
+        },
+        "mutationCounter": 1,
+        "paletteIndex": 2,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1091,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e191",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 3,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1092,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e192",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 2,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1093,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 1,
+      "egg": {
+        "id": "e193",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 9,
+          "atk": 2,
+          "def": 2,
+          "spd": 4
+        },
+        "mutationCounter": 1,
+        "paletteIndex": 3,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1094,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e194",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 3,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1095,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e195",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 10,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1096,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e196",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 2,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1097,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e197",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 4,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1098,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e198",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 10,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1099,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 1,
+      "egg": {
+        "id": "e199",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 9,
+          "atk": 2,
+          "def": 2,
+          "spd": 4
+        },
+        "mutationCounter": 1,
+        "paletteIndex": 3,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1100,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e200",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1101,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e201",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 2,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1102,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e202",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 10,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1103,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e203",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 2,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1104,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e204",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 10,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1105,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e205",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 10,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1106,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e206",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 2,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1107,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e207",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 10,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1108,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e208",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 10,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1109,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e209",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1110,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e210",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 10,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1111,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e211",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1112,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e212",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 4,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1113,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e213",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 10,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1114,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e214",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 10,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1115,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e215",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 4,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1116,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e216",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1117,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e217",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1118,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e218",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 3,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1119,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e219",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1120,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e220",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 10,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1121,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e221",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 3,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1122,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e222",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 2,
+          "def": 10,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1123,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e223",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 10,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1124,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e224",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 2,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1125,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e225",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1126,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e226",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1127,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e227",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "attack"
+        ]
+      }
+    },
+    {
+      "seed": 1128,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 1,
+      "egg": {
+        "id": "e228",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 2,
+          "def": 12,
+          "spd": 4
+        },
+        "mutationCounter": 1,
+        "paletteIndex": 2,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1129,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e229",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 2,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1130,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e230",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 3,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1131,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e231",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1132,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e232",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1133,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e233",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1134,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e234",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 10,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1135,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e235",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1136,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e236",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 4,
+          "def": 3,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1137,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e237",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 3,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1138,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e238",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1139,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e239",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 3,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1140,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e240",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 3,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1141,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e241",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 10,
+          "def": 10,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1142,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e242",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 10,
+          "def": 2,
+          "spd": 7
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "taunt"
+        ]
+      }
+    },
+    {
+      "seed": 1143,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e243",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 2,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1144,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e244",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 2,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "shield",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1145,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e245",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 2,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "guts",
+          "heal-ratio"
+        ]
+      }
+    },
+    {
+      "seed": 1146,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e246",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 11,
+          "atk": 4,
+          "def": 3,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1147,
+      "a": "c001",
+      "b": "c002",
+      "mutations": 0,
+      "egg": {
+        "id": "e247",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 10,
+          "spd": 4
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "attack",
+          "shield"
+        ]
+      }
+    },
+    {
+      "seed": 1148,
+      "a": "c002",
+      "b": "c003",
+      "mutations": 0,
+      "egg": {
+        "id": "e248",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 4,
+          "atk": 10,
+          "def": 2,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "taunt",
+          "guts"
+        ]
+      }
+    },
+    {
+      "seed": 1149,
+      "a": "c003",
+      "b": "c001",
+      "mutations": 0,
+      "egg": {
+        "id": "e249",
+        "speciesId": "tamaru",
+        "wild": {
+          "hp": 7,
+          "atk": 4,
+          "def": 10,
+          "spd": 9
+        },
+        "mutationCounter": 0,
+        "paletteIndex": 0,
+        "generation": 2,
+        "how": "bred",
+        "skills23": [
+          "heal-ratio",
+          "guts"
+        ]
+      }
+    }
+  ]
+}
