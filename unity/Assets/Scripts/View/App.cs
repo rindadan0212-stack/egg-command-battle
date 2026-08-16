@@ -173,8 +173,10 @@ namespace EggCommand.View
 
         private void BuildTopBar(Screen screen)
         {
-            var bar = Ui.Block(_root, "TopBar", new Color32(0x12, 0x10, 0x0e, 0xff),
-                0f, 0f, Ui.W, Ui.TopBarHeight);
+            // ⚠️ 帯を敷かない。字を濃紺にしたので、暗い帯の上では題字が消える。
+            //    モックも上段に帯を持たず、地の上に直接置いている。
+            var bar = Ui.Rect("TopBar", _root);
+            Ui.Place(bar, 0f, 0f, Ui.W, Ui.TopBarHeight);
 
             // ⚠️ ホーム以外は必ず戻れる。戻れない画面を作らない
             if (screen != Screen.Home)

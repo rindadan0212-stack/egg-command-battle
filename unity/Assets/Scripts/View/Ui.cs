@@ -41,30 +41,32 @@ namespace EggCommand.View
 
         // ── 色 ──────────────────────────────────────────
         // 無彩色を支配的に、差し色は1つ。画面ごとに地の色だけを変える。
-        public static readonly Color Ink = new Color32(0xef, 0xe9, 0xdc, 0xff);
-        // ⚠️ Kenney の札は中央が鋼色（#647685）。以前の沈んだ字だと読めないので上げた
-        public static readonly Color InkDim = new Color32(0xcd, 0xc6, 0xb8, 0xff);
-        public static readonly Color InkFaint = new Color32(0x8d, 0x87, 0x7c, 0xff);
-        /// <summary>明るい札（button-lead）の上に置く字。⚠️ 明るい字を置くと消える。</summary>
-        public static readonly Color OnLead = new Color32(0x3a, 0x2a, 0x18, 0xff);
+        // ⚠️ 器が**白**になったので、字は濃い側。以前の淡い字だと全部消える。
+        //    色はモック（参考/モック_タマゴハンター/）の濃紺に合わせてある。
+        public static readonly Color Ink = new Color32(0x2b, 0x33, 0x50, 0xff);
+        public static readonly Color InkDim = new Color32(0x8e, 0x93, 0xa8, 0xff);
+        public static readonly Color InkFaint = new Color32(0xb8, 0xbc, 0xc9, 0xff);
+        /// <summary>色つきの札の上に置く字。⭐ どの色の上でも濃紺で通す（読み方を変えない）。</summary>
+        public static readonly Color OnLead = new Color32(0x2b, 0x33, 0x50, 0xff);
         /// <summary>差し色。⭐ 主導線1つと「今ここ」にしか使わない。</summary>
-        public static readonly Color Accent = new Color32(0xff, 0xd9, 0x77, 0xff);
+        public static readonly Color Accent = new Color32(0xf5, 0x9e, 0x0b, 0xff);
         // ⚠️ 札の中央が鋼色（#647685）なので、沈んだ赤／緑は読めない。明るい側へ寄せた
-        public static readonly Color Danger = new Color32(0xff, 0xa1, 0x92, 0xff);
-        public static readonly Color Good = new Color32(0xbd, 0xed, 0x94, 0xff);
-        public static readonly Color Panel = new Color32(0x24, 0x20, 0x1a, 0xff);
-        public static readonly Color PanelHi = new Color32(0x2f, 0x2a, 0x22, 0xff);
+        public static readonly Color Danger = new Color32(0xe0, 0x4f, 0x5f, 0xff);
+        public static readonly Color Good = new Color32(0x2f, 0xa8, 0x4a, 0xff);
+        // WARN: containers are drawn with panel.png; there is no colour-filled container
 
+        /// <summary>画面ごとの地。⚠️ 器が白なので**淡くしすぎない**（輪郭が無いので消える）。
+        /// モックの空色〜暖色に寄せた中間の明るさを取る。</summary>
         public static Color SkyOf(Sky sky)
         {
             switch (sky)
             {
-                case Sky.Home: return new Color32(0x16, 0x1c, 0x22, 0xff);
-                case Sky.Nest: return new Color32(0x1a, 0x1c, 0x14, 0xff);
-                case Sky.Battle: return new Color32(0x20, 0x15, 0x14, 0xff);
-                case Sky.Hatch: return new Color32(0x1c, 0x1a, 0x22, 0xff);
-                case Sky.Breed: return new Color32(0x22, 0x1a, 0x1e, 0xff);
-                default: return new Color32(0x1a, 0x18, 0x16, 0xff);
+                case Sky.Home: return new Color32(0x8f, 0xd8, 0xf7, 0xff);
+                case Sky.Nest: return new Color32(0xbd, 0xeb, 0xff, 0xff);
+                case Sky.Battle: return new Color32(0xa7, 0xdc, 0xf0, 0xff);
+                case Sky.Hatch: return new Color32(0xd7, 0xe7, 0xff, 0xff);
+                case Sky.Breed: return new Color32(0xff, 0xdf, 0xe8, 0xff);
+                default: return new Color32(0xdc, 0xef, 0xff, 0xff);
             }
         }
 
@@ -219,9 +221,8 @@ namespace EggCommand.View
             var rect = Rect(name, parent);
             Place(rect, left, top, width, height);
 
-            // ⭐ 主導線だけ明るい札にする。他は木の札。押せないものは沈める
-            var image = Sliced(rect.gameObject, lead ? "button-lead" : "button");
-            if (!enabled) image.color = new Color(0.45f, 0.45f, 0.45f, 1f);
+            // ⭐ 主導線は黄、通常は青、押せないものは灰。⚠️ 色を掛けず、絵を差し替える
+            var image = Sliced(rect.gameObject, !enabled ? "button-off" : lead ? "button-lead" : "button");
 
             var button = rect.gameObject.AddComponent<Button>();
             button.targetGraphic = image;
