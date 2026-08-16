@@ -327,6 +327,52 @@ namespace EggCommand.View
             return image;
         }
 
+        /// <summary>キャラの足元に置く短いゲージ。⭐ 左に丸い数字、右に帯。
+        ///
+        /// 実際の対戦ゲームの並び（参考のスクショ）に合わせた形。
+        /// ⚠️ 列幅いっぱいの帯にしない。**誰の量なのか**が離れると読めなくなる。</summary>
+        public static void GaugePill(Transform parent, string name, string badge, float ratio,
+            Color fill, float left, float top, float width, float height = 46f)
+        {
+            var rect = Rect(name, parent);
+            Place(rect, left, top, width, height);
+
+            // 地。⚠️ ピルの絵を敷いて丸みを出す（角丸を自分で描かない）
+            var track = rect.gameObject.AddComponent<Image>();
+            track.sprite = SkinOf("pill");
+            track.type = Image.Type.Sliced;
+            track.color = Color.white;
+            track.raycastTarget = false;
+
+            // 帯は丸い数字の右から
+            float badgeSize = height;
+            float barLeft = badgeSize + 6f;
+            float barWidth = width - barLeft - 10f;
+            Block(rect, "Fill", fill, barLeft, 9f, Mathf.Clamp01(ratio) * barWidth, height - 18f);
+
+            Round(rect, "Badge", 0f, 0f, badgeSize, fill);
+            // ⚠️ 丸の幅で折り返させない。3桁が「10/5」に割れて読めなくなる。
+            //    桁数で字を縮め、はみ出しは許して中央に置く
+            int size = badge.Length >= 4 ? 16 : badge.Length == 3 ? 19 : 23;
+            var num = Label(rect, "Num", badge, size, Ink, TextAnchor.MiddleCenter, 0f, 0f, badgeSize, height);
+            num.horizontalOverflow = HorizontalWrapMode.Overflow;
+        }
+
+        /// <summary>ボタンの中に置く小さなピル（CT など）。⭐ 参考画面の `CT 6` の形。</summary>
+        public static void MiniPill(Transform parent, string name, string text,
+            float left, float top, float width, float height = 40f)
+        {
+            var rect = Rect(name, parent);
+            Place(rect, left, top, width, height);
+            var image = rect.gameObject.AddComponent<Image>();
+            image.sprite = SkinOf("pill");
+            image.type = Image.Type.Sliced;
+            image.color = new Color32(0x2b, 0x33, 0x50, 0xff);
+            image.raycastTarget = false;
+            var label = Label(rect, "T", text, 22, Color.white, TextAnchor.MiddleCenter, 0f, 0f, width, height);
+            label.horizontalOverflow = HorizontalWrapMode.Overflow;
+        }
+
         /// <summary>縦に伸びる中身をスクロールさせる器。返るのは中身を入れる場所。</summary>
         public static RectTransform Scroller(Transform parent, string name,
             float left, float top, float width, float height, float contentHeight)
