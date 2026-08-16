@@ -1,20 +1,54 @@
-/* 区切りは余白で作る。線は引かない。
-   角丸は「押せるもの」だけ。無彩色を支配的にし、アクセント（黄身の色）は点で使う。 */
+/* 見た目の正典。⭐ **UI はモック（`参考/画面モック.html`）、キャラはドット絵。**
+ *
+ *  作法は3つだけ:
+ *  1. **暗色は `--ink` 1色**。輪郭も文字も影も全部これ。他の暗い色を足さない
+ *  2. **輪郭 + ぼかし無しの影**（`--lift`）。ぼかした影は使わない
+ *  3. **彩度の高い色はキャラだけ。**UI は白 + `--ink`。例外は主導線1つ（`--accent`）
+ *
+ *  ⚠️ **共通ルールの「AIっぽさの回避」（角丸で囲わない / 影を全要素に付けない /
+ *  グラデーションを使わない）は、このプロジェクトでは意図的に外している。**
+ *  「無難に寄せた結果の角丸カード」ではなく、太輪郭 + ハードシャドウという
+ *  **1つの明確な選択**をしている。あの規則の趣旨（あえて選ぶ）はこちらで満たす。
+ *  ⚠️ だから、ここを「共通ルールに反している」という理由だけで戻さないこと。
+ */
 
 :root {
-  --bg: #14120f;
-  --bg-raised: #1c1a16;
-  --track: #2a2620;
-  --ink: #e8e4db;
-  --ink-dim: #8a8377;
-  --ink-faint: #56514a;
-  --yolk: #f0b429;
-  --danger: #d1584c;
+  /* 唯一の暗色。輪郭・文字・影を全部これで担う */
+  --ink: #2b3350;
+  --ink-mid: #5c6480;
+  --ink-soft: #8e93a8;
 
-  --mono: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
-  --sans: 'Yu Gothic UI', 'Hiragino Sans', system-ui, sans-serif;
+  --paper: #fff6e5;
+  --card: #ffffff;
+  --sunk: #eff3f7;
 
-  color-scheme: dark;
+  /* 主導線。画面に1つだけ塗る */
+  --accent: #ff9f43;
+  --accent-deep: #f2762e;
+  --sun: #ffc93c;
+
+  /* キャラと属性に使う色。UI の面には使わない */
+  --sky: #6fd3f7;
+  --leaf: #9be07a;
+  --rose: #ff7ba9;
+  --violet: #b79bff;
+  --mint: #4fd1c5;
+
+  --hp: #5fd97a;
+  --gauge: #4fb8f7;
+  --danger: #ff6b6b;
+
+  /* ぼかさない。y 方向だけ。押せるものほど深い */
+  --lift: 0 4px 0 var(--ink);
+  --lift-deep: 0 6px 0 var(--ink);
+
+  --pill: 999px;
+  --card-radius: 18px;
+  --small-radius: 14px;
+
+  --display: 'Mochiy Pop One', 'Yu Gothic UI', sans-serif;
+  --sans: 'Noto Sans JP', 'Yu Gothic UI', 'Hiragino Sans', system-ui, sans-serif;
+  --mono: 'DM Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
 }
 
 * {
@@ -25,15 +59,14 @@ html,
 body {
   margin: 0;
   padding: 0;
-  height: 100%;
 }
 
 body {
-  background: var(--bg);
+  background: var(--paper);
   color: var(--ink);
   font-family: var(--sans);
-  font-size: 15px;
-  line-height: 1.7;
+  font-size: 13px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -43,87 +76,131 @@ img.pixel {
   image-rendering: pixelated;
 }
 
+/* ⭐ モックと同じ縦持ちの1本。横に広げない */
 #app {
-  max-width: 68rem;
+  width: 390px;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 4rem 2rem 6rem;
+  padding: 18px 14px 40px;
 }
 
 h1 {
-  font-size: 1.75rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  margin: 0 0 0.25rem;
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.25;
+  margin: 0 0 12px;
 }
 
-/* 主役は1つだけ。ここではタイトル直下の一行 */
+/* 画面ごとの一行。ここが各画面の主役の文 */
 .lead {
-  color: var(--yolk);
-  font-family: var(--mono);
-  font-size: 0.9rem;
-  margin: 0 0 1.5rem;
+  font-size: 14px;
+  font-weight: 900;
+  margin: 0 0 6px;
 }
 
 .note {
-  color: var(--ink-dim);
-  font-size: 0.85rem;
-  max-width: 44rem;
+  color: var(--ink-mid);
+  font-size: 11px;
   margin: 0;
 }
 
-/* 数値・ID・指紋は等幅。ここは意図的に効かせる */
+/* 数値・ID・英字ラベルは等幅。ここは意図的に効かせる */
 .mono {
   font-family: var(--mono);
 }
 
-/* ── 押せるもの（角丸はここだけ） ───────────────── */
+.cid {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-soft);
+}
+
+.tags {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-mid);
+}
+
+/* ── 押せるもの ────────────────────────────────── */
+
+button {
+  font-family: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
 
 .controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3rem;
-  margin: 2rem 0 0;
+  gap: 8px;
+  margin: 16px 0 0;
 }
 
 .controls button {
-  font-family: var(--mono);
-  font-size: 0.8rem;
-  color: var(--ink-dim);
-  background: transparent;
-  border: 0;
-  border-radius: 3px;
-  padding: 0.3rem 0.7rem;
-  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--pill);
+  box-shadow: var(--lift);
+  padding: 6px 16px;
 }
 
-.controls button:hover {
-  color: var(--ink);
+/* 押した実感は「沈む」で出す。色を変えない */
+.controls button:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--ink);
 }
 
 .controls button[data-on='true'] {
-  background: var(--yolk);
-  color: #1a1408;
+  background: var(--accent);
+}
+
+/* ── 画面の切り替え ────────────────────────────── */
+
+.viewnav {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.viewnav button {
+  font-size: 12px;
+  font-weight: 900;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--small-radius);
+  box-shadow: var(--lift);
+  padding: 8px 4px;
+}
+
+/* ⭐ 今いる画面だけ塗る。画面内の主役は常に1つ */
+.viewnav button[data-on='true'] {
+  background: var(--accent);
 }
 
 /* ── 保管庫 ────────────────────────────────────── */
 
 .roster {
-  margin: 1.75rem 0 0;
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 0;
 }
 
 .unit {
   display: grid;
-  grid-template-columns: 40px 11rem minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  /* ⚠️ 行を auto 任せにすると中身が縦に散る。上詰めを明示する */
+  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
   align-content: start;
-  column-gap: 1.5rem;
-  row-gap: 0.35rem;
-  padding: 0.8rem 0.75rem;
-}
-
-.unit:hover {
-  background: var(--bg-raised);
+  column-gap: 10px;
+  row-gap: 6px;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--card-radius);
+  box-shadow: var(--lift);
+  padding: 12px;
 }
 
 .unit .portrait {
@@ -137,7 +214,7 @@ h1 {
   grid-row: 1;
   display: flex;
   flex-direction: column;
-  line-height: 1.35;
+  line-height: 1.3;
   min-width: 0;
 }
 
@@ -146,285 +223,335 @@ h1 {
   grid-row: 2;
   display: flex;
   flex-direction: column;
-  line-height: 1.35;
+  line-height: 1.3;
   min-width: 0;
 }
 
+/* ステの棒は幅いっぱい使う。厳選の判断はここで決まる */
 .unit .stats {
-  grid-column: 3;
-  grid-row: 1 / 3;
-  align-self: center;
+  grid-column: 1 / 3;
+  grid-row: 3;
   display: grid;
-  gap: 0.28rem;
+  gap: 5px;
   min-width: 0;
+  background: var(--sunk);
+  border-radius: var(--small-radius);
+  padding: 10px;
+}
+
+/* ⚠️ `.ident` は縦並びの flex なので、中の button は既定で幅いっぱいに伸びる。
+   ⭐ 「押せるもの」はピルで、内容ぶんの幅にする。 */
+.unit .sortie {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 900;
+  background: var(--card);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--pill);
+  box-shadow: var(--lift);
+  padding: 3px 14px;
+  margin-top: 5px;
+}
+
+/* 出撃中の3体だけ塗る */
+.unit .sortie[data-on='true'] {
+  background: var(--sun);
+}
+
+.unit .sortie:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--ink);
 }
 
 .unit .name {
-  font-size: 0.95rem;
+  font-size: 13px;
+  font-weight: 900;
 }
 
-.unit .tags,
-.unit .cid {
-  font-size: 0.75rem;
-  color: var(--ink-dim);
-}
-
-.unit .cid {
-  color: var(--ink-faint);
-}
-
-.unit .total {
-  font-size: 0.78rem;
-  color: var(--ink-dim);
+.unit .total,
+.unit .skills {
+  font-size: 10px;
+  color: var(--ink-mid);
 }
 
 .unit .total[data-capped='true'] {
-  color: var(--ink);
+  color: var(--accent-deep);
+  font-weight: 900;
 }
 
-.unit .skills {
-  font-size: 0.78rem;
-  color: var(--ink-dim);
-}
-
-/* ステの棒が画面の主役。厳選の判断はここで決まる */
 .stat {
   display: grid;
-  grid-template-columns: 2.4rem minmax(0, 1fr) 1.8rem 3rem;
-  gap: 0.65rem;
+  grid-template-columns: 28px minmax(0, 1fr) 22px 30px auto;
+  gap: 6px;
   align-items: center;
 }
 
 .stat .k {
-  font-size: 0.75rem;
-  color: var(--ink-dim);
+  font-size: 10px;
+  font-weight: 900;
 }
 
+/* 棒は白地に濃紺の枠。中身の色で意味を出す */
 .stat .bar {
   display: block;
-  height: 7px;
-  background: var(--track);
+  height: 11px;
+  background: var(--card);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--pill);
   overflow: hidden;
 }
 
 .stat .bar i {
   display: block;
   height: 100%;
-  background: var(--ink-faint);
+  background: var(--ink-soft);
 }
 
 .stat .v {
-  font-size: 0.8rem;
+  font-family: var(--mono);
+  font-size: 11px;
   text-align: right;
-  color: var(--ink-dim);
 }
 
-/* 実値は素質より引っ込めるが、装飾ではなくデータなので読める明度にする */
 .stat .real {
-  font-size: 0.75rem;
-  color: #6f6a60;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-mid);
+  text-align: right;
 }
 
-/* 唯一のアクセント。上限に張り付いたステだけを光らせる */
+/* 上限に張り付いたステだけ立てる */
 .stat[data-peak='true'] .bar i {
-  background: var(--yolk);
+  background: var(--sun);
 }
 
 .stat[data-peak='true'] .v {
-  color: var(--yolk);
+  color: var(--accent-deep);
+  font-weight: 900;
 }
 
-/* ── 画面の切り替え ────────────────────────────── */
-
-.viewnav {
-  display: flex;
-  gap: 1.5rem;
-  margin: 0 0 2rem;
+.stat .train {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+  background: var(--sun);
+  border: 2.5px solid var(--ink);
+  border-radius: 9px;
+  padding: 3px 7px;
 }
 
-.viewnav button {
-  font-family: inherit;
-  font-size: 0.95rem;
-  color: var(--ink-faint);
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-}
-
-.viewnav button:hover {
-  color: var(--ink-dim);
-}
-
-/* 選択中は下線一辺だけで示す。囲わない */
-.viewnav button[data-on='true'] {
-  color: var(--ink);
-  box-shadow: 0 2px 0 var(--yolk);
+.stat .train:active {
+  transform: translateY(1px);
 }
 
 /* ── 戦闘 ──────────────────────────────────────── */
 
 .battle {
-  margin: 1.75rem 0 0;
+  margin: 14px 0 0;
 }
 
 .field {
-  display: flex;
-  gap: 1.75rem;
-  flex-wrap: wrap;
+  display: grid;
+  gap: 8px;
+}
+
+/* ⚠️ **敵と味方が同じ顔をしていた。**縦1本に6体並ぶので、
+   間隔だけでは「どっちがどっち」が読めない。面の色で分ける。 */
+.field::before {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--ink-mid);
 }
 
 .field.enemies {
-  margin-bottom: 2.5rem;
+  margin-bottom: 20px;
+}
+
+.field.enemies::before {
+  content: 'ENEMY';
+}
+
+.field.enemies .fighter {
+  background: #ffe0e9;
+}
+
+.field.allies::before {
+  content: 'PARTY';
 }
 
 .fighter {
   display: grid;
-  gap: 0.3rem;
-  /* ⚠️ start にすると中の棒の width:100% が内容幅に解決され、
-     個体ごとに HP バーの長さが変わる（数値検査では捕まらない崩れ） */
-  justify-items: stretch;
-  width: 9.5rem;
-  padding: 0.6rem;
+  grid-template-columns: 44px minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 4px;
+  align-items: center;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--small-radius);
+  box-shadow: var(--lift);
+  padding: 8px 10px;
 }
 
 .fighter .art {
-  justify-self: start;
-}
-
-/* 手番の者だけを立てる。行内の主役は1つ */
-.fighter[data-turn='true'] {
-  background: var(--bg-raised);
-  box-shadow: inset 2px 0 0 var(--yolk);
-}
-
-.fighter[data-down='true'] {
-  opacity: 0.28;
-}
-
-/* 対象を選ばせている間だけ、狙える相手を押せる形にする */
-.fighter[data-selectable='true'] {
-  cursor: pointer;
-  box-shadow: inset 0 0 0 1px var(--yolk);
-}
-
-.fighter[data-selectable='true']:hover {
-  background: var(--bg-raised);
+  grid-column: 1;
+  grid-row: 1 / 4;
 }
 
 .fighter .fname {
-  font-size: 0.8rem;
-  color: var(--ink-dim);
+  grid-column: 2;
+  font-size: 11px;
+  font-weight: 900;
 }
 
-.fighter .nums {
-  font-size: 0.72rem;
-  color: var(--ink-faint);
-}
-
+.fighter .nums,
 .fighter .badges {
-  font-size: 0.68rem;
-  color: var(--ink-faint);
-  line-height: 1.4;
+  grid-column: 2;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-mid);
+  line-height: 1.35;
+}
+
+/* ⭐ 手番の者だけを塗る */
+.fighter[data-turn='true'] {
+  background: var(--sun);
+}
+
+.fighter[data-down='true'] {
+  opacity: 0.35;
+  box-shadow: none;
+}
+
+/* 対象を選ばせている間だけ、狙える相手に輪をかける */
+.fighter[data-selectable='true'] {
+  cursor: pointer;
+  outline: 4px solid rgba(255, 159, 67, 0.45);
 }
 
 .meter {
   display: block;
+  grid-column: 2;
   width: 100%;
-  background: var(--track);
+  background: var(--card);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--pill);
   overflow: hidden;
 }
 
 .meter.hp {
-  height: 7px;
+  height: 11px;
 }
 
 .meter.hp i {
   display: block;
   height: 100%;
-  background: var(--ink-dim);
+  background: var(--hp);
 }
 
-/* ⭐ ゲージは「いつ動くか」を読む主役なので、HP より細くても色で立てる */
+/* ⭐ ゲージは「いつ動くか」を読む主役。HP より細くても色で立てる */
 .meter.gauge {
-  height: 4px;
+  height: 8px;
 }
 
 .meter.gauge i {
   display: block;
   height: 100%;
-  background: var(--yolk);
+  background: var(--gauge);
 }
 
+/* スキルは白いシート。⭐ 枠1（必殺）だけ幅いっぱいの1行にする */
 .commands {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 2.5rem 0 0;
-  min-height: 2.4rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 18px 0 0;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--card-radius);
+  box-shadow: var(--lift);
+  padding: 12px;
 }
 
 .commands .turnof {
-  font-size: 0.78rem;
-  color: var(--ink-dim);
-  margin-right: 0.5rem;
+  grid-column: 1 / -1;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-mid);
 }
 
 .commands button {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.45rem;
-  font-family: inherit;
-  font-size: 0.88rem;
-  color: var(--ink);
-  background: var(--bg-raised);
-  border: 0;
-  border-radius: 4px;
-  padding: 0.4rem 0.9rem;
-  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: left;
+  background: var(--sunk);
+  border: 3px solid var(--ink);
+  border-radius: var(--small-radius);
+  padding: 8px 10px;
 }
 
-.commands button:hover:not(:disabled) {
-  background: #262219;
+.commands button:first-of-type {
+  grid-column: 1 / -1;
+  background: var(--accent);
+  box-shadow: var(--lift);
+}
+
+.commands button:active:not(:disabled) {
+  transform: translateY(2px);
 }
 
 .commands button:disabled {
-  color: var(--ink-faint);
+  color: var(--ink-soft);
+  border-color: var(--ink-soft);
+  background: var(--card);
+  box-shadow: none;
   cursor: default;
 }
 
 .commands .ct {
-  font-size: 0.7rem;
-  color: var(--ink-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--ink-mid);
 }
 
 .commands .verdict {
-  font-size: 1.1rem;
-  color: var(--yolk);
+  grid-column: 1 / -1;
+  font-family: var(--display);
+  font-size: 17px;
   margin: 0;
 }
 
 .battlelog {
-  margin: 2rem 0 0;
-  font-size: 0.75rem;
-  line-height: 1.75;
-  color: var(--ink-faint);
-  max-height: 11rem;
+  margin: 14px 0 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--ink-mid);
+  background: var(--sunk);
+  border-radius: var(--small-radius);
+  padding: 10px 12px;
+  max-height: 150px;
   overflow-y: auto;
 }
 
 /* ── 卵の強奪（発射） ──────────────────────────── */
 
 .steal {
-  margin: 1.5rem 0 0;
+  margin: 12px 0 0;
 }
 
 /* ⭐ 主役はフィールドそのもの。周りは徹底して引っ込める */
 .stealfield {
   display: block;
-  margin: 1.25rem 0 0.75rem;
-  background: #1a1713;
+  margin: 12px auto 8px;
+  border: 4px solid var(--ink);
+  border-radius: var(--card-radius);
+  box-shadow: var(--lift-deep);
   cursor: grab;
   touch-action: none;
   image-rendering: pixelated;
@@ -437,28 +564,33 @@ h1 {
 /* ── 巣 ────────────────────────────────────────── */
 
 .nestlist {
-  margin: 2rem 0 0;
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 12px;
 }
 
 .nestrow {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
-  column-gap: 1.5rem;
-  padding: 0.8rem 0.75rem;
+  column-gap: 10px;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--card-radius);
+  box-shadow: var(--lift);
+  padding: 10px 12px;
 }
 
-.nestrow:hover {
-  background: var(--bg-raised);
-}
-
-/* ⚠️ これが無いと3つの span が横に流れて文字が繋がる。
-   「見切れ」の数値検査はすり抜ける（切れてはおらず、並びが違うだけ）。 */
 .nestrow .ident {
   display: flex;
   flex-direction: column;
-  line-height: 1.35;
+  line-height: 1.3;
   min-width: 0;
+}
+
+.nestrow .name {
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .nestrow .controls {
@@ -466,130 +598,164 @@ h1 {
 }
 
 .nestrow .controls button {
-  background: var(--bg-raised);
-  color: var(--ink);
-  padding: 0.35rem 1.1rem;
+  padding: 5px 14px;
 }
 
-.nestrow:hover .controls button {
-  background: var(--yolk);
-  color: #1a1408;
+/* ⭐ 終点だけは塗る。ここが目指す先だと一目で分かるように */
+.nestrow.boss {
+  background: var(--violet);
+}
+
+.nestrow.boss .controls button {
+  background: var(--accent);
+}
+
+/* ⚠️ 薄い文字色は白地の上でしか成り立たない。塗った面の上では読めない */
+.nestrow.boss .cid,
+.nestrow.boss .tags {
+  color: var(--ink);
 }
 
 .eggshelf {
-  margin: 2rem 0 0;
-  padding: 1rem 0.75rem;
-  background: var(--bg-raised);
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--card-radius);
+  box-shadow: var(--lift);
+  padding: 12px;
+  margin: 16px 0 0;
 }
 
 .shelftitle {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
-  color: var(--ink);
+  font-size: 12px;
+  font-weight: 900;
+  margin: 0 0 8px;
 }
 
 .eggrow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.25rem 0;
-  font-size: 0.78rem;
-  color: var(--ink-dim);
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-mid);
+  padding: 5px 0;
 }
 
 .eggrow button {
   font-family: inherit;
-  font-size: 0.78rem;
-  color: #1a1408;
-  background: var(--yolk);
-  border: 0;
-  border-radius: 3px;
-  padding: 0.25rem 0.9rem;
-  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--sun);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--pill);
+  padding: 3px 12px;
+  white-space: nowrap;
 }
 
 .eggrow button:disabled {
-  background: var(--track);
-  color: var(--ink-faint);
+  background: var(--sunk);
+  color: var(--ink-soft);
+  border-color: var(--ink-soft);
   cursor: default;
 }
 
 .portrait.big {
-  margin: 1.5rem 0;
+  margin: 16px 0;
+  text-align: center;
 }
 
 .result {
-  margin: 2rem 0 0;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--card-radius);
+  box-shadow: var(--lift);
+  padding: 14px;
+  margin: 16px 0 0;
+}
+
+.result .lead {
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 400;
 }
 
 /* ── 配合 ──────────────────────────────────────── */
 
 .breedpreview {
-  margin: 1.5rem 0 0;
-  min-height: 2rem;
-}
-
-.breedpreview .note {
-  max-width: none;
+  min-height: 24px;
+  margin: 12px 0 0;
 }
 
 .roster.picker {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
-  gap: 0.3rem;
-  margin: 1.5rem 0 0;
+  gap: 8px;
+  margin: 14px 0 0;
 }
 
 .pick {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr);
   align-items: center;
-  column-gap: 1rem;
+  column-gap: 10px;
   text-align: left;
-  font-family: inherit;
-  background: none;
-  border: 0;
-  border-radius: 4px;
-  padding: 0.6rem 0.7rem;
-  cursor: pointer;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--small-radius);
+  box-shadow: var(--lift);
+  padding: 8px 10px;
   color: inherit;
 }
 
-.pick:hover {
-  background: var(--bg-raised);
+/* 選ばれている2体だけを塗る */
+.pick[data-on='true'] {
+  background: var(--mint);
 }
 
-/* 選ばれている2体だけを立てる */
-.pick[data-on='true'] {
-  background: var(--bg-raised);
-  box-shadow: inset 2px 0 0 var(--yolk);
+.pick:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--ink);
 }
 
 .pickbody {
   display: flex;
   flex-direction: column;
-  line-height: 1.35;
+  line-height: 1.3;
   min-width: 0;
 }
 
-.pick .tags {
-  font-size: 0.72rem;
+.pickbody .name {
+  font-size: 12px;
+  font-weight: 900;
 }
 
-.pick .cid {
-  font-size: 0.68rem;
+/* ── ギャラリー（意匠の確認用。遊びの画面ではない） ── */
+
+.shelf {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 14px 0 0;
 }
 
-/* 育成の + は「押せるもの」なので角丸 */
-.stat .train {
+.frame {
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--small-radius);
+  box-shadow: var(--lift);
+  padding: 10px;
+  text-align: center;
+}
+
+.frame .label {
   font-family: var(--mono);
-  font-size: 0.75rem;
-  line-height: 1;
-  color: #1a1408;
-  background: var(--yolk);
-  border: 0;
-  border-radius: 3px;
-  padding: 0.15rem 0.4rem;
-  cursor: pointer;
+  font-size: 10px;
+  color: var(--ink-mid);
+  margin-top: 6px;
+}
+
+.plate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }

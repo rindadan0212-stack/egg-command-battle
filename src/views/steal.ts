@@ -20,8 +20,19 @@ import {
 } from '../game/steal.ts'
 import { spriteToCanvas } from '../render/sprite.ts'
 
-/** 画面上の高さ。奥行きが深い巣ほど縦長に見える（幅が狭く見える）。 */
-const DISPLAY_HEIGHT = 460
+/** 画面に置ける最大の枠。⚠️ **縦持ち1本の中に収める。**
+ *
+ *  この枠に**内接**させる（縦横比は保つ）ので、
+ *  ⭐ 奥が深い巣ほど「細く高く」見え、浅い巣ほど「幅広く短く」見える。
+ *  ⚠️ 以前は高さを固定して幅を可変にしていたが、段1で幅 387px になり
+ *  390px の画面からはみ出し、段5では 189px まで痩せた。 */
+const MAX_WIDTH = 350
+const MAX_HEIGHT = 540
+
+/** ⚠️ 唯一の暗色。style.css の `--ink` と同じ値。
+ *  canvas は CSS 変数を直接読めないので、ここだけ二重に持つことになる。
+ *  片方だけ変えると画面の中で色が2種類になる。 */
+const INK = '#2b3350'
 
 export interface StealView {
   readonly element: HTMLElement
@@ -35,7 +46,7 @@ export function renderSteal(
   onDone: (outcome: StealOutcome) => void,
 ): StealView {
   const budget = distanceFor(party)
-  const scale = DISPLAY_HEIGHT / field.height
+  const scale = Math.min(MAX_WIDTH / FIELD_WIDTH, MAX_HEIGHT / field.height)
 
   const element = document.createElement('div')
   element.className = 'steal'
@@ -88,8 +99,13 @@ export function renderSteal(
     if (!ctx) return
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-    // 地
-    ctx.fillStyle = '#1a1713'
+    // 地。⭐ 巣の奥ほど暗い、ではなく**空から地面へ**の縦のグラデーション。
+    //    モック（`参考/画面モック.html` の Explore）と同じ並び
+    const sky = ctx.createLinearGradient(0, 0, 0, canvas.height)
+    sky.addColorStop(0, '#bdebff')
+    sky.addColorStop(0.58, '#dff6e4')
+    sky.addColorStop(1, '#ffe7b8')
+    ctx.fillStyle = sky
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
     // 親が塞ぐ帯。⚠️ 帯の色は**当たり判定そのもの**なので、
@@ -99,9 +115,12 @@ export function renderSteal(
       const w = (span.to - span.from) * scale
       const y = field.bandTop * scale
       const h = (field.bandBottom - field.bandTop) * scale
-      // ⚠️ 面か線かどちらか一方。二重にすると帯だけが画面で強くなりすぎる
-      ctx.fillStyle = '#332c22'
+      // ⚠️ 面と線を**両方**使う。この意匠では輪郭が言語なので、面だけだと浮く
+      ctx.fillStyle = '#c08a55'
       ctx.fillRect(x, y, w, h)
+      ctx.strokeStyle = INK
+      ctx.lineWidth = 3
+      ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3)
     }
 
     // ⭐ 親そのものを立たせる。棒だけでは「立ちはだかっている」に見えない
@@ -117,8 +136,9 @@ export function renderSteal(
     }
 
     // 卵
-    ctx.fillStyle = '#e8dcc0'
-    ctx.strokeStyle = '#3b2f21'
+    ctx.fillStyle = '#ffe9a8'
+    ctx.strokeStyle = INK
+    ctx.lineWidth = 4
     ctx.beginPath()
     ctx.ellipse(
       field.egg.x * scale,
@@ -134,8 +154,8 @@ export function renderSteal(
 
     // 軌跡
     if (run) {
-      ctx.strokeStyle = '#f0b429'
-      ctx.lineWidth = 2
+      ctx.strokeStyle = '#ff9f43'
+      ctx.lineWidth = 3
       ctx.beginPath()
       const upto = Math.min(shown, run.path.length - 1)
       for (let i = 0; i <= upto; i++) {
@@ -151,10 +171,13 @@ export function renderSteal(
       ? (run.path[Math.min(shown, run.path.length - 1)] as { x: number; y: number })
       : field.start
     // ⚠️ 当たり判定は円。絵はその上に乗せるだけで、判定の大きさは変えない
-    ctx.fillStyle = '#f0b429'
+    ctx.fillStyle = '#ffc93c'
+    ctx.strokeStyle = INK
+    ctx.lineWidth = 3
     ctx.beginPath()
     ctx.arc(at.x * scale, at.y * scale, RUNNER_RADIUS * scale, 0, Math.PI * 2)
     ctx.fill()
+    ctx.stroke()
     ctx.drawImage(
       leadArt,
       Math.round(at.x * scale - leadArt.width / 2),
@@ -166,9 +189,9 @@ export function renderSteal(
       const dx = aim.from.x - aim.to.x
       const dy = aim.from.y - aim.to.y
       const len = Math.hypot(dx, dy) || 1
-      ctx.strokeStyle = '#8a8377'
-      ctx.setLineDash([4, 4])
-      ctx.lineWidth = 2
+      ctx.strokeStyle = INK
+      ctx.setLineDash([5, 6])
+      ctx.lineWidth = 3
       ctx.beginPath()
       ctx.moveTo(field.start.x * scale, field.start.y * scale)
       ctx.lineTo(

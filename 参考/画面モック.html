@@ -1,0 +1,706 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Monster Game 画面モック（Claude デザインからの抽出）</title>
+<!-- 出所: Downloads/Monster Game.html（11MB のバンドル）から本体だけ取り出したもの。
+     フォント 246個（10.5MB）は外してあるので、Mochiy Pop One / Noto Sans JP / DM Mono は
+     入っていないと別書体で表示される。値を読む目的なら問題ない。 -->
+<link href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&family=Noto+Sans+JP:wght@400;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#FFF6E5; }
+  a { color:#F2762E; text-decoration:none; }
+  a:hover { color:#ff9a5c; }
+</style>
+
+</helmet>
+<div style="min-height:100vh; padding:56px 48px 80px; background:#FFF6E5; font-family:'Noto Sans JP',sans-serif; color:#2B3350;">
+
+  <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:34px;">
+    <div style="font-family:'Mochiy Pop One',sans-serif; font-size:30px; color:#2B3350;">タマゴハンター</div>
+    <div style="font-family:'DM Mono',monospace; font-size:12px; letter-spacing:.16em; color:#8E93A8;">MONSTER BREEDING RPG — SCREEN MOCKS</div>
+  </div>
+
+  <div style="display:flex; gap:44px; flex-wrap:wrap; align-items:flex-start;">
+
+    <div style="display:flex; flex-direction:column; gap:14px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:26px; height:26px; border-radius:9px; background:#FFC93C; border:2.5px solid #2B3350; display:flex; align-items:center; justify-content:center; font-family:'Mochiy Pop One',sans-serif; font-size:13px;">1</div>
+        <div style="font-weight:900; font-size:15px;">ホーム</div>
+        <div style="font-family:'DM Mono',monospace; font-size:11px; color:#8E93A8;">HOME</div>
+      </div>
+
+      <div data-screen-label="Home" style="position:relative; width:390px; height:844px; overflow:hidden; border:4px solid #2B3350; border-radius:22px; box-shadow:10px 12px 0 rgba(43,51,80,.16); background:linear-gradient(180deg,#8FD8F7 0%, #BDEBFF 44%, #FFE7B8 100%); display:flex; flex-direction:column;">
+
+        <div style="position:absolute; left:-40px; top:96px; width:190px; height:76px; border-radius:999px; background:rgba(255,255,255,.85);"></div>
+        <div style="position:absolute; right:-30px; top:180px; width:150px; height:62px; border-radius:999px; background:rgba(255,255,255,.7);"></div>
+
+        <div style="position:relative; display:flex; align-items:center; justify-content:space-between; padding:16px;">
+          <div style="display:flex; align-items:center; gap:9px; background:#fff; border:3px solid #2B3350; border-radius:999px; padding:5px 15px 5px 5px; box-shadow:0 4px 0 #2B3350;">
+            <div style="width:34px; height:34px; border-radius:50%; background:#FF7BA9; border:2.5px solid #2B3350;"></div>
+            <div style="line-height:1.15;">
+              <div style="font-size:12px; font-weight:900;">ミネオ</div>
+              <div style="font-family:'DM Mono',monospace; font-size:10px; color:#8E93A8;">Lv.28</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <div style="display:flex; align-items:center; gap:6px; background:#fff; border:3px solid #2B3350; border-radius:999px; padding:6px 12px; box-shadow:0 4px 0 #2B3350;">
+              <div style="width:11px; height:11px; border-radius:3px; transform:rotate(45deg); background:#4FD1C5; border:2px solid #2B3350;"></div>
+              <div style="font-family:'DM Mono',monospace; font-size:12px; font-weight:500;">1,240</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px; background:#fff; border:3px solid #2B3350; border-radius:999px; padding:6px 12px; box-shadow:0 4px 0 #2B3350;">
+              <div style="width:12px; height:12px; border-radius:50%; background:#FFC93C; border:2px solid #2B3350;"></div>
+              <div style="font-family:'DM Mono',monospace; font-size:12px; font-weight:500;">32/40</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="position:relative; margin:6px 16px 0; padding:10px 14px; border-radius:16px; background:#fff; border:3px solid #2B3350; box-shadow:0 4px 0 #2B3350; display:flex; align-items:center; justify-content:space-between;">
+          <div>
+            <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.14em; color:#F2762E;">NOW EVENT</div>
+            <div style="font-size:13px; font-weight:900; margin-top:2px;">きりの谷 — 伝説のタマゴ 出現中</div>
+          </div>
+          <div style="font-family:'DM Mono',monospace; font-size:11px; color:#8E93A8;">23:41</div>
+        </div>
+
+        <div style="position:relative; flex:1; display:flex; align-items:flex-end; justify-content:center; padding-bottom:14px;">
+
+          <div style="position:absolute; left:6px; bottom:200px; width:124px; text-align:center;">
+            <div style="display:inline-block; background:#fff; border:2.5px solid #2B3350; border-radius:999px; padding:3px 12px; font-size:11px; font-weight:900; white-space:nowrap;">アクアリム</div>
+            <div style="font-family:'DM Mono',monospace; font-size:10px; color:#5C6480; margin-top:3px; margin-bottom:8px;">02 / Lv.31</div>
+            <div style="width:110px; height:110px; margin:0 auto; border-radius:50%; background:#6FD3F7; border:4px solid #2B3350; box-shadow:0 6px 0 #2B3350; position:relative;">
+              <div style="position:absolute; left:26px; top:42px; width:14px; height:18px; border-radius:50%; background:#2B3350;"></div>
+              <div style="position:absolute; left:62px; top:42px; width:14px; height:18px; border-radius:50%; background:#2B3350;"></div>
+              <div style="position:absolute; left:50%; top:70px; transform:translateX(-50%); width:26px; height:11px; border-radius:0 0 16px 16px; background:#2B3350;"></div>
+            </div>
+          </div>
+
+          <div style="position:absolute; right:6px; bottom:214px; width:124px; text-align:center;">
+            <div style="display:inline-block; background:#fff; border:2.5px solid #2B3350; border-radius:999px; padding:3px 12px; font-size:11px; font-weight:900; white-space:nowrap;">リーフィ</div>
+            <div style="font-family:'DM Mono',monospace; font-size:10px; color:#5C6480; margin-top:3px; margin-bottom:8px;">03 / Lv.27</div>
+            <div style="width:104px; height:104px; margin:0 auto; border-radius:50%; background:#9BE07A; border:4px solid #2B3350; box-shadow:0 6px 0 #2B3350; position:relative;">
+              <div style="position:absolute; left:24px; top:40px; width:13px; height:17px; border-radius:50%; background:#2B3350;"></div>
+              <div style="position:absolute; left:58px; top:40px; width:13px; height:17px; border-radius:50%; background:#2B3350;"></div>
+              <div style="position:absolute; left:50%; top:67px; transform:translateX(-50%); width:24px; height:10px; border-radius:0 0 16px 16px; background:#2B3350;"></div>
+            </div>
+          </div>
+
+          <div style="position:relative; z-index:2; text-align:center; margin-bottom:52px;">
+            <div style="width:188px; height:188px; border-radius:50%; background:#FF7BA9; border:5px solid #2B3350; box-shadow:0 9px 0 #2B3350; position:relative; margin:0 auto;">
+              <div style="position:absolute; left:16px; top:16px; width:44px; height:32px; border-radius:50%; background:rgba(255,255,255,.55); transform:rotate(-24deg);"></div>
+              <div style="position:absolute; left:46px; top:78px; width:22px; height:29px; border-radius:50%; background:#2B3350;"></div>
+              <div style="position:absolute; left:118px; top:78px; width:22px; height:29px; border-radius:50%; background:#2B3350;"></div>
+              <div style="position:absolute; left:50%; top:120px; transform:translateX(-50%); width:44px; height:18px; border-radius:0 0 24px 24px; background:#2B3350;"></div>
+            </div>
+            <div style="margin-top:12px; display:inline-block; background:#FFC93C; border:3px solid #2B3350; border-radius:999px; padding:5px 18px; font-family:'Mochiy Pop One',sans-serif; font-size:17px; box-shadow:0 4px 0 #2B3350; white-space:nowrap;">フランベル</div>
+            <div style="font-family:'DM Mono',monospace; font-size:11px; color:#2B3350; margin-top:6px;">LEADER / Lv.44</div>
+          </div>
+
+          <div style="position:absolute; bottom:22px; left:50%; transform:translateX(-50%); width:314px; height:82px; border-radius:50%; background:#FFD98A; border:4px solid #2B3350;"></div>
+          <div style="position:absolute; bottom:14px; left:50%; transform:translateX(-50%); width:314px; height:44px; border-radius:0 0 28px 28px; background:#F5B24E; border:4px solid #2B3350; border-top:none;"></div>
+        </div>
+
+        <div style="position:relative; padding:0 14px 18px; display:grid; grid-template-columns:repeat(4,1fr); gap:10px;">
+          <div style="border-radius:18px; padding:12px 4px 10px; text-align:center; background:#fff; border:3.5px solid #2B3350; box-shadow:0 5px 0 #2B3350;">
+            <div style="width:34px; height:30px; margin:0 auto 8px; border-radius:8px; background:#4FD1C5; border:3px solid #2B3350;"></div>
+            <div style="font-size:12px; font-weight:900;">BOX</div>
+          </div>
+          <div style="border-radius:18px; padding:12px 4px 10px; text-align:center; background:#fff; border:3.5px solid #2B3350; box-shadow:0 5px 0 #2B3350;">
+            <div style="width:26px; height:32px; margin:0 auto 6px; border-radius:50% 50% 46% 46% / 62% 62% 38% 38%; background:#FFE9A8; border:3px solid #2B3350;"></div>
+            <div style="font-size:12px; font-weight:900;">孵化</div>
+          </div>
+          <div style="border-radius:18px; padding:12px 4px 10px; text-align:center; background:#fff; border:3.5px solid #2B3350; box-shadow:0 5px 0 #2B3350;">
+            <div style="height:30px; margin:0 auto 8px; display:flex; align-items:center; justify-content:center;">
+              <div style="width:24px; height:24px; border-radius:50%; background:#FF7BA9; border:3px solid #2B3350;"></div>
+              <div style="width:24px; height:24px; border-radius:50%; background:#B79BFF; border:3px solid #2B3350; margin-left:-9px;"></div>
+            </div>
+            <div style="font-size:12px; font-weight:900;">配合</div>
+          </div>
+          <div style="border-radius:18px; padding:12px 4px 10px; text-align:center; background:#FF9F43; border:3.5px solid #2B3350; box-shadow:0 5px 0 #2B3350;">
+            <div style="width:32px; height:32px; margin:0 auto 6px; border-radius:50%; background:#FFE9A8; border:5px solid #2B3350;"></div>
+            <div style="font-size:12px; font-weight:900;">探索</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:14px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:26px; height:26px; border-radius:9px; background:#FF7BA9; border:2.5px solid #2B3350; display:flex; align-items:center; justify-content:center; font-family:'Mochiy Pop One',sans-serif; font-size:13px; color:#fff;">2</div>
+        <div style="font-weight:900; font-size:15px;">戦闘</div>
+        <div style="font-family:'DM Mono',monospace; font-size:11px; color:#8E93A8;">BATTLE</div>
+      </div>
+
+      <div data-screen-label="Battle" style="position:relative; width:390px; height:844px; overflow:hidden; border:4px solid #2B3350; border-radius:22px; box-shadow:10px 12px 0 rgba(43,51,80,.16); background:linear-gradient(180deg,#A8E4F7 0%, #CFF0FF 40%, #FFE7B8 62%); display:flex; flex-direction:column;">
+
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 16px 6px;">
+          <div style="width:36px; height:36px; border-radius:12px; background:#fff; border:3px solid #2B3350; box-shadow:0 4px 0 #2B3350; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:900;">‹</div>
+          <div style="text-align:center;">
+            <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.16em; color:#5C6480;">WAVE 3 / 3</div>
+            <div style="font-size:14px; font-weight:900; white-space:nowrap;">きりの谷 深層</div>
+          </div>
+          <div style="font-family:'DM Mono',monospace; font-size:11px; color:#5C6480;">TURN 04</div>
+        </div>
+
+        <div style="position:relative; flex:1; display:flex; padding:8px 14px 0;">
+          <div style="width:170px; display:flex; flex-direction:column; justify-content:center; gap:20px;">
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; align-items:center; gap:9px;">
+                <div style="position:relative; width:56px; height:56px; border-radius:50%; background:#FF7BA9; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350;">
+                  <div style="position:absolute; left:13px; top:22px; width:8px; height:11px; border-radius:50%; background:#2B3350;"></div>
+                  <div style="position:absolute; left:32px; top:22px; width:8px; height:11px; border-radius:50%; background:#2B3350;"></div>
+                </div>
+                <div style="line-height:1.25; white-space:nowrap;">
+                  <div style="font-size:11px; font-weight:900;">フランベル</div>
+                  <div style="font-family:'DM Mono',monospace; font-size:10px; color:#5C6480;">Lv.44</div>
+                </div>
+              </div>
+              <div style="height:11px; border-radius:99px; background:#fff; border:2.5px solid #2B3350; overflow:hidden;">
+                <div style="height:100%; width:82%; background:#5FD97A;"></div>
+              </div>
+              <div style="height:8px; border-radius:99px; background:#fff; border:2.5px solid #2B3350; overflow:hidden;">
+                <div style="height:100%; width:100%; background:#4FB8F7;"></div>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; align-items:center; gap:9px;">
+                <div style="position:relative; width:56px; height:56px; border-radius:50%; background:#6FD3F7; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350;">
+                  <div style="position:absolute; left:13px; top:22px; width:8px; height:11px; border-radius:50%; background:#2B3350;"></div>
+                  <div style="position:absolute; left:32px; top:22px; width:8px; height:11px; border-radius:50%; background:#2B3350;"></div>
+                </div>
+                <div style="line-height:1.25; white-space:nowrap;">
+                  <div style="font-size:11px; font-weight:900;">アクアリム</div>
+                  <div style="font-family:'DM Mono',monospace; font-size:10px; color:#5C6480;">Lv.31</div>
+                </div>
+              </div>
+              <div style="height:11px; border-radius:99px; background:#fff; border:2.5px solid #2B3350; overflow:hidden;">
+                <div style="height:100%; width:64%; background:#5FD97A;"></div>
+              </div>
+              <div style="height:8px; border-radius:99px; background:#fff; border:2.5px solid #2B3350; overflow:hidden;">
+                <div style="height:100%; width:72%; background:#4FB8F7;"></div>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; align-items:center; gap:9px;">
+                <div style="position:relative; width:56px; height:56px; border-radius:50%; background:#9BE07A; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350;">
+                  <div style="position:absolute; left:13px; top:22px; width:8px; height:11px; border-radius:50%; background:#2B3350;"></div>
+                  <div style="position:absolute; left:32px; top:22px; width:8px; height:11px; border-radius:50%; background:#2B3350;"></div>
+                </div>
+                <div style="line-height:1.25; white-space:nowrap;">
+                  <div style="font-size:11px; font-weight:900;">リーフィ</div>
+                  <div style="font-family:'DM Mono',monospace; font-size:10px; color:#5C6480;">Lv.27</div>
+                </div>
+              </div>
+              <div style="height:11px; border-radius:99px; background:#fff; border:2.5px solid #2B3350; overflow:hidden;">
+                <div style="height:100%; width:95%; background:#5FD97A;"></div>
+              </div>
+              <div style="height:8px; border-radius:99px; background:#fff; border:2.5px solid #2B3350; overflow:hidden;">
+                <div style="height:100%; width:45%; background:#4FB8F7;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding-bottom:24px;">
+            <div style="width:176px;">
+              <div style="display:flex; justify-content:space-between; font-family:'DM Mono',monospace; font-size:10px; color:#2B3350; margin-bottom:5px;">
+                <span>BOSS ガイアドン</span><span>68%</span>
+              </div>
+              <div style="height:13px; border-radius:99px; background:#fff; border:3px solid #2B3350; overflow:hidden;">
+                <div style="height:100%; width:68%; background:#FF6B6B;"></div>
+              </div>
+            </div>
+            <div style="position:relative;">
+              <div style="width:186px; height:198px; border-radius:48% 48% 44% 44% / 52% 52% 42% 42%; background:#B79BFF; border:5px solid #2B3350; box-shadow:0 9px 0 #2B3350; position:relative;">
+                <div style="position:absolute; left:20px; top:22px; width:44px; height:30px; border-radius:50%; background:rgba(255,255,255,.5); transform:rotate(-22deg);"></div>
+                <div style="position:absolute; left:40px; top:92px; width:26px; height:16px; border-radius:50%; background:#2B3350;"></div>
+                <div style="position:absolute; left:118px; top:92px; width:26px; height:16px; border-radius:50%; background:#2B3350;"></div>
+                <div style="position:absolute; left:50%; top:130px; transform:translateX(-50%); width:64px; height:22px; border-radius:6px 6px 24px 24px; background:#2B3350;"></div>
+              </div>
+              <div style="position:absolute; left:50%; top:6px; transform:translateX(-50%); font-family:'Mochiy Pop One',sans-serif; font-size:36px; color:#FFC93C; -webkit-text-stroke:4px #2B3350; paint-order:stroke;">3120</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:300px; padding:18px 16px 20px; background:#fff; border-top:4px solid #2B3350; border-radius:26px 26px 0 0; display:flex; flex-direction:column; gap:14px;">
+          <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.16em; color:#8E93A8;">SELECT SKILL</div>
+
+          <div style="align-self:center; width:280px; padding:16px 20px; border-radius:26px; background:#FFC93C; border:4px solid #2B3350; box-shadow:0 6px 0 #2B3350; text-align:center;">
+            <div style="font-family:'Mochiy Pop One',sans-serif; font-size:19px;">スキル1 · 業火の咆哮</div>
+            <div style="font-family:'DM Mono',monospace; font-size:11px; color:#5C6480; margin-top:3px;">全体 220% / SP 40</div>
+          </div>
+
+          <div style="display:flex; gap:12px; margin-top:4px;">
+            <div style="flex:1; padding:16px 10px; border-radius:24px; background:#6FD3F7; border:4px solid #2B3350; box-shadow:0 6px 0 #2B3350; text-align:center;">
+              <div style="font-family:'Mochiy Pop One',sans-serif; font-size:16px;">スキル2</div>
+              <div style="font-family:'DM Mono',monospace; font-size:10px; color:#2B3350; margin-top:3px;">水刃 / 単体 340%</div>
+            </div>
+            <div style="flex:1; padding:16px 10px; border-radius:24px; background:#9BE07A; border:4px solid #2B3350; box-shadow:0 6px 0 #2B3350; text-align:center;">
+              <div style="font-family:'Mochiy Pop One',sans-serif; font-size:16px;">スキル3</div>
+              <div style="font-family:'DM Mono',monospace; font-size:10px; color:#2B3350; margin-top:3px;">再生 / 味方HP回復</div>
+            </div>
+          </div>
+
+          <div style="margin-top:auto; text-align:center; font-family:'DM Mono',monospace; font-size:11px; color:#8E93A8;">フランベル の 業火の咆哮！ 弱点をついた</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:14px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:26px; height:26px; border-radius:9px; background:#4FD1C5; border:2.5px solid #2B3350; display:flex; align-items:center; justify-content:center; font-family:'Mochiy Pop One',sans-serif; font-size:13px;">3</div>
+        <div style="font-weight:900; font-size:15px;">探索</div>
+        <div style="font-family:'DM Mono',monospace; font-size:11px; color:#8E93A8;">EXPLORE</div>
+      </div>
+
+      <div data-screen-label="Explore" style="position:relative; width:390px; height:844px; overflow:hidden; border:4px solid #2B3350; border-radius:22px; box-shadow:10px 12px 0 rgba(43,51,80,.16); background:linear-gradient(180deg,#BDEBFF 0%, #DFF6E4 58%, #FFE7B8 100%);">
+
+        <div style="position:absolute; left:0; top:0; bottom:0; width:30px; background:repeating-linear-gradient(180deg,#8C6A4A 0 30px,#7A5B3E 30px 60px); border-right:4px solid #2B3350;"></div>
+        <div style="position:absolute; right:0; top:0; bottom:0; width:30px; background:repeating-linear-gradient(180deg,#8C6A4A 0 30px,#7A5B3E 30px 60px); border-left:4px solid #2B3350;"></div>
+
+        <div style="position:absolute; left:34px; right:34px; top:14px; display:flex; align-items:center; gap:10px;">
+          <div style="width:34px; height:34px; border-radius:12px; background:#fff; border:3px solid #2B3350; box-shadow:0 4px 0 #2B3350; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:900;">‹</div>
+          <div style="flex:1;">
+            <div style="display:flex; justify-content:space-between; font-family:'DM Mono',monospace; font-size:10px; color:#2B3350; margin-bottom:4px;">
+              <span>親 ガイアドン</span><span>72%</span>
+            </div>
+            <div style="height:12px; border-radius:99px; background:#fff; border:3px solid #2B3350; overflow:hidden;">
+              <div style="height:100%; width:72%; background:#FF6B6B;"></div>
+            </div>
+          </div>
+          <div style="background:#FFC93C; border:3px solid #2B3350; border-radius:999px; padding:4px 12px; font-family:'DM Mono',monospace; font-size:12px; box-shadow:0 4px 0 #2B3350;">×3</div>
+        </div>
+
+        <div style="position:absolute; left:50%; top:74px; transform:translateX(-50%); text-align:center;">
+          <div style="width:76px; height:94px; margin:0 auto; border-radius:50% 50% 46% 46% / 60% 60% 40% 40%; background:#FFE9A8; border:4px solid #2B3350; position:relative;">
+            <div style="position:absolute; left:14px; top:16px; width:22px; height:16px; border-radius:50%; background:rgba(255,255,255,.75); transform:rotate(-22deg);"></div>
+            <div style="position:absolute; left:0; right:0; top:52px; height:8px; background:repeating-linear-gradient(90deg,#FF9F43 0 10px,transparent 10px 20px);"></div>
+          </div>
+          <div style="width:140px; height:36px; margin:-14px auto 0; border-radius:50%; background:#C08A55; border:4px solid #2B3350;"></div>
+          <div style="margin-top:6px; display:inline-block; background:#fff; border:2.5px solid #2B3350; border-radius:999px; padding:2px 12px; font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.12em;">EGG · LEGEND</div>
+        </div>
+
+        <div style="position:absolute; left:206px; top:236px; width:150px; height:150px; margin:-75px 0 0 -75px; border-radius:50%; background:#B79BFF; border:5px solid #2B3350; box-shadow:0 8px 0 #2B3350;">
+          <div style="position:absolute; left:18px; top:18px; width:38px; height:26px; border-radius:50%; background:rgba(255,255,255,.5); transform:rotate(-22deg);"></div>
+          <div style="position:absolute; left:34px; top:66px; width:22px; height:14px; border-radius:50%; background:#2B3350;"></div>
+          <div style="position:absolute; left:90px; top:66px; width:22px; height:14px; border-radius:50%; background:#2B3350;"></div>
+          <div style="position:absolute; left:50%; top:98px; transform:translateX(-50%); width:50px; height:18px; border-radius:5px 5px 20px 20px; background:#2B3350;"></div>
+        </div>
+
+        <div style="position:absolute; left:118px; top:604px; width:14px; height:14px; border-radius:50%; background:#fff; border:2.5px solid #2B3350;"></div>
+        <div style="position:absolute; left:96px; top:548px; width:13px; height:13px; border-radius:50%; background:#fff; border:2.5px solid #2B3350;"></div>
+        <div style="position:absolute; left:74px; top:492px; width:12px; height:12px; border-radius:50%; background:#fff; border:2.5px solid #2B3350;"></div>
+        <div style="position:absolute; left:56px; top:436px; width:11px; height:11px; border-radius:50%; background:#fff; border:2.5px solid #2B3350;"></div>
+        <div style="position:absolute; left:66px; top:382px; width:10px; height:10px; border-radius:50%; background:#fff; border:2.5px solid #2B3350;"></div>
+        <div style="position:absolute; left:98px; top:334px; width:10px; height:10px; border-radius:50%; background:#fff; border:2.5px solid #2B3350;"></div>
+        <div style="position:absolute; left:136px; top:296px; width:9px; height:9px; border-radius:50%; background:#fff; border:2.5px solid #2B3350;"></div>
+
+        <div style="position:absolute; left:44px; top:352px; width:0; height:0; border-left:17px solid transparent; border-right:17px solid transparent; border-bottom:26px solid #FFC93C; filter:drop-shadow(0 0 0 #2B3350); transform:rotate(18deg);"></div>
+
+        <div style="position:absolute; left:150px; top:672px; width:96px; height:96px; border-radius:50%; background:#FF7BA9; border:5px solid #2B3350; box-shadow:0 8px 0 #2B3350;">
+          <div style="position:absolute; left:12px; top:12px; width:26px; height:18px; border-radius:50%; background:rgba(255,255,255,.55); transform:rotate(-22deg);"></div>
+          <div style="position:absolute; left:22px; top:42px; width:12px; height:16px; border-radius:50%; background:#2B3350;"></div>
+          <div style="position:absolute; left:52px; top:42px; width:12px; height:16px; border-radius:50%; background:#2B3350;"></div>
+          <div style="position:absolute; left:50%; top:66px; transform:translateX(-50%); width:26px; height:11px; border-radius:0 0 16px 16px; background:#2B3350;"></div>
+        </div>
+
+        <div style="position:absolute; left:198px; top:718px; width:96px; height:5px; background:repeating-linear-gradient(90deg,#2B3350 0 9px,transparent 9px 18px); transform:rotate(-52deg); transform-origin:0 50%;"></div>
+
+        <div style="position:absolute; left:50%; bottom:26px; transform:translateX(-50%); background:#fff; border:3px solid #2B3350; border-radius:999px; padding:8px 18px; font-size:12px; font-weight:900; box-shadow:0 5px 0 #2B3350; white-space:nowrap;">引っ張って離す → 壁で反射して親に当てる</div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:14px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:26px; height:26px; border-radius:9px; background:#4FD1C5; border:2.5px solid #2B3350; display:flex; align-items:center; justify-content:center; font-family:'Mochiy Pop One',sans-serif; font-size:13px;">4</div>
+        <div style="font-weight:900; font-size:15px;">BOX</div>
+        <div style="font-family:'DM Mono',monospace; font-size:11px; color:#8E93A8;">BOX</div>
+      </div>
+
+      <div data-screen-label="Box" style="position:relative; width:390px; height:844px; overflow:hidden; border:4px solid #2B3350; border-radius:22px; box-shadow:10px 12px 0 rgba(43,51,80,.16); background:#DFF1FA; display:flex; flex-direction:column;">
+
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 14px 10px;">
+          <div style="width:36px; height:36px; border-radius:12px; background:#fff; border:3px solid #2B3350; box-shadow:0 4px 0 #2B3350; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:900;">‹</div>
+          <div style="font-family:'Mochiy Pop One',sans-serif; font-size:17px;">BOX</div>
+          <div style="background:#fff; border:3px solid #2B3350; border-radius:999px; padding:4px 12px; font-family:'DM Mono',monospace; font-size:12px; box-shadow:0 4px 0 #2B3350;">84/120</div>
+        </div>
+
+        <div style="margin:0 14px; padding:14px; border-radius:22px; background:#fff; border:4px solid #2B3350; box-shadow:0 6px 0 #2B3350;">
+          <div style="display:flex; gap:12px;">
+            <div style="width:132px; height:132px; border-radius:16px; background:#FFE9A8; border:3.5px solid #2B3350; display:flex; align-items:center; justify-content:center; flex:none;">
+              <div style="position:relative; width:96px; height:96px; border-radius:50%; background:#FF7BA9; border:4px solid #2B3350;">
+                <div style="position:absolute; left:11px; top:11px; width:26px; height:18px; border-radius:50%; background:rgba(255,255,255,.55); transform:rotate(-22deg);"></div>
+                <div style="position:absolute; left:23px; top:40px; width:12px; height:17px; border-radius:50%; background:#2B3350;"></div>
+                <div style="position:absolute; left:55px; top:40px; width:12px; height:17px; border-radius:50%; background:#2B3350;"></div>
+                <div style="position:absolute; left:50%; top:64px; transform:translateX(-50%); width:28px; height:12px; border-radius:0 0 16px 16px; background:#2B3350;"></div>
+              </div>
+            </div>
+
+            <div style="flex:1; display:flex; flex-direction:column; gap:7px; min-width:0;">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="font-size:14px; font-weight:900; white-space:nowrap;">フランベル</div>
+                <div style="font-family:'DM Mono',monospace; font-size:11px; color:#5C6480;">Lv.44</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:7px;">
+                <div style="font-family:'DM Mono',monospace; font-size:10px; width:28px; color:#5C6480;">HP</div>
+                <div style="flex:1; height:12px; border-radius:99px; background:#EFF3F7; border:2.5px solid #2B3350; overflow:hidden;"><div style="height:100%; width:88%; background:#5FD97A;"></div></div>
+                <div style="font-family:'DM Mono',monospace; font-size:10px; width:32px; text-align:right;">1820</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:7px;">
+                <div style="font-family:'DM Mono',monospace; font-size:10px; width:28px; color:#5C6480;">ATK</div>
+                <div style="flex:1; height:12px; border-radius:99px; background:#EFF3F7; border:2.5px solid #2B3350; overflow:hidden;"><div style="height:100%; width:74%; background:#FF9F43;"></div></div>
+                <div style="font-family:'DM Mono',monospace; font-size:10px; width:32px; text-align:right;">640</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:7px;">
+                <div style="font-family:'DM Mono',monospace; font-size:10px; width:28px; color:#5C6480;">DEF</div>
+                <div style="flex:1; height:12px; border-radius:99px; background:#EFF3F7; border:2.5px solid #2B3350; overflow:hidden;"><div style="height:100%; width:52%; background:#4FB8F7;"></div></div>
+                <div style="font-family:'DM Mono',monospace; font-size:10px; width:32px; text-align:right;">410</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:7px;">
+                <div style="font-family:'DM Mono',monospace; font-size:10px; width:28px; color:#5C6480;">SPD</div>
+                <div style="flex:1; height:12px; border-radius:99px; background:#EFF3F7; border:2.5px solid #2B3350; overflow:hidden;"><div style="height:100%; width:66%; background:#B79BFF;"></div></div>
+                <div style="font-family:'DM Mono',monospace; font-size:10px; width:32px; text-align:right;">128</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; align-items:center; gap:10px; margin-top:14px;">
+            <div style="width:250px; padding:10px 14px; border-radius:22px; background:#FFC93C; border:3.5px solid #2B3350; box-shadow:0 5px 0 #2B3350; text-align:center;">
+              <div style="font-family:'Mochiy Pop One',sans-serif; font-size:14px; white-space:nowrap;">業火の咆哮</div>
+              <div style="font-family:'DM Mono',monospace; font-size:10px; color:#5C6480;">全体 220% / SP40</div>
+            </div>
+            <div style="display:flex; gap:10px; width:100%;">
+              <div style="flex:1; padding:9px 8px; border-radius:20px; background:#6FD3F7; border:3.5px solid #2B3350; box-shadow:0 5px 0 #2B3350; text-align:center;">
+                <div style="font-size:12px; font-weight:900; white-space:nowrap;">火の護り</div>
+                <div style="font-family:'DM Mono',monospace; font-size:10px;">パッシブ</div>
+              </div>
+              <div style="flex:1; padding:9px 8px; border-radius:20px; background:#9BE07A; border:3.5px solid #2B3350; box-shadow:0 5px 0 #2B3350; text-align:center;">
+                <div style="font-size:12px; font-weight:900; white-space:nowrap;">熱波</div>
+                <div style="font-family:'DM Mono',monospace; font-size:10px;">単体 180%</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 16px 8px;">
+          <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.16em; color:#5C6480;">ALL MONSTERS</div>
+          <div style="display:flex; gap:6px;">
+            <div style="background:#fff; border:2.5px solid #2B3350; border-radius:999px; padding:3px 10px; font-size:10px; font-weight:900;">Lv順</div>
+            <div style="background:#2B3350; color:#fff; border:2.5px solid #2B3350; border-radius:999px; padding:3px 10px; font-size:10px; font-weight:900;">属性</div>
+          </div>
+        </div>
+
+        <div style="flex:1; padding:0 14px 16px; display:grid; grid-template-columns:repeat(4,1fr); grid-auto-rows:82px; gap:9px; align-content:start; overflow:hidden;">
+          <div style="border-radius:14px; background:#FF7BA9; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; position:relative;">
+            <div style="position:absolute; left:6px; bottom:4px; font-family:'DM Mono',monospace; font-size:9px; color:#2B3350;">44</div>
+            <div style="position:absolute; right:4px; top:4px; width:12px; height:12px; border-radius:4px; transform:rotate(45deg); background:#FFC93C; border:2px solid #2B3350;"></div>
+          </div>
+          <div style="border-radius:14px; background:#6FD3F7; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; position:relative;"><div style="position:absolute; left:6px; bottom:4px; font-family:'DM Mono',monospace; font-size:9px;">31</div></div>
+          <div style="border-radius:14px; background:#9BE07A; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; position:relative;"><div style="position:absolute; left:6px; bottom:4px; font-family:'DM Mono',monospace; font-size:9px;">27</div></div>
+          <div style="border-radius:14px; background:#B79BFF; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; position:relative;"><div style="position:absolute; left:6px; bottom:4px; font-family:'DM Mono',monospace; font-size:9px;">25</div></div>
+          <div style="border-radius:14px; background:#FFC93C; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; position:relative;"><div style="position:absolute; left:6px; bottom:4px; font-family:'DM Mono',monospace; font-size:9px;">22</div></div>
+          <div style="border-radius:14px; background:#FF9F43; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; position:relative;"><div style="position:absolute; left:6px; bottom:4px; font-family:'DM Mono',monospace; font-size:9px;">20</div></div>
+          <div style="border-radius:14px; background:#4FD1C5; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; position:relative;"><div style="position:absolute; left:6px; bottom:4px; font-family:'DM Mono',monospace; font-size:9px;">18</div></div>
+          <div style="border-radius:14px; background:#FF6B6B; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; position:relative;"><div style="position:absolute; left:6px; bottom:4px; font-family:'DM Mono',monospace; font-size:9px;">17</div></div>
+          <div style="border-radius:14px; background:#9BE07A; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; position:relative;"><div style="position:absolute; left:6px; bottom:4px; font-family:'DM Mono',monospace; font-size:9px;">15</div></div>
+          <div style="border-radius:14px; background:#6FD3F7; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; position:relative;"><div style="position:absolute; left:6px; bottom:4px; font-family:'DM Mono',monospace; font-size:9px;">14</div></div>
+          <div style="border-radius:14px; background:#B79BFF; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; position:relative;"><div style="position:absolute; left:6px; bottom:4px; font-family:'DM Mono',monospace; font-size:9px;">12</div></div>
+          <div style="border-radius:14px; background:#FF7BA9; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; position:relative;"><div style="position:absolute; left:6px; bottom:4px; font-family:'DM Mono',monospace; font-size:9px;">11</div></div>
+          <div style="border-radius:14px; background:#FFC93C; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; position:relative;"><div style="position:absolute; left:6px; bottom:4px; font-family:'DM Mono',monospace; font-size:9px;">09</div></div>
+          <div style="border-radius:14px; background:#4FD1C5; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; position:relative;"><div style="position:absolute; left:6px; bottom:4px; font-family:'DM Mono',monospace; font-size:9px;">08</div></div>
+          <div style="border-radius:14px; background:#EFF3F7; border:3.5px dashed #A8ADBE;"></div>
+          <div style="border-radius:14px; background:#EFF3F7; border:3.5px dashed #A8ADBE;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:14px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:26px; height:26px; border-radius:9px; background:#FFE9A8; border:2.5px solid #2B3350; display:flex; align-items:center; justify-content:center; font-family:'Mochiy Pop One',sans-serif; font-size:13px;">5</div>
+        <div style="font-weight:900; font-size:15px;">孵化</div>
+        <div style="font-family:'DM Mono',monospace; font-size:11px; color:#8E93A8;">HATCH</div>
+      </div>
+
+      <div data-screen-label="Hatch" style="position:relative; width:390px; height:844px; overflow:hidden; border:4px solid #2B3350; border-radius:22px; box-shadow:10px 12px 0 rgba(43,51,80,.16); background:linear-gradient(180deg,#FFE7B8 0%, #FFF3D6 46%, #DFF1FA 100%); display:flex; flex-direction:column;">
+
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:14px;">
+          <div style="width:36px; height:36px; border-radius:12px; background:#fff; border:3px solid #2B3350; box-shadow:0 4px 0 #2B3350; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:900;">‹</div>
+          <div style="font-family:'Mochiy Pop One',sans-serif; font-size:17px;">孵化</div>
+          <div style="background:#fff; border:3px solid #2B3350; border-radius:999px; padding:4px 12px; font-family:'DM Mono',monospace; font-size:12px; box-shadow:0 4px 0 #2B3350;">4/5</div>
+        </div>
+
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:26px; padding:0 20px 30px;">
+
+          <div style="display:flex; gap:26px;">
+            <div style="text-align:center;">
+              <div style="position:relative; width:86px; height:106px; margin:0 auto; border-radius:50% 50% 46% 46% / 60% 60% 40% 40%; background:#6FD3F7; border:4px solid #2B3350;">
+                <div style="position:absolute; left:14px; top:16px; width:22px; height:16px; border-radius:50%; background:rgba(255,255,255,.7); transform:rotate(-22deg);"></div>
+                <div style="position:absolute; left:52px; top:26px; width:16px; height:16px; border-radius:50%; background:#2B3350;"></div>
+                <div style="position:absolute; left:26px; top:58px; width:14px; height:14px; border-radius:50%; background:#2B3350;"></div>
+              </div>
+              <div style="width:110px; height:26px; margin:-9px auto 0; border-radius:50%; background:#C08A55; border:4px solid #2B3350;"></div>
+              <div style="margin-top:8px; width:110px; height:11px; border-radius:99px; background:#fff; border:2.5px solid #2B3350; overflow:hidden;"><div style="height:100%; width:62%; background:#5FD97A;"></div></div>
+              <div style="font-family:'DM Mono',monospace; font-size:11px; margin-top:5px;">01:12:40</div>
+            </div>
+
+            <div style="text-align:center;">
+              <div style="position:relative; width:86px; height:106px; margin:0 auto; border-radius:50% 50% 46% 46% / 60% 60% 40% 40%; background:#B79BFF; border:4px solid #2B3350;">
+                <div style="position:absolute; left:14px; top:16px; width:22px; height:16px; border-radius:50%; background:rgba(255,255,255,.6); transform:rotate(-22deg);"></div>
+                <div style="position:absolute; left:48px; top:34px; width:18px; height:18px; border-radius:5px; transform:rotate(45deg); background:#2B3350;"></div>
+                <div style="position:absolute; left:24px; top:64px; width:13px; height:13px; border-radius:4px; transform:rotate(45deg); background:#2B3350;"></div>
+              </div>
+              <div style="width:110px; height:26px; margin:-9px auto 0; border-radius:50%; background:#C08A55; border:4px solid #2B3350;"></div>
+              <div style="margin-top:8px; width:110px; height:11px; border-radius:99px; background:#fff; border:2.5px solid #2B3350; overflow:hidden;"><div style="height:100%; width:28%; background:#5FD97A;"></div></div>
+              <div style="font-family:'DM Mono',monospace; font-size:11px; margin-top:5px;">05:40:02</div>
+            </div>
+          </div>
+
+          <div style="text-align:center;">
+            <div style="position:relative; width:118px; height:144px; margin:0 auto; border-radius:50% 50% 46% 46% / 60% 60% 40% 40%; background:#FFC93C; border:5px solid #2B3350; box-shadow:0 0 0 8px rgba(255,201,60,.35);">
+              <div style="position:absolute; left:18px; top:20px; width:30px; height:22px; border-radius:50%; background:rgba(255,255,255,.7); transform:rotate(-22deg);"></div>
+              <div style="position:absolute; left:66px; top:40px; width:20px; height:20px; border-radius:6px; transform:rotate(45deg); background:#2B3350;"></div>
+              <div style="position:absolute; left:34px; top:84px; width:16px; height:16px; border-radius:5px; transform:rotate(45deg); background:#2B3350;"></div>
+              <div style="position:absolute; left:0; right:0; top:64px; height:9px; background:repeating-linear-gradient(90deg,#2B3350 0 12px,transparent 12px 24px);"></div>
+            </div>
+            <div style="width:150px; height:34px; margin:-12px auto 0; border-radius:50%; background:#C08A55; border:4px solid #2B3350;"></div>
+            <div style="margin-top:10px; display:inline-block; background:#FF9F43; border:3.5px solid #2B3350; border-radius:999px; padding:8px 24px; font-family:'Mochiy Pop One',sans-serif; font-size:16px; box-shadow:0 5px 0 #2B3350; white-space:nowrap;">ふ化できる！</div>
+          </div>
+
+          <div style="display:flex; gap:26px;">
+            <div style="text-align:center;">
+              <div style="position:relative; width:86px; height:106px; margin:0 auto; border-radius:50% 50% 46% 46% / 60% 60% 40% 40%; background:#9BE07A; border:4px solid #2B3350;">
+                <div style="position:absolute; left:14px; top:16px; width:22px; height:16px; border-radius:50%; background:rgba(255,255,255,.65); transform:rotate(-22deg);"></div>
+                <div style="position:absolute; left:50px; top:30px; width:14px; height:14px; border-radius:50%; background:#2B3350;"></div>
+                <div style="position:absolute; left:28px; top:62px; width:18px; height:18px; border-radius:50%; background:#2B3350;"></div>
+              </div>
+              <div style="width:110px; height:26px; margin:-9px auto 0; border-radius:50%; background:#C08A55; border:4px solid #2B3350;"></div>
+              <div style="margin-top:8px; width:110px; height:11px; border-radius:99px; background:#fff; border:2.5px solid #2B3350; overflow:hidden;"><div style="height:100%; width:81%; background:#5FD97A;"></div></div>
+              <div style="font-family:'DM Mono',monospace; font-size:11px; margin-top:5px;">00:24:15</div>
+            </div>
+
+            <div style="text-align:center;">
+              <div style="width:86px; height:106px; margin:0 auto; border-radius:50% 50% 46% 46% / 60% 60% 40% 40%; background:#EFF3F7; border:4px dashed #A8ADBE; display:flex; align-items:center; justify-content:center; font-size:26px; color:#A8ADBE; font-weight:900;">+</div>
+              <div style="width:110px; height:26px; margin:-9px auto 0; border-radius:50%; background:#D9C4AC; border:4px solid #A8ADBE;"></div>
+              <div style="margin-top:8px; font-size:11px; font-weight:900; color:#8E93A8; white-space:nowrap;">空きスロット</div>
+              <div style="font-family:'DM Mono',monospace; font-size:11px; margin-top:5px; color:#A8ADBE;">--:--:--</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:0 16px 20px; display:flex; gap:10px;">
+          <div style="flex:1; padding:13px; border-radius:22px; background:#fff; border:3.5px solid #2B3350; box-shadow:0 5px 0 #2B3350; text-align:center; font-size:13px; font-weight:900; white-space:nowrap;">まとめて時短 ◈120</div>
+          <div style="flex:1; padding:13px; border-radius:22px; background:#FFC93C; border:3.5px solid #2B3350; box-shadow:0 5px 0 #2B3350; text-align:center; font-family:'Mochiy Pop One',sans-serif; font-size:15px; white-space:nowrap;">ふ化する</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:14px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:26px; height:26px; border-radius:9px; background:#B79BFF; border:2.5px solid #2B3350; display:flex; align-items:center; justify-content:center; font-family:'Mochiy Pop One',sans-serif; font-size:13px;">6</div>
+        <div style="font-weight:900; font-size:15px;">配合</div>
+        <div style="font-family:'DM Mono',monospace; font-size:11px; color:#8E93A8;">BREED</div>
+      </div>
+
+      <div data-screen-label="Breed" style="position:relative; width:390px; height:844px; overflow:hidden; border:4px solid #2B3350; border-radius:22px; box-shadow:10px 12px 0 rgba(43,51,80,.16); background:#EFE6FF; display:flex; flex-direction:column;">
+
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 14px 10px;">
+          <div style="width:36px; height:36px; border-radius:12px; background:#fff; border:3px solid #2B3350; box-shadow:0 4px 0 #2B3350; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:900;">‹</div>
+          <div style="font-family:'Mochiy Pop One',sans-serif; font-size:17px;">配合</div>
+          <div style="background:#fff; border:3px solid #2B3350; border-radius:999px; padding:4px 12px; font-family:'DM Mono',monospace; font-size:12px; box-shadow:0 4px 0 #2B3350;">◈1,240</div>
+        </div>
+
+        <div style="position:relative; margin:0 14px; display:flex; gap:10px;">
+          <div style="flex:1; padding:11px; border-radius:20px; background:#fff; border:4px solid #2B3350; box-shadow:0 6px 0 #2B3350; min-width:0;">
+            <div style="width:100%; height:92px; border-radius:14px; background:#FFE9A8; border:3px solid #2B3350; display:flex; align-items:center; justify-content:center;">
+              <div style="position:relative; width:70px; height:70px; border-radius:50%; background:#FF7BA9; border:3.5px solid #2B3350;">
+                <div style="position:absolute; left:16px; top:28px; width:9px; height:13px; border-radius:50%; background:#2B3350;"></div>
+                <div style="position:absolute; left:40px; top:28px; width:9px; height:13px; border-radius:50%; background:#2B3350;"></div>
+              </div>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+              <div style="font-size:12px; font-weight:900; white-space:nowrap;">フランベル</div>
+              <div style="font-family:'DM Mono',monospace; font-size:10px; color:#5C6480;">Lv.44</div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:5px; margin-top:7px;">
+              <div style="height:9px; border-radius:99px; background:#EFF3F7; border:2px solid #2B3350; overflow:hidden;"><div style="height:100%; width:88%; background:#5FD97A;"></div></div>
+              <div style="height:9px; border-radius:99px; background:#EFF3F7; border:2px solid #2B3350; overflow:hidden;"><div style="height:100%; width:74%; background:#FF9F43;"></div></div>
+              <div style="height:9px; border-radius:99px; background:#EFF3F7; border:2px solid #2B3350; overflow:hidden;"><div style="height:100%; width:52%; background:#4FB8F7;"></div></div>
+            </div>
+            <div style="margin-top:9px; padding:6px; border-radius:14px; background:#FFC93C; border:2.5px solid #2B3350; text-align:center; font-size:11px; font-weight:900; white-space:nowrap;">業火の咆哮</div>
+          </div>
+
+          <div style="flex:1; padding:11px; border-radius:20px; background:#fff; border:4px solid #2B3350; box-shadow:0 6px 0 #2B3350; min-width:0;">
+            <div style="width:100%; height:92px; border-radius:14px; background:#DFF1FA; border:3px solid #2B3350; display:flex; align-items:center; justify-content:center;">
+              <div style="position:relative; width:70px; height:70px; border-radius:50%; background:#6FD3F7; border:3.5px solid #2B3350;">
+                <div style="position:absolute; left:16px; top:28px; width:9px; height:13px; border-radius:50%; background:#2B3350;"></div>
+                <div style="position:absolute; left:40px; top:28px; width:9px; height:13px; border-radius:50%; background:#2B3350;"></div>
+              </div>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+              <div style="font-size:12px; font-weight:900; white-space:nowrap;">アクアリム</div>
+              <div style="font-family:'DM Mono',monospace; font-size:10px; color:#5C6480;">Lv.31</div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:5px; margin-top:7px;">
+              <div style="height:9px; border-radius:99px; background:#EFF3F7; border:2px solid #2B3350; overflow:hidden;"><div style="height:100%; width:64%; background:#5FD97A;"></div></div>
+              <div style="height:9px; border-radius:99px; background:#EFF3F7; border:2px solid #2B3350; overflow:hidden;"><div style="height:100%; width:58%; background:#FF9F43;"></div></div>
+              <div style="height:9px; border-radius:99px; background:#EFF3F7; border:2px solid #2B3350; overflow:hidden;"><div style="height:100%; width:70%; background:#4FB8F7;"></div></div>
+            </div>
+            <div style="margin-top:9px; padding:6px; border-radius:14px; background:#6FD3F7; border:2.5px solid #2B3350; text-align:center; font-size:11px; font-weight:900; white-space:nowrap;">水刃</div>
+          </div>
+
+          <div style="position:absolute; left:50%; top:104px; transform:translate(-50%,-50%); width:40px; height:40px; border-radius:50%; background:#FF9F43; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; display:flex; align-items:center; justify-content:center; font-family:'Mochiy Pop One',sans-serif; font-size:20px; color:#fff;">+</div>
+        </div>
+
+        <div style="margin:12px 14px 0; padding:9px 14px; border-radius:16px; background:#fff; border:3px solid #2B3350; display:flex; align-items:center; justify-content:space-between;">
+          <div style="font-family:'DM Mono',monospace; font-size:10px; color:#5C6480; letter-spacing:.14em;">RESULT EGG</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div style="width:20px; height:26px; border-radius:50% 50% 46% 46% / 60% 60% 40% 40%; background:#B79BFF; border:2.5px solid #2B3350;"></div>
+            <div style="font-size:12px; font-weight:900; white-space:nowrap;">レア度 ★★★★ / 3時間</div>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 16px 8px;">
+          <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.16em; color:#5C6480;">SELECT PARTNER</div>
+          <div style="background:#2B3350; color:#fff; border-radius:999px; padding:3px 10px; font-size:10px; font-weight:900;">配合可</div>
+        </div>
+
+        <div style="flex:1; padding:0 14px; display:grid; grid-template-columns:repeat(4,1fr); grid-auto-rows:74px; gap:9px; align-content:start; overflow:hidden;">
+          <div style="border-radius:14px; background:#FF7BA9; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; outline:3px solid #FF9F43; outline-offset:2px;"></div>
+          <div style="border-radius:14px; background:#6FD3F7; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350; outline:3px solid #FF9F43; outline-offset:2px;"></div>
+          <div style="border-radius:14px; background:#9BE07A; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350;"></div>
+          <div style="border-radius:14px; background:#B79BFF; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350;"></div>
+          <div style="border-radius:14px; background:#FFC93C; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350;"></div>
+          <div style="border-radius:14px; background:#FF9F43; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350;"></div>
+          <div style="border-radius:14px; background:#4FD1C5; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350;"></div>
+          <div style="border-radius:14px; background:#FF6B6B; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350;"></div>
+          <div style="border-radius:14px; background:#9BE07A; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350;"></div>
+          <div style="border-radius:14px; background:#6FD3F7; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350;"></div>
+          <div style="border-radius:14px; background:#B79BFF; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350;"></div>
+          <div style="border-radius:14px; background:#FFC93C; border:3.5px solid #2B3350; box-shadow:0 4px 0 #2B3350;"></div>
+        </div>
+
+        <div style="padding:14px 16px 20px; background:linear-gradient(180deg,rgba(239,230,255,0),#EFE6FF 40%);">
+          <div style="padding:16px; border-radius:26px; background:#FF9F43; border:4px solid #2B3350; box-shadow:0 6px 0 #2B3350; text-align:center;">
+            <div style="font-family:'Mochiy Pop One',sans-serif; font-size:20px; white-space:nowrap;">配合する</div>
+            <div style="font-family:'DM Mono',monospace; font-size:11px; margin-top:2px;">◈300 / スロット 4-5</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:14px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:26px; height:26px; border-radius:9px; background:#FF9F43; border:2.5px solid #2B3350; display:flex; align-items:center; justify-content:center; font-family:'Mochiy Pop One',sans-serif; font-size:13px;">7</div>
+        <div style="font-weight:900; font-size:15px;">探索 — 巣えらび</div>
+        <div style="font-family:'DM Mono',monospace; font-size:11px; color:#8E93A8;">NEST SELECT</div>
+      </div>
+
+      <div data-screen-label="Nest Select" style="position:relative; width:390px; height:844px; overflow:hidden; border:4px solid #2B3350; border-radius:22px; box-shadow:10px 12px 0 rgba(43,51,80,.16); background:linear-gradient(180deg,#BDEBFF 0%, #DFF6E4 62%, #FFE7B8 100%); display:flex; flex-direction:column;">
+
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:14px;">
+          <div style="width:36px; height:36px; border-radius:12px; background:#fff; border:3px solid #2B3350; box-shadow:0 4px 0 #2B3350; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:900;">‹</div>
+          <div style="font-family:'Mochiy Pop One',sans-serif; font-size:17px; white-space:nowrap;">巣をえらぶ</div>
+          <div style="background:#fff; border:3px solid #2B3350; border-radius:999px; padding:4px 12px; font-family:'DM Mono',monospace; font-size:12px; box-shadow:0 4px 0 #2B3350;">AP 32/40</div>
+        </div>
+
+        <div style="flex:1; padding:4px 16px 16px; display:flex; flex-direction:column; gap:14px;">
+
+          <div style="position:relative; padding:14px; border-radius:24px; background:#fff; border:4px solid #2B3350; box-shadow:0 6px 0 #2B3350; display:flex; gap:10px; align-items:center;">
+            <div style="position:relative; width:98px; height:96px; flex:none;">
+              <div style="position:absolute; left:0; bottom:0; width:94px; height:70px; border-radius:60% 60% 16% 16% / 88% 88% 12% 12%; background:repeating-linear-gradient(58deg,#C08A55 0 8px,#A87545 8px 16px); border:4px solid #2B3350;"></div>
+              <div style="position:absolute; left:24px; bottom:-6px; width:52px; height:52px; border-radius:50%; background:#9BE07A; border:4px solid #2B3350;">
+                <div style="position:absolute; left:12px; top:20px; width:8px; height:11px; border-radius:50%; background:#2B3350;"></div>
+                <div style="position:absolute; left:30px; top:20px; width:8px; height:11px; border-radius:50%; background:#2B3350;"></div>
+                <div style="position:absolute; left:50%; top:38px; transform:translateX(-50%); width:20px; height:9px; border-radius:0 0 14px 14px; background:#2B3350;"></div>
+              </div>
+            </div>
+            <div style="flex:1; min-width:0;">
+              <div style="display:flex; flex-direction:column; align-items:flex-start; gap:5px;">
+                <div style="background:#9BE07A; border:2.5px solid #2B3350; border-radius:999px; padding:2px 10px; font-family:'DM Mono',monospace; font-size:11px; white-space:nowrap;">Lv.10</div>
+                <div style="font-size:14px; font-weight:900; white-space:nowrap;">みどりの巣</div>
+              </div>
+              <div style="font-size:11px; color:#5C6480; margin-top:6px;">親：リーフドン／たまご ★★</div>
+              <div style="display:flex; gap:6px; margin-top:9px;">
+                <div style="background:#EFF3F7; border:2.5px solid #2B3350; border-radius:999px; padding:2px 9px; font-family:'DM Mono',monospace; font-size:10px;">AP 4</div>
+                <div style="background:#EFF3F7; border:2.5px solid #2B3350; border-radius:999px; padding:2px 9px; font-family:'DM Mono',monospace; font-size:10px;">弾 5</div>
+              </div>
+            </div>
+            <div style="flex:none; padding:11px 14px; border-radius:18px; background:#FFC93C; border:3.5px solid #2B3350; box-shadow:0 5px 0 #2B3350; font-size:13px; font-weight:900; white-space:nowrap;">挑戦</div>
+          </div>
+
+          <div style="position:relative; padding:14px; border-radius:24px; background:#fff; border:4px solid #2B3350; box-shadow:0 6px 0 #2B3350; display:flex; gap:10px; align-items:center;">
+            <div style="position:relative; width:98px; height:96px; flex:none;">
+              <div style="position:absolute; left:0; bottom:0; width:94px; height:70px; border-radius:60% 60% 16% 16% / 88% 88% 12% 12%; background:repeating-linear-gradient(58deg,#9B7BC9 0 8px,#8465B0 8px 16px); border:4px solid #2B3350;"></div>
+              <div style="position:absolute; left:24px; bottom:-6px; width:52px; height:52px; border-radius:50%; background:#B79BFF; border:4px solid #2B3350;">
+                <div style="position:absolute; left:12px; top:20px; width:8px; height:11px; border-radius:50%; background:#2B3350;"></div>
+                <div style="position:absolute; left:30px; top:20px; width:8px; height:11px; border-radius:50%; background:#2B3350;"></div>
+                <div style="position:absolute; left:50%; top:38px; transform:translateX(-50%); width:20px; height:9px; border-radius:0 0 14px 14px; background:#2B3350;"></div>
+              </div>
+            </div>
+            <div style="flex:1; min-width:0;">
+              <div style="display:flex; flex-direction:column; align-items:flex-start; gap:5px;">
+                <div style="background:#B79BFF; border:2.5px solid #2B3350; border-radius:999px; padding:2px 10px; font-family:'DM Mono',monospace; font-size:11px; white-space:nowrap;">Lv.30</div>
+                <div style="font-size:14px; font-weight:900; white-space:nowrap;">きりの谷の巣</div>
+              </div>
+              <div style="font-size:11px; color:#5C6480; margin-top:6px;">親：ガイアドン／たまご ★★★★</div>
+              <div style="display:flex; gap:6px; margin-top:9px;">
+                <div style="background:#EFF3F7; border:2.5px solid #2B3350; border-radius:999px; padding:2px 9px; font-family:'DM Mono',monospace; font-size:10px;">AP 8</div>
+                <div style="background:#EFF3F7; border:2.5px solid #2B3350; border-radius:999px; padding:2px 9px; font-family:'DM Mono',monospace; font-size:10px;">弾 3</div>
+              </div>
+            </div>
+            <div style="flex:none; padding:11px 14px; border-radius:18px; background:#FF9F43; border:3.5px solid #2B3350; box-shadow:0 5px 0 #2B3350; font-size:13px; font-weight:900; white-space:nowrap;">挑戦</div>
+          </div>
+
+          <div style="position:relative; padding:14px; border-radius:24px; background:#F2F4F8; border:4px solid #A8ADBE; display:flex; gap:10px; align-items:center;">
+            <div style="position:relative; width:98px; height:96px; flex:none; opacity:.55;">
+              <div style="position:absolute; left:0; bottom:0; width:94px; height:70px; border-radius:60% 60% 16% 16% / 88% 88% 12% 12%; background:repeating-linear-gradient(58deg,#B0B6C4 0 8px,#9AA1B2 8px 16px); border:4px solid #8E93A8;"></div>
+              <div style="position:absolute; left:24px; bottom:-6px; width:52px; height:52px; border-radius:50%; background:#C9CFDA; border:4px solid #8E93A8;"></div>
+            </div>
+            <div style="flex:1; min-width:0;">
+              <div style="display:flex; flex-direction:column; align-items:flex-start; gap:5px;">
+                <div style="background:#C9CFDA; border:2.5px solid #8E93A8; border-radius:999px; padding:2px 10px; font-family:'DM Mono',monospace; font-size:11px; color:#5C6480; white-space:nowrap;">Lv.50</div>
+                <div style="font-size:14px; font-weight:900; color:#8E93A8; white-space:nowrap;">火山の巣</div>
+              </div>
+              <div style="font-size:11px; color:#A8ADBE; margin-top:6px;">Lv.30の巣をクリアで解放</div>
+            </div>
+            <div style="flex:none; padding:11px 14px; border-radius:18px; background:#DDE1E8; border:3.5px solid #A8ADBE; font-size:13px; font-weight:900; color:#8E93A8; white-space:nowrap;">ロック</div>
+          </div>
+
+          <div style="margin-top:auto; padding:12px 14px; border-radius:20px; background:rgba(255,255,255,.85); border:3px solid #2B3350; display:flex; align-items:center; justify-content:space-between;">
+            <div style="font-size:12px; font-weight:900; white-space:nowrap;">巣のレベルが高いほどレアなタマゴ</div>
+            <div style="font-family:'DM Mono',monospace; font-size:11px; color:#5C6480;">?</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="width:250px; padding-top:52px; display:flex; flex-direction:column; gap:20px; font-size:12px; line-height:1.8; color:#5C6480;">
+      <div>
+        <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.16em; color:#F2762E;">DESIGN NOTE</div>
+        <div style="margin-top:4px;">太い輪郭線＋ハードシャドウのポップカジュアル。生成色はキャラだけに使い、UIは白＋濃紺で読みやすく。</div>
+      </div>
+      <div>
+        <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.16em; color:#F2762E;">HOME</div>
+        <div style="margin-top:4px;">編成3体を三角配置し、リーダーを手前・大きく。下部4パネルのうち探索のみオレンジで主導線に。</div>
+      </div>
+      <div>
+        <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.16em; color:#F2762E;">BATTLE</div>
+        <div style="margin-top:4px;">上＝味方3体（HP／SPの2本ゲージ）＋ボス。下＝白いスキルシート。スキル1を必殺として幅広1行、2・3は並列。</div>
+      </div>
+      <div>
+        <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.16em; color:#F2762E;">EXPLORE</div>
+        <div style="margin-top:4px;">下のキャラを引っ張って発射。両サイドの壁で反射させ、卵を守る親にヒット。軌道ドットで反射先を提示。</div>
+      </div>
+      <div>
+        <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.16em; color:#F2762E;">BOX / 配合</div>
+        <div style="margin-top:4px;">上部にステータス＋スキル、下部にアイコングリッド（4列）。配合は上部を2体分に割り、中央の＋と最下部の大ボタンで手順を明示。</div>
+      </div>
+      <div>
+        <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.16em; color:#F2762E;">孵化 / 巣えらび</div>
+        <div style="margin-top:4px;">卵5枠を台座付きで菱形配置、中央は完了状態を強調。巣えらびは巣Lvが報酬レアリティに直結することを一覧で見せる。</div>
+      </div>
+      <div style="font-family:'DM Mono',monospace; font-size:10px; color:#A8ADBE;">キャラ・背景はすべてプレースホルダ図形。</div>
+    </div>
+  </div>
+</div>
+</x-dc>
