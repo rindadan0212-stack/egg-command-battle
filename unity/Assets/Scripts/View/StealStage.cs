@@ -102,25 +102,26 @@ namespace EggCommand.View
             // 親が塞ぐ帯。隙間の左右2枚
             float bandMid = (float)(field.BandTop + field.BandBottom) / 2f;
             float bandHeight = (float)(field.BandBottom - field.BandTop);
+
+            // ⭐ 塞いでいる帯を**絵そのもの**で埋める。薄い箱は描かない。
+            // ⚠️ 箱を描いて中央に1体だけ立たせると、「箱が当たり判定で絵は飾り」に見える。
+            //    当たるのは Core の帯なので、その帯を絵で敷き詰めれば見た目と一致する。
+            // ⚠️ 引き伸ばさない。ドット絵は縦横比を崩すと潰れて見える。
+            //    1体ぶんの幅で並べ、端は帯からはみ出さないところで止める。
+            var species = SpeciesTable.ById(nestSpeciesId);
             foreach (var span in Steal.ParentSpans(field))
             {
-                float width = (float)(span.To - span.From);
-                float centerX = (float)(span.From + span.To) / 2f;
-                Solid("Wall", new Color32(0x6b, 0x4a, 0x3a, 0xff),
-                    ToWorld(centerX, bandMid), new Vector2(width, bandHeight), 3f);
-            }
-
-            // 親。⭐ 塞いでいる側の真ん中に立たせる（誰が邪魔しているのか分かるように）
-            var species = SpeciesTable.ById(nestSpeciesId);
-            var spans = Steal.ParentSpans(field);
-            if (spans.Count > 0)
-            {
-                var widest = spans[0];
-                foreach (var s in spans) if (s.To - s.From > widest.To - widest.From) widest = s;
-                float centerX = (float)(widest.From + widest.To) / 2f;
-                // ⚠️ 帯より大きく描かない。はみ出すと「どこが塞がっているか」が読めなくなる
-                PixelObject("Parent", species.Sprite, species.Palettes[0],
-                    ToWorld(centerX, bandMid), bandHeight * 0.9f, 2f);
+                float from = (float)span.From;
+                float to = (float)span.To;
+                float size = bandHeight;
+                // 帯を割り切れる数に丸める。⚠️ 端に隙間が空くと「通れそう」に見える
+                int count = Mathf.Max(1, Mathf.RoundToInt((to - from) / size));
+                float step = (to - from) / count;
+                for (int i = 0; i < count; i++)
+                {
+                    PixelObject("Parent", species.Sprite, species.Palettes[0],
+                        ToWorld(from + step * (i + 0.5f), bandMid), step, 3f);
+                }
             }
 
             // 卵
