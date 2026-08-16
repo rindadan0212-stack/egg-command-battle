@@ -16,11 +16,14 @@
   /* 唯一の暗色。輪郭・文字・影を全部これで担う */
   --ink: #2b3350;
   --ink-mid: #5c6480;
-  --ink-soft: #8e93a8;
+  /* ⚠️ モックの #8E93A8 は白地でも 3.0:1 しか出ない。**読める明度まで下げる**。
+     色は借りるが、読めない値はそのまま持ち込まない。 */
+  --ink-soft: #6b7288;
 
   --paper: #fff6e5;
   --card: #ffffff;
   --sunk: #eff3f7;
+  --sand: #ffe7b8;
 
   /* 主導線。画面に1つだけ塗る */
   --accent: #ff9f43;
@@ -76,20 +79,187 @@ img.pixel {
   image-rendering: pixelated;
 }
 
-/* ⭐ モックと同じ縦持ちの1本。横に広げない */
+/* ⭐ 縦持ちの1本。横に広げない。
+   ⚠️ **端末の枠は描かない。**モックの角丸 + 太枠 + 影は
+   「7画面を並べて見せるための台紙」であって、設計ではない。 */
 #app {
-  width: 390px;
-  max-width: 100%;
-  margin: 0 auto;
-  padding: 18px 14px 40px;
+  display: flex;
+  justify-content: center;
+  padding: 0;
 }
 
-h1 {
+.phone {
+  position: relative;
+  width: 390px;
+  max-width: 100%;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ⭐ どの画面にいるかを地の色で示す。ラベルではなく色で分かるように */
+.phone[data-sky='home'] {
+  background: linear-gradient(180deg, #8fd8f7 0%, #bdebff 44%, var(--sand) 100%);
+}
+.phone[data-sky='nest'] {
+  background: linear-gradient(180deg, #bdebff 0%, #dff6e4 62%, var(--sand) 100%);
+}
+.phone[data-sky='battle'] {
+  background: linear-gradient(180deg, #a8e4f7 0%, #cff0ff 40%, var(--sand) 62%);
+}
+.phone[data-sky='hatch'] {
+  background: linear-gradient(180deg, var(--sand) 0%, #fff3d6 46%, #dff1fa 100%);
+}
+.phone[data-sky='breed'] {
+  background: #efe6ff;
+}
+.phone[data-sky='box'] {
+  background: #dff1fa;
+}
+
+/* ── 上段 ──────────────────────────────────────── */
+
+.topbar {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+}
+
+.topbar .slot {
+  display: flex;
+  min-width: 44px;
+}
+
+.topbar .slot.end {
+  justify-content: flex-end;
+}
+
+.topbar .title {
   font-family: var(--display);
-  font-size: 22px;
-  font-weight: 400;
-  line-height: 1.25;
-  margin: 0 0 12px;
+  font-size: 17px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar .back {
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: var(--lift);
+  padding: 0;
+}
+
+.topbar .back:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--ink);
+}
+
+.topbar .badge {
+  font-size: 11px;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--pill);
+  box-shadow: var(--lift);
+  padding: 3px 11px;
+  white-space: nowrap;
+}
+
+.screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 14px 16px;
+}
+
+/* ── 下段の4パネル（ホームだけ） ─────────────────── */
+
+.dock {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  padding: 0 14px 16px;
+}
+
+.dock button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 900;
+  background: var(--card);
+  border: 3.5px solid var(--ink);
+  border-radius: var(--card-radius);
+  box-shadow: 0 5px 0 var(--ink);
+  padding: 12px 4px 10px;
+}
+
+/* ⭐ 塗るのは主導線1つだけ。「次にやること」が1つに見える */
+.dock button[data-lead='true'] {
+  background: var(--accent);
+}
+
+.dock button:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 var(--ink);
+}
+
+/* パネルの印。⚠️ 絵文字を使わない。形で意味を出す */
+.dmark {
+  width: 32px;
+  height: 30px;
+  border: 3px solid var(--ink);
+}
+
+.dmark[data-for='box'] {
+  background: var(--mint);
+  border-radius: 8px;
+}
+
+.dmark[data-for='hatch'] {
+  width: 26px;
+  height: 32px;
+  background: #ffe9a8;
+  border-radius: 50% 50% 46% 46% / 62% 62% 38% 38%;
+}
+
+.dmark[data-for='breed'] {
+  width: 40px;
+  height: 26px;
+  background: var(--rose);
+  border-radius: var(--pill);
+  box-shadow: inset -14px 0 0 var(--violet);
+}
+
+.dmark[data-for='nests'] {
+  width: 30px;
+  height: 30px;
+  background: #ffe9a8;
+  border-radius: 50%;
+  border-width: 5px;
+}
+
+.dcount {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  font-size: 10px;
+  background: var(--sun);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--pill);
+  padding: 0 6px;
 }
 
 /* 画面ごとの一行。ここが各画面の主役の文 */
@@ -157,29 +327,6 @@ button {
   background: var(--accent);
 }
 
-/* ── 画面の切り替え ────────────────────────────── */
-
-.viewnav {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin: 0 0 18px;
-}
-
-.viewnav button {
-  font-size: 12px;
-  font-weight: 900;
-  background: var(--card);
-  border: 3px solid var(--ink);
-  border-radius: var(--small-radius);
-  box-shadow: var(--lift);
-  padding: 8px 4px;
-}
-
-/* ⭐ 今いる画面だけ塗る。画面内の主役は常に1つ */
-.viewnav button[data-on='true'] {
-  background: var(--accent);
-}
 
 /* ── 保管庫 ────────────────────────────────────── */
 
@@ -347,91 +494,151 @@ button {
 /* ── 戦闘 ──────────────────────────────────────── */
 
 .battle {
-  margin: 14px 0 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ⭐ モックの構成。左に味方を小さくリスト、右に敵を大きく置く */
+.arena {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 158px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 4px 0 12px;
 }
 
 .field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field.allies .fighter {
   display: grid;
-  gap: 8px;
-}
-
-/* ⚠️ **敵と味方が同じ顔をしていた。**縦1本に6体並ぶので、
-   間隔だけでは「どっちがどっち」が読めない。面の色で分ける。 */
-.field::before {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  color: var(--ink-mid);
-}
-
-.field.enemies {
-  margin-bottom: 20px;
-}
-
-.field.enemies::before {
-  content: 'ENEMY';
-}
-
-.field.enemies .fighter {
-  background: #ffe0e9;
-}
-
-.field.allies::before {
-  content: 'PARTY';
-}
-
-.fighter {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  column-gap: 10px;
-  row-gap: 4px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  column-gap: 8px;
+  row-gap: 3px;
   align-items: center;
-  background: var(--card);
-  border: 3px solid var(--ink);
-  border-radius: var(--small-radius);
-  box-shadow: var(--lift);
-  padding: 8px 10px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
 }
 
-.fighter .art {
+.field.allies .art {
   grid-column: 1;
-  grid-row: 1 / 4;
+  grid-row: 1 / 3;
+  line-height: 0;
 }
 
-.fighter .fname {
+.field.allies .fname {
   grid-column: 2;
   font-size: 11px;
   font-weight: 900;
 }
 
+.field.allies .nums,
+.field.allies .badges {
+  grid-column: 1 / 3;
+}
+
+.field.allies .meter {
+  grid-column: 1 / 3;
+}
+
+/* ⭐ 敵は絵を主役に。札にしないで場に立たせる */
+.field.enemies .fighter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+}
+
+.field.enemies .art {
+  line-height: 0;
+  order: 2;
+}
+
+.field.enemies .fname {
+  order: 1;
+  font-size: 11px;
+  font-weight: 900;
+  background: var(--card);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--pill);
+  padding: 1px 10px;
+  white-space: nowrap;
+}
+
+.field.enemies .nums {
+  order: 3;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.field.enemies .meter.hp {
+  order: 4;
+  width: 148px;
+  height: 13px;
+  border-width: 3px;
+}
+
+.field.enemies .meter.hp i {
+  background: var(--danger);
+}
+
+.field.enemies .meter.gauge {
+  order: 5;
+  width: 148px;
+}
+
+.field.enemies .badges {
+  order: 6;
+}
+
+.fighter .fname,
 .fighter .nums,
 .fighter .badges {
-  grid-column: 2;
+  min-width: 0;
+}
+
+.fighter .nums,
+.fighter .badges {
   font-family: var(--mono);
   font-size: 10px;
   color: var(--ink-mid);
   line-height: 1.35;
 }
 
-/* ⭐ 手番の者だけを塗る */
-.fighter[data-turn='true'] {
+/* ⭐ 手番の者だけ立てる */
+.fighter[data-turn='true'] .fname {
   background: var(--sun);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--pill);
+  padding: 1px 10px;
 }
 
 .fighter[data-down='true'] {
   opacity: 0.35;
-  box-shadow: none;
 }
 
 /* 対象を選ばせている間だけ、狙える相手に輪をかける */
 .fighter[data-selectable='true'] {
   cursor: pointer;
-  outline: 4px solid rgba(255, 159, 67, 0.45);
+}
+
+.fighter[data-selectable='true'] .art {
+  outline: 5px solid rgba(255, 159, 67, 0.5);
+  border-radius: 50%;
 }
 
 .meter {
   display: block;
-  grid-column: 2;
   width: 100%;
   background: var(--card);
   border: 2.5px solid var(--ink);
@@ -460,55 +667,69 @@ button {
   background: var(--gauge);
 }
 
-/* スキルは白いシート。⭐ 枠1（必殺）だけ幅いっぱいの1行にする */
+/* ⭐ 下は白いシート。ここがコマンドの場だと形で分かる */
+.sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--card);
+  border-top: 4px solid var(--ink);
+  border-radius: 26px 26px 0 0;
+  padding: 14px 14px 16px;
+  margin: 0 -14px -16px;
+}
+
 .commands {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin: 18px 0 0;
-  background: var(--card);
-  border: 3px solid var(--ink);
-  border-radius: var(--card-radius);
-  box-shadow: var(--lift);
-  padding: 12px;
+  gap: 10px;
 }
 
 .commands .turnof {
   grid-column: 1 / -1;
   font-family: var(--mono);
   font-size: 10px;
-  letter-spacing: 0.14em;
-  color: var(--ink-mid);
+  letter-spacing: 0.16em;
+  color: var(--ink-soft);
 }
 
 .commands button {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 2px;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 900;
-  text-align: left;
-  background: var(--sunk);
-  border: 3px solid var(--ink);
-  border-radius: var(--small-radius);
-  padding: 8px 10px;
+  background: var(--sky);
+  border: 4px solid var(--ink);
+  border-radius: 22px;
+  box-shadow: var(--lift-deep);
+  padding: 12px 8px;
 }
 
-.commands button:first-of-type {
+/* ⭐ 枠1（CTなし）は必殺の位置。幅いっぱいの1行で他と質を変える */
+.commands button:nth-of-type(1) {
   grid-column: 1 / -1;
-  background: var(--accent);
-  box-shadow: var(--lift);
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 400;
+  background: var(--sun);
+  border-radius: 26px;
+}
+
+.commands button:nth-of-type(3) {
+  background: var(--leaf);
 }
 
 .commands button:active:not(:disabled) {
-  transform: translateY(2px);
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 var(--ink);
 }
 
 .commands button:disabled {
   color: var(--ink-soft);
+  background: var(--sunk);
   border-color: var(--ink-soft);
-  background: var(--card);
   box-shadow: none;
   cursor: default;
 }
@@ -520,22 +741,30 @@ button {
   color: var(--ink-mid);
 }
 
+.commands .cancel {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  background: var(--card);
+  border-radius: var(--pill);
+  padding: 6px 14px;
+}
+
 .commands .verdict {
   grid-column: 1 / -1;
   font-family: var(--display);
-  font-size: 17px;
+  font-size: 20px;
+  text-align: center;
   margin: 0;
 }
 
 .battlelog {
-  margin: 14px 0 0;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.7;
   color: var(--ink-mid);
   background: var(--sunk);
   border-radius: var(--small-radius);
-  padding: 10px 12px;
-  max-height: 150px;
+  padding: 8px 10px;
+  max-height: 92px;
   overflow-y: auto;
 }
 
@@ -561,141 +790,530 @@ button {
   cursor: grabbing;
 }
 
-/* ── 巣 ────────────────────────────────────────── */
-
-.nestlist {
-  display: grid;
-  gap: 12px;
-  margin: 16px 0 12px;
-}
-
-.nestrow {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 10px;
-  background: var(--card);
-  border: 3px solid var(--ink);
-  border-radius: var(--card-radius);
-  box-shadow: var(--lift);
-  padding: 10px 12px;
-}
-
-.nestrow .ident {
+/* ⚠️ **縦の伸びは1本に通す。**どこかで flex が切れると、
+   下端に貼るはずのシートが中途半端な位置で止まる。 */
+.nests,
+.hatch,
+.home,
+.steal,
+.battle {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  line-height: 1.3;
-  min-width: 0;
+  min-height: 0;
 }
 
-.nestrow .name {
+/* ── ホーム ────────────────────────────────────── */
+
+.home {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* モックの「NOW EVENT」の位置。⭐ 中身は輪の目的地に置き換えた */
+.goal {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--small-radius);
+  box-shadow: var(--lift);
+  padding: 9px 13px;
+}
+
+.glabel {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  /* ⚠️ #F2762E は白地で 3.3:1。文字に使うなら濃くする */
+  color: #b8480f;
+}
+
+.gname {
   font-size: 13px;
   font-weight: 900;
 }
 
-.nestrow .controls {
-  margin: 0;
+/* ⭐ 編成が主役。三角に置いてリーダーを手前に大きく */
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 380px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
 }
 
-.nestrow .controls button {
-  padding: 5px 14px;
+.cloud {
+  position: absolute;
+  border-radius: var(--pill);
+  background: rgba(255, 255, 255, 0.8);
 }
 
-/* ⭐ 終点だけは塗る。ここが目指す先だと一目で分かるように */
-.nestrow.boss {
+.cloud.a {
+  left: -46px;
+  top: 40px;
+  width: 190px;
+  height: 76px;
+}
+
+.cloud.b {
+  right: -36px;
+  top: 128px;
+  width: 150px;
+  height: 62px;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.stand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stand .tag {
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+  background: var(--card);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--pill);
+  padding: 2px 11px;
+}
+
+/* ⚠️ 台座（濃い黄）の上に乗るので、薄い色にしない */
+.stand .sub {
+  font-size: 10px;
+  color: var(--ink);
+}
+
+.stand.side {
+  position: absolute;
+  z-index: 1;
+}
+
+.stand.left {
+  left: 0;
+  bottom: 132px;
+}
+
+.stand.right {
+  right: 0;
+  bottom: 148px;
+}
+
+.stand.leader {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 40px;
+}
+
+/* ⚠️ 役割の文字を台座の上に置くと、**台座のラベルに見える**。
+   リーダーだけ順番を変えて、名前のピルが台座に乗るようにする。 */
+.stand.leader .sub {
+  order: -1;
+  letter-spacing: 0.16em;
+}
+
+.stand.leader .tag {
+  order: 3;
+  font-family: var(--display);
+  font-size: 16px;
+  background: var(--sun);
+  border-width: 3px;
+  box-shadow: var(--lift);
+  padding: 4px 16px;
+  margin-top: 6px;
+}
+
+/* 台座。⭐ 立ち位置が決まると「並んでいる」に見える */
+.ground,
+.soil {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 268px;
+  border: 4px solid var(--ink);
+}
+
+.ground {
+  bottom: 26px;
+  height: 66px;
+  border-radius: 50%;
+  background: #ffd98a;
+}
+
+.soil {
+  bottom: 16px;
+  height: 36px;
+  border-top: none;
+  border-radius: 0 0 26px 26px;
+  background: #f5b24e;
+}
+
+/* 編成から出る事実だけを3つ。⚠️ Lv も通貨も無い */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.fact {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--small-radius);
+  box-shadow: var(--lift);
+  padding: 7px 4px;
+}
+
+.fact .k {
+  font-size: 9px;
+  color: var(--ink-mid);
+}
+
+.fact .v {
+  font-family: var(--display);
+  font-size: 16px;
+}
+
+/* ── 巣 ────────────────────────────────────────── */
+
+.nestlist {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 4px 0 0;
+}
+
+.nestcard {
+  display: grid;
+  grid-template-columns: 98px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  background: var(--card);
+  border: 4px solid var(--ink);
+  border-radius: 24px;
+  box-shadow: var(--lift-deep);
+  padding: 14px;
+}
+
+/* ⭐ 巣そのものを描く。左が「場所」だとリストではなく行き先に見える */
+.nestart {
+  position: relative;
+  width: 98px;
+  height: 92px;
+}
+
+.bowl {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 94px;
+  height: 68px;
+  border: 4px solid var(--ink);
+  border-radius: 60% 60% 16% 16% / 88% 88% 12% 12%;
+  background: repeating-linear-gradient(58deg, #c08a55 0 8px, #a87545 8px 16px);
+}
+
+.who {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  line-height: 0;
+}
+
+.nestcard .ident {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+}
+
+.nestcard .name {
+  font-size: 14px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+/* 属性のバッジ。⚠️ 段階や素質は出さない（入るまで分からないのが仕様） */
+.ebadge {
+  font-size: 11px;
+  border: 2.5px solid var(--ink);
+  border-radius: var(--pill);
+  padding: 1px 11px;
+}
+
+.ebadge[data-element='scale'] {
+  background: var(--leaf);
+}
+
+.ebadge[data-element='fang'] {
+  background: var(--rose);
+}
+
+.ebadge[data-element='plume'] {
+  background: var(--sky);
+}
+
+.challenge {
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+  background: var(--sun);
+  border: 3.5px solid var(--ink);
+  border-radius: var(--card-radius);
+  box-shadow: 0 5px 0 var(--ink);
+  padding: 11px 14px;
+}
+
+.challenge:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 var(--ink);
+}
+
+/* ⭐ 終点だけ塗る。ここが目指す先だと一目で分かるように */
+.nestcard.boss {
   background: var(--violet);
 }
 
-.nestrow.boss .controls button {
+.nestcard.boss .challenge {
   background: var(--accent);
 }
 
 /* ⚠️ 薄い文字色は白地の上でしか成り立たない。塗った面の上では読めない */
-.nestrow.boss .cid,
-.nestrow.boss .tags {
+.nestcard.boss .tags,
+.nestcard.boss .cid {
   color: var(--ink);
 }
 
-.eggshelf {
+.nestcard.boss .ebadge {
   background: var(--card);
-  border: 3px solid var(--ink);
-  border-radius: var(--card-radius);
-  box-shadow: var(--lift);
-  padding: 12px;
-  margin: 16px 0 0;
 }
 
-.shelftitle {
+.hint {
+  font-size: 11px;
+  color: var(--ink-mid);
+  text-align: center;
+  margin: 14px 0 0;
+}
+
+/* ── 孵化 ──────────────────────────────────────── */
+
+.hatch {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.eggs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.eggslot {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border: 4px solid var(--ink);
+  border-radius: 24px;
+  box-shadow: var(--lift-deep);
+  padding: 12px 14px;
+}
+
+/* 卵のうちは中身が分からない。⭐ 殻だけ見せて、姿は孵るまで出さない */
+.shell {
+  display: block;
+  width: 44px;
+  height: 54px;
+  border: 4px solid var(--ink);
+  border-radius: 50% 50% 46% 46% / 62% 62% 38% 38%;
+  background: #ffe9a8;
+}
+
+.shell[data-how='defeated'] {
+  background: var(--sun);
+}
+
+.ebody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ebody .name {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.eggslot .go {
   font-size: 12px;
   font-weight: 900;
-  margin: 0 0 8px;
-}
-
-.eggrow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--ink-mid);
-  padding: 5px 0;
-}
-
-.eggrow button {
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 500;
-  background: var(--sun);
-  border: 2.5px solid var(--ink);
-  border-radius: var(--pill);
-  padding: 3px 12px;
   white-space: nowrap;
+  background: var(--sun);
+  border: 3px solid var(--ink);
+  border-radius: var(--small-radius);
+  box-shadow: var(--lift);
+  padding: 8px 12px;
 }
 
-.eggrow button:disabled {
+.eggslot .go:disabled {
   background: var(--sunk);
   color: var(--ink-soft);
   border-color: var(--ink-soft);
+  box-shadow: none;
   cursor: default;
 }
 
-.portrait.big {
-  margin: 16px 0;
+.warn {
+  font-size: 11px;
+  background: #ffe0e9;
+  border: 3px solid var(--ink);
+  border-radius: var(--small-radius);
+  padding: 8px 10px;
+  margin: 0;
+}
+
+.born {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  border: 4px solid var(--ink);
+  border-radius: 24px;
+  box-shadow: var(--lift-deep);
+  padding: 20px 14px;
   text-align: center;
 }
 
+.born .title,
+.result .title,
+.breedpreview .title {
+  font-family: var(--display);
+  font-size: 18px;
+  margin: 0;
+}
+
+.born .art {
+  line-height: 0;
+}
+
+/* ── 結果 ──────────────────────────────────────── */
+
 .result {
   background: var(--card);
-  border: 3px solid var(--ink);
-  border-radius: var(--card-radius);
-  box-shadow: var(--lift);
-  padding: 14px;
-  margin: 16px 0 0;
+  border: 4px solid var(--ink);
+  border-radius: 24px;
+  box-shadow: var(--lift-deep);
+  padding: 18px 14px;
+  margin: 12px 0 0;
+  text-align: center;
 }
 
 .result .lead {
   font-family: var(--display);
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 400;
+}
+
+.result .controls {
+  justify-content: center;
 }
 
 /* ── 配合 ──────────────────────────────────────── */
 
+/* ⭐ 上に2枠。「今なにを掛けようとしているか」が常に見えていないと選べない */
+.bench {
+  display: grid;
+  grid-template-columns: 1fr 26px 1fr;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 12px;
+}
+
+.bslot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 120px;
+  justify-content: center;
+  background: var(--card);
+  border: 4px solid var(--ink);
+  border-radius: 22px;
+  box-shadow: var(--lift-deep);
+  padding: 12px 8px;
+  text-align: center;
+}
+
+/* 空き枠は「まだ入っていない」と分かる形にする（塗らない・破線） */
+.bslot[data-filled='false'] {
+  background: rgba(255, 255, 255, 0.5);
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.bslot .art {
+  line-height: 0;
+}
+
+.bslot .name {
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.cross {
+  font-family: var(--display);
+  font-size: 22px;
+  text-align: center;
+}
+
 .breedpreview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   min-height: 24px;
-  margin: 12px 0 0;
+}
+
+.eggpreview {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--small-radius);
+  box-shadow: var(--lift);
+  padding: 10px 12px;
+}
+
+.sheetlabel {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--ink-mid);
+  margin: 12px 0 6px;
 }
 
 .roster.picker {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  margin: 14px 0 0;
 }
 
 .pick {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr);
   align-items: center;
   column-gap: 10px;
   text-align: left;
@@ -710,6 +1328,12 @@ button {
 /* 選ばれている2体だけを塗る */
 .pick[data-on='true'] {
   background: var(--mint);
+}
+
+/* ⚠️ 薄い文字色は白地の上でしか成り立たない。塗った面の上では読めない */
+.pick[data-on='true'] .cid,
+.pick[data-on='true'] .tags {
+  color: var(--ink);
 }
 
 .pick:active {
@@ -727,6 +1351,73 @@ button {
 .pickbody .name {
   font-size: 12px;
   font-weight: 900;
+}
+
+/* ── BOX ───────────────────────────────────────── */
+
+.boxdetail {
+  margin: 4px 0 0;
+}
+
+.controls.sorts {
+  gap: 6px;
+  margin: 12px 0 0;
+}
+
+.controls.sorts button {
+  font-size: 11px;
+  border-width: 2.5px;
+  padding: 3px 11px;
+}
+
+/* ⭐ 下はアイコンのグリッド。50枠まで増えても一覧できる */
+.boxgrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 0 3px 0 var(--ink);
+  padding: 5px 2px 3px;
+  line-height: 0;
+}
+
+.cell[data-on='true'] {
+  background: var(--sun);
+}
+
+/* 出撃中の3体には印を付ける。⭐ 編成は BOX からしか変えられないので */
+.cell[data-party='true']::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2.5px solid var(--ink);
+}
+
+.cell .cnum {
+  font-size: 9px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.cell:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--ink);
 }
 
 /* ── ギャラリー（意匠の確認用。遊びの画面ではない） ── */

@@ -122,16 +122,25 @@ export function renderBattle(
   const element = document.createElement('div')
   element.className = 'battle'
 
-  const enemyRow = document.createElement('div')
-  enemyRow.className = 'field enemies'
+  // ⭐ モックの構成: 左に味方を小さくリスト、右に敵を大きく。
+  //    下は白いシートで、そこがコマンドの場だと形で分かるようにする
+  const arena = document.createElement('div')
+  arena.className = 'arena'
   const allyRow = document.createElement('div')
   allyRow.className = 'field allies'
+  const enemyRow = document.createElement('div')
+  enemyRow.className = 'field enemies'
+  arena.append(allyRow, enemyRow)
+
+  const sheet = document.createElement('div')
+  sheet.className = 'sheet'
   const commands = document.createElement('div')
   commands.className = 'commands'
   const logBox = document.createElement('div')
   logBox.className = 'battlelog mono'
+  sheet.append(commands, logBox)
 
-  element.append(enemyRow, allyRow, commands, logBox)
+  element.append(arena, sheet)
 
   function buildFighter(unit: Unit): HTMLElement {
     const box = document.createElement('div')
@@ -155,9 +164,11 @@ export function renderBattle(
       })
     }
 
+    // ⭐ 敵は「絵」、味方は「札」。同じ形で並べると縦1本で見分けがつかない
+    const big = unit.side === 'enemy'
     const art = document.createElement('div')
     art.className = 'art'
-    art.append(spriteToCanvas(speciesOf(unit.creature).sprite, unitPalette(unit), 2))
+    art.append(spriteToCanvas(speciesOf(unit.creature).sprite, unitPalette(unit), big ? 4 : 2))
 
     const label = document.createElement('span')
     label.className = 'fname'
@@ -171,7 +182,9 @@ export function renderBattle(
 
     const nums = document.createElement('span')
     nums.className = 'nums mono'
-    nums.textContent = `${unit.hp}/${unit.maxHp}`
+    nums.textContent = big
+      ? `${Math.round((unit.hp / unit.maxHp) * 100)}%`
+      : `${unit.hp}/${unit.maxHp}`
 
     const gauge = document.createElement('span')
     gauge.className = 'meter gauge'
@@ -186,7 +199,8 @@ export function renderBattle(
     // ⚠️ 速度の数値は出さない。ゲージの伸び方で読ませる
     badges.textContent = activeStatuses(unit).join(' ')
 
-    box.append(art, label, hp, nums, gauge, badges)
+    if (big) box.append(art, label, nums, hp, gauge, badges)
+    else box.append(art, label, hp, nums, gauge, badges)
     return box
   }
 
@@ -214,7 +228,7 @@ export function renderBattle(
       ask.textContent = `→ ${actionSkill(awaiting, pending).name}：狙う相手を選ぶ`
       const cancel = document.createElement('button')
       cancel.type = 'button'
-      cancel.className = 'steal'
+      cancel.className = 'cancel'
       cancel.textContent = 'やめる'
       cancel.addEventListener('click', () => {
         pending = null

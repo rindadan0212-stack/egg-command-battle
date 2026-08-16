@@ -1,14 +1,21 @@
-/** 画面の器。巣・保管庫を切り替える。 */
+/** 画面の器。⭐ **ホームがハブ。**各画面は ‹ でホームへ戻る。
+ *
+ *  ⚠️ 常時タブではない（モックの構造に合わせた）。
+ *  下部の4パネルはホームにだけ出る。
+ */
 
 import { fingerprintAll } from './core/fingerprint.ts'
 import { wildTotalOf } from './game/creature.ts'
 import { auditNests } from './game/nest.ts'
 import { auditSpecies } from './game/species.ts'
-import { newGame } from './game/state.ts'
+import { newGame, partyOf } from './game/state.ts'
 import type { SortKey } from './game/storage.ts'
 import { EMPTY_SOURCE, startLiveReporting } from './live/report.ts'
 import { renderBreed } from './views/breed.ts'
+import { buildHatch } from './views/hatch.ts'
+import { buildHome } from './views/home.ts'
 import { renderNests, type NestView } from './views/nests.ts'
+import { buildDock, buildFrame, type Sky } from './views/shell.ts'
 import { renderStorage } from './views/storage.ts'
 
 // ⚠️ 表の不備をここで落とす。「型は通る・ただ効かなくなるだけ」を防ぐ数える検査
@@ -18,46 +25,28 @@ auditNests()
 const WORLD_SEED = 20260815
 const game = newGame(WORLD_SEED)
 
-const VIEWS = [
-  ['nests', '巣'],
-  ['breed', '配合'],
-  ['storage', '保管庫'],
-] as const
-type ViewId = (typeof VIEWS)[number][0]
+type ViewId = 'home' | 'nests' | 'hatch' | 'breed' | 'box'
 
-const ui = { view: 'nests' as ViewId, sort: 'wildTotal' as SortKey }
+const ui = { view: 'home' as ViewId, sort: 'wildTotal' as SortKey }
 let nestView: NestView | null = null
 
 const root = document.querySelector<HTMLElement>('#app')
-let storageButton: HTMLButtonElement | null = null
 
-function storageLabel(): string {
-  return `保管庫 ${game.storage.creatures.length}`
+function go(view: ViewId): void {
+  if (ui.view === view) return
+  ui.view = view
+  paint()
 }
 
-function buildNav(): HTMLElement {
-  const nav = document.createElement('nav')
-  nav.className = 'viewnav'
-  for (const [id, label] of VIEWS) {
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.textContent = id === 'storage' ? storageLabel() : label
-    button.dataset['on'] = String(id === ui.view)
-    button.addEventListener('click', () => {
-      if (ui.view === id) return
-      ui.view = id
-      paint()
-    })
-    if (id === 'storage') storageButton = button
-    nav.append(button)
-  }
-  return nav
-}
+const home = (): void => go('home')
 
-/** ⚠️ 巣の流れの途中で画面ごと作り直すと、戦闘や結果表示が飛ぶ。
- *  数だけ差し替える。 */
-function refreshCounts(): void {
-  if (storageButton) storageButton.textContent = storageLabel()
+/** 画面ごとの上段。⚠️ 数えられる事実だけをピルに置く（Lv も通貨も無い）。 */
+const SKY: Record<ViewId, Sky> = {
+  home: 'home',
+  nests: 'nest',
+  hatch: 'hatch',
+  breed: 'breed',
+  box: 'box',
 }
 
 function paint(): void {
@@ -66,22 +55,65 @@ function paint(): void {
   nestView?.dispose()
   nestView = null
 
-  const heading = document.createElement('h1')
-  heading.textContent = 'Egg Command Battle'
-  root.replaceChildren(heading, buildNav())
+  const slots = `${game.storage.creatures.length}/${game.storage.slots}`
 
-  if (ui.view === 'storage') {
-    renderStorage(root, game, ui)
+  if (ui.view === 'home') {
+    const frame = buildFrame('home', { title: 'Egg Command Battle', badge: `BOX ${slots}` })
+    frame.screen.append(buildHome(game))
+    frame.element.append(
+      buildDock([
+        { id: 'box', label: 'BOX', count: slots, onGo: () => go('box') },
+        {
+          id: 'hatch',
+          label: '孵化',
+          count: game.eggs.length > 0 ? String(game.eggs.length) : undefined,
+          onGo: () => go('hatch'),
+        },
+        { id: 'breed', label: '配合', onGo: () => go('breed') },
+        // ⭐ 塗るのはここだけ。次にやることが1つに見える
+        { id: 'nests', label: '探索', lead: true, onGo: () => go('nests') },
+      ]),
+    )
+    root.replaceChildren(frame.element)
     return
   }
 
-  if (ui.view === 'breed') {
-    renderBreed(root, game, refreshCounts)
+  const titles: Record<Exclude<ViewId, 'home'>, string> = {
+    nests: '巣をえらぶ',
+    hatch: '孵化',
+    breed: '配合',
+    box: 'BOX',
+  }
+  const badges: Record<Exclude<ViewId, 'home'>, string | undefined> = {
+    nests: `編成 ${partyOf(game).length}/3`,
+    hatch: `卵 ${game.eggs.length}`,
+    breed: `BOX ${slots}`,
+    box: slots,
+  }
+  const view = ui.view as Exclude<ViewId, 'home'>
+
+  const frame = buildFrame(SKY[view], {
+    back: home,
+    title: titles[view],
+    badge: badges[view],
+  })
+  root.replaceChildren(frame.element)
+
+  if (view === 'box') {
+    renderStorage(frame.screen, game, ui)
+    return
+  }
+  if (view === 'breed') {
+    renderBreed(frame.screen, game, paint)
+    return
+  }
+  if (view === 'hatch') {
+    frame.screen.append(buildHatch(game, paint))
     return
   }
 
-  nestView = renderNests(game, refreshCounts)
-  root.append(nestView.element)
+  nestView = renderNests(game, paint, frame.setTitle)
+  frame.screen.append(nestView.element)
 }
 
 paint()
@@ -96,7 +128,7 @@ startLiveReporting('game', {
   }),
   // ⭐ ここが §5.0 の肝。AI が測るべき個体そのものを名指しできるようにする
   scene: () => ({
-    stage: '段C',
+    stage: '段F',
     view: ui.view,
     seed: WORLD_SEED,
     slots: `${game.storage.creatures.length}/${game.storage.slots}`,

@@ -14,16 +14,17 @@ import { spriteToCanvas } from '../render/sprite.ts'
 export function renderBreed(root: HTMLElement, game: Game, onChange: () => void): void {
   const picked: string[] = []
 
-  const lead = document.createElement('p')
-  lead.className = 'lead'
-
-  const note = document.createElement('p')
-  note.className = 'note'
-  note.textContent =
-    '2体を選ぶ。各ステは独立に、高いほうの親が 55%。変異は 2.5% を3回。◆は種族固定のスキル1。'
+  // ⭐ モックの Breed そのまま: **上に2体の枠と結果、下に相手を選ぶリスト。**
+  //    「今なにを掛けようとしているか」が常に上に出ていないと、選ぶ判断ができない
+  const bench = document.createElement('div')
+  bench.className = 'bench'
 
   const preview = document.createElement('div')
   preview.className = 'breedpreview'
+
+  const pickLabel = document.createElement('p')
+  pickLabel.className = 'sheetlabel mono'
+  pickLabel.textContent = 'SELECT PARTNER'
 
   const list = document.createElement('div')
   list.className = 'roster picker'
@@ -68,23 +69,72 @@ export function renderBreed(root: HTMLElement, game: Game, onChange: () => void)
     return card
   }
 
+  /** 上の2枠。空きも枠として出す（何体選べばいいかが形で分かる） */
+  function buildSlot(index: number): HTMLElement {
+    const id = picked[index]
+    const creature = id ? game.storage.creatures.find((c) => c.id === id) : undefined
+    const slot = document.createElement('div')
+    slot.className = 'bslot'
+    slot.dataset['filled'] = String(Boolean(creature))
+    if (!creature) {
+      const hint = document.createElement('span')
+      hint.className = 'tags'
+      hint.textContent = `親 ${index + 1}`
+      slot.append(hint)
+      return slot
+    }
+    const species = speciesOf(creature)
+    const art = document.createElement('div')
+    art.className = 'art'
+    art.append(spriteToCanvas(species.sprite, paletteOf(creature), 3))
+    const name = document.createElement('span')
+    name.className = 'name'
+    name.textContent = species.name
+    const meta = document.createElement('span')
+    meta.className = 'cid mono'
+    meta.textContent = `${creature.id} · 素質${wildTotalOf(creature)}`
+    const s1 = skillsOf(creature)[0]
+    const skill = document.createElement('span')
+    skill.className = 'tags'
+    skill.textContent = `◆${s1.name}`
+    slot.append(art, name, meta, skill)
+    return slot
+  }
+
   function paint(): void {
-    lead.textContent = `配合する2体を選ぶ（${picked.length}/2）`
     list.replaceChildren(...game.storage.creatures.map(buildCard))
     preview.replaceChildren()
 
-    if (picked.length !== 2) return
+    const cross = document.createElement('span')
+    cross.className = 'cross'
+    cross.textContent = '+'
+    bench.replaceChildren(buildSlot(0), cross, buildSlot(1))
+
+    if (picked.length !== 2) {
+      const wait = document.createElement('p')
+      wait.className = 'note'
+      wait.textContent =
+        '2体を選ぶ。各ステは独立に、高いほうの親が 55%。変異は 2.5% を3回。◆は種族固定のスキル1。'
+      preview.append(wait)
+      return
+    }
 
     const [a, b] = picked.map((id) => game.storage.creatures.find((c) => c.id === id) as Creature)
     if (!a || !b) return
     const info = previewOf(a, b)
 
     const rows = document.createElement('div')
-    rows.className = 'note mono'
-    rows.textContent =
-      `子の種族: ${info.species.join(' か ')}` +
-      ` / 技の候補: ${info.skillPool.join('・') || '（親に技が無い）'}` +
-      ` / 変異: ${info.mutable ? 'あり得る' : `両親とも変異${MUTATION_COUNTER_LIMIT}以上なので出ない`}`
+    rows.className = 'eggpreview'
+    const head = document.createElement('span')
+    head.className = 'sheetlabel mono'
+    head.textContent = 'RESULT EGG'
+    const body = document.createElement('span')
+    body.className = 'note mono'
+    body.textContent =
+      `種族 ${info.species.join(' か ')}` +
+      ` / 技 ${info.skillPool.join('・') || '（親に技が無い）'}` +
+      ` / 変異 ${info.mutable ? 'あり得る' : `両親とも変異${MUTATION_COUNTER_LIMIT}以上なので出ない`}`
+    rows.append(head, body)
 
     const go = document.createElement('div')
     go.className = 'controls'
@@ -98,7 +148,7 @@ export function renderBreed(root: HTMLElement, game: Game, onChange: () => void)
       onChange()
       paint()
       const said = document.createElement('p')
-      said.className = 'lead'
+      said.className = 'title'
       said.textContent =
         outcome.mutations > 0
           ? `卵ができた（${outcome.egg.id}）— ⭐ 変異 ${outcome.mutations} 回`
@@ -111,5 +161,5 @@ export function renderBreed(root: HTMLElement, game: Game, onChange: () => void)
   }
 
   paint()
-  root.append(lead, note, preview, list)
+  root.append(bench, preview, pickLabel, list)
 }

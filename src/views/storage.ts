@@ -140,38 +140,68 @@ export function buildUnitRow(creature: Creature, actions?: RowActions): HTMLElem
   return unit
 }
 
+/** ⭐ モックの Box そのまま: **上に選んだ1体の詳細、下にアイコンのグリッド。**
+ *
+ *  ⚠️ 前は全個体のカードを縦に積んでいたが、50枠まで増えると一覧できない。
+ *  「どれを逃がすか」は並べて比べる作業なので、グリッド のほうが向いている。 */
 export function renderStorage(root: HTMLElement, game: Game, state: { sort: SortKey }): void {
   const storage = game.storage
+  let picked: string | null = storage.creatures[0]?.id ?? null
 
-  const lead = document.createElement('p')
-  lead.className = 'lead'
-
-  const note = document.createElement('p')
-  note.className = 'note'
-  note.textContent =
-    '◆ が種族固定のスキル1。奪ってこないと手に入らない。出撃した3体だけが育成ポイントをもらう。'
+  const detail = document.createElement('div')
+  detail.className = 'boxdetail'
 
   const controls = document.createElement('div')
-  controls.className = 'controls'
-  const list = document.createElement('div')
-  list.className = 'roster'
+  controls.className = 'controls sorts'
 
-  const paint = (): void => {
+  const grid = document.createElement('div')
+  grid.className = 'boxgrid'
+
+  function paint(): void {
     const party = partyOf(game).map((c) => c.id)
-    lead.textContent =
-      `${storage.creatures.length} / ${storage.slots} 枠` +
-      `　出撃 ${party.join(' / ') || '（未選択）'}`
-    list.replaceChildren(
-      ...sorted(storage, state.sort).map((c) =>
-        buildUnitRow(c, {
+    const list = sorted(storage, state.sort)
+    if (picked !== null && !list.some((c) => c.id === picked)) picked = list[0]?.id ?? null
+    const current = list.find((c) => c.id === picked) ?? null
+
+    detail.replaceChildren()
+    if (current) {
+      detail.append(
+        buildUnitRow(current, {
           onTrain: paint,
-          inParty: party.includes(c.id),
+          inParty: party.includes(current.id),
           onToggleParty: () => {
-            togglePartyMember(game, c.id)
+            togglePartyMember(game, current.id)
             paint()
           },
         }),
-      ),
+      )
+    } else {
+      const empty = document.createElement('p')
+      empty.className = 'note'
+      empty.textContent = 'BOX が空。巣へ行って卵を奪ってくる。'
+      detail.append(empty)
+    }
+
+    grid.replaceChildren(
+      ...list.map((c) => {
+        const cell = document.createElement('button')
+        cell.type = 'button'
+        cell.className = 'cell'
+        cell.id = `g-${c.id}`
+        cell.dataset['on'] = String(c.id === picked)
+        cell.dataset['party'] = String(party.includes(c.id))
+        cell.append(spriteToCanvas(speciesOf(c).sprite, paletteOf(c), 2))
+        const n = document.createElement('span')
+        n.className = 'cnum mono'
+        // ⭐ 並べ替えの基準になっている値を出す。並びの理由が見えないと選べない
+        n.textContent = String(wildTotalOf(c))
+        cell.append(n)
+        cell.addEventListener('click', () => {
+          picked = c.id
+          paint()
+        })
+        return cell
+      }),
     )
   }
 
@@ -191,5 +221,5 @@ export function renderStorage(root: HTMLElement, game: Game, state: { sort: Sort
   }
 
   paint()
-  root.append(lead, note, controls, list)
+  root.append(detail, controls, grid)
 }
