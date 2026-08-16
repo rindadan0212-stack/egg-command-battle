@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using EggCommand.Core;
 
@@ -45,14 +46,63 @@ namespace EggCommand.View
         /// ワールド空間に置くときは、そこから実寸へ scale で伸ばすと寸法が読みやすい。</summary>
         public static Sprite ToSprite(PixelSprite pixelSprite, Palette palette, float pixelsPerUnit = 16f)
         {
+            var key = new Key(pixelSprite, palette, pixelsPerUnit);
+
+            Sprite cached;
+            // ⚠️ Unity の == は「破棄済み」も null と答える。再生を抜けたあとの残骸を掴まないように、
+            //    在るかどうかではなく**生きているか**で見る
+            if (_cache.TryGetValue(key, out cached) && cached != null) return cached;
+
             var texture = ToTexture(pixelSprite, palette);
-            return Sprite.Create(
+            var sprite = Sprite.Create(
                 texture,
                 new Rect(0f, 0f, texture.width, texture.height),
                 new Vector2(0.5f, 0.5f),
                 pixelsPerUnit,
                 extrude: 0,
                 meshType: SpriteMeshType.FullRect);
+
+            _cache[key] = sprite;
+            return sprite;
+        }
+
+        /// <summary>作った絵を取っておく場所。
+        ///
+        /// ⭐ 絵の**種類**は有限（種族数 × パレット数）。個体ごとではなく種類ごとに持てば、
+        /// 保管庫に何体いても絵は数十枚で足りる。
+        ///
+        /// ⚠️ ここが無かったので、BOX や配合を開くたびに升のぶんだけ
+        /// Texture2D を作っては捨てていた（保管枠は50）。
+        /// Unity の Texture2D は GC 任せで消えないので、開くほど積み上がる。
+        /// 種族が増えるほど効いてくる場所。</summary>
+        private static readonly Dictionary<Key, Sprite> _cache = new Dictionary<Key, Sprite>();
+
+        /// <summary>⚠️ ドット絵とパレットは表が持つ**同じ実体**を回してくるので、
+        /// 中身ではなく参照で照らし合わせてよい（16×16 の中身を毎回比べない）。</summary>
+        private readonly struct Key : System.IEquatable<Key>
+        {
+            private readonly PixelSprite _sprite;
+            private readonly Palette _palette;
+            private readonly float _pixelsPerUnit;
+
+            public Key(PixelSprite sprite, Palette palette, float pixelsPerUnit)
+            {
+                _sprite = sprite;
+                _palette = palette;
+                _pixelsPerUnit = pixelsPerUnit;
+            }
+
+            public bool Equals(Key other) =>
+                ReferenceEquals(_sprite, other._sprite)
+                && ReferenceEquals(_palette, other._palette)
+                && _pixelsPerUnit == other._pixelsPerUnit;
+
+            public override bool Equals(object obj) => obj is Key key && Equals(key);
+
+            public override int GetHashCode() =>
+                System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(_sprite) * 397
+                ^ System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(_palette)
+                ^ _pixelsPerUnit.GetHashCode();
         }
 
         /// <summary>"#rrggbb" を読む。⚠️ 読めないものを黙って黒にしない。</summary>
