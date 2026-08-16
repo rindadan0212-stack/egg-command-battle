@@ -100,7 +100,7 @@ namespace EggCommand.View
                 onTake: () =>
                 {
                     var nest = app.CurrentNest;
-                    Games.AwardParty(Games.PartyOf(app.Game));
+                    Games.GrowParty(Games.PartyOf(app.Game));
                     _result = null;
                     Leave();
                     // ⚠️ 盗んだ卵は素質が落ちる（倒したほうが良い卵）

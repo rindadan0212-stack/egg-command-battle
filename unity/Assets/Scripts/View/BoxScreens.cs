@@ -51,10 +51,10 @@ namespace EggCommand.View
             view.Bind(creatures, a, b,
                 onBreed: () =>
                 {
-                    var outcome = Games.BreedPair(app.Game, _a, _b);
+                    // ⭐ 2体が卵に還る。両親は失われる
+                    var outcome = Games.FusePair(app.Game, _a, _b);
                     _a = null;
                     _b = null;
-                    // ⭐ 配合でも卵は卵。手に入れた瞬間は同じ演出で伝える
                     Fanfare.EggGot(app.Overlay, outcome.Egg, () => app.Show(Screen.Hatch));
                 },
                 onPick: id =>
@@ -84,25 +84,44 @@ namespace EggCommand.View
     {
         private static SortKey _sort = SortKey.WildTotal;
         private static string _picked;
+        /// <summary>合成で食わせる相手。⚠️ 選んでいる個体とは別に持つ。</summary>
+        private static string _food;
 
         public static void Build(App app, RectTransform body)
         {
             var game = app.Game;
             var sorted = Storages.Sorted(game.Storage, _sort);
 
-            Creature creature = null;
-            foreach (var c in sorted) if (c.Id == _picked) creature = c;
+            Creature creature = null, food = null;
+            foreach (var c in sorted)
+            {
+                if (c.Id == _picked) creature = c;
+                if (c.Id == _food) food = c;
+            }
             if (creature == null && sorted.Count > 0) { creature = sorted[0]; _picked = creature.Id; }
+            if (food != null && creature != null && food.Id == creature.Id) { food = null; _food = null; }
 
             var view = app.Put<BoxView>(body, "BoxScreen");
             if (view == null) return;
 
             view.Bind(game, creature, _sort, sorted,
                 onSort: key => { _sort = key; app.Refresh(); },
+                // ⭐ 一覧を押すのは「見る」だけ。押すたびに意味が変わる画面にしない
                 onPick: id => { _picked = id; app.Refresh(); },
                 onParty: () => { Games.TogglePartyMember(game, creature.Id); app.Refresh(); },
                 onRelease: () => { Games.ReleaseCreature(game, creature.Id); _picked = null; app.Refresh(); },
-                onSpend: key => { Creatures.SpendPoint(creature, key); app.Refresh(); });
+                food: food,
+                onMarkFood: () =>
+                {
+                    _food = _food == creature.Id ? null : creature.Id;
+                    app.Refresh();
+                },
+                onFeed: () =>
+                {
+                    Games.FeedCreature(game, creature.Id, food.Id);
+                    _food = null;
+                    app.Refresh();
+                });
         }
     }
 }

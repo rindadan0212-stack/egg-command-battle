@@ -72,6 +72,19 @@ public class BattleGoldenTests
         }
     }
 
+    /// <summary>得意・不得意を外した同じ個体を作り直す（移植元と同じ形）。</summary>
+    private static List<Creature> Plain(IReadOnlyList<Creature> party)
+    {
+        var plain = new List<Creature>();
+        foreach (var c in party)
+        {
+            plain.Add(new Creature(c.Id, c.SpeciesId, c.Wild, c.Trained, c.Earned,
+                c.MutationCounter, c.Skill2, c.Skill3, c.PaletteIndex,
+                c.ParentA, c.ParentB, c.Generation));
+        }
+        return plain;
+    }
+
     /// <summary>⭐ 戦闘に乱数は無いので、同じ編成からは必ず同じ試合になる。
     /// 1手でもずれたら、較正済みの HP3倍 / 手数2倍 が意味を失う。</summary>
     [Fact]
@@ -85,7 +98,10 @@ public class BattleGoldenTests
             string where = $"seed={seed} vs {name}";
 
             var game = Games.NewGame(seed);
-            var allies = Games.PartyOf(game);
+            // ⚠️ 得意・不得意は移植元に無い概念。ここは**戦闘そのもの**が移植元と
+            //    一致することの検査なので、入力を移植元と同じ形に戻してから渡す。
+            //    （得意を付けたまま比べると、engine ではなく個体の違いで落ちる）
+            var allies = Plain(Games.PartyOf(game));
             var enemies = name == "boss"
                 ? Nests.MakeBossParty()
                 : Nests.MakeDefenders(new Rng(555).Stream(name), Nests.ById(name));

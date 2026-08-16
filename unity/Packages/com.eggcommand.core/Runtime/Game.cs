@@ -37,6 +37,7 @@ namespace EggCommand.Core
         //    較正済みの検査（45件）はそのまま通る。混ぜて引かないこと。
         public readonly Rng RngRarity;
         public readonly Rng RngEncounter;
+        public readonly Rng RngSlant;
 
         public Game(int seed)
         {
@@ -50,6 +51,7 @@ namespace EggCommand.Core
             RngBreed = root.Stream("breed");
             RngRarity = root.Stream("rarity");
             RngEncounter = root.Stream("encounter");
+            RngSlant = root.Stream("slant");
         }
     }
 
@@ -67,7 +69,10 @@ namespace EggCommand.Core
             {
                 var egg = Nests.MakeEgg(game.RngEgg, first, EggOrigin.Defeated, ++game.Serial);
                 string id = $"c{game.Serial.ToString().PadLeft(3, '0')}";
-                game.Storage = Storages.Accept(game.Storage, Nests.Hatch(game.RngHatch, egg, id));
+                StatKey strong, weak;
+                Nests.RollSlant(game.RngSlant, out strong, out weak);
+                game.Storage = Storages.Accept(game.Storage,
+                    Nests.Hatch(game.RngHatch, egg, id, strong, weak));
             }
             Encounters.Refill(game);
             return game;
@@ -123,7 +128,9 @@ namespace EggCommand.Core
             throw new ArgumentException($"{id} は保管庫にいない");
         }
 
-        /// <summary>配合する。卵は保管庫ではなく卵の棚に入る（孵すまでが1手間）。</summary>
+        /// <summary>配合する。卵は保管庫ではなく卵の棚に入る（孵すまでが1手間）。
+        /// ⚠️ 移植元の規則。較正済みの検査が踏んでいるので残す。
+        /// 遊びで使うのは <see cref="FusePair"/>。</summary>
         public static BreedOutcome BreedPair(Game game, string aId, string bId)
         {
             var outcome = Breeding.Breed(
@@ -135,10 +142,49 @@ namespace EggCommand.Core
             return outcome;
         }
 
-        /// <summary>戦闘の報酬。⭐ 出撃していた個体だけがもらう（連れ出すことが育成に直結する）。</summary>
+        /// <summary>配合＝2体が卵に還る。⭐ **両親は失われる**。
+        ///
+        /// ⚠️ 卵を作ってから消す。先に消すと、作る途中で投げたときに
+        /// 2体を失っただけで何も残らない。</summary>
+        public static BreedOutcome FusePair(Game game, string aId, string bId)
+        {
+            var a = CreatureById(game, aId);
+            var b = CreatureById(game, bId);
+            var outcome = Fusion.Fuse(game.RngBreed, a, b, ++game.Serial);
+            game.Eggs.Add(outcome.Egg);
+
+            ReleaseCreature(game, aId);
+            ReleaseCreature(game, bId);
+            return outcome;
+        }
+
+        /// <summary>合成＝個体を食わせて育てる。⭐ **食わせた側は失われる**。</summary>
+        /// <returns>実際に伸びた点数。0 なら上限に達していた（＝食わせない）。</returns>
+        public static int FeedCreature(Game game, string eaterId, string foodId)
+        {
+            if (eaterId == foodId) throw new InvalidOperationException("自分自身は食わせられない");
+            var eater = CreatureById(game, eaterId);
+            var food = CreatureById(game, foodId);
+
+            // ⚠️ 満杯なら食わせない。黙って消すと「押したのに何も起きず1体減った」になる
+            if (Levels.IsMaxed(eater)) return 0;
+
+            int gained = Creatures.Grow(eater, Levels.FeedValueOf(food));
+            if (gained > 0) ReleaseCreature(game, foodId);
+            return gained;
+        }
+
+        /// <summary>戦闘の報酬。⭐ 出撃していた個体だけがもらう（連れ出すことが育成に直結する）。
+        /// ⚠️ 移植元の規則（振り先を持たない）。遊びで使うのは <see cref="GrowParty"/>。</summary>
         public static void AwardParty(IReadOnlyList<Creature> party, int amount = 1)
         {
             foreach (var creature in party) Creatures.Award(creature, amount);
+        }
+
+        /// <summary>戦闘の報酬。⭐ 得意の方向へ自動で乗る（振り先は選ばせない）。</summary>
+        public static void GrowParty(IReadOnlyList<Creature> party, int amount = 1)
+        {
+            foreach (var creature in party) Creatures.Grow(creature, amount);
         }
 
         /// <summary>出撃する3体。⚠️ 選んでいなければ素質の高い順に埋める（遊び始めで詰まらないように）。</summary>

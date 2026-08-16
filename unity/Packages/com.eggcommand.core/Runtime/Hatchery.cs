@@ -95,7 +95,11 @@ namespace EggCommand.Core
 
                 game.Incubating.RemoveAt(i);
                 string id = $"c{(++game.Serial).ToString().PadLeft(3, '0')}";
-                var creature = Nests.Hatch(game.RngHatch, slot.Egg, id);
+                // ⚠️ 得意・不得意は別の系統で引く。hatch の系統に混ぜると
+                //    技のガチャの列がずれて、較正済みの検査が無効になる
+                StatKey strong, weak;
+                Nests.RollSlant(game.RngSlant, out strong, out weak);
+                var creature = Nests.Hatch(game.RngHatch, slot.Egg, id, strong, weak);
                 game.Storage = Storages.Accept(game.Storage, creature);
                 return creature;
             }

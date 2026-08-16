@@ -43,7 +43,7 @@ namespace EggCommand.View
                 if (slot.Wild != null) slot.Wild.text = Creatures.WildTotalOf(creature).ToString();
             }
 
-            bool ready = a != null && b != null && Breeding.CanBreed(a, b);
+            bool ready = a != null && b != null && Fusion.CanFuse(a, b);
             if (_result != null) _result.SetActive(ready);
             if (ready)
             {
@@ -55,7 +55,13 @@ namespace EggCommand.View
                     _resultEgg.sprite = PixelSpriteTexture.ToSprite(EggArt.Sprite, EggArt.Shell);
                     _resultEgg.preserveAspect = true;
                 }
-                if (_resultSpecies != null) _resultSpecies.text = string.Join(" / ", speciesNames);
+                // ⭐ 生まれる子の Lv を**先に**見せる。育てていない2体を並べたら小さい数が出る。
+                // ⚠️ 「先に育ててください」と字で書かない。数が言えば足りる
+                if (_resultSpecies != null)
+                {
+                    _resultSpecies.text =
+                        $"Lv {Fusion.PreviewBirthLevel(a, b)}　{string.Join(" / ", speciesNames)}";
+                }
                 if (_resultSkills != null) _resultSkills.text = string.Join("・", skillPool);
                 // ⭐ 変異が出うるかは印1つ。⚠️ 確率を字で説明しない
                 if (_resultMutable != null) _resultMutable.SetActive(mutable);

@@ -39,10 +39,22 @@ namespace EggCommand.Core
         public readonly string? ParentB;
         public readonly int Generation;
 
+        /// <summary>生まれつきの得意・不得意。⭐ 遺伝するが**伸ばせない**。
+        ///
+        /// ⭐ これが「合計が高い＝良い個体」を崩す。同じ合計でも形が違う。
+        /// ⭐ 育てた分はここ（得意）へ自動で乗るので、振り先を選ばせなくてよい。
+        /// ⚠️ null は「持たない」。移植元にはこの概念が無いので、
+        /// 較正済みの検査が作る個体は null のまま＝従来と1つも変わらない。</summary>
+        public readonly StatKey? Strong;
+        public readonly StatKey? Weak;
+
         public Creature(string id, string speciesId, StatBlock wild, StatBlock trained, int earned,
             int mutationCounter, string? skill2, string? skill3, int paletteIndex,
-            string? parentA, string? parentB, int generation)
+            string? parentA, string? parentB, int generation,
+            StatKey? strong = null, StatKey? weak = null)
         {
+            Strong = strong;
+            Weak = weak;
             Id = id;
             SpeciesId = speciesId;
             Wild = wild;
@@ -82,7 +94,39 @@ namespace EggCommand.Core
             creature.Earned = next > TrainMax ? TrainMax : next;
         }
 
-        /// <summary>1点を振る。⚠️ 戻せない（取り返しがつかないほうが判断に重みが出る）。</summary>
+        /// <summary>育てる。⭐ 振り先は選ばせない — その個体の**得意**へ自動で乗る。
+        ///
+        /// ⭐ 選ばせないのは、選択になっていなかったから。上限も対価も無い ＋1 は
+        /// 「多いほど良い」でしかなく、答えは画面が既に教えている。
+        /// ⭐ 得意の方向へ乗るので、個体ごとに違う形に育つ（全部が同じ最適形へ収束しない）。
+        /// ⚠️ 得意を持たない個体（移植元と同じ作り）は素質の高い順に乗せる。
+        /// </summary>
+        /// <returns>実際に伸びた点数。上限に達していれば 0。</returns>
+        public static int Grow(Creature creature, int amount)
+        {
+            int before = creature.Earned;
+            Award(creature, amount);
+            int gained = creature.Earned - before;
+            for (int i = 0; i < gained; i++)
+            {
+                var key = creature.Strong ?? Tallest(creature);
+                creature.Trained = creature.Trained.With(key, creature.Trained[key] + 1);
+            }
+            return gained;
+        }
+
+        private static StatKey Tallest(Creature creature)
+        {
+            var best = Stats.Keys[0];
+            foreach (var key in Stats.Keys)
+            {
+                if (creature.Wild[key] > creature.Wild[best]) best = key;
+            }
+            return best;
+        }
+
+        /// <summary>1点を振る。⚠️ 戻せない（取り返しがつかないほうが判断に重みが出る）。
+        /// ⚠️ 遊びからは外した（<see cref="Grow"/> が自動で振る）。移植元との照合のために残す。</summary>
         public static void SpendPoint(Creature creature, StatKey key)
         {
             if (UnspentOf(creature) <= 0)
@@ -102,9 +146,35 @@ namespace EggCommand.Core
             };
         }
 
-        /// <summary>実値。唯一の出所は <see cref="Stats"/>。ここは種族基礎を渡すだけ。</summary>
-        public static StatBlock StatsOf(Creature creature) =>
-            Stats.ActualStats(SpeciesOf(creature).Base, creature.Wild, creature.Trained);
+        /// <summary>得意・不得意の増減。⭐ ±15%。
+        /// ⚠️ 大きくすると「得意なステだけ見ればいい」になり、素質の意味が薄れる。</summary>
+        public const double Slant = 0.15;
+
+        /// <summary>実値。唯一の出所は <see cref="Stats"/>。ここは種族基礎を渡すだけ。
+        /// ⭐ 最後に得意・不得意を掛ける。⚠️ 持っていない個体（移植元と同じ作り）は素通り。</summary>
+        public static StatBlock StatsOf(Creature creature)
+        {
+            var actual = Stats.ActualStats(SpeciesOf(creature).Base, creature.Wild, creature.Trained);
+            return Slanted(actual, creature.Strong, creature.Weak);
+        }
+
+        /// <summary>得意を上げ、不得意を下げる。⚠️ 同じキーなら何もしない（打ち消し合う）。</summary>
+        public static StatBlock Slanted(StatBlock stats, StatKey? strong, StatKey? weak)
+        {
+            if (strong == null || weak == null || strong.Value == weak.Value) return stats;
+            var work = stats
+                .With(strong.Value, Scale(stats[strong.Value], 1.0 + Slant))
+                .With(weak.Value, Scale(stats[weak.Value], 1.0 - Slant));
+            return work;
+        }
+
+        /// <summary>⚠️ JS の Math.round は「0.5 は上へ」。C# の既定は銀行丸めなので合わせる。
+        /// ⚠️ 1 未満にしない（0 にすると割り算のある式が壊れる）。</summary>
+        private static int Scale(int value, double by)
+        {
+            int scaled = (int)Math.Floor(value * by + 0.5);
+            return scaled < 1 ? 1 : scaled;
+        }
 
         /// <summary>野生レベルの合計。厳選の目安として並べ替えに使う。</summary>
         public static int WildTotalOf(Creature creature) => Stats.TotalOf(creature.Wild);

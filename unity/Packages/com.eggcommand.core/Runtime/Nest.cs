@@ -53,11 +53,19 @@ namespace EggCommand.Core
         /// 「時間をかけた＝強い」が確定してしまい、待つ以外の選択が消える。</summary>
         public readonly int Rarity;
 
+        /// <summary>生まれつきの得意・不得意。⭐ null なら孵すときに引く（野生の卵）。
+        /// ⚠️ <see cref="HasSkills"/> と同じ約束。配合で決まっているものを引き直さない。</summary>
+        public readonly StatKey? Strong;
+        public readonly StatKey? Weak;
+
         public Egg(string id, string speciesId, StatBlock wild, int mutationCounter, int paletteIndex,
             string? parentA, string? parentB, int generation, EggOrigin how,
-            bool hasSkills, string? skill2, string? skill3, int rarity = 1)
+            bool hasSkills, string? skill2, string? skill3, int rarity = 1,
+            StatKey? strong = null, StatKey? weak = null)
         {
             Rarity = rarity < 1 ? 1 : rarity > Rarities.Max ? Rarities.Max : rarity;
+            Strong = strong;
+            Weak = weak;
             Id = id;
             SpeciesId = speciesId;
             Wild = wild;
@@ -194,7 +202,11 @@ namespace EggCommand.Core
 
         /// <summary>孵す。⭐ 野生の卵はここでスキル2・3のガチャを引く。
         /// 配合の卵は既に決まっているのでそのまま使う。</summary>
-        public static Creature Hatch(Rng rng, Egg egg, string id)
+        /// <summary><paramref name="strong"/>/<paramref name="weak"/> は卵が持っていないときの
+        /// 引き直し結果。⚠️ ここで乱数を引かない — 引くと既にある hatch の系統がずれて、
+        /// 較正済みの検査が無効になる。呼び側が別の系統で引いて渡す。</summary>
+        public static Creature Hatch(Rng rng, Egg egg, string id,
+            StatKey? strong = null, StatKey? weak = null)
         {
             var species = SpeciesTable.ById(egg.SpeciesId);
             string? skill2 = egg.Skill2;
@@ -206,7 +218,17 @@ namespace EggCommand.Core
 
             return new Creature(id, egg.SpeciesId, egg.Wild, new StatBlock(0, 0, 0, 0), 0,
                 egg.MutationCounter, skill2, skill3, egg.PaletteIndex,
-                egg.ParentA, egg.ParentB, egg.Generation);
+                egg.ParentA, egg.ParentB, egg.Generation,
+                egg.Strong ?? strong, egg.Weak ?? weak);
+        }
+
+        /// <summary>得意・不得意を引く。⚠️ 同じステにならないよう2つ別々に取る。</summary>
+        public static void RollSlant(Rng rng, out StatKey strong, out StatKey weak)
+        {
+            var keys = new List<StatKey>(Stats.Keys);
+            rng.Shuffle(keys);
+            strong = keys[0];
+            weak = keys[1];
         }
 
         // ── ボス ─────────────────────────────────────────

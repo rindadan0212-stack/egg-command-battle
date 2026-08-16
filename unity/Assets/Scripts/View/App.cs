@@ -252,7 +252,7 @@ namespace EggCommand.View
 
             if (won)
             {
-                Games.AwardParty(Games.PartyOf(Game));
+                Games.GrowParty(Games.PartyOf(Game));
                 if (!CurrentIsBoss && nest != null)
                 {
                     GainEgg(nest, PendingOrigin);

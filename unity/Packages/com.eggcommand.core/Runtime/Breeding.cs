@@ -128,7 +128,8 @@ namespace EggCommand.Core
 
         /// <summary>両親の4枠から、子の枠2・3を決める。
         /// ⚠️ 子の枠1（種族スキル）と重なるものは外す。同じ技が2枠を占めると片方が無駄になる。</summary>
-        private static void InheritSkills(Rng rng, Creature a, Creature b, string childSkill1,
+        /// <summary>⚠️ <see cref="Fusion"/> からも呼ぶ。技の遺伝は両方で同じ規則にしておく。</summary>
+        internal static void InheritSkills(Rng rng, Creature a, Creature b, string childSkill1,
             string childSpeciesId, out string? skill2, out string? skill3)
         {
             // ⚠️ JS の Set は入れた順を保つ。C# の HashSet は保たないので、List で順を守る
