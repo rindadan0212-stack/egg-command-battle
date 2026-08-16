@@ -38,6 +38,8 @@ namespace EggCommand.View
         // 画面をまたいで持ち回るもの
         public Nest CurrentNest;
         public bool CurrentIsBoss;
+        /// <summary>いまの戦闘が野良か。⭐ 野良は卵が出ないかわりに Lv が厚い。</summary>
+        public bool CurrentIsWild;
         public StealField Field;
         public BattleState Battle;
 
@@ -228,11 +230,19 @@ namespace EggCommand.View
 
         // ── 進行 ────────────────────────────────────────
 
+        /// <summary>野良へ挑む。⭐ 卵は出ないが Lv が厚く入る（雑魚戦）。</summary>
+        public void EnterWild(Encounter encounter)
+        {
+            EnterBattle(encounter.Nest, false);
+            CurrentIsWild = true;
+        }
+
         /// <summary>巣へ挑む。⚠️ 守り手は挑むたびに作り直す（同じ巣でも顔ぶれが変わる）。</summary>
         public void EnterBattle(Nest nest, bool boss)
         {
             CurrentNest = nest;
             CurrentIsBoss = boss;
+            CurrentIsWild = false;
             PendingOrigin = EggOrigin.Defeated;
             var enemies = boss ? Nests.MakeBossParty() : Games.DefendersOf(Game, nest);
             Battle = Core.Battle.CreateBattle(Games.PartyOf(Game), enemies);
@@ -252,8 +262,10 @@ namespace EggCommand.View
 
             if (won)
             {
-                Games.GrowParty(Games.PartyOf(Game));
-                if (!CurrentIsBoss && nest != null)
+                // ⭐ 野良は卵が出ないかわりに Lv が厚い。ここが雑魚戦の見返り
+                Games.GrowParty(Games.PartyOf(Game),
+                    CurrentIsWild ? Encounters.WildReward : 1);
+                if (!CurrentIsBoss && !CurrentIsWild && nest != null)
                 {
                     GainEgg(nest, PendingOrigin);
                     return;

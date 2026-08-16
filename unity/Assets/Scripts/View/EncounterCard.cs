@@ -15,6 +15,9 @@ namespace EggCommand.View
         [SerializeField] private Image _art;
         [SerializeField] private Text _level;
         [SerializeField] private Button _button;
+        /// <summary>卵の絵。⭐ **これが付いていれば卵が獲れる**。
+        /// ⚠️ 「巣」「野良」と字で書かない。手に入るものを出せば足りる。</summary>
+        [SerializeField] private Image _egg;
 
         public void Bind(Encounter encounter, Action onTap)
         {
@@ -23,6 +26,16 @@ namespace EggCommand.View
             {
                 _art.sprite = PixelSpriteTexture.ToSprite(species.Sprite, species.Palettes[0]);
                 _art.preserveAspect = true;
+            }
+            if (_egg != null)
+            {
+                bool hasEgg = encounter.Kind == EncounterKind.Nest;
+                _egg.gameObject.SetActive(hasEgg);
+                if (hasEgg)
+                {
+                    _egg.sprite = PixelSpriteTexture.ToSprite(EggArt.Sprite, EggArt.Shell);
+                    _egg.preserveAspect = true;
+                }
             }
             if (_level != null) _level.text = encounter.Level.ToString();
             if (_button != null)

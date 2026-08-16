@@ -126,6 +126,40 @@ public class HatcheryTests
     }
 
     [Fact]
+    public void 探索には巣と野良が必ず並ぶ()
+    {
+        // ⭐ 3件とも同じ種類だと「卵が獲れない回」「育てられない回」ができてしまう
+        for (int seed = 0; seed < 60; seed++)
+        {
+            var game = Games.NewGame(seed);
+            int nests = 0, wild = 0;
+            foreach (var e in game.Encounters)
+            {
+                if (e.Kind == EncounterKind.Nest) nests++; else wild++;
+            }
+            Assert.True(nests > 0 && wild > 0, $"seed={seed}: 巣{nests} 野良{wild}");
+
+            // 引き直しても崩れない
+            for (int i = 0; i < 20; i++)
+            {
+                Encounters.Replace(game, game.Encounters[i % Encounters.Shown].Nest);
+                nests = 0; wild = 0;
+                foreach (var e in game.Encounters)
+                {
+                    if (e.Kind == EncounterKind.Nest) nests++; else wild++;
+                }
+                Assert.True(nests > 0 && wild > 0, $"seed={seed} 引き直し{i}: 巣{nests} 野良{wild}");
+            }
+        }
+    }
+
+    [Fact]
+    public void 野良のほうが厚く伸びる()
+    {
+        Assert.True(Encounters.WildReward > 1, "野良の見返りが巣の戦闘と同じでは選ぶ理由が無い");
+    }
+
+    [Fact]
     public void 探索の巣に居ない種族は出さない()
     {
         var rng = new Rng(3);
