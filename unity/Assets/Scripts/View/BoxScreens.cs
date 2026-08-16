@@ -44,8 +44,7 @@ namespace EggCommand.View
             foreach (var egg in new List<Egg>(game.Eggs))
             {
                 Egg captured = egg;
-                var panel = Ui.Block(content, $"Egg {egg.Id}", Ui.Panel, Ui.Margin, y,
-                    Ui.W - Ui.Margin * 2f, Row);
+                var panel = Ui.Card(content, $"Egg {egg.Id}", Ui.Margin, y, Ui.W - Ui.Margin * 2f, Row);
                 float width = Ui.W - Ui.Margin * 2f;
 
                 var species = SpeciesTable.ById(egg.SpeciesId);
@@ -109,8 +108,7 @@ namespace EggCommand.View
             float panelTop = 56f;
             var a = Find(creatures, _a);
             var b = Find(creatures, _b);
-            var preview = Ui.Block(body, "Preview", Ui.Panel, Ui.Margin, panelTop,
-                Ui.W - Ui.Margin * 2f, 250f);
+            var preview = Ui.Card(body, "Preview", Ui.Margin, panelTop, Ui.W - Ui.Margin * 2f, 250f);
             float width = Ui.W - Ui.Margin * 2f;
 
             Slot(preview, "親A", a, 24f, 20f);
@@ -158,8 +156,7 @@ namespace EggCommand.View
             {
                 Creature captured = creature;
                 bool picked = creature.Id == _a || creature.Id == _b;
-                var row = Ui.Block(content, $"C {creature.Id}",
-                    picked ? Ui.PanelHi : Ui.Panel, Ui.Margin, y, Ui.W - Ui.Margin * 2f, rowHeight);
+                var row = Ui.Card(content, $"C {creature.Id}", Ui.Margin, y, Ui.W - Ui.Margin * 2f, rowHeight, picked);
                 if (picked) Ui.Block(row, "Mark", Ui.Accent, 0f, 0f, 6f, rowHeight);
 
                 Ui.PixelOf(row, "Art", creature, 20f, 18f, 96f);
@@ -256,8 +253,7 @@ namespace EggCommand.View
                 bool inParty = Games.IsInParty(game, creature.Id);
                 float thisHeight = rowHeight + (open ? openExtra : 0f);
 
-                var row = Ui.Block(content, $"C {creature.Id}",
-                    inParty ? Ui.PanelHi : Ui.Panel, Ui.Margin, rowY, Ui.W - Ui.Margin * 2f, thisHeight);
+                var row = Ui.Card(content, $"C {creature.Id}", Ui.Margin, rowY, Ui.W - Ui.Margin * 2f, thisHeight, inParty);
                 float width = Ui.W - Ui.Margin * 2f;
                 if (inParty) Ui.Block(row, "Mark", Ui.Accent, 0f, 0f, 6f, thisHeight);
 

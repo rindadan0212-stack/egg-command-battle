@@ -109,8 +109,7 @@ namespace EggCommand.View
             bool isActor = actor != null && ReferenceEquals(actor, unit);
             float width = Ui.W - Ui.Margin * 2f;
 
-            var panel = Ui.Block(body, $"Unit {unit.Key}",
-                isActor ? Ui.PanelHi : Ui.Panel, Ui.Margin, top, width, 176f);
+            var panel = Ui.Card(body, $"Unit {unit.Key}", Ui.Margin, top, width, 176f, isActor);
 
             // ⭐ 「今動く者」だけを差し色の一辺で示す（面と線を二重に使わない）
             if (isActor) Ui.Block(panel, "Now", Ui.Accent, 0f, 0f, 6f, 176f);

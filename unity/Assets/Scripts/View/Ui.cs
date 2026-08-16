@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using EggCommand.Core;
@@ -41,12 +42,16 @@ namespace EggCommand.View
         // ── 色 ──────────────────────────────────────────
         // 無彩色を支配的に、差し色は1つ。画面ごとに地の色だけを変える。
         public static readonly Color Ink = new Color32(0xef, 0xe9, 0xdc, 0xff);
-        public static readonly Color InkDim = new Color32(0x93, 0x8b, 0x7c, 0xff);
-        public static readonly Color InkFaint = new Color32(0x60, 0x5a, 0x50, 0xff);
+        // ⚠️ Kenney の札は中央が鋼色（#647685）。以前の沈んだ字だと読めないので上げた
+        public static readonly Color InkDim = new Color32(0xcd, 0xc6, 0xb8, 0xff);
+        public static readonly Color InkFaint = new Color32(0x8d, 0x87, 0x7c, 0xff);
+        /// <summary>明るい札（button-lead）の上に置く字。⚠️ 明るい字を置くと消える。</summary>
+        public static readonly Color OnLead = new Color32(0x3a, 0x2a, 0x18, 0xff);
         /// <summary>差し色。⭐ 主導線1つと「今ここ」にしか使わない。</summary>
-        public static readonly Color Accent = new Color32(0xd8, 0xb4, 0x5c, 0xff);
-        public static readonly Color Danger = new Color32(0xc9, 0x6e, 0x6e, 0xff);
-        public static readonly Color Good = new Color32(0x8f, 0xc9, 0x6e, 0xff);
+        public static readonly Color Accent = new Color32(0xff, 0xd9, 0x77, 0xff);
+        // ⚠️ 札の中央が鋼色（#647685）なので、沈んだ赤／緑は読めない。明るい側へ寄せた
+        public static readonly Color Danger = new Color32(0xff, 0xa1, 0x92, 0xff);
+        public static readonly Color Good = new Color32(0xbd, 0xed, 0x94, 0xff);
         public static readonly Color Panel = new Color32(0x24, 0x20, 0x1a, 0xff);
         public static readonly Color PanelHi = new Color32(0x2f, 0x2a, 0x22, 0xff);
 
@@ -92,6 +97,39 @@ namespace EggCommand.View
             }
         }
 
+        // ── Kenney の意匠（CC0） ────────────────────────
+        // ⚠️ 素材そのものは Assets/Resources/UI/。出所は同フォルダの NOTICE.md。
+        // ⭐ 色を掛けない。ドット絵に色を掛けると、作者が組んだ配色が濁る。
+        //    使い分けは「どの絵を貼るか」で行う。
+
+        private static readonly Dictionary<string, Sprite> Skin = new Dictionary<string, Sprite>();
+
+        private static Sprite SkinOf(string name)
+        {
+            Sprite sprite;
+            if (Skin.TryGetValue(name, out sprite)) return sprite;
+            sprite = Resources.Load<Sprite>("UI/" + name);
+            if (sprite == null)
+            {
+                // ⚠️ 黙って無地に落とさない。無いことに気づけないほうが困る
+                Debug.LogError($"UI の絵が無い: Resources/UI/{name}");
+            }
+            Skin[name] = sprite;
+            return sprite;
+        }
+
+        /// <summary>9スライスで貼る。⚠️ 引き伸ばすのは中央だけで、枠の太さは変わらない。</summary>
+        private static Image Sliced(GameObject go, string skin)
+        {
+            var image = go.AddComponent<Image>();
+            image.sprite = SkinOf(skin);
+            image.type = Image.Type.Sliced;
+            // ⚠️ ここを 0.25（4倍）にしたら枠が 75 単位になり、112 の押しどころが枠だけになった。
+            //    描かれる枠 = 6px × (100 / 32) ÷ この値。1.0 で約 19 単位。
+            image.pixelsPerUnitMultiplier = 1f;
+            return image;
+        }
+
         // ── 部品 ────────────────────────────────────────
 
         public static RectTransform Rect(string name, Transform parent)
@@ -122,13 +160,29 @@ namespace EggCommand.View
             return rect;
         }
 
-        /// <summary>面で区切る。⚠️ 線と二重に使わない。</summary>
+        /// <summary>ただの面。⚠️ 帯・印・地など「枠を持たないもの」だけに使う。
+        /// 中身を持つ器は <see cref="Card"/>。</summary>
         public static RectTransform Block(Transform parent, string name, Color color,
             float left, float top, float width, float height)
         {
             var rect = Rect(name, parent);
             Place(rect, left, top, width, height);
             rect.gameObject.AddComponent<Image>().color = color;
+            return rect;
+        }
+
+        /// <summary>中身を入れる器。⭐ 枠のある札として置く。
+        ///
+        /// ⚠️ 器はこれ1種類。⭐ **明るい札を「選択中」に使わない。**
+        /// 明るい鋼色の上では字の明暗が逆になり、行ごとに読み方が変わってしまう
+        /// （実際、光らせた行だけ字が飛んだ）。目立たせるのは差し色の一辺で足りる。
+        /// <paramref name="highlighted"/> は呼ぶ側の意図を残すためだけに受ける。</summary>
+        public static RectTransform Card(Transform parent, string name,
+            float left, float top, float width, float height, bool highlighted = false)
+        {
+            var rect = Rect(name, parent);
+            Place(rect, left, top, width, height);
+            Sliced(rect.gameObject, "panel");
             return rect;
         }
 
@@ -165,19 +219,18 @@ namespace EggCommand.View
             var rect = Rect(name, parent);
             Place(rect, left, top, width, height);
 
-            var image = rect.gameObject.AddComponent<Image>();
-            // ⭐ 主導線だけを塗る。他は面をひとつ持ち上げるだけで済ませる
-            image.color = !enabled ? new Color32(0x1e, 0x1b, 0x17, 0xff)
-                : lead ? Accent
-                : PanelHi;
+            // ⭐ 主導線だけ明るい札にする。他は木の札。押せないものは沈める
+            var image = Sliced(rect.gameObject, lead ? "button-lead" : "button");
+            if (!enabled) image.color = new Color(0.45f, 0.45f, 0.45f, 1f);
 
             var button = rect.gameObject.AddComponent<Button>();
             button.targetGraphic = image;
             button.interactable = enabled;
             if (onClick != null) button.onClick.AddListener(() => onClick());
 
+            // ⚠️ 明るい札の上に明るい字を置かない。札ごとに読める側を選ぶ
             var text = Label(rect, "Label", label, 34,
-                !enabled ? InkFaint : lead ? new Color32(0x1a, 0x16, 0x12, 0xff) : Ink,
+                !enabled ? InkFaint : lead ? OnLead : Ink,
                 TextAnchor.MiddleCenter, 0f, 0f, width, height);
             text.horizontalOverflow = HorizontalWrapMode.Overflow;
 

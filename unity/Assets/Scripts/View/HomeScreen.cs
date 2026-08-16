@@ -152,8 +152,7 @@ namespace EggCommand.View
 
         private static void NestRow(App app, RectTransform content, Nest nest, float top)
         {
-            var panel = Ui.Block(content, $"Nest {nest.Id}", Ui.Panel, Ui.Margin, top,
-                Ui.W - Ui.Margin * 2f, Row);
+            var panel = Ui.Card(content, $"Nest {nest.Id}", Ui.Margin, top, Ui.W - Ui.Margin * 2f, Row);
             float width = Ui.W - Ui.Margin * 2f;
 
             var species = SpeciesTable.ById(nest.SpeciesId);
@@ -183,8 +182,8 @@ namespace EggCommand.View
 
         private static void BossRow(App app, RectTransform content, float top)
         {
-            var panel = Ui.Block(content, "Boss", new Color32(0x2c, 0x1c, 0x1a, 0xff),
-                Ui.Margin, top, Ui.W - Ui.Margin * 2f, Row);
+            // ⭐ ゴールだけ明るい札にする（この画面の主役）
+            var panel = Ui.Card(content, "Boss", Ui.Margin, top, Ui.W - Ui.Margin * 2f, Row, true);
             float width = Ui.W - Ui.Margin * 2f;
 
             var species = SpeciesTable.ById("nushi");
