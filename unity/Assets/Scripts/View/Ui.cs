@@ -237,6 +237,30 @@ namespace EggCommand.View
             return button;
         }
 
+        /// <summary>見えない押しどころ。⭐ 札そのものを押させたいときに重ねる。
+        /// ⚠️ <see cref="Tappable"/> を使うと木の札が描かれてしまい、
+        /// 中身の上に茶色い面が乗る（実際グリッドでそうなった）。</summary>
+        public static Button HitArea(Transform parent, string name, Action onClick,
+            float left, float top, float width, float height)
+        {
+            var rect = Rect(name, parent);
+            Place(rect, left, top, width, height);
+            var image = rect.gameObject.AddComponent<Image>();
+            image.color = new Color(0f, 0f, 0f, 0f);
+            image.raycastTarget = true;
+            var button = rect.gameObject.AddComponent<Button>();
+            button.targetGraphic = image;
+            if (onClick != null) button.onClick.AddListener(() => onClick());
+            return button;
+        }
+
+        /// <summary>押しどころの字を小さくする。⚠️ 語が枠から出るときだけ使う。</summary>
+        public static void Shrink(Button button, int size)
+        {
+            var label = button.transform.Find("Label");
+            if (label != null) label.GetComponent<Text>().fontSize = size;
+        }
+
         /// <summary>ドット絵を貼る。⚠️ 補間しない（<see cref="PixelSpriteTexture"/> が保証する）。</summary>
         public static Image Pixel(Transform parent, string name, PixelSprite sprite, Palette palette,
             float left, float top, float size)

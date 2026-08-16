@@ -74,6 +74,47 @@ namespace EggCommand.EditorTools
                 }
             }
 
+            // ⭐ 同じ札の中で、字どうし・字と絵が重なっていないか。
+            // ⚠️ これを見ていなかったので、モックへ組み替えたとき詳細カードの中で
+            //    絵とステの行が重なったまま通してしまった。親の枠内なので「枠外」では出ない。
+            int textOverlaps = 0;
+            var byParent = new Dictionary<Transform, List<RectTransform>>();
+            foreach (var text in canvas.GetComponentsInChildren<Text>(false))
+            {
+                if (string.IsNullOrWhiteSpace(text.text)) continue;
+                var rect = (RectTransform)text.transform;
+                if (!byParent.ContainsKey(rect.parent)) byParent[rect.parent] = new List<RectTransform>();
+                byParent[rect.parent].Add(rect);
+            }
+            foreach (var pair in byParent)
+            {
+                var group = pair.Value;
+                for (int i = 0; i < group.Count; i++)
+                {
+                    for (int j = i + 1; j < group.Count; j++)
+                    {
+                        var a = new Vector3[4]; group[i].GetWorldCorners(a);
+                        var b = new Vector3[4]; group[j].GetWorldCorners(b);
+                        // ⚠️ 枠いっぱいの器（中央寄せの見出しなど）は重なって当然なので、
+                        //    どちらかが相手を丸ごと含むときは数えない
+                        bool contains = a[0].x <= b[0].x && a[2].x >= b[2].x && a[0].y <= b[0].y && a[2].y >= b[2].y;
+                        bool contained = b[0].x <= a[0].x && b[2].x >= a[2].x && b[0].y <= a[0].y && b[2].y >= a[2].y;
+                        if (contains || contained) continue;
+                        bool hit = !(a[2].x <= b[0].x + 1f || b[2].x <= a[0].x + 1f
+                                  || a[2].y <= b[0].y + 1f || b[2].y <= a[0].y + 1f);
+                        if (hit)
+                        {
+                            textOverlaps++;
+                            if (textOverlaps <= 4)
+                            {
+                                sb.Append("  字が重なる: ").Append(Where(group[i]))
+                                  .Append(" × ").Append(group[j].name).Append('\n');
+                            }
+                        }
+                    }
+                }
+            }
+
             // ⭐ 並べたドット絵どうしが重なっていないか。
             //    倍率を変えた日に静かに重なる（実際、フォントを替えたら編成の3体が重なった）。
             var art = new List<RectTransform>();
@@ -117,6 +158,7 @@ namespace EggCommand.EditorTools
             sb.Append("層=").Append(layers)
               .Append(" 画面外=").Append(offScreen)
               .Append(" 枠外=").Append(offParent)
+              .Append(" 字の重なり=").Append(textOverlaps)
               .Append(" 絵の重なり=").Append(overlaps)
               .Append(" 小さい押しどころ=").Append(tooSmall)
               .Append(" / Button=").Append(canvas.GetComponentsInChildren<Button>(false).Length)
