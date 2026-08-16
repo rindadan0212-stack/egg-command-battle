@@ -44,29 +44,16 @@ export const DAMAGE_POWER: Readonly<Record<PowerTier, number>> = {
   特大: 42,
 }
 
-/** ステータス系が動かす割合（%）。⭐ **ステータスの数値そのものに掛かる。** */
-export const BUFF_PERCENT: Readonly<Record<PowerTier, number>> = {
-  小: 15,
-  中: 25,
-  大: 40,
-  特大: 60,
-}
+/** ステータス系が動かす割合（%）。⭐ **ステータスの数値そのものに掛かる。**
+ *
+ *  ⚠️ **段位を使わない。**威力とは別の軸なので揃えない。UP も DOWN も一律この値。 */
+export const BUFF_PERCENT = 30
 
-/** 毒・リジェネが1行動ごとに動かす、最大HP に対する割合（%）。 */
-export const TICK_PERCENT: Readonly<Record<PowerTier, number>> = {
-  小: 3,
-  中: 5,
-  大: 8,
-  特大: 12,
-}
-
-/** HP割合回復・シールドの、最大HP に対する割合（%）。 */
-export const RATIO_PERCENT: Readonly<Record<PowerTier, number>> = {
-  小: 15,
-  中: 25,
-  大: 40,
-  特大: 60,
-}
+/** 毒・リジェネの1スタックが、1行動ごとに動かす最大HP の割合（%）。
+ *
+ *  ⭐ **スタックする。**2重なら 10%、3重なら 15%。
+ *  ⚠️ 上限を置いていない。掛け続けられると青天井になる形なので、実測で見張る。 */
+export const TICK_PERCENT = 5
 
 /** 効果のプリミティブ。
  *
@@ -78,24 +65,27 @@ export type Effect =
   | { readonly kind: 'damage'; readonly power: PowerTier; readonly scale: 'atk' | 'def' }
 
   // ── ステータス系（数値に ±%） ──────────
-  /** 攻撃力/防御力/スピードの UP・DOWN。sign が +1 で UP、-1 で DOWN */
+  /** 攻撃力/防御力/スピードの UP・DOWN。sign が +1 で UP、-1 で DOWN。
+   *  ⚠️ 効き目は一律 `BUFF_PERCENT`。段位は使わない */
   | {
       readonly kind: 'buff'
       readonly stat: Extract<StatKey, 'atk' | 'def' | 'spd'>
-      readonly power: PowerTier
       readonly sign: 1 | -1
       readonly turns: number
     }
 
   // ── HP系 ──────────────────────────────
-  /** 毒。1行動ごとに最大HPの割合ぶん減る */
-  | { readonly kind: 'poison'; readonly power: PowerTier; readonly turns: number }
-  /** リジェネ。1行動ごとに最大HPの割合ぶん回復 */
-  | { readonly kind: 'regen'; readonly power: PowerTier; readonly turns: number }
-  /** HP割合回復。即時 */
-  | { readonly kind: 'healRatio'; readonly power: PowerTier }
-  /** シールド。HP より先に減る肩代わりの点数 */
-  | { readonly kind: 'shield'; readonly power: PowerTier }
+  /** 毒。1行動ごとに最大HPの `TICK_PERCENT × スタック数` ぶん減る。⭐ スタックする */
+  | { readonly kind: 'poison'; readonly stacks: number; readonly turns: number }
+  /** リジェネ。1行動ごとに回復。⭐ スタックする */
+  | { readonly kind: 'regen'; readonly stacks: number; readonly turns: number }
+  /** HP割合回復。即時。⚠️ **技ごとに割合が違う**（段位を使わない） */
+  | { readonly kind: 'healRatio'; readonly percent: number }
+  /** シールド。⭐ **点数ではなく枚数。**
+   *  1回の攻撃につき1枚消費して、その攻撃を**威力に関係なく完全に無効化する**。
+   *  枚数が尽きたら以降は素通し。
+   *  ⭐ つまり「大きな一撃」に強く、「手数」に弱い */
+  | { readonly kind: 'shield'; readonly count: number }
 
   // ── 行動系 ────────────────────────────
   /** スタン。その回数ぶん手番を飛ばす */
@@ -187,7 +177,7 @@ const LIST: readonly Skill[] = [
     gist: '自分の攻撃力を上げる',
     ct: 4,
     target: 'self',
-    effects: [{ kind: 'buff', stat: 'atk', power: '中', sign: 1, turns: 3 }],
+    effects: [{ kind: 'buff', stat: 'atk', sign: 1, turns: 3 }],
   },
   {
     id: 'atk-down',
@@ -195,7 +185,7 @@ const LIST: readonly Skill[] = [
     gist: '敵1体の攻撃力を下げる',
     ct: 4,
     target: 'enemyOne',
-    effects: [{ kind: 'buff', stat: 'atk', power: '中', sign: -1, turns: 3 }],
+    effects: [{ kind: 'buff', stat: 'atk', sign: -1, turns: 3 }],
   },
   {
     id: 'def-up',
@@ -203,7 +193,7 @@ const LIST: readonly Skill[] = [
     gist: '自分の防御力を上げる',
     ct: 4,
     target: 'self',
-    effects: [{ kind: 'buff', stat: 'def', power: '中', sign: 1, turns: 3 }],
+    effects: [{ kind: 'buff', stat: 'def', sign: 1, turns: 3 }],
   },
   {
     id: 'def-down',
@@ -211,7 +201,7 @@ const LIST: readonly Skill[] = [
     gist: '敵1体の防御力を下げる',
     ct: 4,
     target: 'enemyOne',
-    effects: [{ kind: 'buff', stat: 'def', power: '中', sign: -1, turns: 3 }],
+    effects: [{ kind: 'buff', stat: 'def', sign: -1, turns: 3 }],
   },
   {
     id: 'spd-up',
@@ -219,7 +209,7 @@ const LIST: readonly Skill[] = [
     gist: '自分のスピードを上げる',
     ct: 4,
     target: 'self',
-    effects: [{ kind: 'buff', stat: 'spd', power: '中', sign: 1, turns: 3 }],
+    effects: [{ kind: 'buff', stat: 'spd', sign: 1, turns: 3 }],
   },
   {
     id: 'spd-down',
@@ -227,7 +217,7 @@ const LIST: readonly Skill[] = [
     gist: '敵1体のスピードを下げる',
     ct: 4,
     target: 'enemyOne',
-    effects: [{ kind: 'buff', stat: 'spd', power: '中', sign: -1, turns: 3 }],
+    effects: [{ kind: 'buff', stat: 'spd', sign: -1, turns: 3 }],
   },
 
   // ── HP系 ──────────────────────────────
@@ -237,7 +227,7 @@ const LIST: readonly Skill[] = [
     gist: '敵1体が行動するたびに削れる',
     ct: 5,
     target: 'enemyOne',
-    effects: [{ kind: 'poison', power: '中', turns: 4 }],
+    effects: [{ kind: 'poison', stacks: 1, turns: 4 }],
   },
   {
     id: 'regen',
@@ -245,7 +235,7 @@ const LIST: readonly Skill[] = [
     gist: '味方1体が行動するたびに回復する',
     ct: 5,
     target: 'allyLowest',
-    effects: [{ kind: 'regen', power: '中', turns: 4 }],
+    effects: [{ kind: 'regen', stacks: 1, turns: 4 }],
   },
   {
     id: 'heal-ratio',
@@ -253,7 +243,7 @@ const LIST: readonly Skill[] = [
     gist: '味方1体の HP を最大値の割合ぶん回復',
     ct: 4,
     target: 'allyLowest',
-    effects: [{ kind: 'healRatio', power: '中' }],
+    effects: [{ kind: 'healRatio', percent: 30 }],
   },
   {
     id: 'shield',
@@ -261,7 +251,7 @@ const LIST: readonly Skill[] = [
     gist: '味方1体に、HP より先に減る盾を張る',
     ct: 4,
     target: 'allyLowest',
-    effects: [{ kind: 'shield', power: '中' }],
+    effects: [{ kind: 'shield', count: 2 }],
   },
 
   // ── 行動系 ────────────────────────────

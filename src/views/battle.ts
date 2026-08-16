@@ -64,10 +64,10 @@ function describe(state: BattleState, event: BattleEvent): string {
     case 'act':
       return `${nameOf(event.actor)} → ${event.skill}`
     case 'damage':
-      return (
-        `　${nameOf(event.unit)} に ${event.amount} ダメージ（残 ${event.hp}）` +
-        (event.absorbed > 0 ? ` ※盾が ${event.absorbed} 受けた` : '')
-      )
+      // ⭐ 盾は威力に関係なく1撃を丸ごと無効化する
+      return event.absorbed > 0
+        ? `　${nameOf(event.unit)} は盾で防いだ（${event.absorbed} を無効化）`
+        : `　${nameOf(event.unit)} に ${event.amount} ダメージ（残 ${event.hp}）`
     case 'heal':
       return `　${nameOf(event.unit)} を ${event.amount} 回復（残 ${event.hp}）`
     case 'buff':
@@ -79,7 +79,7 @@ function describe(state: BattleState, event: BattleEvent): string {
     case 'regen':
       return `　${nameOf(event.unit)} がリジェネで ${event.amount} 回復（残 ${event.hp}）`
     case 'shield':
-      return `　${nameOf(event.unit)} に盾 ${event.amount}`
+      return `　${nameOf(event.unit)} に盾 ${event.amount}枚`
     case 'stun':
       return `　${nameOf(event.unit)} はスタン（${event.turns}回）`
     case 'skipped':

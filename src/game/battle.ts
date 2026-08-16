@@ -16,7 +16,6 @@ import {
   DAMAGE_POWER,
   effectiveCt,
   isHarmful,
-  RATIO_PERCENT,
   TICK_PERCENT,
   type Effect,
   type Skill,
@@ -64,16 +63,22 @@ export interface Modifier {
   turns: number
 }
 
+/** スタックする状態（毒・リジェネ）。 */
+export interface Stacking {
+  stacks: number
+  turns: number
+}
+
 /** 持続する状態。⚠️ 数える単位は全部「その個体の行動回数」。 */
 export interface UnitStatus {
   atk: Modifier
   def: Modifier
   spd: Modifier
-  /** 毒。1行動ごとに最大HPの percent% 減る */
-  poison: Modifier
-  /** リジェネ。1行動ごとに最大HPの percent% 回復 */
-  regen: Modifier
-  /** シールドの残量（点）。HP より先に減る */
+  /** 毒。1行動ごとに最大HPの `TICK_PERCENT × stacks`% 減る */
+  poison: Stacking
+  /** リジェネ。1行動ごとに回復 */
+  regen: Stacking
+  /** ⭐ シールドの**残り枚数**。1回の攻撃につき1枚消費し、その攻撃を完全に無効化する */
   shield: number
   /** 飛ばす手番の残り */
   stun: number
@@ -189,13 +194,17 @@ function noMod(): Modifier {
   return { percent: 0, turns: 0 }
 }
 
+function noStack(): Stacking {
+  return { stacks: 0, turns: 0 }
+}
+
 function freshStatus(): UnitStatus {
   return {
     atk: noMod(),
     def: noMod(),
     spd: noMod(),
-    poison: noMod(),
-    regen: noMod(),
+    poison: noStack(),
+    regen: noStack(),
     shield: 0,
     stun: 0,
     taunt: 0,
@@ -299,19 +308,22 @@ function decideOutcome(state: BattleState): Outcome | null {
 function tickStatus(state: BattleState, unit: Unit): void {
   const s = unit.status
 
+  // ⭐ 重なっているぶんだけ強く効く
   if (s.poison.turns > 0) {
-    const amount = Math.max(1, Math.floor((unit.maxHp * s.poison.percent) / 100))
+    const amount = Math.max(1, Math.floor((unit.maxHp * TICK_PERCENT * s.poison.stacks) / 100))
     unit.hp = Math.max(0, unit.hp - amount)
     state.log.push({ kind: 'poison', unit: unit.key, amount, hp: unit.hp })
     s.poison.turns--
+    if (s.poison.turns === 0) s.poison.stacks = 0
     if (unit.hp === 0) state.log.push({ kind: 'down', unit: unit.key })
   }
   if (s.regen.turns > 0 && isAlive(unit)) {
-    const amount = Math.max(1, Math.floor((unit.maxHp * s.regen.percent) / 100))
+    const amount = Math.max(1, Math.floor((unit.maxHp * TICK_PERCENT * s.regen.stacks) / 100))
     const before = unit.hp
     unit.hp = Math.min(unit.maxHp, unit.hp + amount)
     state.log.push({ kind: 'regen', unit: unit.key, amount: unit.hp - before, hp: unit.hp })
     s.regen.turns--
+    if (s.regen.turns === 0) s.regen.stacks = 0
   }
 
   for (const key of ['atk', 'def', 'spd'] as const) {
@@ -415,17 +427,27 @@ function targetsOf(state: BattleState, actor: Unit, skill: Skill, chosen?: Unit 
   }
 }
 
-/** ダメージを通す。シールド → HP の順に減り、ガッツがあれば HP1 で止まる。 */
+/** ダメージを通す。
+ *
+ *  ⭐ **シールドは枚数。**1回の攻撃につき1枚消費して、
+ *  **威力に関係なくその攻撃を完全に無効化する**（100 ダメージでも 1 ダメージでも同じ1枚）。
+ *  枚数が尽きたら以降は素通し。
+ *  ⭐ だから「大きな一撃」には滅法強く、「手数」には弱い。 */
 function dealDamage(state: BattleState, target: Unit, amount: number): void {
-  let left = amount
-  let absorbed = 0
   if (target.status.shield > 0) {
-    absorbed = Math.min(target.status.shield, left)
-    target.status.shield -= absorbed
-    left -= absorbed
+    target.status.shield--
+    state.log.push({
+      kind: 'damage',
+      unit: target.key,
+      amount: 0,
+      hp: target.hp,
+      absorbed: amount,
+    })
+    return
   }
+
   const before = target.hp
-  target.hp = Math.max(0, target.hp - left)
+  target.hp = Math.max(0, target.hp - amount)
 
   // ⭐ ガッツ: 致命傷を HP1 で耐える。⚠️ 元から1以下なら効かない（無限に粘らせない）
   if (target.hp === 0 && target.status.guts > 0 && before > 1) {
@@ -439,7 +461,7 @@ function dealDamage(state: BattleState, target: Unit, amount: number): void {
     unit: target.key,
     amount: before - target.hp,
     hp: target.hp,
-    absorbed,
+    absorbed: 0,
   })
   if (target.hp === 0) state.log.push({ kind: 'down', unit: target.key })
 }
@@ -469,7 +491,7 @@ function applyEffect(state: BattleState, actor: Unit, target: Unit, effect: Effe
     }
     case 'buff': {
       // ⚠️ 掛け直しは上書き。積み上げにすると青天井になる
-      const percent = BUFF_PERCENT[effect.power] * effect.sign
+      const percent = BUFF_PERCENT * effect.sign
       target.status[effect.stat] = { percent, turns: effect.turns }
       state.log.push({
         kind: 'buff',
@@ -481,27 +503,44 @@ function applyEffect(state: BattleState, actor: Unit, target: Unit, effect: Effe
       break
     }
     case 'poison': {
-      target.status.poison = { percent: TICK_PERCENT[effect.power], turns: effect.turns }
-      state.log.push({ kind: 'applied', unit: target.key, label: '毒', turns: effect.turns })
+      // ⭐ スタックする。重ねるほど1行動あたりの削りが増える
+      target.status.poison = {
+        stacks: target.status.poison.turns > 0 ? target.status.poison.stacks + effect.stacks : effect.stacks,
+        turns: effect.turns,
+      }
+      state.log.push({
+        kind: 'applied',
+        unit: target.key,
+        label: `毒×${target.status.poison.stacks}`,
+        turns: effect.turns,
+      })
       break
     }
     case 'regen': {
-      target.status.regen = { percent: TICK_PERCENT[effect.power], turns: effect.turns }
-      state.log.push({ kind: 'applied', unit: target.key, label: 'リジェネ', turns: effect.turns })
+      target.status.regen = {
+        stacks: target.status.regen.turns > 0 ? target.status.regen.stacks + effect.stacks : effect.stacks,
+        turns: effect.turns,
+      }
+      state.log.push({
+        kind: 'applied',
+        unit: target.key,
+        label: `リジェネ×${target.status.regen.stacks}`,
+        turns: effect.turns,
+      })
       break
     }
     case 'healRatio': {
-      const amount = Math.max(1, Math.floor((target.maxHp * RATIO_PERCENT[effect.power]) / 100))
+      // ⚠️ 割合は技ごとに違う（段位を使わない）
+      const amount = Math.max(1, Math.floor((target.maxHp * effect.percent) / 100))
       const before = target.hp
       target.hp = Math.min(target.maxHp, target.hp + amount)
       state.log.push({ kind: 'heal', unit: target.key, amount: target.hp - before, hp: target.hp })
       break
     }
     case 'shield': {
-      const amount = Math.max(1, Math.floor((target.maxHp * RATIO_PERCENT[effect.power]) / 100))
       // ⚠️ 重ね掛けは上書き。積むと実質無敵になる
-      target.status.shield = amount
-      state.log.push({ kind: 'shield', unit: target.key, amount })
+      target.status.shield = effect.count
+      state.log.push({ kind: 'shield', unit: target.key, amount: effect.count })
       break
     }
     case 'stun': {
@@ -604,9 +643,10 @@ export function activeStatuses(unit: Unit): string[] {
   if (s.atk.turns > 0) out.push(`攻撃${sign(s.atk.percent)}%`)
   if (s.def.turns > 0) out.push(`防御${sign(s.def.percent)}%`)
   if (s.spd.turns > 0) out.push(`速度${sign(s.spd.percent)}%`)
-  if (s.poison.turns > 0) out.push(`毒${s.poison.turns}`)
-  if (s.regen.turns > 0) out.push(`リジェネ${s.regen.turns}`)
-  if (s.shield > 0) out.push(`盾${s.shield}`)
+  if (s.poison.turns > 0) out.push(`毒×${s.poison.stacks}(${s.poison.turns})`)
+  if (s.regen.turns > 0) out.push(`リジェネ×${s.regen.stacks}(${s.regen.turns})`)
+  // ⭐ 枚数。1回の攻撃につき1枚
+  if (s.shield > 0) out.push(`盾${s.shield}枚`)
   if (s.stun > 0) out.push(`スタン${s.stun}`)
   if (s.taunt > 0) out.push(`挑発${s.taunt}`)
   if (s.guts > 0) out.push(`ガッツ${s.guts}`)

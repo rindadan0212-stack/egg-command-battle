@@ -19,13 +19,7 @@ import {
   type Unit,
 } from './battle.ts'
 import { speciesOf, statsOf } from './creature.ts'
-import {
-  BUFF_PERCENT,
-  DAMAGE_POWER,
-  RATIO_PERCENT,
-  TICK_PERCENT,
-  type PowerTier,
-} from './skills.ts'
+import { BUFF_PERCENT, DAMAGE_POWER, TICK_PERCENT, type PowerTier } from './skills.ts'
 
 /** ⚠️ 「たたかう」は無い。枠1（種族固定・CTなし）がその役目を兼ねる。 */
 const ALL_ACTIONS: readonly Action[] = [
@@ -95,35 +89,39 @@ function scoreOf(state: BattleState, actor: Unit, action: Action): number {
       case 'buff': {
         // 既に同じ向きで掛かっているなら重ねる意味が薄い
         const now = subject.status[effect.stat]
-        const next = BUFF_PERCENT[effect.power] * effect.sign
-        const gain = now.turns > 0 && Math.sign(now.percent) === effect.sign ? 0 : Math.abs(next)
+        const gain =
+          now.turns > 0 && Math.sign(now.percent) === effect.sign ? 0 : BUFF_PERCENT
         score += gain * BUFF_VALUE
         break
       }
       case 'poison': {
-        // 効き切るまでの総量。⚠️ 相手の残 HP で頭打ち
-        const total = Math.floor((subject.maxHp * TICK_PERCENT[effect.power]) / 100) * effect.turns
-        score += subject.status.poison.turns > 0 ? 0 : Math.min(subject.hp, total)
+        // ⭐ スタックするので重ね掛けにも価値がある。⚠️ 相手の残 HP で頭打ち
+        const stacked = subject.status.poison.turns > 0 ? subject.status.poison.stacks : 0
+        const perTurn = Math.floor((subject.maxHp * TICK_PERCENT * effect.stacks) / 100)
+        const total = perTurn * effect.turns
+        // 既に重なっているぶんは「上乗せ」の価値だけを見る
+        score += Math.min(subject.hp, total) / (1 + stacked * 0.5)
         break
       }
       case 'regen': {
-        const total = Math.floor((subject.maxHp * TICK_PERCENT[effect.power]) / 100) * effect.turns
+        const stacked = subject.status.regen.turns > 0 ? subject.status.regen.stacks : 0
+        const perTurn = Math.floor((subject.maxHp * TICK_PERCENT * effect.stacks) / 100)
         const missing = subject.maxHp - subject.hp
-        score += subject.status.regen.turns > 0 ? 0 : Math.min(missing, total) * 0.7
+        score += (Math.min(missing, perTurn * effect.turns) * 0.7) / (1 + stacked * 0.5)
         break
       }
       case 'healRatio': {
         // ⚠️ 「HPを戻す」と「敵のHPを削る」は同じ単位ではない。緊急度で割り引く
-        const amount = Math.floor((subject.maxHp * RATIO_PERCENT[effect.power]) / 100)
+        const amount = Math.floor((subject.maxHp * effect.percent) / 100)
         const missing = subject.maxHp - subject.hp
         const urgency = 0.5 + 0.5 * (1 - subject.hp / subject.maxHp)
         score += Math.min(amount, missing) * urgency
         break
       }
       case 'shield': {
-        const amount = Math.floor((subject.maxHp * RATIO_PERCENT[effect.power]) / 100)
-        // 既に盾があるなら上書きになるので価値が薄い
-        score += subject.status.shield > 0 ? 0 : amount * 0.6
+        // ⭐ 枚数ぶんの攻撃を完全に無効化する。1枚の価値は「相手の一撃ぶん」で見る
+        const incoming = estimateDamage(focus, subject, '中', 'atk')
+        score += subject.status.shield > 0 ? 0 : incoming * effect.count * 0.7
         break
       }
       case 'stun': {
