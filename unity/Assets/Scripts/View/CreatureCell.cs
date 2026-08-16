@@ -53,6 +53,10 @@ namespace EggCommand.View
         public Image Element;
         public Text Name;
         public Text Wild;
+        /// <summary>実値4本。⭐ 何を掛け合わせるのか、数を見て決められるように。</summary>
+        public Text[] Stats;
+        /// <summary>技3枠を1つの字にまとめたもの。⭐ 配合で狙うのは主にここ。</summary>
+        public Text Skills;
     }
 
     /// <summary>格子に札を敷き直す共通処理。

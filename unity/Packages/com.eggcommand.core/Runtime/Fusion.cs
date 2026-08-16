@@ -44,6 +44,11 @@ namespace EggCommand.Core
         public static int PreviewBirthLevel(Creature a, Creature b) =>
             BaseTotalOf(a, b);
 
+        /// <summary>生まれる子の希少さの見込み。⚠️ 変異が出れば1つ上がるので「見込み」。
+        /// ⭐ 孵るのにどれだけ待つかがここで分かる。</summary>
+        public static int PreviewRarity(Creature a, Creature b) =>
+            Rarities.Clamp(Math.Max(a.Generation, b.Generation) + 1);
+
         private static int BaseTotalOf(Creature a, Creature b)
         {
             // 合計は素では増えない。両親の平均

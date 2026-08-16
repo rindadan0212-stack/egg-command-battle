@@ -40,31 +40,57 @@ namespace EggCommand.View
                 }
                 if (slot.Element != null) slot.Element.color = ElementMark.ColorOf(species.Element);
                 if (slot.Name != null) slot.Name.text = species.Name;
-                if (slot.Wild != null) slot.Wild.text = Creatures.WildTotalOf(creature).ToString();
+                if (slot.Wild != null)
+                {
+                    slot.Wild.text = $"Lv {Levels.Of(creature)} / {Levels.MaxOf(creature)}";
+                }
+
+                // ⭐ 実値4本。得意は緑、不得意は赤（BOX と同じ読み方にする）
+                var stats = Creatures.StatsOf(creature);
+                for (int k = 0; slot.Stats != null && k < slot.Stats.Length && k < Stats.Keys.Length; k++)
+                {
+                    var key = Stats.Keys[k];
+                    if (slot.Stats[k] == null) continue;
+                    slot.Stats[k].text = $"{Stats.LabelOf(key)} {stats[key]}";
+                    slot.Stats[k].color = key == creature.Strong ? Ui.Good
+                        : key == creature.Weak ? Ui.Danger : Ui.Ink;
+                }
+
+                if (slot.Skills != null)
+                {
+                    var names = new List<string>();
+                    foreach (var skill in Creatures.SkillsOf(creature))
+                    {
+                        if (skill != null) names.Add(skill.Name);
+                    }
+                    slot.Skills.text = string.Join("・", names);
+                }
             }
 
             bool ready = a != null && b != null && Fusion.CanFuse(a, b);
             if (_result != null) _result.SetActive(ready);
             if (ready)
             {
-                List<string> speciesNames, skillPool;
-                bool mutable;
-                Breeding.PreviewOf(a, b, out speciesNames, out skillPool, out mutable);
                 if (_resultEgg != null)
                 {
                     _resultEgg.sprite = PixelSpriteTexture.ToSprite(EggArt.Sprite, EggArt.Shell);
                     _resultEgg.preserveAspect = true;
                 }
-                // ⭐ 生まれる子の Lv を**先に**見せる。育てていない2体を並べたら小さい数が出る。
+                // ⭐ 卵に出すのは**推定レベルと希少さだけ**。
+                // ⚠️ 種族も技の候補も出さない。まだ決まっていないものを見せると、
+                //    出た結果が「約束と違う」に見える。孵してからのお楽しみにする。
                 // ⚠️ 「先に育ててください」と字で書かない。数が言えば足りる
                 if (_resultSpecies != null)
                 {
-                    _resultSpecies.text =
-                        $"Lv {Fusion.PreviewBirthLevel(a, b)}　{string.Join(" / ", speciesNames)}";
+                    _resultSpecies.text = $"Lv {Fusion.PreviewBirthLevel(a, b)}";
                 }
-                if (_resultSkills != null) _resultSkills.text = string.Join("・", skillPool);
-                // ⭐ 変異が出うるかは印1つ。⚠️ 確率を字で説明しない
-                if (_resultMutable != null) _resultMutable.SetActive(mutable);
+                if (_resultSkills != null)
+                {
+                    _resultSkills.text = Rarities.StarsOf(Fusion.PreviewRarity(a, b));
+                    _resultSkills.color = Ui.Accent;
+                }
+                // ⚠️ 変異の印は外した（希少さの★と役割がぶつかる）
+                if (_resultMutable != null) _resultMutable.SetActive(false);
             }
 
             if (_breed != null)
