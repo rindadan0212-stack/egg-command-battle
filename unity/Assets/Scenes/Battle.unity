@@ -119,7 +119,7 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &1234961506
+--- !u!1 &150549950
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -127,34 +127,38 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1234961508}
-  - component: {fileID: 1234961507}
+  - component: {fileID: 150549952}
+  - component: {fileID: 150549951}
   m_Layer: 0
-  m_Name: Species Gallery
+  m_Name: App
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1234961507
+--- !u!114 &150549951
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1234961506}
+  m_GameObject: {fileID: 150549950}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2078109df4a804b4686790913a786ff0, type: 3}
+  m_Script: {fileID: 11500000, guid: 966526179833da741ba0443bb7565264, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EggCommand.View.SpeciesGallery
---- !u!4 &1234961508
+  m_EditorClassIdentifier: Assembly-CSharp::EggCommand.View.App
+  Seed: 20260816
+  CurrentIsBoss: 0
+  Notice: 
+  PendingOrigin: 0
+--- !u!4 &150549952
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1234961506}
+  m_GameObject: {fileID: 150549950}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -260,4 +264,4 @@ SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 1283946564}
-  - {fileID: 1234961508}
+  - {fileID: 150549952}
