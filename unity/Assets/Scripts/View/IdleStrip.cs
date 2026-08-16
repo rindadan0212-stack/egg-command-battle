@@ -39,8 +39,9 @@ namespace EggCommand.View
         private int _shownDefeated = -1;
         private Vector2 _enemyHome;
 
-        /// <summary>転がって来るのにかかる秒。⚠️ 短いと結局パッと入れ替わって見える。</summary>
-        private const float EntrySeconds = 0.7f;
+        /// <summary>転がって来るのにかかる秒。⚠️ 短いと結局パッと入れ替わって見える。
+        /// ⭐ 0.7 では次が来るのが早すぎたので倍にした（間が空くほど別個体だと分かる）。</summary>
+        private const float EntrySeconds = 1.4f;
         /// <summary>画面の外へ置く距離。⚠️ 短いと画面内から湧いたように見える。</summary>
         private const float EntryFrom = 700f;
 
@@ -133,7 +134,8 @@ namespace EggCommand.View
                 // ⭐ 右の外から転がって来る。回るので「別の個体が来た」と分かる
                 float ease = _entry * _entry;   // 近づくほど減速する
                 _enemySlot.anchoredPosition = _enemyHome + new Vector2(EntryFrom * ease, 0f);
-                _enemySlot.localEulerAngles = new Vector3(0f, 0f, _entry * 720f);
+                // ⚠️ 向きは進む向きと合わせる。左へ転がるなら反時計回り
+                _enemySlot.localEulerAngles = new Vector3(0f, 0f, -_entry * 720f);
                 // 倒れる瞬間だけ縮める。⭐ 「倒した」が目に見える
                 float scale = 0.85f + 0.15f * _shownHp;
                 _enemySlot.localScale = new Vector3(scale, scale, 1f);
