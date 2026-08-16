@@ -23,7 +23,7 @@ namespace EggCommand.View
                 _art.sprite = PixelSpriteTexture.ToSprite(species.Sprite, Creatures.PaletteOf(creature));
                 _art.preserveAspect = true;
             }
-            if (_element != null) _element.color = ElementMark.ColorOf(species.Element);
+            if (_element != null) _element.color = ElementMark.ColorOf(creature.Element);
             if (_wild != null) _wild.text = Creatures.WildTotalOf(creature).ToString();
             if (_mark != null) _mark.SetActive(picked);
             if (_button != null)

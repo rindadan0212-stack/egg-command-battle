@@ -34,8 +34,8 @@ namespace EggCommand.Core
                 : Battle.EffectiveStat(a.Def, actor.Status.Def);
             int defenseStat = Battle.EffectiveStat(t.Def, target.Status.Def);
             double mult = Battle.ElementMultiplier(
-                Creatures.SpeciesOf(actor.Creature).Element,
-                Creatures.SpeciesOf(target.Creature).Element);
+                actor.Creature.Element,
+                target.Creature.Element);
             return Battle.DamageOf(Skills.DamagePowerOf(tier), attackStat, defenseStat, mult);
         }
 

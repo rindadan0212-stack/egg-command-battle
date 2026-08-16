@@ -58,11 +58,15 @@ namespace EggCommand.Core
         public readonly StatKey? Strong;
         public readonly StatKey? Weak;
 
+        /// <summary>孵ったときの属性。⭐ 卵の時点で決まっている（孵るまでの楽しみは希少さと素質）。</summary>
+        public readonly Element Element;
+
         public Egg(string id, string speciesId, StatBlock wild, int mutationCounter, int paletteIndex,
             string? parentA, string? parentB, int generation, EggOrigin how,
             bool hasSkills, string? skill2, string? skill3, int rarity = 1,
-            StatKey? strong = null, StatKey? weak = null)
+            StatKey? strong = null, StatKey? weak = null, Element? element = null)
         {
+            Element = element ?? Migrations.ElementOf(speciesId);
             Rarity = rarity < 1 ? 1 : rarity > Rarities.Max ? Rarities.Max : rarity;
             Strong = strong;
             Weak = weak;
@@ -166,7 +170,9 @@ namespace EggCommand.Core
         /// ⚠️ 以前は見張り2体を足して3体にしていたが、同じ種族が3体並ぶだけで、
         /// 画面でも戦術でも区別が付かなかった。1体にすると「この親をどう崩すか」に話が絞れる。
         /// HP の埋め合わせは loneScale（体数の比）が持つので、ここでは何もしない。</summary>
-        public static List<Creature> MakeDefenders(Rng rng, Nest nest)
+        /// <param name="element">⚠️ 既定は種族が昔持っていた属性。
+        /// 遊びの中では呼び側（<see cref="Games.DefendersOf"/>）が個体ごとに引いて渡す。</param>
+        public static List<Creature> MakeDefenders(Rng rng, Nest nest, Element? element = null)
         {
             var species = SpeciesTable.ById(nest.SpeciesId);
             var wild = SpreadWild(rng, WildTotalForTier(nest.Tier));
@@ -176,13 +182,16 @@ namespace EggCommand.Core
             return new List<Creature>
             {
                 new Creature($"{nest.Id}-0", nest.SpeciesId, wild, new StatBlock(0, 0, 0, 0), 0,
-                    0, skill2, skill3, 0, null, null, 1),
+                    0, skill2, skill3, 0, null, null, 1, null, null, element),
             };
         }
 
         /// <summary>親から卵を作る。
         /// ⚠️ 盗んだ卵は素質が落ちる。倒したほうが良い卵、という企画どおりにするため。</summary>
-        public static Egg MakeEgg(Rng rng, Nest nest, EggOrigin how, int serial, int rarity = 1)
+        /// <param name="element">⚠️ ここで引かない。呼び側が別の系統（RngElement）で引いて渡す。
+        /// 引くと卵の系統がずれて、較正済みの検査が無効になる。</param>
+        public static Egg MakeEgg(Rng rng, Nest nest, EggOrigin how, int serial, int rarity = 1,
+            Element? element = null)
         {
             int baseTotal = WildTotalForTier(nest.Tier);
             double quality = how == EggOrigin.Defeated ? 1.0 : 0.78;
@@ -197,7 +206,7 @@ namespace EggCommand.Core
                 SpreadWild(rng, total),
                 0, 0, null, null, 1, how,
                 hasSkills: false, skill2: null, skill3: null, // 野生の卵。孵すときにガチャ
-                rarity: rarity);
+                rarity: rarity, element: element);
         }
 
         /// <summary>孵す。⭐ 野生の卵はここでスキル2・3のガチャを引く。
@@ -219,7 +228,7 @@ namespace EggCommand.Core
             return new Creature(id, egg.SpeciesId, egg.Wild, new StatBlock(0, 0, 0, 0), 0,
                 egg.MutationCounter, skill2, skill3, egg.PaletteIndex,
                 egg.ParentA, egg.ParentB, egg.Generation,
-                egg.Strong ?? strong, egg.Weak ?? weak);
+                egg.Strong ?? strong, egg.Weak ?? weak, egg.Element);
         }
 
         /// <summary>得意・不得意を引く。⚠️ 同じステにならないよう2つ別々に取る。</summary>

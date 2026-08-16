@@ -109,18 +109,26 @@ namespace EggCommand.Sim
 
         // ── 個体づくり。⭐ 本番と同じ経路（巣 → 卵 → 孵化）────────────
 
-        private static Creature Born(Rng rng, string speciesId, int tier, ref int serial)
+        /// <param name="element">⚠️ 指定しなければ引く。属性は**個体**が持つので、
+        /// 測るときも個体ごとに決める（種族から決まらない）。</param>
+        private static Creature Born(Rng rng, string speciesId, int tier, ref int serial,
+            Element? element = null)
         {
             // ⚠️ 巣は「その種族の卵が出る器」としてだけ使う。表に無い巣でも Nest は作れる
             var nest = new Nest($"sim-{speciesId}-{tier}", "測定", speciesId, tier);
-            var egg = Nests.MakeEgg(rng, nest, EggOrigin.Defeated, ++serial);
+            var egg = Nests.MakeEgg(rng, nest, EggOrigin.Defeated, ++serial,
+                element: element ?? SpeciesTable.Roll(rng));
             return Nests.Hatch(rng, egg, $"s{serial:D4}");
         }
 
-        private static List<Creature> Party(Rng rng, string speciesId, int tier, ref int serial)
+        private static List<Creature> Party(Rng rng, string speciesId, int tier, ref int serial,
+            Element? element = null)
         {
             var party = new List<Creature>();
-            for (int i = 0; i < Games.PartySize; i++) party.Add(Born(rng, speciesId, tier, ref serial));
+            for (int i = 0; i < Games.PartySize; i++)
+            {
+                party.Add(Born(rng, speciesId, tier, ref serial, element));
+            }
             return party;
         }
 
@@ -248,20 +256,15 @@ namespace EggCommand.Sim
             const int Samples = 60;
             const int Tier = 5;
 
-            // 属性ごとの代表種族。⚠️ 同じ属性が複数あれば最初のものを使う
-            var by = new Dictionary<Element, string>();
-            foreach (var s in SpeciesTable.All)
-            {
-                if (!by.ContainsKey(s.Element)) by[s.Element] = s.Id;
-            }
+            // ⭐ 属性は個体が持つので、種族は同じにして**属性だけ**を変える。
+            //    これで「属性の効き目」だけを取り出せる（種族の差が混ざらない）
+            const string Same = "tamaru";
 
             Console.WriteLine();
-            Console.WriteLine($"■ 3すくみ（段階{Tier}・各{Samples}回）");
+            Console.WriteLine($"■ 3すくみ（段階{Tier}・各{Samples}回・種族は揃えて属性だけ変える）");
             foreach (var attacker in SpeciesTable.Elements)
             {
-                if (!by.ContainsKey(attacker)) continue;
                 var beaten = SpeciesTable.Beats(attacker);
-                if (!by.ContainsKey(beaten)) continue;
 
                 int won = 0;
                 for (int i = 0; i < Samples; i++)
@@ -269,8 +272,8 @@ namespace EggCommand.Sim
                     var rng = new Rng(seed + i).Stream($"elem{attacker}");
                     int serial = 0;
                     var fight = Run(
-                        Party(rng, by[attacker], Tier, ref serial),
-                        Party(rng, by[beaten], Tier, ref serial));
+                        Party(rng, Same, Tier, ref serial, attacker),
+                        Party(rng, Same, Tier, ref serial, beaten));
                     if (fight.Result == Outcome.Ally) won++;
                 }
                 Console.WriteLine(

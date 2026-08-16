@@ -22,7 +22,6 @@ namespace EggCommand.Core
     {
         public readonly string Id;
         public readonly string Name;
-        public readonly Element Element;
         /// <summary>種族固定のスキル枠1。</summary>
         public readonly string Skill1;
         /// <summary>⚠️ 合計は <see cref="SpeciesTable.BaseTotal"/> に揃える。差は配分で出す。</summary>
@@ -38,12 +37,11 @@ namespace EggCommand.Core
         /// 「必要な技を持つ親の巣へ行く」という輪の駆動力が消えるため。</summary>
         public readonly IReadOnlyList<string> Gacha;
 
-        public Species(string id, string name, Element element, string skill1, StatBlock baseStats,
+        public Species(string id, string name, string skill1, StatBlock baseStats,
             PixelSprite sprite, IReadOnlyList<Palette> palettes, IReadOnlyList<string> gacha)
         {
             Id = id;
             Name = name;
-            Element = element;
             Skill1 = skill1;
             Base = baseStats;
             Sprite = sprite;
@@ -57,9 +55,14 @@ namespace EggCommand.Core
     /// | 種族が決めるもの | 種族から独立して流通するもの |
     /// |---|---|
     /// | 見た目（ドット + パレット） | ステの野生レベル |
-    /// | 属性（3すくみ） | スキル2・3 |
-    /// | スキル1（種族固定枠） | 育成で振った分 |
-    /// | 基礎値の**配分** | |
+    /// | スキル1（種族固定枠） | **属性**（3すくみ） |
+    /// | 基礎値の**配分** | スキル2・3 |
+    /// | | 育てた分 |
+    ///
+    /// ⭐ **属性は種族に固定しない**（2026-08-17）。炎のタマルも水のタマルも生まれる。
+    /// 種族＝見た目と骨格、属性＝そのつど引くもの、と役割が分かれる。
+    /// ⚠️ 固定していたとき、巣の守り手は種族が1つなので必ず単一属性になり、
+    /// 有利属性を揃えれば**確定で勝てた**（実測 100%）。個体ごとに散れば巣の中も混ざる。
     ///
     /// ⚠️ 種族ごとに基礎値の合計を変えない。
     /// 変えると最強種族に全部が集約され、種族の多様性が「どれを使うのが得か」という
@@ -83,6 +86,10 @@ namespace EggCommand.Core
                 default: throw new ArgumentOutOfRangeException(nameof(element));
             }
         }
+
+        /// <summary>属性を1つ引く。⭐ 種族に関係なく等確率。
+        /// ⚠️ 専用の系統（RngElement）で引くこと。既にある系統に混ぜると列がずれる。</summary>
+        public static Element Roll(Rng rng) => Elements[rng.Int(0, Elements.Length)];
 
         /// <summary>有利を取る相手。炎 → 木 → 水 → 炎。</summary>
         public static Element Beats(Element element)
@@ -224,20 +231,17 @@ namespace EggCommand.Core
         /// 全種族が同じステでスケールすると、そのステだけが二重に得になる。</summary>
         private static readonly Species[] List =
         {
-            new Species("tamaru", "タマル", Element.Water,
-                "attack-def", // 防御スケール
+            new Species("tamaru", "タマル", "attack-def", // 防御スケール
                 new StatBlock(24, 18, 22, 16), TamaruSprite, TamaruPalettes,
                 // 守りの系統
                 new[] { "def-up", "taunt", "shield", "heal-ratio", "guts", "attack", "ct-long" }),
 
-            new Species("tsunoga", "ツノガ", Element.Fire,
-                "attack", // 攻撃スケール・単体
+            new Species("tsunoga", "ツノガ", "attack", // 攻撃スケール・単体
                 new StatBlock(22, 24, 18, 16), TsunogaSprite, TsunogaPalettes,
                 // 攻めの系統
                 new[] { "atk-up", "def-down", "attack-heavy", "ct-short", "poison", "attack-def", "stun" }),
 
-            new Species("haneru", "ハネル", Element.Wood,
-                "attack-all", // 攻撃スケール・全体（全体なので威力は小）
+            new Species("haneru", "ハネル", "attack-all", // 攻撃スケール・全体（全体なので威力は小）
                 new StatBlock(20, 18, 16, 26), HaneruSprite, HaneruPalettes,
                 // 撹乱の系統
                 new[] { "spd-up", "spd-down", "atk-down", "stun", "regen", "ct-long", "immune" }),
@@ -247,8 +251,7 @@ namespace EggCommand.Core
             //    ここを読み違えて検証編成を組み、測り損ねたことがある。
             // ⚠️ 枠1は CT が無いので、大技を置くと毎回撃ててしまう。
             //    震撼（CT7 の全体大技）は枠2へ回し、ここは中程度に留める。
-            new Species("nushi", "ヌシ", Element.Water,
-                "attack-def",
+            new Species("nushi", "ヌシ", "attack-def",
                 new StatBlock(26, 20, 24, 10), NushiSprite, NushiPalettes,
                 // ⚠️ 卵は落とさないが、数える検査が「プールが無い」で落ちるので置く
                 new[] { "def-up", "spd-down", "taunt", "guts", "immune", "attack-all-heavy" }),
@@ -332,18 +335,8 @@ namespace EggCommand.Core
             foreach (var species in List) ids.Add(species.Id);
             if (ids.Count != List.Length) problems.Add("種族 id が重複している");
 
-            // 属性が3すくみを覆えているか。⚠️ 覆えていないと、有利不利が一方通行になる
-            var covered = new HashSet<Element>();
-            foreach (var species in List) covered.Add(species.Element);
-            var missing = new List<string>();
-            foreach (var element in Elements)
-            {
-                if (!covered.Contains(element)) missing.Add(LabelOf(element));
-            }
-            if (missing.Count > 0 && List.Length >= Elements.Length)
-            {
-                problems.Add($"使われていない属性: {string.Join(", ", missing)}");
-            }
+            // ⚠️ 「属性が3すくみを覆えているか」はもう数えない。
+            //    属性は種族ではなく個体が持つので、どの種族からも3属性すべてが生まれる。
 
             if (problems.Count > 0)
             {

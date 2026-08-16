@@ -183,7 +183,7 @@ namespace EggCommand.View
 
             var skill = Core.Battle.SkillAt(actor, slot);
             var fx = Fx.Get(_app.transform);
-            var tint = ElementMark.ColorOf(Creatures.SpeciesOf(actor.Creature).Element);
+            var tint = ElementMark.ColorOf(actor.Creature.Element);
 
             if (skill != null) fx.Shout(fx.PointOf(stand, HeadOf(actor)), skill.Name, Ui.Ink);
             fx.Ring(fx.PointOf(stand, Body), tint, 120f, 420f, 0.5f);

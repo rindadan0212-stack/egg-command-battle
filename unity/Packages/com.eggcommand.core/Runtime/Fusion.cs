@@ -60,7 +60,10 @@ namespace EggCommand.Core
 
         /// <summary>配合する。⚠️ 両親を消すのは呼び側（<see cref="Games"/>）の仕事。
         /// ここは卵を作るだけにしておく（消してから例外を投げたら取り返しがつかない）。</summary>
-        public static BreedOutcome Fuse(Rng rng, Creature a, Creature b, int serial, int rarity = 0)
+        /// <param name="element">⚠️ 親のどちらを継ぐかは呼び側が別の系統で引く。
+        /// ここで引くと配合の系統がずれて、較正済みの検査が無効になる。</param>
+        public static BreedOutcome Fuse(Rng rng, Creature a, Creature b, int serial, int rarity = 0,
+            Element? element = null)
         {
             if (!CanFuse(a, b)) throw new InvalidOperationException("同じ個体どうしは配合できない");
 
@@ -113,7 +116,8 @@ namespace EggCommand.Core
                 childSpecies.Id, wild, mutationCounter, paletteIndex,
                 a.Id, b.Id, generation, EggOrigin.Bred,
                 hasSkills: true, skill2: skill2, skill3: skill3,
-                rarity: childRarity, strong: strong, weak: weak);
+                rarity: childRarity, strong: strong, weak: weak,
+                element: element ?? a.Element);
 
             return new BreedOutcome(egg, mutations);
         }

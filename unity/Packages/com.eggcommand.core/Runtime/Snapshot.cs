@@ -29,6 +29,8 @@ namespace EggCommand.Core
         public string? Skill2, Skill3, ParentA, ParentB;
         /// <summary>⚠️ -1 は「持たない」。enum を直に入れると 0 と区別が付かない。</summary>
         public int Strong = -1, Weak = -1;
+        /// <summary>属性。⚠️ -1 は「属性を個体に持たせる前の保存」。種族の昔の属性で埋める。</summary>
+        public int Element = -1;
     }
 
     [Serializable]
@@ -40,6 +42,7 @@ namespace EggCommand.Core
         public bool HasSkills;
         public string? Skill2, Skill3, ParentA, ParentB;
         public int Strong = -1, Weak = -1;
+        public int Element = -1;
     }
 
     [Serializable]
@@ -92,11 +95,13 @@ namespace EggCommand.Core
     {
         public const int Version = 1;
 
-        /// <summary>乱数の並び。⚠️ 順番を変えない（保存した列と対応が崩れる）。</summary>
+        /// <summary>乱数の並び。⚠️ **順番を変えない**（保存した列と対応が崩れる）。
+        /// ⭐ 足すのは末尾だけ。古い保存は短いので、読む側は届いたぶんだけ戻す。</summary>
         private static Rng[] StreamsOf(Game game) => new[]
         {
             game.RngNest, game.RngEgg, game.RngHatch, game.RngSteal,
             game.RngBreed, game.RngRarity, game.RngEncounter, game.RngSlant,
+            game.RngElement,
         };
 
         public static GameSave Save(Game game)
@@ -231,6 +236,17 @@ namespace EggCommand.Core
 
         private static int Key(StatKey? key) => key == null ? -1 : (int)key.Value;
 
+        /// <summary>⚠️ -1 は属性を個体へ移す前の保存。null を返して種族の昔の属性に任せる。</summary>
+        private static Element? Elem(int value)
+        {
+            if (value < 0) return null;
+            foreach (var element in SpeciesTable.Elements)
+            {
+                if ((int)element == value) return element;
+            }
+            return null;
+        }
+
         private static StatKey? Key(int value)
         {
             if (value < 0) return null;
@@ -248,14 +264,15 @@ namespace EggCommand.Core
             Earned = c.Earned, MutationCounter = c.MutationCounter,
             Skill2 = c.Skill2, Skill3 = c.Skill3, PaletteIndex = c.PaletteIndex,
             ParentA = c.ParentA, ParentB = c.ParentB, Generation = c.Generation,
-            Strong = Key(c.Strong), Weak = Key(c.Weak),
+            Strong = Key(c.Strong), Weak = Key(c.Weak), Element = (int)c.Element,
         };
 
         private static Creature To(CreatureSave s, List<string>? notes) => new Creature(
             s.Id, ResolveSpecies(s.SpeciesId, notes), s.Wild.To(), s.Trained.To(), s.Earned,
             s.MutationCounter, ResolveSkill(s.Skill2, notes), ResolveSkill(s.Skill3, notes),
             s.PaletteIndex,
-            s.ParentA, s.ParentB, s.Generation, Key(s.Strong), Key(s.Weak));
+            s.ParentA, s.ParentB, s.Generation, Key(s.Strong), Key(s.Weak),
+            Elem(s.Element));
 
         private static EggSave Of(Egg e) => new EggSave
         {
@@ -264,13 +281,13 @@ namespace EggCommand.Core
             Generation = e.Generation, How = (int)e.How, Rarity = e.Rarity,
             HasSkills = e.HasSkills, Skill2 = e.Skill2, Skill3 = e.Skill3,
             ParentA = e.ParentA, ParentB = e.ParentB,
-            Strong = Key(e.Strong), Weak = Key(e.Weak),
+            Strong = Key(e.Strong), Weak = Key(e.Weak), Element = (int)e.Element,
         };
 
         private static Egg To(EggSave s, List<string>? notes) => new Egg(
             s.Id, ResolveSpecies(s.SpeciesId, notes), s.Wild.To(), s.MutationCounter, s.PaletteIndex,
             s.ParentA, s.ParentB, s.Generation, (EggOrigin)s.How,
             s.HasSkills, ResolveSkill(s.Skill2, notes), ResolveSkill(s.Skill3, notes),
-            s.Rarity, Key(s.Strong), Key(s.Weak));
+            s.Rarity, Key(s.Strong), Key(s.Weak), Elem(s.Element));
     }
 }

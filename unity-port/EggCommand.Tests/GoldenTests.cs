@@ -310,7 +310,11 @@ public class SpeciesGoldenTests
             var species = SpeciesTable.ById(entry.GetProperty("id").GetString()!);
             Assert.Equal(entry.GetProperty("id").GetString(), species.Id);
             Assert.Equal(entry.GetProperty("name").GetString(), species.Name);
-            Assert.Equal(Golden.Element(entry.GetProperty("element").GetString()!), species.Element);
+            // ⚠️ 属性は種族の欄ではなくなった（個体が持つ）。移植元の割り当ては
+            //    Migrations が「昔の属性」として持っていて、古い保存と照合の入力に使う。
+            //    ⭐ ここが一致していれば、その表が移植元に忠実であることの証明になる。
+            Assert.Equal(Golden.Element(entry.GetProperty("element").GetString()!),
+                Migrations.ElementOf(species.Id));
             Assert.Equal(entry.GetProperty("skill1").GetString(), species.Skill1);
             Assert.Equal(Golden.Block(entry.GetProperty("base")), species.Base);
 

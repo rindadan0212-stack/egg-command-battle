@@ -99,7 +99,7 @@ namespace EggCommand.View
 
             if (_glow != null) _glow.SetActive(isActor);
 
-            var element = Creatures.SpeciesOf(unit.Creature).Element;
+            var element = unit.Creature.Element;
             if (_elementMark != null) _elementMark.color = ElementMark.ColorOf(element);
             if (_elementBeats != null) _elementBeats.color = ElementMark.ColorOf(SpeciesTable.Beats(element));
 

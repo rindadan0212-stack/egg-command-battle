@@ -133,11 +133,11 @@ public class BattleGoldenTests
             // ⭐ 属性の同じ対戦（浅瀬・深み・ヌシ）は倍率を一度も通らないので、
             // 手番の順・CT・状態異常・出来事の並びは**そのまま丸ごと照合できている**。
             // ⚠️ 上の開幕の並び（最大HP・手数倍率・速度）は倍率と無関係なので全件で見る。
-            var allyElement = Creatures.SpeciesOf(allies[0]).Element;
+            var allyElement = allies[0].Element;
             bool crossElement = false;
             foreach (var foe in enemies)
             {
-                if (Creatures.SpeciesOf(foe).Element != allyElement) crossElement = true;
+                if (foe.Element != allyElement) crossElement = true;
             }
             if (crossElement) continue;
 

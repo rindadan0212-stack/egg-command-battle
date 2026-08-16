@@ -596,8 +596,8 @@ namespace EggCommand.Core
                         : EffectiveStat(actorStats.Def, actor.Status.Def);
                     int defenseStat = EffectiveStat(targetStats.Def, target.Status.Def);
                     double mult = ElementMultiplier(
-                        Creatures.SpeciesOf(actor.Creature).Element,
-                        Creatures.SpeciesOf(target.Creature).Element);
+                        actor.Creature.Element,
+                        target.Creature.Element);
                     DealDamage(state, target,
                         DamageOf(Skills.DamagePowerOf(effect.Power), attackStat, defenseStat, mult));
                     break;

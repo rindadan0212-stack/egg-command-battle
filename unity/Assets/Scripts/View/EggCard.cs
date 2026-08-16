@@ -36,7 +36,7 @@ namespace EggCommand.View
             }
             if (_element != null)
             {
-                _element.color = ElementMark.ColorOf(SpeciesTable.ById(egg.SpeciesId).Element);
+                _element.color = ElementMark.ColorOf(egg.Element);
             }
             if (_button != null)
             {

@@ -65,7 +65,7 @@ namespace EggCommand.View
                 _art.sprite = PixelSpriteTexture.ToSprite(species.Sprite, Creatures.PaletteOf(creature));
                 _art.preserveAspect = true;
             }
-            if (_element != null) _element.color = ElementMark.ColorOf(species.Element);
+            if (_element != null) _element.color = ElementMark.ColorOf(creature.Element);
             if (_name != null) _name.text = species.Name;
             if (_id != null) _id.text = creature.Id;
 

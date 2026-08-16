@@ -40,6 +40,8 @@ namespace EggCommand.Core
         public readonly Rng RngRarity;
         public readonly Rng RngEncounter;
         public readonly Rng RngSlant;
+        /// <summary>属性を引く系統。⚠️ 後から足したもの。既にある系統の消費順を1つも変えていない。</summary>
+        public readonly Rng RngElement;
 
         public Game(int seed)
         {
@@ -54,6 +56,7 @@ namespace EggCommand.Core
             RngRarity = root.Stream("rarity");
             RngEncounter = root.Stream("encounter");
             RngSlant = root.Stream("slant");
+            RngElement = root.Stream("element");
         }
     }
 
@@ -69,7 +72,8 @@ namespace EggCommand.Core
             var first = Nests.ById("shallow-scale");
             for (int i = 0; i < 3; i++)
             {
-                var egg = Nests.MakeEgg(game.RngEgg, first, EggOrigin.Defeated, ++game.Serial);
+                var egg = Nests.MakeEgg(game.RngEgg, first, EggOrigin.Defeated, ++game.Serial,
+                    element: SpeciesTable.Roll(game.RngElement));
                 string id = $"c{game.Serial.ToString().PadLeft(3, '0')}";
                 StatKey strong, weak;
                 Nests.RollSlant(game.RngSlant, out strong, out weak);
@@ -82,14 +86,15 @@ namespace EggCommand.Core
 
         /// <summary>巣の守り手。⚠️ 挑むたびに作り直す（同じ巣でも顔ぶれが変わる）。</summary>
         public static List<Creature> DefendersOf(Game game, Nest nest) =>
-            Nests.MakeDefenders(game.RngNest, nest);
+            Nests.MakeDefenders(game.RngNest, nest, SpeciesTable.Roll(game.RngElement));
 
         public static Egg GainEgg(Game game, Nest nest, EggOrigin how)
         {
             // ⚠️ 希少さは別の系統で引く。ここを RngEgg に混ぜると素質の列がずれて、
             //    較正済みの検査が無効になる
             int rarity = Rarities.Roll(game.RngRarity, nest.Tier, how);
-            var egg = Nests.MakeEgg(game.RngEgg, nest, how, ++game.Serial, rarity);
+            var egg = Nests.MakeEgg(game.RngEgg, nest, how, ++game.Serial, rarity,
+                element: SpeciesTable.Roll(game.RngElement));
             game.Eggs.Add(egg);
             return egg;
         }
@@ -152,7 +157,9 @@ namespace EggCommand.Core
         {
             var a = CreatureById(game, aId);
             var b = CreatureById(game, bId);
-            var outcome = Fusion.Fuse(game.RngBreed, a, b, ++game.Serial);
+            // ⭐ 属性は親のどちらかから受け継ぐ。⚠️ 別の系統で引く（配合の列をずらさない）
+            var element = game.RngElement.Chance(0.5) ? a.Element : b.Element;
+            var outcome = Fusion.Fuse(game.RngBreed, a, b, ++game.Serial, element: element);
             game.Eggs.Add(outcome.Egg);
 
             ReleaseCreature(game, aId);

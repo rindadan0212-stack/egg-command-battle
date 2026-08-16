@@ -39,7 +39,7 @@ namespace EggCommand.View
             var species = SpeciesTable.ById(egg.SpeciesId);
             Put(parent, PixelSpriteTexture.ToSprite(EggArt.Sprite, EggArt.Shell),
                 Rarities.StarsOf(egg.Rarity), $"{species.Name}のたまごをゲットした！！",
-                ElementMark.ColorOf(species.Element), onClose);
+                ElementMark.ColorOf(egg.Element), onClose);
         }
 
         /// <summary>卵が孵った。</summary>
@@ -48,7 +48,7 @@ namespace EggCommand.View
             var species = Creatures.SpeciesOf(creature);
             Put(parent, PixelSpriteTexture.ToSprite(species.Sprite, Creatures.PaletteOf(creature)),
                 "", $"{species.Name}がうまれた！！",
-                ElementMark.ColorOf(species.Element), onClose);
+                ElementMark.ColorOf(creature.Element), onClose);
         }
 
         private static void Put(Transform parent, Sprite art, string stars, string line,

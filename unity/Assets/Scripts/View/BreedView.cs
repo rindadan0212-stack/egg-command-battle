@@ -38,7 +38,7 @@ namespace EggCommand.View
                     slot.Art.sprite = PixelSpriteTexture.ToSprite(species.Sprite, Creatures.PaletteOf(creature));
                     slot.Art.preserveAspect = true;
                 }
-                if (slot.Element != null) slot.Element.color = ElementMark.ColorOf(species.Element);
+                if (slot.Element != null) slot.Element.color = ElementMark.ColorOf(creature.Element);
                 if (slot.Name != null) slot.Name.text = species.Name;
                 if (slot.Wild != null)
                 {

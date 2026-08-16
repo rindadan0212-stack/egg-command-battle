@@ -48,13 +48,20 @@ namespace EggCommand.Core
         public readonly StatKey? Strong;
         public readonly StatKey? Weak;
 
+        /// <summary>3すくみの属性。⭐ **種族ではなく個体が持つ**。
+        /// 炎のタマルも水のタマルも生まれる。配合では親のどちらかから受け継ぐ。</summary>
+        public readonly Element Element;
+
         public Creature(string id, string speciesId, StatBlock wild, StatBlock trained, int earned,
             int mutationCounter, string? skill2, string? skill3, int paletteIndex,
             string? parentA, string? parentB, int generation,
-            StatKey? strong = null, StatKey? weak = null)
+            StatKey? strong = null, StatKey? weak = null, Element? element = null)
         {
             Strong = strong;
             Weak = weak;
+            // ⚠️ 指定が無ければ、その種族が昔持っていた属性にする。
+            //    属性を個体へ移す前のセーブと、移植元との照合が、これで動かずに済む
+            Element = element ?? Migrations.ElementOf(speciesId);
             Id = id;
             SpeciesId = speciesId;
             Wild = wild;
@@ -178,6 +185,12 @@ namespace EggCommand.Core
 
         /// <summary>野生レベルの合計。厳選の目安として並べ替えに使う。</summary>
         public static int WildTotalOf(Creature creature) => Stats.TotalOf(creature.Wild);
+
+        /// <summary>属性だけ差し替えた同じ個体。⚠️ 個体は作り直す（欄は書き換えない）。</summary>
+        public static Creature WithElement(Creature c, Element element) => new Creature(
+            c.Id, c.SpeciesId, c.Wild, c.Trained, c.Earned, c.MutationCounter,
+            c.Skill2, c.Skill3, c.PaletteIndex, c.ParentA, c.ParentB, c.Generation,
+            c.Strong, c.Weak, element);
 
         /// <summary>その個体のパレット。添字が範囲外なら黙って通常色にせず投げる。</summary>
         public static Palette PaletteOf(Creature creature)

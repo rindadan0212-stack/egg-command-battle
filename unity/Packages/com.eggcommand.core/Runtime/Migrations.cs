@@ -30,6 +30,28 @@ namespace EggCommand.Core
         {
         };
 
+        /// <summary>属性を種族に固定していた頃の割り当て（2026-08-17 に個体側へ移した）。
+        ///
+        /// ⭐ いまは**属性を持たない個体・卵は存在しない**。ここが効くのは2つだけ:
+        /// 1. 属性を持たない古いセーブを読むとき（その個体の見え方が変わらないように）
+        /// 2. 移植元との照合（入力を移植元と同じ形に戻すため）
+        ///
+        /// ⚠️ 新しい種族をここへ足さない。足すと「その種族の属性」という考え方が復活する。
+        /// 表に無い種族は炎（3すくみのどれかであればよく、どれでも同じ）。</summary>
+        private static readonly Dictionary<string, Element> LegacyElements = new Dictionary<string, Element>
+        {
+            { "tamaru", Element.Water },
+            { "tsunoga", Element.Fire },
+            { "haneru", Element.Wood },
+            { "nushi", Element.Water },
+        };
+
+        public static Element ElementOf(string speciesId)
+        {
+            Element element;
+            return LegacyElements.TryGetValue(speciesId, out element) ? element : Element.Fire;
+        }
+
         /// <summary>辿る上限。⚠️ 輪（a→b→a）は書き間違いなので投げる。</summary>
         public const int MaxHops = 8;
 

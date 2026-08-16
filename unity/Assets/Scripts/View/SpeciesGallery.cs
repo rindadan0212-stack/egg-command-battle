@@ -104,9 +104,9 @@ namespace EggCommand.View
             var name = NewText(row, "Name", species.Name, 36, Ink, TextAnchor.UpperLeft);
             Place(name, 0f, 24f, NameColumnWidth, 48f);
 
-            string element = SpeciesTable.LabelOf(species.Element);
+            // ⚠️ 属性は種族ではなく個体が持つので、ここには出さない
             string skill = Skills.ById(species.Skill1).Name;
-            var meta = NewText(row, "Meta", $"{element} / {skill}", 24, InkDim, TextAnchor.UpperLeft);
+            var meta = NewText(row, "Meta", skill, 24, InkDim, TextAnchor.UpperLeft);
             Place(meta, 0f, 76f, NameColumnWidth, 40f);
 
             var stats = NewText(row, "Stats",
