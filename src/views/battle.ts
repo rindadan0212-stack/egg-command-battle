@@ -121,21 +121,22 @@ export function renderBattle(
 
   const element = document.createElement('div')
   element.className = 'battle'
+  // ⚠️ 下のシートはわざと左右いっぱいに広げている（器の端まで届かせる）
+  element.dataset['bleed'] = 'true'
 
-  // ⭐ モックの構成: 左に味方を小さくリスト、右に敵を大きく。
-  //    下は白いシートで、そこがコマンドの場だと形で分かるようにする
-  // ⭐ 場は縦に伸びうる（敵が多い / 状態が付く）ので**スクロールさせる**。
-  //    スキルシートは下に貼り付けたまま動かさない。指の位置が変わらない
-  const arenaScroll = document.createElement('div')
-  arenaScroll.className = 'scroller arenascroll'
+  // ⚠️ **操作面は絶対にスクロールさせない。**
+  //    一度ここをスクロール層にしたが、**敵を選ぶのにスクロールが要る戦闘画面**という
+  //    有り得ない形になった。スクロールしてよいのは一覧（BOX・巣・配合の相手）だけ。
+  //
+  //  ⭐ 上に敵3体・下に味方3体を**横並び**にする。縦に積むと必ず入らない。
+  //     横並びなら、体数が増えても幅を分け合うだけで高さは変わらない。
   const arena = document.createElement('div')
   arena.className = 'arena'
-  arenaScroll.append(arena)
-  const allyRow = document.createElement('div')
-  allyRow.className = 'field allies'
   const enemyRow = document.createElement('div')
   enemyRow.className = 'field enemies'
-  arena.append(allyRow, enemyRow)
+  const allyRow = document.createElement('div')
+  allyRow.className = 'field allies'
+  arena.append(enemyRow, allyRow)
 
   const sheet = document.createElement('div')
   sheet.className = 'sheet'
@@ -145,7 +146,7 @@ export function renderBattle(
   logBox.className = 'battlelog mono'
   sheet.append(commands, logBox)
 
-  element.append(arenaScroll, sheet)
+  element.append(arena, sheet)
 
   function buildFighter(unit: Unit): HTMLElement {
     const box = document.createElement('div')
@@ -169,7 +170,7 @@ export function renderBattle(
       })
     }
 
-    // ⭐ 敵は「絵」、味方は「札」。同じ形で並べると縦1本で見分けがつかない
+    // ⭐ 敵のほうを大きく描く。狙う相手なので、指で押せる大きさが要る
     const big = unit.side === 'enemy'
     const art = document.createElement('div')
     art.className = 'art'
@@ -204,8 +205,7 @@ export function renderBattle(
     // ⚠️ 速度の数値は出さない。ゲージの伸び方で読ませる
     badges.textContent = activeStatuses(unit).join(' ')
 
-    if (big) box.append(art, label, nums, hp, gauge, badges)
-    else box.append(art, label, hp, nums, gauge, badges)
+    box.append(art, label, hp, nums, gauge, badges)
     return box
   }
 
@@ -310,14 +310,16 @@ export function renderBattle(
     enemyRow.replaceChildren(...state.units.filter((u) => u.side === 'enemy').map(buildFighter))
     allyRow.replaceChildren(...state.units.filter((u) => u.side === 'ally').map(buildFighter))
     buildCommands()
+    // ⚠️ **スクロールする履歴を操作面に置かない。**
+    //    直前に何が起きたかだけ 2行。遡って読む必要があるなら、それは
+    //    「その場で分からない」ということなので、表示のほうを直す。
     logBox.replaceChildren(
-      ...state.log.slice(-9).map((event) => {
+      ...state.log.slice(-2).map((event) => {
         const line = document.createElement('div')
         line.textContent = describe(state, event)
         return line
       }),
     )
-    logBox.scrollTop = logBox.scrollHeight
   }
 
   /** 次に動く者まで進める。味方の番なら止まって入力を待つ。 */

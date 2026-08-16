@@ -10,10 +10,12 @@
     "preview": "vite preview",
     "same": "node scripts/same.mjs",
     "sim": "node scripts/sim.mjs",
-    "check:determinism": "node scripts/check-determinism.mjs"
+    "check:determinism": "node scripts/check-determinism.mjs",
+    "shots": "node scripts/shots.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "playwright": "^1.62.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.1"
   }

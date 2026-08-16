@@ -49,6 +49,9 @@ function buildStanding(creature: Creature, scale: number, role: string): HTMLEle
 export function buildHome(game: Game): HTMLElement {
   const wrap = document.createElement('div')
   wrap.className = 'home'
+  // ⚠️ 雲はわざと枠の外へ出して切っている。検査に「これは意図」と伝える。
+  //    印を付けないと毎回警告が出て、いつか本物のはみ出しを見逃す。
+  wrap.dataset['bleed'] = 'true'
 
   const party = partyOf(game)
 

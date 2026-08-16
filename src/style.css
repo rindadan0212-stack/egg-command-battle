@@ -607,156 +607,118 @@ button {
 
 /* ── 戦闘 ──────────────────────────────────────── */
 
+/*  ⚠️ **戦闘画面は1画面に収める。スクロールさせない。**
+ *  一度ここをスクロール層にして「敵を選ぶのにスクロールが要る戦闘」を作った。
+ *  操作面をスクロールさせるゲームは無い。スクロールは一覧だけ。
+ *
+ *  ```
+ *  敵  3体（横並び・大きめ）   ← 狙う相手。指で押す
+ *  味方 3体（横並び・小さめ）  ← 状態を見るだけ
+ *  白いシート（技3つ + 直前の出来事）
+ *  ```
+ *  ⭐ **横並びにすると高さが体数に依存しない。**縦に積むと必ず入らない。
+ */
 .battle {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
+  overflow: hidden;
 }
 
-/* ⭐ モックの構成。左に味方を小さくリスト、右に敵を大きく置く。
-   ⚠️ **列幅を px で決めない。**158px 固定にしていて、320px の端末で
-   横スクロールが出ていた（縦のスクロール層の中なので見切れ検査もすり抜けた）。 */
 .arena {
   display: grid;
-  grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
-  gap: 10px;
-  align-items: start;
-  padding: 4px 0 12px;
+  grid-template-rows: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 4px;
+  min-height: 0;
+  padding: 2px 0 8px;
 }
 
 .field {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.field.allies .fighter {
-  min-width: 0;
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
-  column-gap: 8px;
-  row-gap: 3px;
-  align-items: center;
-  background: none;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  padding: 0;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: 6px;
+  min-height: 0;
 }
 
-.field.allies .art {
-  grid-column: 1;
-  grid-row: 1 / 3;
-  line-height: 0;
+.field.allies {
+  align-items: start;
 }
 
-.field.allies .fname {
-  grid-column: 2;
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.field.allies .nums,
-.field.allies .badges {
-  grid-column: 1 / 3;
-}
-
-.field.allies .meter {
-  grid-column: 1 / 3;
-}
-
-/* ⭐ 敵は絵を主役に。札にしないで場に立たせる */
-.field.enemies .fighter {
-  min-width: 0;
+.fighter {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+  min-width: 0;
   padding: 0;
 }
 
-.field.enemies .art {
+.fighter .art {
   line-height: 0;
-  order: 2;
 }
 
-.field.enemies .fname {
-  order: 1;
+.fighter .fname {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 11px;
+  white-space: nowrap;
+  font-size: 10px;
   font-weight: 900;
   background: var(--card);
   border: 2.5px solid var(--ink);
   border-radius: var(--pill);
-  padding: 1px 10px;
+  padding: 0 8px;
+}
+
+.fighter .nums,
+.fighter .badges {
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: 1.3;
+  color: var(--ink-mid);
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* ⭐ 敵は上・大きめ。狙う相手なので当たり判定を確保する */
+.field.enemies .fighter {
+  justify-content: flex-end;
+  min-height: 44px;
+  cursor: default;
+}
+
+.field.enemies .art {
+  order: 1;
+}
+.field.enemies .fname {
+  order: 2;
+}
 .field.enemies .nums {
   order: 3;
-  font-family: var(--mono);
-  font-size: 11px;
 }
-
 .field.enemies .meter.hp {
   order: 4;
-  width: 100%;
-  max-width: 148px;
-  height: 13px;
+  height: 11px;
   border-width: 3px;
 }
-
 .field.enemies .meter.hp i {
   background: var(--danger);
 }
-
 .field.enemies .meter.gauge {
   order: 5;
-  width: 100%;
-  max-width: 148px;
 }
-
 .field.enemies .badges {
   order: 6;
 }
 
-.fighter .fname,
-.fighter .nums,
-.fighter .badges {
-  min-width: 0;
-}
-
-.fighter .nums,
-.fighter .badges {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--ink-mid);
-  line-height: 1.35;
-}
-
-/* ⭐ 手番の者だけ立てる */
-.fighter[data-turn='true'] .fname {
-  background: var(--sun);
-  border: 2.5px solid var(--ink);
-  border-radius: var(--pill);
-  padding: 1px 10px;
-}
-
-.fighter[data-down='true'] {
-  opacity: 0.35;
-}
-
-/* 対象を選ばせている間だけ、狙える相手に輪をかける */
-.fighter[data-selectable='true'] {
-  cursor: pointer;
-}
-
-.fighter[data-selectable='true'] .art {
-  outline: 5px solid rgba(255, 159, 67, 0.5);
-  border-radius: 50%;
+/* 味方は下・小さめ。見るだけなので詰めてよい */
+.field.allies .fighter {
+  justify-content: flex-start;
 }
 
 .meter {
@@ -769,7 +731,7 @@ button {
 }
 
 .meter.hp {
-  height: 11px;
+  height: 9px;
 }
 
 .meter.hp i {
@@ -780,7 +742,7 @@ button {
 
 /* ⭐ ゲージは「いつ動くか」を読む主役。HP より細くても色で立てる */
 .meter.gauge {
-  height: 8px;
+  height: 7px;
 }
 
 .meter.gauge i {
@@ -789,24 +751,41 @@ button {
   background: var(--gauge);
 }
 
+/* ⭐ 手番の者だけ立てる */
+.fighter[data-turn='true'] .fname {
+  background: var(--sun);
+}
+
+.fighter[data-down='true'] {
+  opacity: 0.35;
+}
+
+/* 対象を選ばせている間だけ、狙える相手に輪をかける */
+.fighter[data-selectable='true'] {
+  cursor: pointer;
+}
+
+.fighter[data-selectable='true'] .art {
+  outline: 5px solid rgba(255, 159, 67, 0.55);
+  border-radius: 50%;
+}
+
 /* ⭐ 下は白いシート。ここがコマンドの場だと形で分かる */
 .sheet {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   background: var(--card);
   border-top: 4px solid var(--ink);
   border-radius: 26px 26px 0 0;
-  padding: 14px 14px 16px;
-  /* 左右は端まで届かせる。⚠️ **下の負のマージンは使わない**
-     （器の外へ 16px 押し出して、狭い端末でシートの底が切れていた） */
+  padding: 12px 14px 14px;
   margin: 0 -14px 0;
 }
 
 .commands {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 8px;
 }
 
 .commands .turnof {
@@ -814,31 +793,32 @@ button {
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.16em;
-  color: var(--ink-soft);
+  color: var(--ink-mid);
 }
 
 .commands button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  font-size: 14px;
+  justify-content: center;
+  gap: 1px;
+  font-size: 13px;
   font-weight: 900;
   background: var(--sky);
-  border: 4px solid var(--ink);
-  border-radius: 22px;
-  box-shadow: var(--lift-deep);
-  padding: 12px 8px;
+  border: 3.5px solid var(--ink);
+  border-radius: 20px;
+  box-shadow: 0 5px 0 var(--ink);
+  padding: 8px 6px;
 }
 
 /* ⭐ 枠1（CTなし）は必殺の位置。幅いっぱいの1行で他と質を変える */
 .commands button:nth-of-type(1) {
   grid-column: 1 / -1;
   font-family: var(--display);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 400;
   background: var(--sun);
-  border-radius: 26px;
+  border-radius: 24px;
 }
 
 .commands button:nth-of-type(3) {
@@ -847,7 +827,7 @@ button {
 
 .commands button:active:not(:disabled) {
   transform: translateY(4px);
-  box-shadow: 0 2px 0 var(--ink);
+  box-shadow: 0 1px 0 var(--ink);
 }
 
 .commands button:disabled {
@@ -881,17 +861,14 @@ button {
   margin: 0;
 }
 
+/* ⚠️ 直前の出来事だけ。**遡れる履歴を操作面に置かない** */
 .battlelog {
+  font-family: var(--mono);
   font-size: 10px;
-  line-height: 1.7;
+  line-height: 1.5;
   color: var(--ink-mid);
-  background: var(--sunk);
-  border-radius: var(--small-radius);
-  padding: 8px 10px;
-  /* ⚠️ 高さを px で固定しない。狭い端末ではログが場を圧迫する */
-  max-height: min(92px, 14vh);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  min-height: 30px;
+  overflow: hidden;
 }
 
 /* ── 卵の強奪（発射） ──────────────────────────── */
