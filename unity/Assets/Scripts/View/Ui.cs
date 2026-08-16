@@ -70,6 +70,22 @@ namespace EggCommand.View
             }
         }
 
+        /// <summary>画面ごとの地の絵（空→砂の縦グラデーション）。
+        /// ⭐ 中身は Assets/Editor/BuildSky.cs が書き出した PNG。移植元の CSS と同じ停止位置。
+        /// ⚠️ 見つからないときは null を返す。呼び側は <see cref="SkyOf"/> の単色へ落ちること。</summary>
+        public static Sprite SkySpriteOf(Sky sky)
+        {
+            switch (sky)
+            {
+                case Sky.Home: return SkinSprite("sky-home");
+                case Sky.Nest: return SkinSprite("sky-nest");
+                case Sky.Battle: return SkinSprite("sky-battle");
+                case Sky.Hatch: return SkinSprite("sky-hatch");
+                case Sky.Breed: return SkinSprite("sky-breed");
+                default: return SkinSprite("sky-box");
+            }
+        }
+
         // ── フォント ────────────────────────────────────
         private static Font _font;
 

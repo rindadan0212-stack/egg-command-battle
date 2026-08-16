@@ -122,12 +122,22 @@ namespace EggCommand.View
 
             var back = Ui.Rect("Sky", _root);
             Ui.Stretch(back);
+            var backImage = back.gameObject.AddComponent<Image>();
             // ⚠️ 強奪だけは盤がワールド空間に居る。地を塗ると UI が世界を隠してしまうので、
             //    ここは透明にしてカメラの背景を見せる。
-            back.gameObject.AddComponent<Image>().color = screen == Screen.Steal
-                ? new Color(0f, 0f, 0f, 0f)
-                : Ui.SkyOf(SkyOf(screen));
-            back.GetComponent<Image>().raycastTarget = screen != Screen.Steal;
+            if (screen == Screen.Steal)
+            {
+                backImage.color = new Color(0f, 0f, 0f, 0f);
+            }
+            else
+            {
+                var sky = SkyOf(screen);
+                // ⭐ 空→砂のグラデーション。地平線があると「立っている場所」が分かる
+                backImage.sprite = Ui.SkySpriteOf(sky);
+                // ⚠️ 絵が無いときは単色へ落ちる。黙って透明にしない
+                backImage.color = backImage.sprite != null ? Color.white : Ui.SkyOf(sky);
+            }
+            backImage.raycastTarget = screen != Screen.Steal;
 
             bool home = screen == Screen.Home;
             float bodyTop = Ui.TopBarHeight;
