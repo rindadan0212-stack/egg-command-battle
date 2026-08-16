@@ -214,19 +214,20 @@ function audit() {
     ) {
       push(`横に切れている: ${el.className || el.tagName}`)
     }
-    // 器の外へ出ている。スクロール層と切り落とし層の中は除く
+    // 器の外へ出ている。
+    // ⚠️ **`overflow: hidden` の中を丸ごと見逃さない。**
+    //    以前そうしていて、切り落とされて見えなくなっている中身を
+    //    「はみ出し 0」と報告した（罠19 と同じ形。切って隠すと綺麗に見える）。
+    //    見逃してよいのは ①スクロールすれば見える ②`data-bleed` の宣言がある、の2つだけ。
     if (r.right > p.right + 1 || r.left < p.left - 1 || r.bottom > p.bottom + 1 || r.top < p.top - 1) {
-      let inside = false
+      let excused = el.dataset.bleed === 'true'
       let n = el.parentElement
-      while (n && n !== phone) {
-        const s = getComputedStyle(n)
-        if (s.overflowY === 'auto' || s.overflow === 'hidden') {
-          inside = true
-          break
-        }
+      while (!excused && n && n !== phone) {
+        if (getComputedStyle(n).overflowY === 'auto') excused = true
+        else if (n.dataset.bleed === 'true') excused = true
         n = n.parentElement
       }
-      if (!inside) push(`はみ出し: ${el.tagName}.${el.className}`)
+      if (!excused) push(`はみ出し: ${el.tagName}.${el.className}`)
     }
     if (el.tagName === 'BUTTON' && (r.height < 43.5 || r.width < 43.5)) {
       push(`タップ域が 44px 未満: ${el.className || el.textContent.trim().slice(0, 8)}`)
@@ -235,6 +236,23 @@ function audit() {
 
   for (const el of phone.querySelectorAll('.title,.name,.fname,.dlabel,.gname,.lead')) {
     if (el.scrollWidth > el.clientWidth + 1) push(`文字が途切れる: ${el.className}`)
+  }
+
+  // ⚠️ **重なりを見る。**はみ出し検査は「枠から出たか」しか見ないので、
+  //    枠の中で要素どうしが乗り合っているのを一切captureできない。
+  //    実際 grid の `align-content: space-between` が負の空きで
+  //    トラックを重ね、敵の HP バーが味方に乗っていた。
+  const blocks = [...phone.querySelectorAll('.stand, .fighter, .nestcard, .eggslot, .bslot, .fact, .cell')]
+  for (let i = 0; i < blocks.length; i++) {
+    for (let j = i + 1; j < blocks.length; j++) {
+      const a = blocks[i].getBoundingClientRect()
+      const b = blocks[j].getBoundingClientRect()
+      if (!a.width || !b.width) continue
+      const over =
+        Math.min(a.right, b.right) - Math.max(a.left, b.left) > 2 &&
+        Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 2
+      if (over) push(`重なり: ${blocks[i].className} × ${blocks[j].className}`)
+    }
   }
   return bad
 }

@@ -96,6 +96,9 @@ export interface Unit {
   readonly key: string
   readonly name: string
   readonly maxHp: number
+  /** ⭐ **手数の倍率。**少数側の1体が背負う人数ぶん、ゲージが速く溜まる。
+   *  ⚠️ 味方は常に 1。孤立している側だけが上がる。 */
+  readonly tempo: number
   hp: number
   gauge: number
   status: UnitStatus
@@ -164,13 +167,14 @@ export function damageOf(
   return Math.max(1, Math.floor(raw * elementMult))
 }
 
-/** 1刻みでゲージがいくつ溜まるか。**唯一の出所。** */
-export function gaugeRate(speed: number): number {
-  return GAUGE_BASE + Math.max(0, speed)
+/** 1刻みでゲージがいくつ溜まるか。**唯一の出所。**
+ *  @param tempo 少数側が背負う人数ぶんの手数の倍率（味方は 1） */
+export function gaugeRate(speed: number, tempo = 1): number {
+  return Math.round((GAUGE_BASE + Math.max(0, speed)) * tempo)
 }
 
-export function ticksToAct(gauge: number, speed: number): number {
-  return Math.ceil((GAUGE_MAX - gauge) / gaugeRate(speed))
+export function ticksToAct(gauge: number, speed: number, tempo = 1): number {
+  return Math.ceil((GAUGE_MAX - gauge) / gaugeRate(speed, tempo))
 }
 
 // ── 組み立て ────────────────────────────────────────
@@ -198,8 +202,14 @@ function freshStatus(): UnitStatus {
   }
 }
 
-export function makeUnit(creature: Creature, side: Side, slot: number): Unit {
-  const maxHp = statsOf(creature).hp * HP_SCALE
+export function makeUnit(
+  creature: Creature,
+  side: Side,
+  slot: number,
+  hpScale = 1,
+  tempo = 1,
+): Unit {
+  const maxHp = Math.round(statsOf(creature).hp * HP_SCALE * hpScale)
   return {
     creature,
     side,
@@ -207,6 +217,7 @@ export function makeUnit(creature: Creature, side: Side, slot: number): Unit {
     key: `${side}-${slot}`,
     name: speciesOf(creature).name,
     maxHp,
+    tempo,
     hp: maxHp,
     gauge: 0,
     status: freshStatus(),
@@ -214,14 +225,41 @@ export function makeUnit(creature: Creature, side: Side, slot: number): Unit {
   }
 }
 
+/** ⭐ **少数側の1体が「何人分」を背負うか。**（体数の比）
+ *
+ *  ⚠️ ボス専用の例外を作らない。体数の比で決めるので、2体にしても3体に戻しても式は変わらない。 */
+export function loneScale(allyCount: number, enemyCount: number): number {
+  if (enemyCount <= 0) return 1
+  return Math.max(1, allyCount / enemyCount)
+}
+
+/** HP は人数ぶんそのまま持つ。**一つの器に同じ総量**を入れるだけ。 */
+export function loneHp(scale: number): number {
+  return scale
+}
+
+/** ⭐ **手数は増える分を半分に割り引く。**
+ *
+ *  ⚠️ **3体は倒すたびに弱くなるが、1体は倒れるまで弱くならない。**
+ *  だから同じ総量でも単体のほうが強い。人数ぶんそのまま手数を与えると
+ *  初期パーティが段1にすら勝てなくなった（実測）。
+ *  逆に手数を据え置く（1倍）と、硬いだけの案山子になって
+ *  初期パーティでボスに勝ててしまい輪が閉じなかった（実測 47行動）。
+ *  ⭐ 掃引した結果、HP=体数比 / 手数=増分の半分 が
+ *  「段1・2は勝てる / 上位とボスには負ける」形になった。 */
+export function loneTempo(scale: number): number {
+  return 1 + (scale - 1) * 0.5
+}
+
 export function createBattle(
   allies: readonly Creature[],
   enemies: readonly Creature[],
 ): BattleState {
+  const scale = loneScale(allies.length, enemies.length)
   return {
     units: [
       ...allies.map((c, i) => makeUnit(c, 'ally', i)),
-      ...enemies.map((c, i) => makeUnit(c, 'enemy', i)),
+      ...enemies.map((c, i) => makeUnit(c, 'enemy', i, loneHp(scale), loneTempo(scale))),
     ],
     actions: 0,
     log: [],
@@ -328,10 +366,10 @@ export function nextActor(state: BattleState): Unit | null {
 
     let ticks = Infinity
     for (const unit of living) {
-      ticks = Math.min(ticks, ticksToAct(unit.gauge, speedOf(unit)))
+      ticks = Math.min(ticks, ticksToAct(unit.gauge, speedOf(unit), unit.tempo))
     }
     if (Number.isFinite(ticks) && ticks > 0) {
-      for (const unit of living) unit.gauge += ticks * gaugeRate(speedOf(unit))
+      for (const unit of living) unit.gauge += ticks * gaugeRate(speedOf(unit), unit.tempo)
     }
 
     // ⭐ 満ちた者のうち「**内部ゲージが最も多い**」者が動く。速度ではない。

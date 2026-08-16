@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Unity 6 の C# は 9。ここを 9 に固定して、
+         Unity で通らない構文をコンパイラに止めさせる（覚えている必要をなくす）。 -->
+    <LangVersion>9.0</LangVersion>
+    <!-- ⚠️ Unity 6 の C# は 9。ここを 9 に固定して、
+         Unity で通らない構文を**コンパイラに止めさせる**（覚えている必要をなくす）。 -->
+    <LangVersion>9.0</LangVersion>
+  </PropertyGroup>
+
+</Project>

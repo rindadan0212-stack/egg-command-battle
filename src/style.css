@@ -618,19 +618,31 @@ button {
  *  ```
  *  ⭐ **横並びにすると高さが体数に依存しない。**縦に積むと必ず入らない。
  */
+/* ⚠️ **共有の縦積みルールに `.battle` を混ぜない。**
+   一度混ぜていて、後から来る共有ルールの `display:flex` が
+   ここの `display:grid` を打ち消していた。見た目では気づけず、
+   実測して初めて「行が伸びていない」と分かった。 */
 .battle {
+  flex: 1;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
   overflow: hidden;
 }
 
+/* ⭐ **敵1体が主役。**残りの高さを全部あげて、その中で中央に置く。
+   味方は中身なりの高さでシートの直上に控える。
+
+   ⚠️ 一度 `grid-template-rows: auto auto` ＋ `align-content: space-between` にしたが、
+   狭い端末で**空きが負になるとトラックどうしが重なる**。
+   実際 320×568 で敵の HP バーが真ん中の味方に乗った。
+   ⭐ `1fr` で余りを吸わせれば、負の空きが生まれないので重ならない。 */
 .arena {
   display: grid;
-  grid-template-rows: minmax(0, 1.1fr) minmax(0, 1fr);
-  gap: 4px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 8px;
   min-height: 0;
-  padding: 2px 0 8px;
+  padding: 6px 0 8px;
 }
 
 .field {
@@ -685,25 +697,40 @@ button {
   white-space: nowrap;
 }
 
-/* ⭐ 敵は上・大きめ。狙う相手なので当たり判定を確保する */
+/* ⭐ 敵1体。中央に据えて、下に HP を密着させる（まもダンの作法）。
+   ⚠️ 名前は出さない。属性だけ小さく添える */
+.field.enemies {
+  align-items: center;
+  justify-items: center;
+  justify-content: center;
+}
+
 .field.enemies .fighter {
-  justify-content: flex-end;
-  min-height: 44px;
+  justify-content: center;
+  gap: 2px;
+  max-width: 220px;
   cursor: default;
 }
 
 .field.enemies .art {
   order: 1;
 }
+/* 属性だけの小さいピル。⚠️ 種族名は出さない */
 .field.enemies .fname {
   order: 2;
+  font-size: 10px;
+  padding: 0 10px;
 }
 .field.enemies .nums {
   order: 3;
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--ink);
 }
+/* ⭐ HP は絵の直下に密着させ、太くする。ここが「あとどれだけか」の主役 */
 .field.enemies .meter.hp {
   order: 4;
-  height: 11px;
+  height: 14px;
   border-width: 3px;
 }
 .field.enemies .meter.hp i {
@@ -716,9 +743,18 @@ button {
   order: 6;
 }
 
-/* 味方は下・小さめ。見るだけなので詰めてよい */
+/* 味方3体は下に横並び。⚠️ 名前を出さないので、区別は絵と並び順で付く */
+.field.allies {
+  align-items: start;
+}
+
 .field.allies .fighter {
   justify-content: flex-start;
+}
+
+/* 名前札が空のときは場所を取らない */
+.fighter .fname:empty {
+  display: none;
 }
 
 .meter {
@@ -751,7 +787,15 @@ button {
   background: var(--gauge);
 }
 
-/* ⭐ 手番の者だけ立てる */
+/* ⭐ 手番の者だけ立てる。
+   ⚠️ 名前札に色を付けていたが、札を消したら**手番が一切見えなくなった**。
+   絵そのものを立てる（札の有無に依存しない形にする）。 */
+.fighter[data-turn='true'] .art {
+  outline: 4px solid var(--sun);
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+
 .fighter[data-turn='true'] .fname {
   background: var(--sun);
 }
@@ -910,7 +954,6 @@ button {
 .hatch,
 .home,
 .steal,
-.battle,
 .boxview,
 .breedview {
   flex: 1;

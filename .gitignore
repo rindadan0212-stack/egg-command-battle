@@ -11,3 +11,7 @@ dist/
 Thumbs.db
 
 shots/
+
+unity-port/**/bin/
+unity-port/**/obj/
+unity/

@@ -15,7 +15,6 @@ import {
   isAlive,
   isUsable,
   livingOf,
-  needsTarget,
   nextActor,
   performAction,
   skillAt,
@@ -36,6 +35,13 @@ import { spriteToCanvas } from '../render/sprite.ts'
 /** 敵の手番を見せるための間。長さは体感のためだけで、状態には影響しない。 */
 const ENEMY_PAUSE_MS = 420
 
+/** 敵のドット倍率の下限と上限。⭐ **整数倍だけ**（小数倍でボケる）。 */
+const ENEMY_SCALE_MIN = 3
+const ENEMY_SCALE_MAX = 12
+
+/** ドット絵の一辺（px）。 */
+const SPRITE_PX = 16
+
 export interface BattleView {
   readonly element: HTMLElement
   /** 画面を離れるときに呼ぶ。待ち時間と描画ループを止める */
@@ -50,10 +56,17 @@ function tierOf(skill: Skill): string {
   return ''
 }
 
+/** 並びの位置。⚠️ 同じ種族が3体並ぶので、名前だけでは誰か分からない。
+ *  内部キー（`ally-1`）は開発の都合なので画面に出さない。 */
+const SPOTS = ['左', '中', '右'] as const
+
 function describe(state: BattleState, event: BattleEvent): string {
   const nameOf = (key: string): string => {
     const unit = state.units.find((u) => u.key === key)
-    return unit ? `${unit.name}(${unit.key})` : key
+    if (!unit) return key
+    // 敵は1体なので位置を言う必要が無い
+    if (unit.side === 'enemy') return `親の${unit.name}`
+    return `${SPOTS[unit.slot] ?? ''}の${unit.name}`
   }
   switch (event.kind) {
     case 'act':
@@ -103,8 +116,9 @@ export function renderBattle(
 ): BattleView {
   const state = createBattle(allies, enemies)
   let awaiting: Unit | null = null
-  /** ⭐ 対象を選ばせている最中の行動。単体攻撃はここを経由する */
-  let pending: Action | null = null
+  /** ⭐ 直前に手番だった味方。敵の手番の間、その技を**押せない状態で**出しておく。
+   *  ⚠️ 空欄にすると欄が縮んで画面が跳ね、場所だけ予約すると白い空白が残る。 */
+  let lastActor: Unit | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
 
@@ -156,29 +170,23 @@ export function renderBattle(
     box.dataset['down'] = String(!isAlive(unit))
     box.dataset['turn'] = String(awaiting === unit)
 
-    // ⭐ 対象を選ばせている間、狙える相手を押せるようにする
-    const selectable = pending !== null && unit.side === 'enemy' && isAlive(unit)
-    box.dataset['selectable'] = String(selectable)
-    if (selectable) {
-      box.addEventListener('click', () => {
-        if (!awaiting || !pending) return
-        performAction(state, awaiting, pending, unit)
-        pending = null
-        awaiting = null
-        paint()
-        schedule()
-      })
-    }
+    // ⚠️ **敵は1体なので、狙う相手を選ばせない。**
+    //    以前は単体攻撃のたびに対象を選ばせていたが、選択肢が1つしかない問い
+    //    （＝ただの確認）になった。押す回数が増えるだけで判断が増えない。
 
-    // ⭐ 敵のほうを大きく描く。狙う相手なので、指で押せる大きさが要る
+    // ⭐ **敵は1体なので大きく描く。**画面の主役はこれ
     const big = unit.side === 'enemy'
     const art = document.createElement('div')
     art.className = 'art'
-    art.append(spriteToCanvas(speciesOf(unit.creature).sprite, unitPalette(unit), big ? 4 : 2))
+    const scale = big ? enemyArtScale : 3
+    art.append(spriteToCanvas(speciesOf(unit.creature).sprite, unitPalette(unit), scale))
 
+    // ⚠️ **名前札を全員に付けない。**
+    //    同じ種族が並ぶと「同じ札」が並ぶだけで、画面が汚れて何も読めなくなる。
+    //    戦闘中に要るのは HP とゲージ。誰の番かは手番の強調で示す。
     const label = document.createElement('span')
     label.className = 'fname'
-    label.textContent = `${unit.name} ${ELEMENT_LABELS[speciesOf(unit.creature).element]}`
+    label.textContent = big ? ELEMENT_LABELS[speciesOf(unit.creature).element] : ''
 
     const hp = document.createElement('span')
     hp.className = 'meter hp'
@@ -219,29 +227,19 @@ export function renderBattle(
       commands.append(done)
       return
     }
-    if (!awaiting) return
+    // ⚠️ 敵の手番でも**同じ形のまま**出す（押せないだけ）。
+    //    空欄にすると欄が縮んで画面が跳ね、場所だけ予約すると白い空白が残る。
+    // ⚠️ 戦闘の初手が敵だと lastActor がまだ無い。**先頭の生存者**で埋める。
+    //    ここを空にすると開幕から欄ごと消え、画面が跳ねる。
+    const shown = awaiting ?? lastActor ?? livingOf(state, 'ally')[0] ?? null
+    if (!shown) return
+    const usableNow = awaiting !== null
 
     const who = document.createElement('span')
     who.className = 'turnof mono'
-    who.textContent = `${awaiting.name}(${awaiting.key}) の番`
+    // ⚠️ 内部の key を画面に出さない（`ally-0` は開発の都合であって遊ぶ人の情報ではない）
+    who.textContent = usableNow ? `${SPOTS[shown.slot] ?? ''}の${shown.name} の番` : '相手の番'
     commands.append(who)
-
-    // 対象選択中は、コマンドの代わりに「誰を狙うか」を促す
-    if (pending !== null) {
-      const ask = document.createElement('span')
-      ask.className = 'turnof'
-      ask.textContent = `→ ${actionSkill(awaiting, pending).name}：狙う相手を選ぶ`
-      const cancel = document.createElement('button')
-      cancel.type = 'button'
-      cancel.className = 'cancel'
-      cancel.textContent = 'やめる'
-      cancel.addEventListener('click', () => {
-        pending = null
-        paint()
-      })
-      commands.append(ask, cancel)
-      return
-    }
 
     // ⚠️ 「たたかう」は無い。枠1（CTなし）がその役目を兼ねる
     const options: Action[] = [
@@ -250,9 +248,9 @@ export function renderBattle(
       { kind: 'skill', slot: 2 },
     ]
     for (const action of options) {
-      if (action.kind !== 'skill' || !skillAt(awaiting, action.slot)) continue
-      const skill = actionSkill(awaiting, action)
-      const usable = isUsable(awaiting, action)
+      if (action.kind !== 'skill' || !skillAt(shown, action.slot)) continue
+      const skill = actionSkill(shown, action)
+      const usable = usableNow && isUsable(shown, action)
       const button = document.createElement('button')
       button.type = 'button'
       button.disabled = !usable
@@ -264,7 +262,7 @@ export function renderBattle(
 
       const ct = document.createElement('span')
       ct.className = 'ct mono'
-      const left = awaiting.cooldowns[action.slot] ?? 0
+      const left = shown.cooldowns[action.slot] ?? 0
       const own = effectiveCt(action.slot, skill)
       // 枠1 は待ちが無いので、CT ではなく威力の段位を出す
       ct.textContent = left > 0 ? `あと${left}` : own > 0 ? `CT${own}` : tierOf(skill)
@@ -272,13 +270,8 @@ export function renderBattle(
 
       button.addEventListener('click', () => {
         if (!awaiting) return
-        // ⭐ 単体攻撃は対象を選ばせる。自動任せだと HP の高い相手が永久に狙われない
-        if (needsTarget(skill) && livingOf(state, 'enemy').length > 1) {
-          pending = action
-          paint()
-          return
-        }
         performAction(state, awaiting, action)
+        lastActor = awaiting
         awaiting = null
         paint()
         schedule()
@@ -305,11 +298,42 @@ export function renderBattle(
     frame = requestAnimationFrame(animate)
   }
 
+  /** 敵の絵の倍率。⚠️ **実測で決める。**最初は仮の値で描いて、そのあと合わせる。 */
+  let enemyArtScale = 6
+
+  /** ⭐ **敵の絵が行に収まる最大の整数倍を、実測で求める。**
+   *
+   *  ⚠️ 倍率の表（440以上なら12、340以上なら10…）を書いていたが、
+   *  絵以外（属性ピル・数値・HP・ゲージ・隙間）の高さを**推測**していたので合わなかった。
+   *  実際 320×568 で行136px に対して中身173px になり、味方に重なった。
+   *  絵以外の高さは**その場で測れる**ので、推測せずに引き算する。 */
+  function fitEnemy(): void {
+    const fighter = enemyRow.querySelector('.fighter') as HTMLElement | null
+    const art = fighter?.querySelector('.art') as HTMLElement | null
+    if (!fighter || !art) return
+
+    const rowHeight = enemyRow.getBoundingClientRect().height
+    if (rowHeight <= 0) return
+    // 絵以外が使っている高さ（＝測れる分は測る）
+    const chrome = fighter.getBoundingClientRect().height - art.getBoundingClientRect().height
+    const room = rowHeight - chrome
+    const want = Math.max(
+      ENEMY_SCALE_MIN,
+      Math.min(ENEMY_SCALE_MAX, Math.floor(room / SPRITE_PX)),
+    )
+    if (want === enemyArtScale) return
+    enemyArtScale = want
+    const unit = state.units.find((u) => u.side === 'enemy')
+    if (!unit) return
+    art.replaceChildren(spriteToCanvas(speciesOf(unit.creature).sprite, unitPalette(unit), want))
+  }
+
   function paint(): void {
     gaugeFills.clear()
     enemyRow.replaceChildren(...state.units.filter((u) => u.side === 'enemy').map(buildFighter))
     allyRow.replaceChildren(...state.units.filter((u) => u.side === 'ally').map(buildFighter))
     buildCommands()
+    fitEnemy()
     // ⚠️ **スクロールする履歴を操作面に置かない。**
     //    直前に何が起きたかだけ 2行。遡って読む必要があるなら、それは
     //    「その場で分からない」ということなので、表示のほうを直す。
@@ -350,10 +374,17 @@ export function renderBattle(
   frame = requestAnimationFrame(animate)
   schedule()
 
+  // ⚠️ 回転やバーの出入りで場の高さが変わる。変わったら敵の倍率を選び直す
+  const resize = new ResizeObserver(() => {
+    if (!disposed) fitEnemy()
+  })
+  resize.observe(arena)
+
   return {
     element,
     dispose() {
       disposed = true
+      resize.disconnect()
       if (timer !== null) clearTimeout(timer)
       // ⚠️ 描画ループを必ず止める。放っておくと画面を離れても回り続ける
       if (frame !== 0) cancelAnimationFrame(frame)
