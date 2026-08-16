@@ -31,12 +31,7 @@ namespace EggCommand.View
             var view = app.Put<NestsView>(body, "NestsScreen");
             if (view == null) return;
             view.Bind(app.Game,
-                // ⭐ 巣は引っ張って卵を狙う。野良はそのまま戦闘（雑魚戦＝レベル上げ）
-                encounter =>
-                {
-                    if (encounter.Kind == EncounterKind.Wild) app.EnterWild(encounter);
-                    else StealScreen.Enter(app, encounter.Nest);
-                },
+                encounter => StealScreen.Enter(app, encounter.Nest),
                 () => app.EnterBattle(null, true));
         }
     }
