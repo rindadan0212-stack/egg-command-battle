@@ -63,6 +63,9 @@ namespace EggCommand.View
             // ⭐ 保存があれば続きから。無ければ新しく始める
             Game = FreshStart ? null : SaveFile.Read();
             if (Game == null) Game = Games.NewGame(Seed);
+            // ⭐ 編成をここで確定させる。⚠️ 通さないと、良い個体を手に入れた瞬間に
+            //    「素質の高い順」で埋め直されて、選んだ3体が黙って入れ替わる
+            Games.LockParty(Game);
             BuildCanvas();
             Show(Screen.Home);
         }

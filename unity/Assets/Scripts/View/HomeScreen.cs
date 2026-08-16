@@ -27,6 +27,8 @@ namespace EggCommand.View
                     if (Storages.IsFull(app.Game.Storage)) { app.Show(Screen.Box); return; }
                     var born = Hatchery.Collect(app.Game, slot.Egg.Id, app.Now());
                     if (born == null) { app.Refresh(); return; }
+                    // ⚠️ 枠が空いていれば入れる。埋まっていれば触らない
+                    Games.LockParty(app.Game);
                     Fanfare.Born(app.Overlay, born, () => app.Show(Screen.Home));
                 });
         }

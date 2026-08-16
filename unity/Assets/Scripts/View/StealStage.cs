@@ -99,8 +99,9 @@ namespace EggCommand.View
             _camera.orthographicSize = ViewWidth / 2f / _camera.aspect;
             _camera.transform.position = new Vector3(0f, 0f, -10f);
 
-            // 地。⚠️ 盤の外と中を色で分ける（線を引かずに面で）
-            Solid("Board", new Color32(0x14, 0x18, 0x12, 0xff),
+            // 地。⚠️ 盤の外と中を分ける。⭐ 素の四角ではなくタイルの絵を敷く
+            //    （色だけの面は「まだ作っていない」ように見える）
+            Skinned("Board", "tile", new Color32(0x6f, 0x8a, 0x5e, 0xff),
                 new Vector2(0f, 0f), new Vector2((float)Steal.FieldWidth, (float)field.Height), 5f);
 
             // 親が塞ぐ帯。隙間の左右2枚
@@ -137,9 +138,9 @@ namespace EggCommand.View
             float reachY = (float)field.Start.Y - (float)budget;
             if (reachY > 0f && reachY < (float)field.Height)
             {
-                Solid("Reach", new Color32(0xff, 0xd9, 0x77, 0x55),
+                Skinned("Reach", "pill", new Color32(0xff, 0xd9, 0x77, 0x88),
                     ToWorld((float)Steal.FieldWidth / 2f, reachY),
-                    new Vector2((float)Steal.FieldWidth, 1.5f), 4.5f);
+                    new Vector2((float)Steal.FieldWidth, 2.2f), 4.5f);
             }
 
             // ⭐ 画面の端に目盛り。距離が字と線の両方で分かる
@@ -205,9 +206,9 @@ namespace EggCommand.View
                 if (y < 0f) break;
                 float worldY = ToWorld(0f, y).y;
 
-                Solid($"Tick {d}", new Color(1f, 1f, 1f, 0.5f),
+                Skinned($"Tick {d}", "pill", new Color(1f, 1f, 1f, 0.65f),
                     new Vector2((tickFrom + tickTo) / 2f, worldY),
-                    new Vector2(tickTo - tickFrom, 1.2f), 4.8f);
+                    new Vector2(tickTo - tickFrom, 1.6f), 4.8f);
 
                 var label = new GameObject($"Meter {d}");
                 label.transform.SetParent(transform, false);
@@ -398,6 +399,25 @@ namespace EggCommand.View
             renderer.sprite = White();
             renderer.color = color;
             renderer.sortingOrder = Mathf.RoundToInt(-depth * 10f);
+            return go;
+        }
+
+        /// <summary>意匠の絵を貼った板。⭐ 素の四角の代わり。
+        /// ⚠️ 見つからなければ白い四角へ落ちる（黙って何も出さない、をしない）。</summary>
+        private GameObject Skinned(string name, string skin, Color color,
+            Vector2 center, Vector2 size, float depth)
+        {
+            var go = Solid(name, color, center, size, depth);
+            var sprite = Ui.SkinSprite(skin);
+            if (sprite != null)
+            {
+                var renderer = go.GetComponent<SpriteRenderer>();
+                renderer.sprite = sprite;
+                renderer.drawMode = SpriteDrawMode.Sliced;
+                // ⚠️ drawMode を変えたら localScale ではなく size で伸ばす
+                go.transform.localScale = Vector3.one;
+                renderer.size = size;
+            }
             return go;
         }
 

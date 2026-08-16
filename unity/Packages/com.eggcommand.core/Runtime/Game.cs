@@ -227,5 +227,21 @@ namespace EggCommand.Core
         }
 
         public static bool IsInParty(Game game, string id) => game.Party.Contains(id);
+
+        /// <summary>いまの編成をそのまま書き留める。⭐ **勝手に入れ替わらなくする**。
+        ///
+        /// ⚠️ <see cref="PartyOf"/> は選んでいない枠を「素質の高い順」で埋める。
+        /// 便利だが、良い個体を手に入れた瞬間に編成が黙って変わってしまう。
+        /// 手に入れた直後にここを通せば、それ以降は選んだ3体で固定される。
+        /// ⚠️ 既に選んである枠は触らない（プレイヤーの選択を上書きしない）。</summary>
+        public static void LockParty(Game game)
+        {
+            if (game.Party.Count >= PartySize) return;
+            foreach (var creature in PartyOf(game))
+            {
+                if (game.Party.Count >= PartySize) break;
+                if (!game.Party.Contains(creature.Id)) game.Party.Add(creature.Id);
+            }
+        }
     }
 }

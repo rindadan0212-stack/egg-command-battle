@@ -32,6 +32,18 @@ namespace EggCommand.View
         private float _shownHp = 1f;
         private float _groundWidth;
 
+        /// <summary>登場の残り（1 = 画面の外、0 = 定位置）。
+        /// ⭐ 倒した瞬間に次が定位置へ現れると「回復した」ようにしか見えない。
+        /// 右の外から転がってこさせて、別の個体だと分かるようにする。</summary>
+        private float _entry;
+        private int _shownDefeated = -1;
+        private Vector2 _enemyHome;
+
+        /// <summary>転がって来るのにかかる秒。⚠️ 短いと結局パッと入れ替わって見える。</summary>
+        private const float EntrySeconds = 0.7f;
+        /// <summary>画面の外へ置く距離。⚠️ 短いと画面内から湧いたように見える。</summary>
+        private const float EntryFrom = 700f;
+
         public void Bind(Game game, System.Func<long> clock, System.Action onGain)
         {
             _game = game;
@@ -54,6 +66,8 @@ namespace EggCommand.View
                 _walkers[i].preserveAspect = true;
             }
 
+            if (_enemySlot != null) _enemyHome = _enemySlot.anchoredPosition;
+            _shownDefeated = game.Idle.Defeated;
             if (_enemy != null)
             {
                 // ⚠️ 相手は編成から決めない。放置の敵は「立ちはだかるもの」の絵でよい
@@ -94,15 +108,33 @@ namespace EggCommand.View
                 rect.anchoredPosition = _home[i] + new Vector2(0f, bob);
             }
 
+            // ── 倒したら、次を画面の外から転がしてくる
+            if (_game.Idle.Defeated != _shownDefeated)
+            {
+                _shownDefeated = _game.Idle.Defeated;
+                _entry = 1f;
+                _shownHp = 1f;
+            }
+            if (_entry > 0f) _entry = Mathf.MoveTowards(_entry, 0f, Time.deltaTime / EntrySeconds);
+
             // ── 敵の帯。⚠️ Core は1秒刻みなので、そのまま描くと段になる。寄せて滑らかにする
             float target = Mathf.Clamp01((float)(_game.Idle.EnemyHp / Core.Idle.EnemyHp));
             _shownHp = Mathf.MoveTowards(_shownHp, target, 2.5f * Time.deltaTime);
-            if (target > _shownHp) _shownHp = target;   // 次の敵が出たら即座に満タンへ
-            if (_enemyHp != null) _enemyHp.fillAmount = _shownHp;
+            if (target > _shownHp) _shownHp = target;
+            if (_enemyHp != null)
+            {
+                _enemyHp.fillAmount = _shownHp;
+                // ⚠️ 来ている途中は帯を出さない。満タンの帯が動くと「回復した」に見える
+                _enemyHp.transform.parent.gameObject.SetActive(_entry <= 0.05f);
+            }
 
-            // 倒れる瞬間だけ縮める。⭐ 「倒した」が目に見える
             if (_enemySlot != null)
             {
+                // ⭐ 右の外から転がって来る。回るので「別の個体が来た」と分かる
+                float ease = _entry * _entry;   // 近づくほど減速する
+                _enemySlot.anchoredPosition = _enemyHome + new Vector2(EntryFrom * ease, 0f);
+                _enemySlot.localEulerAngles = new Vector3(0f, 0f, _entry * 720f);
+                // 倒れる瞬間だけ縮める。⭐ 「倒した」が目に見える
                 float scale = 0.85f + 0.15f * _shownHp;
                 _enemySlot.localScale = new Vector3(scale, scale, 1f);
             }
