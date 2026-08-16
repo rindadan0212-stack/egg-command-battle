@@ -125,6 +125,22 @@ public class BattleGoldenTests
                     $"{where}/{unit.Key}: 速度が {Battle.SpeedOf(unit)}");
             }
 
+            // ⚠️ **ここから先は属性が絡む組み合わせでは比べられない。**
+            // 不利倍率を 1/1.5（0.667）から 0.75 へ変えると決めたので、
+            // 属性の食い違う対戦は移植元と違う経過をたどる。数値を変えた判断そのものは
+            // 課題.md（属性の有利が 100%/0%）に基づく。
+            //
+            // ⭐ 属性の同じ対戦（浅瀬・深み・ヌシ）は倍率を一度も通らないので、
+            // 手番の順・CT・状態異常・出来事の並びは**そのまま丸ごと照合できている**。
+            // ⚠️ 上の開幕の並び（最大HP・手数倍率・速度）は倍率と無関係なので全件で見る。
+            var allyElement = Creatures.SpeciesOf(allies[0]).Element;
+            bool crossElement = false;
+            foreach (var foe in enemies)
+            {
+                if (Creatures.SpeciesOf(foe).Element != allyElement) crossElement = true;
+            }
+            if (crossElement) continue;
+
             int guard = 0;
             while (state.Result == null && guard++ < Battle.MaxActions * 3)
             {

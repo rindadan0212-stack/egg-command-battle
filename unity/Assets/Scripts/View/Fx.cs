@@ -144,9 +144,9 @@ namespace EggCommand.View
         {
             switch (element)
             {
-                case Element.Fang: return new Color32(0xe8, 0x7a, 0x5c, 0xff);
-                case Element.Plume: return new Color32(0xa8, 0xd8, 0x6e, 0xff);
-                default: return new Color32(0x6e, 0xa8, 0xd8, 0xff);
+                case Element.Fire: return new Color32(0xe8, 0x7a, 0x5c, 0xff);   // 炎
+                case Element.Wood: return new Color32(0xa8, 0xd8, 0x6e, 0xff);   // 木
+                default: return new Color32(0x6e, 0xa8, 0xd8, 0xff);             // 水
             }
         }
 

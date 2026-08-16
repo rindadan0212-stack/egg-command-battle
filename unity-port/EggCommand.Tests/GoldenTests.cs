@@ -279,19 +279,21 @@ public class SpeciesGoldenTests
         var beats = golden.GetProperty("elementBeats");
         foreach (var element in SpeciesTable.Elements)
         {
+            // ⚠️ 移植元の名前で引く（牙=炎 / 羽=木 / 鱗=水）。⭐ Golden.Element と同じ対応
             string key = element switch
             {
-                Element.Fang => "fang",
-                Element.Plume => "plume",
+                Element.Fire => "fang",
+                Element.Wood => "plume",
                 _ => "scale",
             };
             Assert.Equal(Golden.Element(beats.GetProperty(key).GetString()!), SpeciesTable.Beats(element));
         }
 
-        var labels = golden.GetProperty("elementLabels");
-        Assert.Equal(labels.GetProperty("fang").GetString(), SpeciesTable.LabelOf(Element.Fang));
-        Assert.Equal(labels.GetProperty("plume").GetString(), SpeciesTable.LabelOf(Element.Plume));
-        Assert.Equal(labels.GetProperty("scale").GetString(), SpeciesTable.LabelOf(Element.Scale));
+        // ⚠️ 画面に出す語だけは移植元と変えた（牙/羽/鱗 → 炎/水/木）ので照合しない。
+        // ⭐ 上の輪の照合が通っている＝**中身は同じで名前だけ変えた**ことは示せている。
+        Assert.Equal("炎", SpeciesTable.LabelOf(Element.Fire));
+        Assert.Equal("水", SpeciesTable.LabelOf(Element.Water));
+        Assert.Equal("木", SpeciesTable.LabelOf(Element.Wood));
     }
 
     /// <summary>⭐ id で引く。並び順も件数も見ない（理由は技の側と同じ）。</summary>

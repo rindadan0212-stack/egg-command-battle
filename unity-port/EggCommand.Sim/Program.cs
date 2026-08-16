@@ -124,6 +124,21 @@ namespace EggCommand.Sim
             return party;
         }
 
+        /// <summary>属性を混ぜた編成。⭐ **まもダン型のモンスターシステムでは編成は混ざる。**
+        /// 単一属性の編成だけを測ると、属性の効き目を過大に見積もる。</summary>
+        private static List<Creature> MixedParty(Rng rng, int tier, ref int serial)
+        {
+            var ids = new List<string>();
+            foreach (var s in SpeciesTable.All) ids.Add(s.Id);
+
+            var party = new List<Creature>();
+            for (int i = 0; i < Games.PartySize; i++)
+            {
+                party.Add(Born(rng, ids[rng.Int(0, ids.Count)], tier, ref serial));
+            }
+            return party;
+        }
+
         private static string Pct(int part, int whole) =>
             whole == 0 ? "  - " : $"{100.0 * part / whole,5:0.0}%";
 
@@ -263,6 +278,23 @@ namespace EggCommand.Sim
                     $"  勝率 {Pct(won, Samples)}");
             }
             Console.WriteLine("  ⚠️ 有利側が 50% 付近なら、属性が勝敗に効いていない");
+
+            // ⭐ 上は**編成3体が全部同じ属性**の場合。倍率が編成まるごとに掛かるので、
+            //    有利 ×1.5 と 不利 ×0.75 が両側で重なって **2.0倍の差**になる。
+            //    実際に遊ぶときの編成が混成なら、差は組み合わせごとに散る。どちらなのかを測る。
+            Console.WriteLine();
+            Console.WriteLine($"  ・編成の属性を混ぜた場合（{Samples}回）");
+            int mixedWon = 0, mixedDraw = 0;
+            for (int i = 0; i < Samples; i++)
+            {
+                var rng = new Rng(seed + i).Stream("mixed");
+                int serial = 0;
+                var fight = Run(MixedParty(rng, Tier, ref serial), MixedParty(rng, Tier, ref serial));
+                if (fight.Result == Outcome.Ally) mixedWon++;
+                if (fight.Result == Outcome.Draw) mixedDraw++;
+            }
+            Console.WriteLine($"    先手側の勝率 {Pct(mixedWon, Samples)}（引き分け {mixedDraw}）");
+            Console.WriteLine("    ⭐ 50% 付近なら、混成では属性が勝敗を決めきっていない");
         }
 
         // ── 型（特化 と 均等）────────────────────────────────

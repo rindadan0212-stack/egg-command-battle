@@ -39,11 +39,16 @@ internal static class Golden
         _ => throw new ArgumentException($"知らないステ: {s}"),
     };
 
+    /// <summary>移植元の 牙 / 羽 / 鱗 を、いまの 炎 / 木 / 水 に読み替える。
+    ///
+    /// ⭐ **名前だけ入れ替えて、輪は回していない**ことをここで固定している。
+    /// この対応表のまま `elementBeats` の照合が通る ＝ 種族どうしの有利不利が1つも変わっていない、
+    /// という証明になる。⚠️ 対応表を都合よく組み替えたら証明にならないので、ここは触らない。</summary>
     public static Element Element(string s) => s switch
     {
-        "fang" => Core.Element.Fang,
-        "plume" => Core.Element.Plume,
-        "scale" => Core.Element.Scale,
+        "fang" => Core.Element.Fire,
+        "plume" => Core.Element.Wood,
+        "scale" => Core.Element.Water,
         _ => throw new ArgumentException($"知らない属性: {s}"),
     };
 

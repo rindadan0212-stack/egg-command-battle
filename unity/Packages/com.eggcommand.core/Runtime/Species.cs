@@ -4,13 +4,18 @@ using System.Collections.Generic;
 
 namespace EggCommand.Core
 {
-    /// <summary>3すくみ。牙 → 羽 → 鱗 → 牙。
-    /// （牙は羽を裂き / 羽は鱗をかわし / 鱗は牙を弾く）</summary>
+    /// <summary>3すくみ。炎 → 木 → 水 → 炎。
+    /// （炎は木を焼き / 木は水を吸い / 水は炎を消す）
+    ///
+    /// ⚠️ 以前は 牙 → 羽 → 鱗 だった。**輪の向きはそのまま**で名前だけ入れ替えてある
+    /// （牙=炎 / 羽=木 / 鱗=水）。種族どうしの有利不利は1つも変わっていない。
+    /// ⭐ 見て分かる属性にしたのは、種族が増えたときに**相性を覚えずに読めるようにする**ため。
+    /// 牙と羽のどちらが強いかは覚えるしかないが、炎と木なら見た瞬間に分かる。</summary>
     public enum Element
     {
-        Fang,
-        Plume,
-        Scale,
+        Fire,
+        Water,
+        Wood,
     }
 
     public sealed class Species
@@ -58,27 +63,27 @@ namespace EggCommand.Core
     /// 種族ごとに違うステへ寄せてある。</summary>
     public static class SpeciesTable
     {
-        public static readonly Element[] Elements = { Element.Fang, Element.Plume, Element.Scale };
+        public static readonly Element[] Elements = { Element.Fire, Element.Water, Element.Wood };
 
         public static string LabelOf(Element element)
         {
             switch (element)
             {
-                case Element.Fang: return "牙";
-                case Element.Plume: return "羽";
-                case Element.Scale: return "鱗";
+                case Element.Fire: return "炎";
+                case Element.Water: return "水";
+                case Element.Wood: return "木";
                 default: throw new ArgumentOutOfRangeException(nameof(element));
             }
         }
 
-        /// <summary>有利を取る相手。</summary>
+        /// <summary>有利を取る相手。炎 → 木 → 水 → 炎。</summary>
         public static Element Beats(Element element)
         {
             switch (element)
             {
-                case Element.Fang: return Element.Plume;
-                case Element.Plume: return Element.Scale;
-                case Element.Scale: return Element.Fang;
+                case Element.Fire: return Element.Wood;
+                case Element.Wood: return Element.Water;
+                case Element.Water: return Element.Fire;
                 default: throw new ArgumentOutOfRangeException(nameof(element));
             }
         }
@@ -211,24 +216,24 @@ namespace EggCommand.Core
         /// 全種族が同じステでスケールすると、そのステだけが二重に得になる。</summary>
         private static readonly Species[] List =
         {
-            new Species("tamaru", "タマル", Element.Scale,
+            new Species("tamaru", "タマル", Element.Water,
                 "attack-def", // 防御スケール
                 new StatBlock(24, 18, 22, 16), TamaruSprite, TamaruPalettes),
 
-            new Species("tsunoga", "ツノガ", Element.Fang,
+            new Species("tsunoga", "ツノガ", Element.Fire,
                 "attack", // 攻撃スケール・単体
                 new StatBlock(22, 24, 18, 16), TsunogaSprite, TsunogaPalettes),
 
-            new Species("haneru", "ハネル", Element.Plume,
+            new Species("haneru", "ハネル", Element.Wood,
                 "attack-all", // 攻撃スケール・全体（全体なので威力は小）
                 new StatBlock(20, 18, 16, 26), HaneruSprite, HaneruPalettes),
 
             // ⚠️ ボス専用。巣は持たないので卵からは出ない
-            // ⚠️ 3すくみは 牙 → 羽 → 鱗 → 牙。鱗に有利を取るのは羽（ハネル）。
-            //    ここを「牙が有利」と読み違えて検証編成を組み、測り損ねた。
+            // ⚠️ 3すくみは 炎 → 木 → 水 → 炎。水に有利を取るのは木（ハネル）。
+            //    ここを読み違えて検証編成を組み、測り損ねたことがある。
             // ⚠️ 枠1は CT が無いので、大技を置くと毎回撃ててしまう。
             //    震撼（CT7 の全体大技）は枠2へ回し、ここは中程度に留める。
-            new Species("nushi", "ヌシ", Element.Scale,
+            new Species("nushi", "ヌシ", Element.Water,
                 "attack-def",
                 new StatBlock(26, 20, 24, 10), NushiSprite, NushiPalettes),
         };

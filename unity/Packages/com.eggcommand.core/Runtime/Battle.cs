@@ -182,6 +182,10 @@ namespace EggCommand.Core
         /// <summary>属性の有利倍率。3すくみ。</summary>
         public const double ElementAdvantage = 1.5;
 
+        /// <summary>属性の不利倍率。⚠️ <see cref="ElementAdvantage"/> の逆数**ではない**。
+        /// 逆数（0.667）にしていたとき、有利側の勝率が実測で 100% になった。</summary>
+        public const double ElementWeakness = 0.75;
+
         /// <summary>攻撃・防御それぞれの効きを飽和させる定数。
         ///
         /// ⭐ 値は2次元に掃引して決めた。防御側を大きく取ってあるのは、
@@ -205,11 +209,20 @@ namespace EggCommand.Core
             return value < 1 ? 1 : value;
         }
 
-        /// <summary>属性の倍率。牙 → 羽 → 鱗 → 牙。</summary>
+        /// <summary>属性の倍率。炎 → 木 → 水 → 炎。
+        ///
+        /// ⭐ **有利と不利は対称にしない。** 有利 ×1.5 に対して不利は ×0.75。
+        /// 対称（1/1.5 = 0.667）だと不利側の被害が大きすぎて、
+        /// 実測で**有利側の勝率が 100% / 0%** になっていた。
+        /// そこまで決まりきると、種族を何種足しても選び方は
+        /// 「相手の属性を見て counter を出す」の一手に収束し、組み合わせが生まれない。
+        ///
+        /// ⚠️ 逆に 1.0 へ寄せすぎると「有利な属性を探す」動機が消える。
+        /// どちらへ動かすときも <c>sim elements</c> で測ってから決める。</summary>
         public static double ElementMultiplier(Element attacker, Element defender)
         {
             if (SpeciesTable.Beats(attacker) == defender) return ElementAdvantage;
-            if (SpeciesTable.Beats(defender) == attacker) return 1.0 / ElementAdvantage;
+            if (SpeciesTable.Beats(defender) == attacker) return ElementWeakness;
             return 1.0;
         }
 
