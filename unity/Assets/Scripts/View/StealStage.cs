@@ -38,6 +38,10 @@ namespace EggCommand.View
         /// <summary>目盛りの間隔（盤の単位＝メートル）。</summary>
         private const float MeterStep = 50f;
 
+        /// <summary>画面に映る世界の幅。⭐ **道より広く取る**。
+        /// ⚠️ 道と同じにすると目盛りを置く場所が道の上しか無くなり、線が盤を横切る。</summary>
+        private const float ViewWidth = 160f;
+
         /// <summary>カメラが追いつく速さ。⚠️ 速すぎると画面が跳ねて酔う。</summary>
         private const float CameraCatchUp = 90f;
 
@@ -92,7 +96,7 @@ namespace EggCommand.View
             // ⭐ 盤を縮めて収めない。**倍率は横幅だけで決める**。
             // ⚠️ 全体が入るように縮めると、深い巣ほど絵が小さくなって距離感が消える。
             //    奥行きは上へ伸ばして、カメラで追う。
-            _camera.orthographicSize = ((float)Steal.FieldWidth / 2f + 8f) / _camera.aspect;
+            _camera.orthographicSize = ViewWidth / 2f / _camera.aspect;
             _camera.transform.position = new Vector3(0f, 0f, -10f);
 
             // 地。⚠️ 盤の外と中を色で分ける（線を引かずに面で）
@@ -184,28 +188,37 @@ namespace EggCommand.View
             return new Vector2(fx - (float)Steal.FieldWidth / 2f, (float)_field.Height / 2f - fy);
         }
 
-        /// <summary>画面の端の目盛り。⭐ 走者の足元を 0 として、上へ何メートルか。</summary>
+        /// <summary>目盛り。⭐ **道の外（右の余白）**に短い線と数字を置く。
+        /// ⚠️ 盤を横切る線を引かない。道の上に線があると通り道の一部に見える。</summary>
         private void BuildMeters()
         {
-            float edge = (float)Steal.FieldWidth / 2f + 3f;
+            float roadEdge = (float)Steal.FieldWidth / 2f;
+            float tickFrom = roadEdge + 4f;
+            float tickTo = roadEdge + 14f;
+            // ⚠️ 左寄せにしたら「250」が画面の右端で切れた。
+            //    画面の縁から右寄せで置く（何桁でも必ず収まる）
+            float textRight = ViewWidth / 2f - 3f;
+
             for (float d = MeterStep; d <= (float)_field.Height; d += MeterStep)
             {
                 float y = (float)_field.Start.Y - d;
                 if (y < 0f) break;
-                var at = ToWorld((float)Steal.FieldWidth / 2f, y);
-                Solid($"Tick {d}", new Color(1f, 1f, 1f, 0.35f),
-                    at, new Vector2((float)Steal.FieldWidth + 6f, 0.8f), 4.8f);
+                float worldY = ToWorld(0f, y).y;
+
+                Solid($"Tick {d}", new Color(1f, 1f, 1f, 0.5f),
+                    new Vector2((tickFrom + tickTo) / 2f, worldY),
+                    new Vector2(tickTo - tickFrom, 1.2f), 4.8f);
 
                 var label = new GameObject($"Meter {d}");
                 label.transform.SetParent(transform, false);
-                label.transform.position = new Vector3(edge, at.y + 5f, 4.7f);
+                label.transform.position = new Vector3(textRight, worldY, 4.7f);
                 var text = label.AddComponent<TextMesh>();
-                text.text = $"{(int)d}m";
+                text.text = $"{(int)d}";
                 text.font = Ui.TheFont;
                 text.fontSize = 64;
-                text.characterSize = 0.34f;
-                text.anchor = TextAnchor.LowerRight;
-                text.color = new Color(1f, 1f, 1f, 0.75f);
+                text.characterSize = 0.62f;   // ⚠️ 0.34 では小さすぎて読めなかった
+                text.anchor = TextAnchor.MiddleRight;
+                text.color = new Color(1f, 1f, 1f, 0.85f);
                 // ⚠️ TextMesh は自前の材質を持たないので、フォントのものを貼る
                 label.GetComponent<MeshRenderer>().sharedMaterial = Ui.TheFont.material;
             }

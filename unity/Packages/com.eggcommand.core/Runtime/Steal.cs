@@ -93,7 +93,10 @@ namespace EggCommand.Core
     /// </summary>
     public static class Steal
     {
-        public const double FieldWidth = 160;
+        /// ⚠️ 画面の横幅と同じにしない。道が画面いっぱいだと、
+        /// 目盛りを置く場所が道の上しか無くなり、線が盤を横切る。
+        /// 160 から 1/3 狭めて 107。余った左右が目盛りの置き場になる。
+        public const double FieldWidth = 107;
 
         /// <summary>段階ごとの奥行き。
         ///
@@ -143,7 +146,7 @@ namespace EggCommand.Core
         /// <summary>親が塞ぐ幅。⭐ **絵1体ぶん**。
         /// ⚠️ ここを広げると絵1体では埋まらず、並べて誤魔化すことになる。
         /// 見た目と当たり判定を一致させるための上限でもある。</summary>
-        public const double ParentWidth = 28;
+        public const double ParentWidth = 56;
 
         /// <summary>親の寄り具合（中央からのずれ）。
         /// ⭐ 隙間が片方の壁に届くように寄せる ＝ 親は反対側の端で <see cref="ParentWidth"/> だけ塞ぐ。

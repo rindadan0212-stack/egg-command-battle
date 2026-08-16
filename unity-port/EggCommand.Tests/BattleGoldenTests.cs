@@ -169,19 +169,20 @@ public class BattleGoldenTests
     }
 }
 
+/// <summary>発射フェーズ。
+///
+/// ⚠️ 盤の寸法（FieldWidth / GapWidth / Lean / ParentWidth）は移植後に**意図して変えた**。
+/// FieldWidth は跳ね返りの壁そのものなので、移植元と同じ軌跡はもう出ない。
+/// ⭐ そこで「移植元と一致するか」ではなく**規則そのもの**を検査する。
+/// 変えていない較正値（飛距離の係数・当たりの半径・段ごとの奥行き）はそのまま比べる。
+/// </summary>
 public class StealGoldenTests
 {
     [Fact]
-    public void 発射フェーズの定数が一致する()
+    public void 変えていない較正値は移植元と一致する()
     {
         var golden = Golden.Load("steal");
-        Assert.Equal(golden.GetProperty("fieldWidth").GetDouble(), Steal.FieldWidth);
         Assert.Equal(golden.GetProperty("speedToDistance").GetDouble(), Steal.SpeedToDistance);
-        // ⚠️ gapWidth / lean は移植後に**意図して変えた**（塞ぐ幅を絵1体ぶんにするため）。
-        //    移植元と同じであることを求めるのは、もうこの遊びを表していない。
-        //    代わりに「塞ぐ幅 ＝ 絵1体ぶん」という今の規則を検査する。
-        Assert.Equal(Steal.FieldWidth - Steal.ParentWidth, Steal.GapWidth);
-        Assert.Equal(Steal.ParentWidth + Steal.GapWidth / 2 - Steal.FieldWidth / 2, Steal.Lean);
         Assert.Equal(golden.GetProperty("eggRadius").GetDouble(), Steal.EggRadius);
         Assert.Equal(golden.GetProperty("runnerRadius").GetDouble(), Steal.RunnerRadius);
 
@@ -192,69 +193,91 @@ public class StealGoldenTests
         }
     }
 
-    /// <summary>⭐ 乱数を使わないので、同じ角度・同じ飛距離からは必ず同じ結果になる。
-    /// ⚠️ ここは三角関数を通るので、桁の最後の1ビットが処理系で違いうる。
-    /// 落ちたときは「境目に当たった1件だけか」を先に見る。</summary>
     [Fact]
-    public void 発射の結果が一致する()
+    public void 盤の寸法は塞ぐ幅から導かれる()
     {
-        var golden = Golden.Load("steal");
-        foreach (var entry in golden.GetProperty("fields").EnumerateArray())
+        // ⚠️ 手で決めた数を置かない。絵と当たり判定が食い違いようがない形にしてある
+        Assert.Equal(Steal.FieldWidth - Steal.ParentWidth, Steal.GapWidth);
+        Assert.Equal(Steal.ParentWidth + Steal.GapWidth / 2 - Steal.FieldWidth / 2, Steal.Lean);
+        Assert.True(Steal.GapWidth > Steal.RunnerRadius * 2,
+            "隙間が走者より狭い。どう狙っても通れない");
+    }
+
+    [Fact]
+    public void 塞ぐ幅は必ず絵一体ぶん()
+    {
+        // ⭐ 幅がこれを超えると、盤の側で絵を並べて埋めることになる（増殖して見える）
+        foreach (int tier in new[] { 1, 2, 3, 4, 5 })
         {
-            int tier = entry.GetProperty("tier").GetInt32();
-            var side = Golden.Side(entry.GetProperty("side").GetString()!);
-            string where = $"tier={tier} {side}";
-            // ⚠️ 盤の寸法は意図して変えたので MakeField で作らない。
-            //    ここが確かめたいのは**跳ね返りと当たり判定**なので、
-            //    移植元と同じ寸法の盤を組んでから、その上で飛ばして比べる。
-            double height = entry.GetProperty("height").GetDouble();
-            var field = new StealField(
-                height, side,
-                entry.GetProperty("gapFrom").GetDouble(),
-                entry.GetProperty("gapTo").GetDouble(),
-                entry.GetProperty("bandTop").GetDouble(),
-                entry.GetProperty("bandBottom").GetDouble(),
-                new Point(Steal.FieldWidth / 2, 26),
-                new Point(Steal.FieldWidth / 2, height - 14));
-
-            Assert.True(Steal.DepthForTier(tier) == height, $"{where}: 奥行き");
-
-            var spans = Steal.ParentSpans(field);
-            var spansJson = entry.GetProperty("spans");
-            Assert.True(spansJson.GetArrayLength() == spans.Count, $"{where}: 塞ぎの枚数が {spans.Count}");
-            int s = 0;
-            foreach (var spanJson in spansJson.EnumerateArray())
+            foreach (var side in new[] { FieldSide.Left, FieldSide.Right })
             {
-                Assert.True(spanJson.GetProperty("from").GetDouble() == spans[s].From, $"{where}: 塞ぎ{s}の左");
-                Assert.True(spanJson.GetProperty("to").GetDouble() == spans[s].To, $"{where}: 塞ぎ{s}の右");
-                s++;
+                var field = Steal.MakeField(tier, side);
+                foreach (var span in Steal.ParentSpans(field))
+                {
+                    Assert.True(span.To - span.From <= Steal.ParentWidth + 0.001,
+                        $"tier={tier} {side}: 塞ぐ幅が {span.To - span.From}");
+                }
             }
+        }
+    }
 
-            foreach (var launchJson in entry.GetProperty("launches").EnumerateArray())
+    [Fact]
+    public void 軌跡は盤から出ない()
+    {
+        // ⚠️ 壁の跳ね返りが崩れると、画面の外を飛ぶ
+        foreach (int tier in new[] { 1, 3, 5 })
+        {
+            var field = Steal.MakeField(tier, FieldSide.Right);
+            for (int deg = -80; deg <= 80; deg += 5)
             {
-                int deg = launchJson.GetProperty("deg").GetInt32();
                 var run = Steal.Launch(field, deg * System.Math.PI / 180.0, 400);
-                Assert.True(Golden.Steal(launchJson.GetProperty("outcome").GetString()!) == run.Outcome,
-                    $"{where} {deg}°: 結果が {run.Outcome}（期待 {launchJson.GetProperty("outcome").GetString()}）");
-                Assert.True(launchJson.GetProperty("traveled").GetDouble() == run.Traveled,
-                    $"{where} {deg}°: 飛距離が {run.Traveled}");
-                Assert.True(launchJson.GetProperty("pathLength").GetInt32() == run.Path.Count,
-                    $"{where} {deg}°: 軌跡の点数が {run.Path.Count}");
+                foreach (var p in run.Path)
+                {
+                    Assert.True(p.X >= -0.001 && p.X <= Steal.FieldWidth + 0.001,
+                        $"tier={tier} {deg}°: x={p.X}");
+                    Assert.True(p.Y >= -0.001 && p.Y <= field.Height + 0.001,
+                        $"tier={tier} {deg}°: y={p.Y}");
+                }
             }
+        }
+    }
 
-            // ⭐ 設計が解けるものになっているか（解けない巣を出荷しない）
-            var solutionJson = entry.GetProperty("solution");
-            bool found = Steal.FindSolution(field, 400, 180, out _, out double traveled);
-            if (solutionJson.ValueKind == System.Text.Json.JsonValueKind.Null)
+    [Fact]
+    public void 同じ角度からは必ず同じ結果()
+    {
+        // ⭐ 乱数を使っていないことの検査。腕前の勝負なので、揺れてはいけない
+        var field = Steal.MakeField(3, FieldSide.Right);
+        for (int deg = -60; deg <= 60; deg += 7)
+        {
+            var a = Steal.Launch(field, deg * System.Math.PI / 180.0, 300);
+            var b = Steal.Launch(field, deg * System.Math.PI / 180.0, 300);
+            Assert.Equal(a.Outcome, b.Outcome);
+            Assert.Equal(a.Traveled, b.Traveled);
+            Assert.Equal(a.Path.Count, b.Path.Count);
+        }
+    }
+
+    [Fact]
+    public void 飛距離が足りなければ届かない()
+    {
+        var field = Steal.MakeField(5, FieldSide.Right);
+        Assert.NotEqual(StealOutcome.Success, Steal.Launch(field, 0.0, 10).Outcome);
+    }
+
+    [Fact]
+    public void 隙間を抜ければ卵に届く()
+    {
+        // ⭐ どこかの角度では必ず成功する。成功しえない盤は詰み
+        foreach (int tier in new[] { 1, 2, 3, 4, 5 })
+        {
+            bool any = false;
+            var field = Steal.MakeField(tier, FieldSide.Right);
+            for (int deg = -80; deg <= 80 && !any; deg++)
             {
-                Assert.False(found, $"{where}: 解けないはずが解けた");
+                any = Steal.Launch(field, deg * System.Math.PI / 180.0, 2000).Outcome
+                    == StealOutcome.Success;
             }
-            else
-            {
-                Assert.True(found, $"{where}: 解けるはずが解けなかった");
-                Assert.True(solutionJson.GetProperty("traveled").GetDouble() == traveled,
-                    $"{where}: 最短の飛距離が {traveled}");
-            }
+            Assert.True(any, $"tier={tier}: どの角度でも届かない");
         }
     }
 }
