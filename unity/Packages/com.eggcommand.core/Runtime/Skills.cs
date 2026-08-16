@@ -285,6 +285,9 @@ namespace EggCommand.Core
             return map;
         }
 
+        /// <summary>表にあるか。⚠️ 投げずに聞けるのは**セーブの読み込み**のためだけ。</summary>
+        public static bool Has(string id) => Index.ContainsKey(id);
+
         /// <summary>知らない id を黙って握りつぶさない。表に無いものは「効かないだけ」で気づけないため。</summary>
         public static Skill ById(string id)
         {

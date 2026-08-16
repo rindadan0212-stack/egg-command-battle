@@ -244,6 +244,15 @@ namespace EggCommand.Core
             return map;
         }
 
+        /// <summary>表にあるか。⚠️ 投げずに聞けるのは**セーブの読み込み**のためだけ。
+        /// 遊びの最中は <see cref="ById"/> を使う（知らない id は投げるべき）。</summary>
+        public static bool Has(string id) => Index.ContainsKey(id);
+
+        /// <summary>読めない種族 id が来たときの置き換え先。
+        /// ⚠️ 見た目も属性も変わってしまうが、**セーブが開かないよりはましだ**という判断。
+        /// ⭐ 置き換えたことは <see cref="Snapshots.Load"/> が記録に残す。</summary>
+        public static Species Fallback => List[0];
+
         /// <summary>表に無い id を黙って握りつぶさない。
         /// ⚠️ 「型は通る・テストも通る・ただ効かなくなるだけ」が一番気づけない形なので、必ず投げる。</summary>
         public static Species ById(string id)

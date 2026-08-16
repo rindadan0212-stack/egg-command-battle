@@ -148,4 +148,99 @@ public class SnapshotTests
         Assert.Null(Hatchery.Collect(back, slot.Egg.Id, slot.ReadyUnix - 1));
         Assert.NotNull(Hatchery.Collect(back, slot.Egg.Id, slot.ReadyUnix));
     }
+
+    // ── 中身が増減しても保存が死なないこと ────────────────────────
+    // ⚠️ ここが落ちる形になっていると、種族や技を1つ消しただけで
+    //    「それを持っている人のセーブだけが開かない」という壊れ方をする。
+    //    手元の新規プレイでは再現しないので、検査でしか押さえられない。
+
+    [Fact]
+    public void 表から消えた種族を持つ保存でも読める()
+    {
+        var save = Snapshots.Save(Played());
+        save.Creatures[0].SpeciesId = "もう無い種族";
+
+        var notes = new List<string>();
+        var back = Snapshots.Load(save, notes);
+
+        Assert.NotNull(back);
+        // ⭐ 個体は残る。素質も育てた分もそのまま
+        Assert.Equal(save.Creatures[0].Id, back!.Storage.Creatures[0].Id);
+        Assert.Equal(save.Creatures[0].Earned, back.Storage.Creatures[0].Earned);
+        // 置き換え先は表から引ける
+        Assert.True(SpeciesTable.Has(back.Storage.Creatures[0].SpeciesId));
+        // ⚠️ 黙って別の種族にしない。何をしたかが残る
+        Assert.Contains(notes, n => n.Contains("もう無い種族"));
+    }
+
+    [Fact]
+    public void 表から消えた技は枠が空くだけで済む()
+    {
+        var save = Snapshots.Save(Played());
+        save.Creatures[0].Skill2 = "もう無い技";
+
+        var notes = new List<string>();
+        var back = Snapshots.Load(save, notes)!;
+
+        // ⚠️ 別の技で埋めない。持っていない技を持っている状態のほうが危ない
+        Assert.Null(back.Storage.Creatures[0].Skill2);
+        Assert.Contains(notes, n => n.Contains("もう無い技"));
+        // 残りの枠は無事
+        Assert.Equal(save.Creatures[0].Skill3, back.Storage.Creatures[0].Skill3);
+    }
+
+    [Fact]
+    public void 卵と探索の中の種族も読み替わる()
+    {
+        var save = Snapshots.Save(Played());
+        save.Eggs[0].SpeciesId = "もう無い種族";
+        save.Encounters[0].SpeciesId = "もう無い種族";
+
+        var back = Snapshots.Load(save)!;
+
+        Assert.True(SpeciesTable.Has(back.Eggs[0].SpeciesId));
+        Assert.True(SpeciesTable.Has(back.Encounters[0].Nest.SpeciesId));
+    }
+
+    /// <summary>⚠️ 古い版を捨てない。捨てるのは「直せない壊し方」の中で一番よくある。</summary>
+    [Fact]
+    public void 古い版の保存は読み_新しすぎる版だけ捨てる()
+    {
+        var save = Snapshots.Save(Played());
+
+        save.Version = Snapshots.Version - 1;
+        Assert.NotNull(Snapshots.Load(save));
+
+        save.Version = Snapshots.Version + 1;
+        Assert.Null(Snapshots.Load(save));
+    }
+
+    /// <summary>引っ越し表そのもの。⭐ 仕組みだけ作って一度も通していない状態にしない。</summary>
+    [Fact]
+    public void 引っ越し表は多段を辿り輪で投げる()
+    {
+        var chain = new Dictionary<string, string> { { "a", "b" }, { "b", "c" } };
+        Assert.Equal("c", Migrations.Apply(chain, "a"));
+        Assert.Equal("c", Migrations.Apply(chain, "c"));
+        // 表に無いものはそのまま
+        Assert.Equal("z", Migrations.Apply(chain, "z"));
+
+        var loop = new Dictionary<string, string> { { "a", "b" }, { "b", "a" } };
+        Assert.Throws<System.InvalidOperationException>(() => Migrations.Apply(loop, "a"));
+    }
+
+    /// <summary>いま生きている id は、引っ越し表を通しても自分のまま。
+    /// ⚠️ 表に書き間違いがあると、遊んでいる最中の個体が別の種族に化ける。</summary>
+    [Fact]
+    public void 生きている_id_は引っ越し表で動かない()
+    {
+        foreach (var species in SpeciesTable.All)
+        {
+            Assert.Equal(species.Id, Migrations.SpeciesOf(species.Id));
+        }
+        foreach (var skill in Skills.All)
+        {
+            Assert.Equal(skill.Id, Migrations.SkillOf(skill.Id));
+        }
+    }
 }

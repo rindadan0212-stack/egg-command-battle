@@ -144,28 +144,35 @@ namespace EggCommand.Core
             return save;
         }
 
-        /// <summary>復元する。⚠️ 版が合わなければ null（黙って壊れた状態で始めない）。</summary>
-        public static Game? Load(GameSave? save)
+        /// <summary>復元する。
+        ///
+        /// ⚠️ **知らない種族・技の id が来ても投げない。** 遊びの最中なら投げるのが正しいが、
+        /// ここで投げると「二度と開けないセーブ」になる。置き換えて先へ進み、
+        /// 何をしたかを <paramref name="notes"/> に残す。
+        ///
+        /// ⚠️ 版が**新しすぎる**ときだけ null。古い版は既定値で埋めて読む
+        /// （古いセーブを捨てるのは、直せない壊し方の中で一番よくあるもの）。</summary>
+        public static Game? Load(GameSave? save, List<string>? notes = null)
         {
-            if (save == null || save.Version != Version) return null;
+            if (save == null || save.Version > Version) return null;
 
             var game = new Game(save.Seed);
             game.Serial = save.Serial;
             game.EncounterSerial = save.EncounterSerial;
 
             var creatures = new List<Creature>();
-            foreach (var c in save.Creatures) creatures.Add(To(c));
+            foreach (var c in save.Creatures) creatures.Add(To(c, notes));
             game.Storage = new Storage(save.Slots > 0 ? save.Slots : game.Storage.Slots, creatures);
 
-            foreach (var e in save.Eggs) game.Eggs.Add(To(e));
+            foreach (var e in save.Eggs) game.Eggs.Add(To(e, notes));
             foreach (var i in save.Incubating)
             {
-                game.Incubating.Add(new Incubation(To(i.Egg), i.StartUnix, i.ReadyUnix, i.Slot));
+                game.Incubating.Add(new Incubation(To(i.Egg, notes), i.StartUnix, i.ReadyUnix, i.Slot));
             }
             foreach (var e in save.Encounters)
             {
                 game.Encounters.Add(new Encounter(
-                    new Nest(e.NestId, e.Name, e.SpeciesId, e.Tier), e.Level));
+                    new Nest(e.NestId, e.Name, ResolveSpecies(e.SpeciesId, notes), e.Tier), e.Level));
             }
             game.Party.AddRange(save.Party);
 
@@ -193,6 +200,33 @@ namespace EggCommand.Core
             return game;
         }
 
+        // ── id の解決 ──────────────────────────────────
+        // ⭐ セーブに入っているのは id の**文字そのもの**。表から消えた id を復元できる場所は
+        //    ここしか無いので、引っ越し表を通すのもここ1か所に閉じる。
+
+        private static string ResolveSpecies(string id, List<string>? notes)
+        {
+            string moved = Migrations.SpeciesOf(id);
+            if (SpeciesTable.Has(moved)) return moved;
+
+            // ⚠️ 見た目も属性も変わる。それでも「開かないセーブ」よりはましだと決めた
+            var fallback = SpeciesTable.Fallback;
+            notes?.Add($"種族 {id} が表に無いので {fallback.Id} で置き換えた");
+            return fallback.Id;
+        }
+
+        private static string? ResolveSkill(string? id, List<string>? notes)
+        {
+            if (id == null) return null;
+            string moved = Migrations.SkillOf(id);
+            if (Skills.Has(moved)) return moved;
+
+            // ⚠️ 別の技で埋めない。埋めると「持っていない技を持っている」状態になる。
+            //    枠が空くほうが、まだ読める
+            notes?.Add($"技 {id} が表に無いので枠を空けた");
+            return null;
+        }
+
         // ── 個々の変換 ──────────────────────────────────
 
         private static int Key(StatKey? key) => key == null ? -1 : (int)key.Value;
@@ -217,9 +251,10 @@ namespace EggCommand.Core
             Strong = Key(c.Strong), Weak = Key(c.Weak),
         };
 
-        private static Creature To(CreatureSave s) => new Creature(
-            s.Id, s.SpeciesId, s.Wild.To(), s.Trained.To(), s.Earned,
-            s.MutationCounter, s.Skill2, s.Skill3, s.PaletteIndex,
+        private static Creature To(CreatureSave s, List<string>? notes) => new Creature(
+            s.Id, ResolveSpecies(s.SpeciesId, notes), s.Wild.To(), s.Trained.To(), s.Earned,
+            s.MutationCounter, ResolveSkill(s.Skill2, notes), ResolveSkill(s.Skill3, notes),
+            s.PaletteIndex,
             s.ParentA, s.ParentB, s.Generation, Key(s.Strong), Key(s.Weak));
 
         private static EggSave Of(Egg e) => new EggSave
@@ -232,9 +267,10 @@ namespace EggCommand.Core
             Strong = Key(e.Strong), Weak = Key(e.Weak),
         };
 
-        private static Egg To(EggSave s) => new Egg(
-            s.Id, s.SpeciesId, s.Wild.To(), s.MutationCounter, s.PaletteIndex,
+        private static Egg To(EggSave s, List<string>? notes) => new Egg(
+            s.Id, ResolveSpecies(s.SpeciesId, notes), s.Wild.To(), s.MutationCounter, s.PaletteIndex,
             s.ParentA, s.ParentB, s.Generation, (EggOrigin)s.How,
-            s.HasSkills, s.Skill2, s.Skill3, s.Rarity, Key(s.Strong), Key(s.Weak));
+            s.HasSkills, ResolveSkill(s.Skill2, notes), ResolveSkill(s.Skill3, notes),
+            s.Rarity, Key(s.Strong), Key(s.Weak));
     }
 }

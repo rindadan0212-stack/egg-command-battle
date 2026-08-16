@@ -43,8 +43,12 @@ namespace EggCommand.View
             {
                 if (!File.Exists(Path)) return null;
                 var save = JsonUtility.FromJson<GameSave>(File.ReadAllText(Path));
-                var game = Snapshots.Load(save);
-                if (game == null) Debug.LogWarning("保存の版が合わない。作り直して始める");
+
+                // ⭐ 置き換えが起きたら残る。⚠️ 黙って別の種族になっているのが一番困る
+                var notes = new System.Collections.Generic.List<string>();
+                var game = Snapshots.Load(save, notes);
+                if (game == null) Debug.LogWarning("保存の版が新しすぎる。作り直して始める");
+                foreach (string note in notes) Debug.LogWarning($"保存の読み替え: {note}");
                 return game;
             }
             catch (Exception error)
