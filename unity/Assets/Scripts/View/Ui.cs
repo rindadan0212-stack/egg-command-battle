@@ -66,19 +66,27 @@ namespace EggCommand.View
         // ── フォント ────────────────────────────────────
         private static Font _font;
 
-        /// <summary>⚠️ OS のフォントを借りている。Editor（Windows）では日本語が出るが、
-        /// Android ビルドでは出ない。日本語のフォントアセットを入れるまでの仮。
-        /// ⚠️ 配布物に Windows 同梱フォントを埋め込むのはライセンス上できないので、
-        /// 自由に使えるフォント（Noto Sans JP など）を選ぶ判断が要る。</summary>
+        /// <summary>⭐ DotGothic16（SIL OFL 1.1）。日本語のドットフォント。
+        ///
+        /// キャラがドット絵なので、字も同じ格子に乗るものを選んだ。
+        /// OFL なので APK に埋め込んで販売してよい。詳細は Assets/Fonts/NOTICE.md。
+        ///
+        /// ⚠️ OS のフォントを借りない。Editor では出ても Android では出ないうえ、
+        /// Windows 同梱フォントは配布物に埋め込めない。
+        /// ⚠️ Resources から読むので、フォントは Assets/Resources/Fonts/ に置く。</summary>
         public static Font TheFont
         {
             get
             {
                 if (_font == null)
                 {
-                    _font = Font.CreateDynamicFontFromOSFont(
-                        new[] { "Yu Gothic UI", "Meiryo", "MS Gothic", "Noto Sans JP" }, 32);
-                    if (_font == null) _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                    _font = Resources.Load<Font>("Fonts/DotGothic16-Regular");
+                    if (_font == null)
+                    {
+                        // ⚠️ 黙って別の字で描かない。無いことに気づけないほうが困る
+                        Debug.LogError("DotGothic16 が読めない。Assets/Resources/Fonts/ にあるか確認する");
+                        _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                    }
                 }
                 return _font;
             }

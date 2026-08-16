@@ -74,6 +74,31 @@ namespace EggCommand.EditorTools
                 }
             }
 
+            // ⭐ 並べたドット絵どうしが重なっていないか。
+            //    倍率を変えた日に静かに重なる（実際、フォントを替えたら編成の3体が重なった）。
+            var art = new List<RectTransform>();
+            foreach (var rect in canvas.GetComponentsInChildren<RectTransform>(false))
+            {
+                if (rect.name.StartsWith("Art ")) art.Add(rect);
+            }
+            int overlaps = 0;
+            for (int i = 0; i < art.Count; i++)
+            {
+                for (int j = i + 1; j < art.Count; j++)
+                {
+                    if (art[i].parent != art[j].parent) continue;
+                    var a = new Vector3[4]; art[i].GetWorldCorners(a);
+                    var b = new Vector3[4]; art[j].GetWorldCorners(b);
+                    bool hit = !(a[2].x <= b[0].x || b[2].x <= a[0].x || a[2].y <= b[0].y || b[2].y <= a[0].y);
+                    if (hit)
+                    {
+                        overlaps++;
+                        if (overlaps <= 3)
+                            sb.Append("  絵が重なる: ").Append(art[i].name).Append(" × ").Append(art[j].name).Append('\n');
+                    }
+                }
+            }
+
             foreach (var button in canvas.GetComponentsInChildren<Button>(false))
             {
                 var rect = button.GetComponent<RectTransform>();
@@ -92,6 +117,7 @@ namespace EggCommand.EditorTools
             sb.Append("層=").Append(layers)
               .Append(" 画面外=").Append(offScreen)
               .Append(" 枠外=").Append(offParent)
+              .Append(" 絵の重なり=").Append(overlaps)
               .Append(" 小さい押しどころ=").Append(tooSmall)
               .Append(" / Button=").Append(canvas.GetComponentsInChildren<Button>(false).Length)
               .Append(" Text=").Append(canvas.GetComponentsInChildren<Text>(false).Length);

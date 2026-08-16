@@ -41,8 +41,16 @@ namespace EggCommand.View
             else
             {
                 // ⭐ 整数倍だけ。ドット絵は小数倍で拡大するとボケる。
-                // ⚠️ 舞台の高さに合わせて選ぶ。決め打ちすると狭い端末で潰れる
-                int lead = stageHeight >= 900f ? 30 : stageHeight >= 700f ? 24 : stageHeight >= 520f ? 18 : 13;
+                // ⚠️ 高さだけで選ぶと**横が足りず3体が重なる**（実際に重なった）。
+                //    3体が並ぶのに要る幅から上限を出して、そこで頭打ちにする。
+                //    要る幅 = lead*16 + 2*(lead-10)*16 - 重ね幅*2  ≦ 画面幅 - 余白
+                int byHeight = stageHeight >= 900f ? 30 : stageHeight >= 700f ? 24 : stageHeight >= 520f ? 18 : 13;
+                // ⚠️ 重ねない。平面のドット絵は重ねても奥行きに見えず、ただ潰れて見える
+                const float Gap = 24f;
+                float usable = Ui.W - Ui.Margin * 2f;
+                // 3体ぶん = lead*16 + 2*(lead-10)*16 + 2*Gap ≦ usable
+                int byWidth = Mathf.FloorToInt((((usable - Gap * 2f) / 16f) + 20f) / 3f);
+                int lead = Mathf.Clamp(Mathf.Min(byHeight, byWidth), 8, 30);
                 int side = Mathf.Max(6, lead - 10);
 
                 float leadSize = lead * 16f;
@@ -61,14 +69,16 @@ namespace EggCommand.View
                 Ui.Block(body, "Ground", new Color32(0x1f, 0x24, 0x1c, 0xff),
                     centerX - standWidth / 2f, baseline + 6f, standWidth, 26f);
 
-                // ⭐ 三角配置。手前のリーダーを一番大きく。脇は奥に見えるよう少し上へ
+                // ⭐ 三角配置。手前のリーダーを一番大きく。脇は奥に見えるよう少し上へ。
+                // ⚠️ 離す幅は絵の大きさから出す。決め打ちにすると倍率が変わった日に重なる
+                float apart = leadSize / 2f + sideSize / 2f + Gap;
                 float sideBaseline = baseline - 96f;
                 if (party.Count > 1)
                     Stand(body, party[1], sideSize, "02",
-                        centerX - 320f - sideSize / 2f, sideBaseline - sideSize);
+                        centerX - apart - sideSize / 2f, sideBaseline - sideSize);
                 if (party.Count > 2)
                     Stand(body, party[2], sideSize, "03",
-                        centerX + 320f - sideSize / 2f, sideBaseline - sideSize);
+                        centerX + apart - sideSize / 2f, sideBaseline - sideSize);
                 Stand(body, party[0], leadSize, "LEADER", centerX - leadSize / 2f, baseline - leadSize);
             }
 
