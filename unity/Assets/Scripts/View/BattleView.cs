@@ -101,13 +101,10 @@ namespace EggCommand.View
                 }
             }
 
+            // ⚠️ 「戻る」は選択肢ではない。決着したら戻るしかないので押させない。
+            //    代わりに WIN / LOSE を挟んでから切り替える（BattleDriver）
             bool over = state.Result != null;
-            if (_finish != null)
-            {
-                _finish.gameObject.SetActive(over);
-                _finish.onClick.RemoveAllListeners();
-                if (over && onFinish != null) _finish.onClick.AddListener(() => onFinish());
-            }
+            if (_finish != null) _finish.gameObject.SetActive(false);
 
             // 狙い先を選ばせるのは、相手が2体以上いるときだけ
             if (_pick != null)

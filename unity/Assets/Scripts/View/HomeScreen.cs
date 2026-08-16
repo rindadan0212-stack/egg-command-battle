@@ -16,9 +16,9 @@ namespace EggCommand.View
             if (view == null) return;
 
             view.Bind(app,
-                onBegin: egg =>
+                onBegin: (slot, egg) =>
                 {
-                    Hatchery.Begin(app.Game, egg.Id, app.Now(), app.HatchSpeed);
+                    Hatchery.Begin(app.Game, egg.Id, app.Now(), app.HatchSpeed, slot);
                     app.Refresh();
                 },
                 onCollect: slot =>

@@ -47,6 +47,7 @@ namespace EggCommand.Core
     {
         public EggSave Egg = new EggSave();
         public long StartUnix, ReadyUnix;
+        public int Slot;
     }
 
     [Serializable]
@@ -115,7 +116,7 @@ namespace EggCommand.Core
             {
                 save.Incubating.Add(new IncubationSave
                 {
-                    Egg = Of(i.Egg), StartUnix = i.StartUnix, ReadyUnix = i.ReadyUnix,
+                    Egg = Of(i.Egg), StartUnix = i.StartUnix, ReadyUnix = i.ReadyUnix, Slot = i.Slot,
                 });
             }
             foreach (var e in game.Encounters)
@@ -159,7 +160,7 @@ namespace EggCommand.Core
             foreach (var e in save.Eggs) game.Eggs.Add(To(e));
             foreach (var i in save.Incubating)
             {
-                game.Incubating.Add(new Incubation(To(i.Egg), i.StartUnix, i.ReadyUnix));
+                game.Incubating.Add(new Incubation(To(i.Egg), i.StartUnix, i.ReadyUnix, i.Slot));
             }
             foreach (var e in save.Encounters)
             {

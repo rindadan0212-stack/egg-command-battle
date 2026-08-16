@@ -13,11 +13,17 @@ namespace EggCommand.Core
         /// 残り秒で持つと、画面を見ていない間の時間が進まない。</summary>
         public long ReadyUnix;
 
-        public Incubation(Egg egg, long startUnix, long readyUnix)
+        /// <summary>どの枠に入れたか。⭐ **入れた場所に留まる**。
+        /// ⚠️ 順番に詰めると、取り出すたびに残りが左上へ動く。
+        /// どこに置いたか覚えていられないし、空けておくこともできない。</summary>
+        public readonly int Slot;
+
+        public Incubation(Egg egg, long startUnix, long readyUnix, int slot = 0)
         {
             Egg = egg;
             StartUnix = startUnix;
             ReadyUnix = readyUnix;
+            Slot = slot;
         }
     }
 
@@ -38,12 +44,36 @@ namespace EggCommand.Core
 
         public static bool HasRoom(Game game) => game.Incubating.Count < Slots;
 
+        /// <summary>その枠に入っているもの。⚠️ 空なら null。</summary>
+        public static Incubation? At(Game game, int slot)
+        {
+            foreach (var one in game.Incubating)
+            {
+                if (one.Slot == slot) return one;
+            }
+            return null;
+        }
+
+        /// <summary>いちばん手前の空き枠。⚠️ 無ければ -1。</summary>
+        public static int FreeSlot(Game game)
+        {
+            for (int i = 0; i < Slots; i++)
+            {
+                if (At(game, i) == null) return i;
+            }
+            return -1;
+        }
+
         /// <summary>孵化器へ入れる。⚠️ 枠が無ければ入れない（黙って捨てない）。
         /// <paramref name="speed"/> は所要時間の割る数。テストで即孵らせるために使う。</summary>
-        public static Incubation Begin(Game game, string eggId, long nowUnix, int speed = 1)
+        /// <summary><paramref name="slot"/> が負なら手前の空き枠へ。</summary>
+        public static Incubation Begin(Game game, string eggId, long nowUnix, int speed = 1, int slot = -1)
         {
-            if (!HasRoom(game))
+            if (slot < 0) slot = FreeSlot(game);
+            if (slot < 0 || slot >= Slots)
                 throw new InvalidOperationException($"孵化器が満杯（{Slots}枠）。先にどれかを取り出す");
+            if (At(game, slot) != null)
+                throw new InvalidOperationException($"{slot} 番の枠は埋まっている");
 
             int index = -1;
             for (int i = 0; i < game.Eggs.Count; i++)
@@ -59,9 +89,9 @@ namespace EggCommand.Core
             if (speed > 1) seconds = seconds / speed;
             if (seconds < 1) seconds = 1;   // ⚠️ 0 にしない。入れた瞬間に孵ると演出が出ない
 
-            var slot = new Incubation(egg, nowUnix, nowUnix + seconds);
-            game.Incubating.Add(slot);
-            return slot;
+            var started = new Incubation(egg, nowUnix, nowUnix + seconds, slot);
+            game.Incubating.Add(started);
+            return started;
         }
 
         public static bool IsReady(Incubation slot, long nowUnix) => nowUnix >= slot.ReadyUnix;

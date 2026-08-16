@@ -46,6 +46,8 @@ namespace EggCommand.View
         private float _wait;
         /// <summary>まだ進めていない端数の刻み。⚠️ 切り捨てると遅い者が永久に進まない。</summary>
         private float _ticks;
+        /// <summary>決着を渡し終えたか。⚠️ 毎フレーム告知を作らないための札。</summary>
+        private bool _handed;
 
         // 名乗り済みで、まだ打っていない手
         private Unit _pending;
@@ -128,7 +130,17 @@ namespace EggCommand.View
                     return;
             }
 
-            if (_state.Result != null || Actor != null) return;
+            if (_state.Result != null)
+            {
+                // ⭐ 決着。⚠️ ボタンを置かない。何が起きたかを一言だけ挟んで渡す
+                if (_handed) return;
+                _handed = true;
+                BannerView.Show(_app.Overlay,
+                    _state.Result == Outcome.Ally ? "WIN" : "LOSE",
+                    () => _app.FinishBattle());
+                return;
+            }
+            if (Actor != null) return;
 
             // ⭐ ここが「ゲージのレース」。誰も満ちていない間は少しずつ進めて、
             //    帯だけ描き直す。⚠️ 画面は組み直さない（組み直すと帯が飛ぶ）。

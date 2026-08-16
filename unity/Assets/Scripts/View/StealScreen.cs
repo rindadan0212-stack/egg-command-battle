@@ -72,41 +72,30 @@ namespace EggCommand.View
             if (_result == null) return;
 
             // ── 結果 ────────────────────────────────────
-            if (_result.Outcome != StealOutcome.Success)
+            // ⚠️ ここに押しどころを置かない。届いたなら持ち帰るしかないし、
+            //    見つかったなら戦うしかない。選択肢でないものを押させない。
+            if (_handing) return;
+            _handing = true;
+
+            bool won = _result.Outcome == StealOutcome.Success;
+            var nest = app.CurrentNest;
+            BannerView.Show(app.Overlay, won ? "GET!" : "親に見つかった！", () =>
             {
-                // ⭐ 届かなかったら**選ばせない**。見つかったのだから戦うしかない。
-                // ⚠️ ここに「戦闘へ」のボタンを置くと、押したから戦闘になったように見える。
-                //    起きたことを告げて、そのまま戦闘へ渡す。
-                if (_handing) return;
-                _handing = true;
-                var caught = app.CurrentNest;
-                BannerView.Show(app.Overlay, "親に見つかった！", () =>
+                _result = null;
+                _handing = false;
+                Leave();
+                if (won)
                 {
-                    _result = null;
-                    _handing = false;
-                    Leave();
-                    // ⭐ 立ちはだかるのも親1体なので、そのまま戦闘へ繋がる
-                    app.EnterBattle(caught, false);
-                });
-                return;
-            }
-
-            // ⚠️ 成功のほうは押させる。持ち帰るかどうかは手番の終わりを自分で切る所作なので、
-            //    ここだけは待ってよい。配置は Prefab が持つ。
-            var view = app.Put<StealResultView>(body, "StealResult");
-            if (view == null) return;
-
-            view.Bind(true,
-                onTake: () =>
-                {
-                    var nest = app.CurrentNest;
                     Games.GrowParty(Games.PartyOf(app.Game));
-                    _result = null;
-                    Leave();
                     // ⚠️ 盗んだ卵は素質が落ちる（倒したほうが良い卵）
                     app.GainEgg(nest, EggOrigin.Stolen);
-                },
-                onFight: null);
+                }
+                else
+                {
+                    // ⭐ 立ちはだかるのも親1体なので、そのまま戦闘へ繋がる
+                    app.EnterBattle(nest, false);
+                }
+            });
         }
     }
 }

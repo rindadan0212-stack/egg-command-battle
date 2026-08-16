@@ -24,8 +24,11 @@ namespace EggCommand.View
         [SerializeField] private Button _pickerClose;
 
         private App _app;
+        /// <summary>在庫を開いたときに押した枠。⭐ **その枠へ入れる**。
+        /// ⚠️ 手前から詰めると、取り出すたびに残りが左上へ動く。</summary>
+        private int _openedSlot;
 
-        public void Bind(App app, Action<Egg> onBegin, Action<Incubation> onCollect)
+        public void Bind(App app, Action<int, Egg> onBegin, Action<Incubation> onCollect)
         {
             _app = app;
             var game = app.Game;
@@ -37,13 +40,15 @@ namespace EggCommand.View
             for (int i = 0; i < _slots.Length; i++)
             {
                 if (_slots[i] == null) continue;
-                var slot = i < game.Incubating.Count ? game.Incubating[i] : null;
+                // ⭐ 枠は動かない。空けたままにもできる
+                var slot = Hatchery.At(game, i);
                 bool ready = slot != null && Hatchery.IsReady(slot, now);
                 var captured = slot;
+                int at = i;
                 // ⭐ 入っていれば「取り出す」、空いていれば「在庫を開く」
                 _slots[i].Bind(slot, now, app.Now,
-                    slot == null ? (Action)OpenPicker
-                        : ready ? () => onCollect(captured) : null);
+                    slot == null ? () => OpenPicker(at)
+                        : ready ? () => onCollect(captured) : (Action)null);
             }
 
             if (_picker != null) _picker.SetActive(false);
@@ -62,8 +67,9 @@ namespace EggCommand.View
             _materials.text = _app.Game.Idle.Materials.ToString();
         }
 
-        private void OpenPicker()
+        private void OpenPicker(int slot)
         {
+            _openedSlot = slot;
             if (_picker != null) _picker.SetActive(true);
         }
 
@@ -72,7 +78,7 @@ namespace EggCommand.View
             if (_picker != null) _picker.SetActive(false);
         }
 
-        private void FillShelf(Game game, Action<Egg> onBegin)
+        private void FillShelf(Game game, Action<int, Egg> onBegin)
         {
             if (_shelf == null || _eggCard == null) return;
             // ⚠️ Destroy はフレームの終わりまで効かない。親から外して無効にし、その場で居なくする
@@ -90,7 +96,7 @@ namespace EggCommand.View
                 var captured = egg;
                 var card = Instantiate(_eggCard, _shelf);
                 card.gameObject.SetActive(true);
-                card.Bind(egg, room, _app.HatchSpeed, () => onBegin(captured));
+                card.Bind(egg, room, _app.HatchSpeed, () => onBegin(_openedSlot, captured));
             }
         }
     }
