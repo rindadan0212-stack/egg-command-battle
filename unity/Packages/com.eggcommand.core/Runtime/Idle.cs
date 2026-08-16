@@ -145,19 +145,16 @@ namespace EggCommand.Core
             return gained;
         }
 
-        /// <summary>素材で Lv を上げる。⭐ 1回で、足りるぶんだけ一気に上限まで。
-        /// ⚠️ 1回1Lv にすると20回押すことになる。作業を増やさない。</summary>
-        /// <returns>実際に上がった Lv。</returns>
+        /// <summary>素材で Lv を1つ上げる。⭐ **1回で1レベル**。
+        /// ⚠️ 一気に上限まで入れると、上げ止めどころを選べない。
+        /// どこで止めるかは持ち主が決める。</summary>
+        /// <returns>上がったなら 1、素材か上限が足りなければ 0。</returns>
         public static int Spend(IdleRun run, Creature creature)
         {
-            int room = Levels.GrowMax - creature.Earned;
-            if (room <= 0) return 0;
+            if (creature.Earned >= Levels.GrowMax) return 0;
+            if (run.Materials < MaterialPerLevel) return 0;
 
-            int affordable = run.Materials / MaterialPerLevel;
-            int steps = room < affordable ? room : affordable;
-            if (steps <= 0) return 0;
-
-            int gained = Creatures.Grow(creature, steps);
+            int gained = Creatures.Grow(creature, 1);
             run.Materials -= gained * MaterialPerLevel;
             return gained;
         }

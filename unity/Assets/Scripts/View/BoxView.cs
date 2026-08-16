@@ -88,11 +88,11 @@ namespace EggCommand.View
             // ⚠️ 「個体を選んでください」と書かない。⭐ 伸びる数だけ出す
             Repurpose(1, canFeed ? $"合成 ＋{Levels.FeedValueOf(food)}" : "合成", canFeed, false, onFeed);
 
-            // ⭐ 放置で溜めた素材で育てる。1回で足りるぶんだけ一気に上限まで
-            int steps = game.Idle.Materials / Core.Idle.MaterialPerLevel;
-            int room = Levels.GrowMax - creature.Earned;
-            if (steps > room) steps = room;
-            Repurpose(2, steps > 0 ? $"そだてる ＋{steps}" : "そだてる", steps > 0, steps > 0, onGrow);
+            // ⭐ 放置で溜めた素材で育てる。1回で1レベル
+            bool canGrow = !Levels.IsMaxed(creature)
+                && game.Idle.Materials >= Core.Idle.MaterialPerLevel;
+            // ⚠️ 「素材が足りません」と書かない。⭐ 要る数を出せば足りる
+            Repurpose(2, $"そだてる ●{Core.Idle.MaterialPerLevel}", canGrow, canGrow, onGrow);
 
             for (int i = 3; i < _spend.Length; i++)
             {

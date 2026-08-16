@@ -142,22 +142,24 @@ public class IdleTests
     // ── 素材を使う ──────────────────────────────────
 
     [Fact]
-    public void 素材は一度で上限まで入る()
+    public void 素材は一度に一レベルだけ入る()
     {
+        // ⭐ 一気に上限まで入れない。どこで上げ止めるかは持ち主が決める
         var run = new IdleRun { Materials = Levels.GrowMax * Idle.MaterialPerLevel };
         var creature = Party(20, 20, 20, 20, 1)[0];
-        Assert.Equal(Levels.GrowMax, Idle.Spend(run, creature));
-        Assert.Equal(Levels.GrowMax, creature.Earned);
-        Assert.Equal(0, run.Materials);
+        Assert.Equal(1, Idle.Spend(run, creature));
+        Assert.Equal(1, creature.Earned);
+        Assert.Equal((Levels.GrowMax - 1) * Idle.MaterialPerLevel, run.Materials);
     }
 
     [Fact]
-    public void 足りないぶんだけ入る()
+    public void 素材が一レベルぶんに満たなければ入らない()
     {
-        var run = new IdleRun { Materials = Idle.MaterialPerLevel * 3 + 7 };
+        var run = new IdleRun { Materials = Idle.MaterialPerLevel - 1 };
         var creature = Party(20, 20, 20, 20, 1)[0];
-        Assert.Equal(3, Idle.Spend(run, creature));
-        Assert.Equal(7, run.Materials);   // ⚠️ 端数は捨てない
+        Assert.Equal(0, Idle.Spend(run, creature));
+        Assert.Equal(Idle.MaterialPerLevel - 1, run.Materials);   // ⚠️ 端数は捨てない
+        Assert.Equal(0, creature.Earned);
     }
 
     [Fact]

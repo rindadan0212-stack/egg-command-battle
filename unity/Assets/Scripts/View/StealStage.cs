@@ -24,6 +24,23 @@ namespace EggCommand.View
         /// <summary>引っ張りとみなす最小の長さ（画面の割合）。⚠️ これ未満は誤タップ。</summary>
         private const float MinPull = 0.04f;
 
+        /// <summary>走者を掴めるとみなす半径（盤の単位）。
+        /// ⚠️ ここより外を触ったら「上を見る」ほうの操作にする。</summary>
+        private const float GrabRadius = 26f;
+
+        /// <summary>失速し始める残りの割合。⭐ ここから先はだんだん遅くなる。
+        /// ⚠️ 等速のまま終点で止めると「ビタ止まり」になって、
+        ///    力尽きたのか壁に当たったのか区別が付かない。</summary>
+        private const float SlowFrom = 0.22f;
+        /// <summary>失速しきったときの速さの割合。⚠️ 0 にすると永久に着かない。</summary>
+        private const float SlowTo = 0.18f;
+
+        /// <summary>目盛りの間隔（盤の単位＝メートル）。</summary>
+        private const float MeterStep = 50f;
+
+        /// <summary>カメラが追いつく速さ。⚠️ 速すぎると画面が跳ねて酔う。</summary>
+        private const float CameraCatchUp = 90f;
+
         private StealField _field;
         private double _budget;
         private Action<StealRun> _onDone;
@@ -37,6 +54,13 @@ namespace EggCommand.View
         private bool _dragging;
         private Vector2 _dragFrom;
         private Vector2 _dragTo;
+
+        /// <summary>盤を上下に見回している最中（走者から離れたところを触った）。</summary>
+        private bool _looking;
+        private float _lookFrom;
+        private float _cameraFrom;
+        /// <summary>いま見ている高さ（世界座標）。⭐ 追従もここを動かすだけ。</summary>
+        private float _cameraY;
 
         private StealRun _run;
         private float _travelled;
@@ -65,12 +89,10 @@ namespace EggCommand.View
             _camera = Camera.main;
             _cameraSizeBefore = _camera.orthographicSize;
             _cameraPosBefore = _camera.transform.position;
-            // 盤の全体が入る大きさに合わせる。
-            // ⚠️ 高さだけで決めない。縦持ち（横が狭い）なので、浅い巣では**横が先に足りなくなり**、
-            //    盤の左右が画面の外へ出る（段1で実際に切れた）。縦と横の両方を満たす。
-            float halfHeight = (float)field.Height / 2f + 16f;
-            float halfWidthNeeded = ((float)Steal.FieldWidth / 2f + 8f) / _camera.aspect;
-            _camera.orthographicSize = Mathf.Max(halfHeight, halfWidthNeeded);
+            // ⭐ 盤を縮めて収めない。**倍率は横幅だけで決める**。
+            // ⚠️ 全体が入るように縮めると、深い巣ほど絵が小さくなって距離感が消える。
+            //    奥行きは上へ伸ばして、カメラで追う。
+            _camera.orthographicSize = ((float)Steal.FieldWidth / 2f + 8f) / _camera.aspect;
             _camera.transform.position = new Vector3(0f, 0f, -10f);
 
             // 地。⚠️ 盤の外と中を色で分ける（線を引かずに面で）
@@ -123,6 +145,13 @@ namespace EggCommand.View
                     new Vector2((float)Steal.FieldWidth, 1.5f), 4.5f);
             }
 
+            // ⭐ 画面の端に目盛り。距離が字と線の両方で分かる
+            BuildMeters();
+
+            // ⭐ 最初は走者のところを見る。上は自分で見に行く
+            _cameraY = ClampCamera(ToWorld((float)field.Start.X, (float)field.Start.Y).y);
+            ApplyCamera();
+
             // 狙いの線
             var guideGo = new GameObject("Guide");
             guideGo.transform.SetParent(transform, false);
@@ -162,6 +191,49 @@ namespace EggCommand.View
             return new Vector2(fx - (float)Steal.FieldWidth / 2f, (float)_field.Height / 2f - fy);
         }
 
+        /// <summary>画面の端の目盛り。⭐ 走者の足元を 0 として、上へ何メートルか。</summary>
+        private void BuildMeters()
+        {
+            float edge = (float)Steal.FieldWidth / 2f + 3f;
+            for (float d = MeterStep; d <= (float)_field.Height; d += MeterStep)
+            {
+                float y = (float)_field.Start.Y - d;
+                if (y < 0f) break;
+                var at = ToWorld((float)Steal.FieldWidth / 2f, y);
+                Solid($"Tick {d}", new Color(1f, 1f, 1f, 0.35f),
+                    at, new Vector2((float)Steal.FieldWidth + 6f, 0.8f), 4.8f);
+
+                var label = new GameObject($"Meter {d}");
+                label.transform.SetParent(transform, false);
+                label.transform.position = new Vector3(edge, at.y + 5f, 4.7f);
+                var text = label.AddComponent<TextMesh>();
+                text.text = $"{(int)d}m";
+                text.font = Ui.TheFont;
+                text.fontSize = 64;
+                text.characterSize = 0.34f;
+                text.anchor = TextAnchor.LowerRight;
+                text.color = new Color(1f, 1f, 1f, 0.75f);
+                // ⚠️ TextMesh は自前の材質を持たないので、フォントのものを貼る
+                label.GetComponent<MeshRenderer>().sharedMaterial = Ui.TheFont.material;
+            }
+        }
+
+        /// <summary>盤の外を見ないように挟む。
+        /// ⚠️ 始まりと終わりだけは端に張り付く（ここが「その限りでない」ところ）。</summary>
+        private float ClampCamera(float y)
+        {
+            float half = _camera.orthographicSize;
+            float top = (float)_field.Height / 2f;
+            if (top <= half) return 0f;
+            return Mathf.Clamp(y, -top + half, top - half);
+        }
+
+        private void ApplyCamera()
+        {
+            var at = _camera.transform.position;
+            _camera.transform.position = new Vector3(0f, _cameraY, at.z);
+        }
+
         // ── 引っ張る ────────────────────────────────────
 
         private void Update()
@@ -180,9 +252,32 @@ namespace EggCommand.View
             // ⚠️ マウスも指も同じ扱いにする（Editor と実機で操作が変わらないように）
             if (Input.GetMouseButtonDown(0))
             {
-                _dragging = true;
-                _dragFrom = Input.mousePosition;
-                _dragTo = _dragFrom;
+                // ⭐ 走者を掴んだら狙う。離れたところなら**上を見に行く**。
+                //    飛ばす前に奥行きを確かめて、位置を決められるようにする
+                var touch = _camera.ScreenToWorldPoint(Input.mousePosition);
+                if (Vector2.Distance(touch, _runner.position) <= GrabRadius)
+                {
+                    _dragging = true;
+                    _dragFrom = Input.mousePosition;
+                    _dragTo = _dragFrom;
+                }
+                else
+                {
+                    _looking = true;
+                    _lookFrom = Input.mousePosition.y;
+                    _cameraFrom = _cameraY;
+                }
+            }
+            else if (_looking)
+            {
+                if (Input.GetMouseButton(0))
+                {
+                    // ⚠️ 指の動きと同じだけ盤が動く（画面の割合ではなく世界の量で合わせる）
+                    float perPixel = _camera.orthographicSize * 2f / UnityEngine.Screen.height;
+                    _cameraY = ClampCamera(_cameraFrom + (_lookFrom - Input.mousePosition.y) * perPixel);
+                    ApplyCamera();
+                }
+                else { _looking = false; }
             }
             else if (_dragging && Input.GetMouseButton(0))
             {
@@ -233,7 +328,13 @@ namespace EggCommand.View
         private void StepFlight()
         {
             var path = _run.Path;
-            _travelled += Time.deltaTime * FlightSpeed;
+            // ⭐ 終わりに近づくほど遅くなる（失速）。
+            // ⚠️ 等速のまま終点で止めると「ビタ止まり」になり、
+            //    力尽きたのか壁に当たったのか区別が付かない
+            float left = 1f - _travelled / Mathf.Max(1f, path.Count - 1);
+            float ease = left >= SlowFrom ? 1f
+                : Mathf.Lerp(SlowTo, 1f, left / SlowFrom);
+            _travelled += Time.deltaTime * FlightSpeed * ease;
             int index = Mathf.FloorToInt(_travelled);
 
             if (index >= path.Count - 1)
@@ -246,6 +347,11 @@ namespace EggCommand.View
                 if (_onDone != null) _onDone(finished);
                 return;
             }
+
+            // ⭐ 走者を中心に画面が追う。⚠️ 盤の端では張り付く（始まりと終わり）
+            _cameraY = Mathf.MoveTowards(_cameraY, ClampCamera(_runner.position.y),
+                CameraCatchUp * Time.deltaTime);
+            ApplyCamera();
 
             var point = path[index];
             _runner.position = ToWorld((float)point.X, (float)point.Y);
