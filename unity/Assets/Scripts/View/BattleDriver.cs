@@ -17,15 +17,20 @@ namespace EggCommand.View
     /// </summary>
     public sealed class BattleDriver : MonoBehaviour
     {
+        /// <summary>ゲージが満ちてから名乗るまでの溜め。
+        /// ⭐ 相手の番はここが無いと「満ちた瞬間に殴られた」になり、
+        /// 帯が満タンになったことを目が確かめる前に次が始まる。
+        /// ⚠️ 自分の番には要らない（札が出て考える時間がそのまま溜めになる）。</summary>
+        private const float Ready = 0.40f;
         /// <summary>名乗りを読ませる時間。⭐ 技名が読める長さが下限。</summary>
-        private const float Announce = 0.55f;
+        private const float Announce = 0.72f;
         /// <summary>着弾のあとの間。⭐ 数字が飛び切るまで次を始めない。</summary>
-        private const float Settle = 0.55f;
+        private const float Settle = 0.72f;
         /// <summary>1秒に進める刻み。⭐ 速い者が先に満ちる様子が目で追える速さ。
         /// ⚠️ 上げすぎると結局パッと切り替わり、下げすぎると待たされる。</summary>
         private const float TicksPerSecond = 14f;
 
-        private enum Phase { Idle, Announcing, Settling }
+        private enum Phase { Idle, Ready, Announcing, Settling }
 
         /// <summary>体の中心・頭の上を、枠の中心から見たずれで持つ。
         /// ⚠️ 枠は絵より広い（帯や印のぶん）。枠の中心に出すと足元に寄る。</summary>
@@ -68,16 +73,26 @@ namespace EggCommand.View
 
         /// <summary>プレイヤーが技を選んだ。⚠️ ここでは**まだ計算しない**。
         /// 名乗りを出して、着弾は次の拍に回す。</summary>
-        public void Queue(Unit actor, int slot, Unit target)
+        public void Queue(Unit actor, int slot, Unit target, bool ready = false)
         {
             if (Busy || actor == null) return;
             _pending = actor;
             _pendingSlot = slot;
             _pendingTarget = target;
             Actor = null;                 // 手番は終わり。札を消す（二度押しの防止でもある）
-            Cast(actor, slot);
-            _phase = Phase.Announcing;
-            _wait = Announce;
+
+            if (ready)
+            {
+                // ⭐ 帯が満タンになったことを目で確かめさせてから名乗る
+                _phase = Phase.Ready;
+                _wait = Ready;
+            }
+            else
+            {
+                Cast(actor, slot);
+                _phase = Phase.Announcing;
+                _wait = Announce;
+            }
             _app.Refresh();
         }
 
@@ -88,6 +103,12 @@ namespace EggCommand.View
 
             switch (_phase)
             {
+                case Phase.Ready:
+                    // 溜めが終わった。ここで初めて名乗る
+                    Cast(_pending, _pendingSlot);
+                    _phase = Phase.Announcing;
+                    _wait = Announce;
+                    return;
                 case Phase.Announcing:
                 {
                     // ⭐ 状態が変わるのはここだけ
@@ -137,7 +158,7 @@ namespace EggCommand.View
             // 敵も同じ3拍で打つ。⚠️ 敵だけ即座に済ませると、
             //    何をされたのか分からないまま HP だけ減る
             int slot = Ai.ChooseAction(_state, next);
-            Queue(next, slot, null);
+            Queue(next, slot, null, ready: true);
         }
 
         /// <summary>名乗り。頭上に技名、足元に輪、体をひと突き。</summary>
