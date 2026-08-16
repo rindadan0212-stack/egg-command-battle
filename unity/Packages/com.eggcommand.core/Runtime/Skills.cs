@@ -90,14 +90,26 @@ namespace EggCommand.Core
         /// ⭐ これを足すだけで「連続攻撃」「追撃」が段位の掛け算で書ける。
         /// **新しい効果の種類を足さずに**表現が増えるのがこの欄の狙い。
         /// ⭐ 盾は1発につき1枚剥がれるので、多段は「大きな一撃」と違う役割を持つ。
-        /// ⚠️ 発動率は**作らない**。戦闘に乱数を入れると
-        /// 「1万回の勝率」が戦闘の運を測ってしまい、釣り合いの検算が濁る。</summary>
+        /// ⚠️ ダメージそのものに外れは無い。外れがあるのは弱化だけ（<see cref="Chance"/>）。</summary>
         public readonly int Repeat;
 
+        /// <summary>弱化が通る率（%）。⭐ 100 なら必ず通る（乱数を1度も引かない）。
+        ///
+        /// ⭐ 弱化に確率があるのは、**外れることが読みの一部**だから。
+        /// 必ず通るなら「弱化を持っているかどうか」だけの話になり、掛ける順や相手を選ぶ意味が消える。
+        /// ⚠️ 実際の率は速度差で上下する（<see cref="Battle.LandChanceOf"/>）。
+        /// ここは「素の通しやすさ」で、速い相手には落ちる。
+        ///
+        /// ⚠️ **100 のときは乱数を引かない。** これで移植した21技の試合は
+        /// 1手も変わらず、較正済みの照合がそのまま生きる。</summary>
+        public readonly int Chance;
+
         private Effect(EffectKind kind, PowerTier power, DamageScale scale, StatKey stat, int sign,
-            int turns, int stacks, int percent, int count, int delta, int hits, int repeat = 1)
+            int turns, int stacks, int percent, int count, int delta, int hits, int repeat = 1,
+            int chance = 100)
         {
             Repeat = repeat < 1 ? 1 : repeat;
+            Chance = chance < 1 ? 1 : chance > 100 ? 100 : chance;
             Kind = kind;
             Power = power;
             Scale = scale;
@@ -116,18 +128,21 @@ namespace EggCommand.Core
             new Effect(EffectKind.Damage, power, scale, default, 0, 0, 0, 0, 0, 0, 0, repeat);
 
         /// <summary>攻撃力/防御力/スピードの UP・DOWN。⚠️ 効き目は一律 <see cref="Skills.BuffPercent"/>。段位は使わない。</summary>
-        public static Effect Buff(StatKey stat, int sign, int turns)
+        public static Effect Buff(StatKey stat, int sign, int turns, int chance = 100)
         {
             if (stat != StatKey.Atk && stat != StatKey.Def && stat != StatKey.Spd)
                 throw new ArgumentException($"buff は atk/def/spd のみ（{stat} が渡された）");
             if (sign != 1 && sign != -1)
                 throw new ArgumentException($"buff の sign は ±1（{sign} が渡された）");
-            return new Effect(EffectKind.Buff, default, default, stat, sign, turns, 0, 0, 0, 0, 0);
+            // ⚠️ 強化（自分に掛ける側）に確率は要らない。外す意味が無い
+            return new Effect(EffectKind.Buff, default, default, stat, sign, turns, 0, 0, 0, 0, 0,
+                1, sign > 0 ? 100 : chance);
         }
 
         /// <summary>毒。1行動ごとに最大HPの TickPercent × スタック数 ぶん減る。</summary>
-        public static Effect Poison(int stacks, int turns) =>
-            new Effect(EffectKind.Poison, default, default, default, 0, turns, stacks, 0, 0, 0, 0);
+        public static Effect Poison(int stacks, int turns, int chance = 100) =>
+            new Effect(EffectKind.Poison, default, default, default, 0, turns, stacks, 0, 0, 0, 0,
+                1, chance);
 
         /// <summary>リジェネ。1行動ごとに回復。</summary>
         public static Effect Regen(int stacks, int turns) =>
@@ -143,8 +158,9 @@ namespace EggCommand.Core
             new Effect(EffectKind.Shield, default, default, default, 0, 0, 0, 0, count, 0, 0);
 
         /// <summary>スタン。その回数ぶん手番を飛ばす。</summary>
-        public static Effect Stun(int turns) =>
-            new Effect(EffectKind.Stun, default, default, default, 0, turns, 0, 0, 0, 0, 0);
+        public static Effect Stun(int turns, int chance = 100) =>
+            new Effect(EffectKind.Stun, default, default, default, 0, turns, 0, 0, 0, 0, 0,
+                1, chance);
 
         /// <summary>CT短縮（負）/ CT延長（正）。⚠️ 枠1には効かない。</summary>
         public static Effect Ct(int delta) =>
@@ -296,12 +312,15 @@ namespace EggCommand.Core
                 Effect.Damage(PowerTier.Medium, DamageScale.Def, 2)),
 
             // 複合。⭐ 1手で2つのことをする代わりに CT が長い
-            new Skill("venom-fang", "毒牙", "ダメージを与えて毒も入れる", 5, Target.EnemyOne,
+            // ⭐ ここから下の弱化は**外れることがある**（速度差で上下する）。
+            // ⚠️ 上の移植した21技は 100% のまま。較正済みの照合が1手も変わらないように残してある。
+            // ⚠️ ダメージの側は必ず当たる。外れるのは弱化だけ
+            new Skill("venom-fang", "毒牙", "ダメージを与え、高い確率で毒も入れる", 5, Target.EnemyOne,
                 Effect.Damage(PowerTier.Small, DamageScale.Atk),
-                Effect.Poison(1, 4)),
-            new Skill("crush", "打ち崩し", "ダメージを与えて防御力を下げる", 5, Target.EnemyOne,
+                Effect.Poison(1, 4, chance: 75)),
+            new Skill("crush", "打ち崩し", "ダメージを与え、高い確率で防御力を下げる", 5, Target.EnemyOne,
                 Effect.Damage(PowerTier.Small, DamageScale.Atk),
-                Effect.Buff(StatKey.Def, -1, 3)),
+                Effect.Buff(StatKey.Def, -1, 3, chance: 75)),
             new Skill("dash", "早駆け", "自分のスピードを上げ、技の待ちも縮める", 5, Target.Self,
                 Effect.Buff(StatKey.Spd, 1, 3),
                 Effect.Ct(-2)),
@@ -311,19 +330,21 @@ namespace EggCommand.Core
             new Skill("bulwark", "受けの構え", "攻撃を引き受け、防御力も上げる", 4, Target.Self,
                 Effect.Taunt(2),
                 Effect.Buff(StatKey.Def, 1, 3)),
+            // ⭐ 2つ掛けるので1つずつの通りは低い。速い個体が使うと両方通りやすい
             new Skill("curse", "呪詛", "敵1体の攻撃力とスピードを下げる", 5, Target.EnemyOne,
-                Effect.Buff(StatKey.Atk, -1, 3),
-                Effect.Buff(StatKey.Spd, -1, 3)),
+                Effect.Buff(StatKey.Atk, -1, 3, chance: 70),
+                Effect.Buff(StatKey.Spd, -1, 3, chance: 70)),
 
             // 濃さを変えただけのもの。⭐ 段位ではなくスタック数・割合で差を出す
-            new Skill("venom-heavy", "猛毒", "毒を2重に入れる", 6, Target.EnemyOne,
-                Effect.Poison(2, 4)),
+            new Skill("venom-heavy", "猛毒", "毒を2重に入れる。やや外れやすい", 6, Target.EnemyOne,
+                Effect.Poison(2, 4, chance: 65)),
             new Skill("heal-big", "大回復", "味方1体の HP を大きく回復", 6, Target.AllyLowest,
                 Effect.HealRatio(55)),
 
             // ⚠️ 全体は1段下げる。全体の弱化は単体よりずっと効く
+            // ⚠️ 全体なので通りは低め。全員に確実に入ると1手で試合が決まる
             new Skill("slow-all", "鎮めの風", "敵全体のスピードを下げる", 6, Target.EnemyAll,
-                Effect.Buff(StatKey.Spd, -1, 3)),
+                Effect.Buff(StatKey.Spd, -1, 3, chance: 60)),
         };
 
         public static IReadOnlyList<Skill> All => List;

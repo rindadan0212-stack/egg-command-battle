@@ -100,6 +100,8 @@ namespace EggCommand.Core
     {
         Act, Damage, Heal, Buff, Poison, Regen, Applied, Shield, Stun, Skipped,
         Ct, Taunt, Guts, GutsSaved, Immune, Blocked, Down,
+        /// <summary>弱化が外れた。⭐ 免疫で弾いた（Blocked）とは分ける。</summary>
+        Missed,
     }
 
     public sealed class BattleEvent
@@ -143,9 +145,18 @@ namespace EggCommand.Core
         public readonly List<BattleEvent> Log = new List<BattleEvent>();
         public Outcome? Result;
 
-        public BattleState(List<Unit> units)
+        /// <summary>弱化が通るかを引く乱数。
+        ///
+        /// ⚠️ **戦闘が持つ唯一の乱数。** ここ以外に運を入れない
+        /// （命中率も会心も無い。入れると「1万回の勝率」が個体差ではなく運を測る）。
+        /// ⭐ 種を渡せば同じ試合を再現できるので、検査も測定も繰り返せる。
+        /// ⚠️ 通る率が 100 の効果では**引かない**。移植した技の試合が1手も変わらないように。</summary>
+        public readonly Rng Rng;
+
+        public BattleState(List<Unit> units, Rng? rng = null)
         {
             Units = units;
+            Rng = rng ?? new Rng(0).Stream("land");
         }
     }
 
@@ -278,14 +289,17 @@ namespace EggCommand.Core
         /// 「段1・2は勝てる / 上位とボスには負ける」形になった。</summary>
         public static double LoneTempo(double scale) => 1.0 + (scale - 1.0) * 0.5;
 
-        public static BattleState CreateBattle(IReadOnlyList<Creature> allies, IReadOnlyList<Creature> enemies)
+        /// <param name="rng">弱化が通るかを引く乱数。⚠️ 渡さなければ固定の種
+        /// （同じ編成からは必ず同じ試合になる）。</param>
+        public static BattleState CreateBattle(IReadOnlyList<Creature> allies, IReadOnlyList<Creature> enemies,
+            Rng? rng = null)
         {
             double scale = LoneScale(allies.Count, enemies.Count);
             var units = new List<Unit>(allies.Count + enemies.Count);
             for (int i = 0; i < allies.Count; i++) units.Add(MakeUnit(allies[i], Side.Ally, i));
             for (int i = 0; i < enemies.Count; i++)
                 units.Add(MakeUnit(enemies[i], Side.Enemy, i, LoneHp(scale), LoneTempo(scale)));
-            return new BattleState(units);
+            return new BattleState(units, rng);
         }
 
         public static bool IsAlive(Unit unit) => unit.Hp > 0;
@@ -576,12 +590,48 @@ namespace EggCommand.Core
             if (target.Hp == 0) state.Log.Add(new BattleEvent(BattleEventKind.Down, target.Key));
         }
 
+        /// <summary>弱化が実際に通る率（%）。
+        ///
+        /// ⭐ **速い側が通しやすく、速い相手には通りにくい。**
+        /// これで「スピードが高い個体＝弱化役」という役割が数字の上でも成立する
+        /// （速度が行動回数にしか効かないと、弱化役を作る理由が薄い）。
+        ///
+        /// ⚠️ 素の率から動かせる幅は ±<see cref="LandSwing"/> まで。
+        /// 速度差だけで 0% や 100% にすると、速さが弱化の全部になってしまう。</summary>
+        public static int LandChanceOf(Effect effect, Unit actor, Unit target)
+        {
+            if (effect.Chance >= 100) return 100;
+
+            int mine = SpeedOf(actor);
+            int yours = SpeedOf(target);
+            // 速度比を -1〜+1 に畳んでから振れ幅を掛ける
+            double ratio = (double)(mine - yours) / (mine + yours);
+            int moved = effect.Chance + JsRound(ratio * LandSwing);
+            return moved < LandFloor ? LandFloor : moved > LandCeil ? LandCeil : moved;
+        }
+
+        /// <summary>速度差で動かせる幅（%ポイント）。</summary>
+        public const int LandSwing = 30;
+        /// <summary>⚠️ どれだけ速度で劣っても、ここまでは通る（弱化役が完全に死なないように）。</summary>
+        public const int LandFloor = 25;
+        /// <summary>⚠️ どれだけ速くても確実にはしない（免疫と盾の意味を残す）。</summary>
+        public const int LandCeil = 95;
+
         private static void ApplyEffect(BattleState state, Unit actor, Unit target, Effect effect)
         {
             // ⭐ 免疫は弱い側の効果だけを弾く
             if (Skills.IsHarmful(effect) && target.Status.Immune > 0)
             {
                 state.Log.Add(new BattleEvent(BattleEventKind.Blocked, target.Key));
+                return;
+            }
+
+            // ⭐ 弱化は外れることがある。⚠️ 率が 100 のときは引かない
+            //    （移植した技の試合が1手も変わらないようにするため）
+            int land = LandChanceOf(effect, actor, target);
+            if (land < 100 && state.Rng.Int(0, 100) >= land)
+            {
+                state.Log.Add(new BattleEvent(BattleEventKind.Missed, target.Key));
                 return;
             }
 

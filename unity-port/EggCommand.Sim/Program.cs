@@ -20,7 +20,7 @@ namespace EggCommand.Sim
     ///   dotnet run --project EggCommand.Sim -- species   種族どうしの勝率行列
     ///   dotnet run --project EggCommand.Sim -- skills    技ごとの採用率（**死んでいる技**を探す）
     ///   dotnet run --project EggCommand.Sim -- elements  3すくみが効いているか
-    ///   dotnet run --project EggCommand.Sim -- builds    特化と均等のどちらが報われるか
+    ///   dotnet run --project EggCommand.Sim -- roles     役割を1つ抜いたらどれだけ困るか
     ///   dotnet run --project EggCommand.Sim -- pace      決着までの行動数
     /// </summary>
     public static class Program
@@ -46,10 +46,10 @@ namespace EggCommand.Sim
                 case "species": Species(seed); break;
                 case "skills": SkillCensus(seed); break;
                 case "elements": Elements(seed); break;
-                case "builds": Builds(seed); break;
+                case "roles": Roles(seed); break;
                 case "pace": Pace(seed); break;
                 case "all":
-                    Species(seed); SkillCensus(seed); Elements(seed); Builds(seed); Pace(seed);
+                    Species(seed); SkillCensus(seed); Elements(seed); Roles(seed); Pace(seed);
                     break;
                 default:
                     Console.WriteLine($"知らない指定: {what}");
@@ -302,75 +302,108 @@ namespace EggCommand.Sim
 
         // ── 型（特化 と 均等）────────────────────────────────
 
-        /// <summary>⚠️ 罠と教訓 #8 の再発を見張る場所。
-        /// ダメージ式が比だけで決まっていたとき、企画の芯である「得意を2つ作れる」が
-        /// 死んでいて、均等の勝率 82% に対し攻速が 22% だった。
-        /// 式を読んでも分からず、ここで測って初めて分かった。</summary>
-        private static void Builds(int seed)
+        /// <summary>役割ごとの貢献度。**「型どうしの勝率」ではない。**
+        ///
+        /// ⚠️ 以前はここで「攻速の編成 vs HP防の編成」を戦わせて型の強弱を測っていた。
+        /// それは**3体とも同じ役割しか持たない編成**どうしの勝負で、実際の遊びの形ではない。
+        /// 属性を単一属性どうしで測って 100% と読み違えたのと同じ間違いだった。
+        ///
+        /// ⭐ 役割の価値は「その役だけで勝てるか」ではなく
+        /// **「抜けたときにどれだけ困るか」**に出る。攻撃は勝率に直に出るが、
+        /// 弱化役や壁役の価値は勝率の数字そのものには出にくい。
+        /// だから**揃った編成を基準に、1つずつ抜いて落ち込みを測る**。
+        ///
+        /// ⚠️ 落ち込みが 0 に近い役は「居ても居なくても同じ」＝その役が仕事をしていない。</summary>
+        private static void Roles(int seed)
         {
-            const int Samples = 80;
+            const int Samples = 120;
+            const int Tier = 5;
             int total = Stats.WildTotalMax;
+            int high = total * 3 / 8;
+            int low = total / 8;
 
-            // ⚠️ 2ステを 0 にした型を混ぜてはいけない。HP 0 の編成は「特化が弱い」ではなく
-            //    「HP が無いから死ぬ」を測ってしまう（最初にそれで測り損ねた）。
-            //    どの型も全ステに下限を残し、**寄せ方だけ**を変える。
-            int high = total * 3 / 8;   // 寄せた側
-            int low = total / 8;        // 残した側
-            var builds = new (string Name, StatBlock Block)[]
-            {
-                ("均等", Spread(total)),
-                ("HP防", new StatBlock(high, low, high, low)),
-                ("攻速", new StatBlock(low, high, low, high)),
-                ("HP攻", new StatBlock(high, high, low, low)),
-            };
+            // ⭐ 役割はステの寄せ方で作る。⚠️ どの役も全ステに下限を残す
+            //    （2ステを0にすると「役が弱い」ではなく「HPが無いから死ぬ」を測る）
+            // ⚠️ 役割は**ステだけでは作れない**。技を卵ガチャ任せにしていたときは
+            //    どの役を抜いても落ち込みが 0 だった（弱化役が弱化技を持っていなかった）。
+            //    ⭐ 役割 = 寄せたステ + それを活かす技。両方を揃えて初めて役になる。
+            var attacker = new Role("攻撃役", new StatBlock(low, high, low, high),
+                "attack-heavy", "attack-twice");
+            var tank = new Role("壁役", new StatBlock(high, low, high, low),
+                "bulwark", "harden");
+            var support = new Role("弱化役", new StatBlock(high, low, low, high),
+                "curse", "slow-all");
+            var even = new Role("均等", new StatBlock(total / 4, total / 4, total / 4, total - total / 4 * 3),
+                "attack", "def-up");
+
+            var full = new[] { attacker, tank, support };
 
             Console.WriteLine();
-            Console.WriteLine($"■ 型ごとの総合勝率（素質合計{total}・各組合せ{Samples}回）");
+            Console.WriteLine($"■ 役割の貢献度（段階{Tier}・各{Samples}回）");
+            Console.WriteLine("  基準 = 攻撃役・壁役・弱化役の3体。相手は毎回同じ基準の編成");
 
-            foreach (var mine in builds)
+            int baseWon = 0;
+            for (int i = 0; i < Samples; i++)
             {
-                int won = 0, played = 0;
-                foreach (var yours in builds)
-                {
-                    if (mine.Name == yours.Name) continue;
-                    for (int i = 0; i < Samples; i++)
-                    {
-                        var rng = new Rng(seed + i).Stream($"build{mine.Name}{yours.Name}");
-                        int serial = 0;
-                        var fight = Run(
-                            Shaped(rng, mine.Block, ref serial),
-                            Shaped(rng, yours.Block, ref serial));
-                        if (fight.Result == Outcome.Ally) won++;
-                        played++;
-                    }
-                }
-                Console.WriteLine($"  {mine.Name,-6} {Pct(won, played)}");
+                var rng = new Rng(seed + i).Stream("roles-base");
+                int serial = 0;
+                var fight = Run(Shaped(rng, full, ref serial), Shaped(rng, full, ref serial));
+                if (fight.Result == Outcome.Ally) baseWon++;
             }
-            Console.WriteLine("  ⚠️ 均等が突出していたら、特化が報われていない（＝合計上限の意味が消えている）");
+            Console.WriteLine($"  基準どうし            {Pct(baseWon, Samples)}");
+
+            for (int drop = 0; drop < full.Length; drop++)
+            {
+                // 抜いた役を「均等」に置き換える。⚠️ 2体にすると体数の差を測ってしまう
+                var missing = new Role[full.Length];
+                for (int k = 0; k < full.Length; k++) missing[k] = k == drop ? even : full[k];
+
+                int won = 0;
+                for (int i = 0; i < Samples; i++)
+                {
+                    var rng = new Rng(seed + i).Stream($"roles-{drop}");
+                    int serial = 0;
+                    var fight = Run(Shaped(rng, missing, ref serial), Shaped(rng, full, ref serial));
+                    if (fight.Result == Outcome.Ally) won++;
+                }
+                double drop_pp = 100.0 * baseWon / Samples - 100.0 * won / Samples;
+                Console.WriteLine(
+                    $"  {full[drop].Name}を均等に替える  {Pct(won, Samples)}   落ち込み {drop_pp,5:0.0}pt");
+            }
+
+            Console.WriteLine("  ⚠️ 落ち込みが 0 付近の役は、居ても居なくても同じ＝仕事をしていない");
         }
 
-        private static StatBlock Spread(int total)
+        /// <summary>役割ごとに素質を差し替えた編成。⚠️ 技は本番どおり卵ガチャで引く
+        /// （技を固定すると「役の差」ではなく「技の差」を測ってしまう）。</summary>
+        private sealed class Role
         {
-            int each = total / 4;
-            return new StatBlock(each, each, each, total - each * 3);
+            public readonly string Name;
+            public readonly StatBlock Wild;
+            public readonly string Skill2;
+            public readonly string Skill3;
+
+            public Role(string name, StatBlock wild, string skill2, string skill3)
+            {
+                Name = name; Wild = wild; Skill2 = skill2; Skill3 = skill3;
+            }
         }
 
-        /// <summary>素質だけ差し替えた編成。⚠️ 技は本番どおり卵ガチャで引く
-        /// （技を固定すると「型の差」ではなく「技の差」を測ってしまう）。</summary>
-        private static List<Creature> Shaped(Rng rng, StatBlock wild, ref int serial)
+        private static List<Creature> Shaped(Rng rng, Role[] roles, ref int serial)
         {
             var party = new List<Creature>();
             var ids = new List<string>();
             foreach (var s in SpeciesTable.All) ids.Add(s.Id);
 
-            for (int i = 0; i < Games.PartySize; i++)
+            for (int i = 0; i < Games.PartySize && i < roles.Length; i++)
             {
                 string speciesId = ids[rng.Int(0, ids.Count)];
                 var born = Born(rng, speciesId, 5, ref serial);
                 party.Add(new Creature(
-                    born.Id, born.SpeciesId, wild, born.Trained, born.Earned,
-                    born.MutationCounter, born.Skill2, born.Skill3, born.PaletteIndex,
-                    born.ParentA, born.ParentB, born.Generation, born.Strong, born.Weak));
+                    born.Id, born.SpeciesId, roles[i].Wild, born.Trained, born.Earned,
+                    born.MutationCounter, roles[i].Skill2, roles[i].Skill3, born.PaletteIndex,
+                    born.ParentA, born.ParentB, born.Generation, born.Strong, born.Weak,
+                    born.Element));
             }
             return party;
         }

@@ -75,6 +75,11 @@ namespace EggCommand.Core
             double score = 0;
             foreach (var effect in skill.Effects)
             {
+                // ⭐ 外れる技は、外れるぶん安く見積もる。
+                //    ⚠️ これが無いと AI が「必ず通る前提」で弱化を選び続ける
+                double land = Battle.LandChanceOf(effect, actor, subject) / 100.0;
+                double before = score;
+
                 switch (effect.Kind)
                 {
                     case EffectKind.Damage:
@@ -193,6 +198,8 @@ namespace EggCommand.Core
                         throw new ArgumentOutOfRangeException(nameof(effect.Kind),
                             $"{effect.Kind} を AI が採点できない。ScoreOf に case を足す");
                 }
+
+                if (land < 1.0) score = before + (score - before) * land;
             }
             return score;
         }
