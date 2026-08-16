@@ -10,89 +10,60 @@ namespace EggCommand.View
     /// ⚠️ 判定は <see cref="Core.Battle"/> が全部持つ。この画面は
     /// 「今の状態を描く」「枠を選んで渡す」しかしない。
     ///
-    /// ⭐ 敵の手番はここで自動で進める。プレイヤーの手番まで一気に送るので、
-    /// 画面に出るのは常に「自分が選ぶ場面」だけになる。
+    /// ⭐ **言葉で説明しない。**
+    /// 何が起きたかは飛ぶ数字と点滅で見せる。以前は下に戦闘ログを流していたが、
+    /// 読ませている間は画面を見ていない。数字が当たった体の上に出るほうが早い。
     /// </summary>
     public static class BattleScreen
     {
         private static Unit _target;
+        private static BattleDriver _driver;
+
+        public static void Leave()
+        {
+            if (_driver != null)
+            {
+                Object.Destroy(_driver.gameObject);
+                _driver = null;
+            }
+        }
 
         public static void Build(App app, RectTransform body, float height)
         {
             var state = app.Battle;
             if (state == null) { app.Show(Screen.Nests); return; }
 
-            // ⭐ プレイヤーが選ぶ場面まで進める
-            var actor = Advance(state);
+            if (_driver == null) _driver = BattleDriver.Create(app);
+            _driver.Bind(app, state);
 
-            float y = 16f;
-
-            // ── 敵 ──────────────────────────────────────
-            var enemies = Core.Battle.LivingOf(state, Side.Enemy);
-            Ui.Label(body, "EnemyLabel", "敵", 24, Ui.InkDim,
-                TextAnchor.UpperLeft, Ui.Margin, y, 200f, 30f);
-            y += 34f;
-            foreach (var unit in AllOf(state, Side.Enemy))
+            float y = 24f;
+            foreach (var unit in SideOf(state, Side.Enemy))
             {
-                UnitRow(app, body, unit, y, true, enemies.Count > 1);
-                y += 188f;
+                UnitRow(app, body, unit, y, true, Core.Battle.LivingOf(state, Side.Enemy).Count > 1);
+                y += 184f;
             }
 
-            y += 12f;
+            // ⭐ 敵と味方は「上と下」で分ける。見出しを置かない
+            y += 40f;
 
-            // ── 味方 ────────────────────────────────────
-            Ui.Label(body, "AllyLabel", "編成", 24, Ui.InkDim,
-                TextAnchor.UpperLeft, Ui.Margin, y, 200f, 30f);
-            y += 34f;
-            foreach (var unit in AllOf(state, Side.Ally))
+            foreach (var unit in SideOf(state, Side.Ally))
             {
-                UnitRow(app, body, unit, y, false, false, actor);
-                y += 188f;
+                UnitRow(app, body, unit, y, false, false, _driver.Actor);
+                y += 184f;
             }
 
-            // ── 出来事 ──────────────────────────────────
-            // ⚠️ 残りを全部ログ帯にすると、暗い面が画面の半分を占めて「何も無い」ように見える。
-            //    高さを決め打ちして手札の真上に置き、余りは地の色のままにする。
-            const float LogHeight = 240f;
-            float handTop = height - (state.Result != null ? 160f : 296f);
-            float logTop = handTop - LogHeight - 12f;
-            if (logTop > y) BuildLog(state, body, logTop, LogHeight);
-
-            // ── 手 ──────────────────────────────────────
             if (state.Result != null)
             {
-                string message = state.Result == Outcome.Ally ? "勝った"
-                    : state.Result == Outcome.Enemy ? "負けた" : "決着つかず";
-                Ui.Label(body, "Result", message, 44,
-                    state.Result == Outcome.Ally ? Ui.Good : Ui.Danger,
-                    TextAnchor.MiddleCenter, 0f, height - 148f, Ui.W, 52f);
-                Ui.Tappable(body, "Finish", "戻る", () => app.FinishBattle(),
-                    Ui.Margin, height - 92f, Ui.W - Ui.Margin * 2f, Ui.Tap, true);
+                Ui.Tappable(body, "Finish", "戻る", () => { Leave(); app.FinishBattle(); },
+                    Ui.Margin, height - 132f, Ui.W - Ui.Margin * 2f, Ui.Tap, true);
             }
-            else if (actor != null)
+            else if (_driver.Actor != null)
             {
-                BuildHand(app, body, state, actor, height);
+                BuildHand(app, body, state, _driver.Actor, height);
             }
         }
 
-        /// <summary>敵の手番を自動で進め、味方が選ぶところで止める。</summary>
-        private static Unit Advance(BattleState state)
-        {
-            int guard = 0;
-            while (state.Result == null && guard++ < Core.Battle.MaxActions * 3)
-            {
-                var actor = Core.Battle.NextActor(state);
-                if (actor == null) return null;
-                if (actor.Side == Side.Ally) return actor;
-
-                // ⚠️ AI は乱数を使わない。同じ状況からは必ず同じ手を選ぶ
-                int slot = Ai.ChooseAction(state, actor);
-                Core.Battle.PerformAction(state, actor, slot);
-            }
-            return null;
-        }
-
-        private static List<Unit> AllOf(BattleState state, Side side)
+        private static List<Unit> SideOf(BattleState state, Side side)
         {
             var list = new List<Unit>();
             foreach (var unit in state.Units)
@@ -109,113 +80,57 @@ namespace EggCommand.View
             bool isActor = actor != null && ReferenceEquals(actor, unit);
             float width = Ui.W - Ui.Margin * 2f;
 
-            var panel = Ui.Card(body, $"Unit {unit.Key}", Ui.Margin, top, width, 176f, isActor);
+            var panel = Ui.Card(body, $"Unit {unit.Key}", Ui.Margin, top, width, 168f);
 
-            // ⭐ 「今動く者」だけを差し色の一辺で示す（面と線を二重に使わない）
-            if (isActor) Ui.Block(panel, "Now", Ui.Accent, 0f, 0f, 6f, 176f);
+            // ⭐ 今動く者は差し色の一辺だけで示す（「〜の番」と書かない）
+            if (isActor) Ui.Block(panel, "Now", Ui.Accent, 0f, 0f, 8f, 168f);
 
             var image = Ui.PixelOf(panel, "Art", unit.Creature, 20f, 20f, 88f);
-            if (!alive) image.color = new Color(1f, 1f, 1f, 0.25f);
+            if (!alive) image.color = new Color(1f, 1f, 1f, 0.22f);
 
+
+            // ⭐ 属性は色の印。名前の隣に置く（字で「鱗」と書かない）
+            ElementMark.Put(panel, Creatures.SpeciesOf(unit.Creature).Element, 124f, 22f);
             Ui.Label(panel, "Name", unit.Name, 30, alive ? Ui.Ink : Ui.InkFaint,
-                TextAnchor.UpperLeft, 124f, 16f, width - 300f, 40f);
+                TextAnchor.UpperLeft, 160f, 18f, width - 360f, 40f);
             Ui.Label(panel, "Hp", $"{unit.Hp}/{unit.MaxHp}", 26, Ui.InkDim,
-                TextAnchor.UpperRight, 124f, 16f, width - 148f, 36f);
+                TextAnchor.UpperRight, 124f, 18f, width - 148f, 36f);
 
             Ui.Bar(panel, "HpBar", unit.MaxHp > 0 ? (float)unit.Hp / unit.MaxHp : 0f,
                 alive ? (isEnemy ? Ui.Danger : Ui.Good) : Ui.InkFaint,
-                124f, 60f, width - 148f, 14f);
-
-            // ゲージ。⭐ 満ちた者が動く
+                124f, 66f, width - 148f, 16f);
             Ui.Bar(panel, "Gauge", Mathf.Clamp01((float)unit.Gauge / Core.Battle.GaugeMax),
-                Ui.InkFaint, 124f, 82f, width - 148f, 6f);
+                Ui.Accent, 124f, 90f, width - 148f, 6f);
 
+            // かかっている状態は短い札のまま（名前と数だけ。説明ではない）
             var statuses = Core.Battle.ActiveStatuses(unit);
-            string line = statuses.Count > 0 ? string.Join(" ", statuses) : "";
-            Ui.Label(panel, "Status", line, 22, Ui.InkDim,
-                TextAnchor.UpperLeft, 124f, 100f, width - 148f, 60f);
+            if (statuses.Count > 0)
+            {
+                Ui.Label(panel, "Status", string.Join("  ", statuses), 22, Ui.InkDim,
+                    TextAnchor.UpperLeft, 124f, 108f, width - 148f, 50f);
+            }
 
-            // 単体攻撃の狙い先。⚠️ 敵が1体しかいないときは選ばせない
             if (selectable && alive && isEnemy)
             {
                 bool chosen = ReferenceEquals(_target, unit);
                 Ui.Tappable(panel, "Pick", chosen ? "狙う" : "選ぶ",
                     () => { _target = unit; app.Refresh(); },
-                    width - 200f, 176f - Ui.Tap - 8f, 180f, Ui.Tap, chosen);
+                    width - 200f, 168f - Ui.Tap - 8f, 180f, Ui.Tap, chosen);
             }
         }
 
-        private static void BuildLog(BattleState state, RectTransform body, float top, float height)
-        {
-            Ui.Block(body, "LogBg", new Color32(0x16, 0x12, 0x10, 0xff), 0f, top, Ui.W, height);
-
-            var lines = new List<string>();
-            int from = Mathf.Max(0, state.Log.Count - 6);
-            for (int i = from; i < state.Log.Count; i++) lines.Add(Describe(state, state.Log[i]));
-
-            Ui.Label(body, "Log", string.Join("\n", lines), 24, Ui.InkDim,
-                TextAnchor.LowerLeft, Ui.Margin, top + 8f, Ui.W - Ui.Margin * 2f, height - 16f);
-        }
-
-        /// <summary>出来事を1行の日本語にする。⚠️ ここが唯一の言い換え。</summary>
-        private static string Describe(BattleState state, BattleEvent e)
-        {
-            string who = NameOf(state, e.Unit);
-            switch (e.Kind)
-            {
-                case BattleEventKind.Act: return $"{who} の {e.Label}";
-                case BattleEventKind.Damage:
-                    return e.Absorbed > 0 ? $"  {who} は盾で防いだ" : $"  {who} に {e.Amount}";
-                case BattleEventKind.Heal: return $"  {who} が {e.Amount} 回復";
-                case BattleEventKind.Buff:
-                    return $"  {who} の{Stats.LabelOf(e.Stat)} {(e.Percent > 0 ? "+" : "")}{e.Percent}%";
-                case BattleEventKind.Poison: return $"  {who} は毒で {e.Amount}";
-                case BattleEventKind.Regen: return $"  {who} が {e.Amount} 回復";
-                case BattleEventKind.Applied: return $"  {who} に {e.Label}";
-                case BattleEventKind.Shield: return $"  {who} に盾 {e.Amount}枚";
-                case BattleEventKind.Stun: return $"  {who} の手番を飛ばす";
-                case BattleEventKind.Skipped: return $"{who} は動けない";
-                case BattleEventKind.Ct: return $"  {who} の待ちが {(e.Delta > 0 ? "+" : "")}{e.Delta}";
-                case BattleEventKind.Taunt: return $"  {who} が引き受ける（{e.Hits}回）";
-                case BattleEventKind.Guts: return $"  {who} が踏みとどまる構え";
-                case BattleEventKind.GutsSaved: return $"  {who} は HP1 で耐えた";
-                case BattleEventKind.Immune: return $"  {who} は弱化を受けない";
-                case BattleEventKind.Blocked: return $"  {who} には効かない";
-                case BattleEventKind.Down: return $"  {who} は倒れた";
-                default: return "";
-            }
-        }
-
-        private static string NameOf(BattleState state, string key)
-        {
-            foreach (var unit in state.Units)
-            {
-                if (unit.Key == key) return unit.Side == Side.Ally ? unit.Name : $"敵{unit.Name}";
-            }
-            return key;
-        }
-
-        /// <summary>手札。⭐ 枠1は CT が無いので必ず押せる（「たたかう」の代わり）。</summary>
+        /// <summary>手札。⭐ 枠1は CT が無いので必ず押せる。
+        /// ⚠️ 技の説明文を載せない。名前と「あと何回待つか」だけで足りる。</summary>
         private static void BuildHand(App app, RectTransform body, BattleState state, Unit actor, float height)
         {
-            float top = height - 296f;
-            Ui.Block(body, "HandBg", new Color32(0x16, 0x12, 0x10, 0xff), 0f, top, Ui.W, 296f);
-            Ui.Label(body, "Turn", $"{actor.Name} の番", 28, Ui.Accent,
-                TextAnchor.UpperLeft, Ui.Margin, top + 12f, Ui.W - Ui.Margin * 2f, 36f);
+            float top = height - 236f;
+            float width = (Ui.W - Ui.Margin * 2f - 20f * 2f) / 3f;
 
-            float width = (Ui.W - Ui.Margin * 2f - 24f * 2f) / 3f;
             for (int slot = 0; slot < 3; slot++)
             {
                 var skill = Core.Battle.SkillAt(actor, slot);
-                float left = Ui.Margin + (width + 24f) * slot;
-                if (skill == null)
-                {
-                    Ui.Block(body, $"Empty {slot}", new Color32(0x1a, 0x17, 0x14, 0xff),
-                        left, top + 56f, width, 200f);
-                    Ui.Label(body, $"EmptyLabel {slot}", "空き", 24, Ui.InkFaint,
-                        TextAnchor.MiddleCenter, left, top + 56f, width, 200f);
-                    continue;
-                }
+                float left = Ui.Margin + (width + 20f) * slot;
+                if (skill == null) continue;
 
                 int cooldown = actor.Cooldowns[slot];
                 bool usable = Core.Battle.IsUsable(actor, slot);
@@ -224,22 +139,20 @@ namespace EggCommand.View
                 var button = Ui.Tappable(body, $"Skill {slot}", "", () =>
                 {
                     var chosen = Core.Battle.NeedsTarget(skill) ? _target : null;
+                    int before = state.Log.Count;
                     Core.Battle.PerformAction(state, actor, capturedSlot, chosen);
+                    _driver.ShowSince(state, before);
                     _target = null;
+                    _driver.HandOff();
                     app.Refresh();
-                }, left, top + 56f, width, 200f, slot == 0 && usable, usable);
+                }, left, top, width, 196f, slot == 0 && usable, usable);
 
                 Ui.Label(button.transform, "Name", skill.Name, 28,
-                    usable ? (slot == 0 ? new Color32(0x1a, 0x16, 0x12, 0xff) : Ui.Ink) : Ui.InkFaint,
-                    TextAnchor.UpperCenter, 0f, 16f, width, 40f);
-                Ui.Label(button.transform, "Gist", skill.Gist, 20,
-                    usable ? (slot == 0 ? new Color32(0x4a, 0x3c, 0x22, 0xff) : Ui.InkDim) : Ui.InkFaint,
-                    TextAnchor.UpperCenter, 8f, 60f, width - 16f, 90f);
-                // ⭐ CT は技ではなく枠の性質。枠1は常に 0
-                Ui.Label(button.transform, "Ct",
-                    slot == 0 ? "いつでも" : cooldown > 0 ? $"あと {cooldown}" : $"CT {skill.Ct}",
-                    22, cooldown > 0 ? Ui.Danger : Ui.InkDim,
-                    TextAnchor.LowerCenter, 0f, 156f, width, 36f);
+                    usable ? (slot == 0 ? Ui.OnLead : Ui.Ink) : Ui.InkFaint,
+                    TextAnchor.MiddleCenter, 4f, 40f, width - 8f, 80f);
+                // ⭐ 待ちは数だけ。⚠️「防御力が高いほど強い一撃」のような説明は置かない
+                Ui.Label(button.transform, "Ct", cooldown > 0 ? cooldown.ToString() : "",
+                    30, Ui.Danger, TextAnchor.LowerCenter, 0f, 140f, width, 44f);
             }
         }
     }

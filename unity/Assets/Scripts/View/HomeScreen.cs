@@ -23,11 +23,8 @@ namespace EggCommand.View
             Ui.Label(body, "GoalName", $"{Nests.BossName} を倒す", 40, Ui.Ink,
                 TextAnchor.UpperLeft, Ui.Margin, 68f, Ui.W - Ui.Margin * 2f, 56f);
 
-            if (app.Notice.Length > 0)
-            {
-                Ui.Label(body, "Notice", app.Notice, 26, Ui.InkDim,
-                    TextAnchor.UpperLeft, Ui.Margin, 134f, Ui.W - Ui.Margin * 2f, 40f);
-            }
+            // ⚠️ 「勝った」「卵を手に入れた」といった事後報告を置かない。
+            //    孵化の数が増えていることが、そのまま報告になっている。
 
             // ── 舞台 ────────────────────────────────────
             float stageTop = 190f;
@@ -35,8 +32,14 @@ namespace EggCommand.View
 
             if (party.Count == 0)
             {
-                Ui.Label(body, "Empty", "BOX で3体を「出撃」にすると、ここに並ぶ。", 30, Ui.InkDim,
-                    TextAnchor.MiddleCenter, Ui.Margin, stageTop, Ui.W - Ui.Margin * 2f, stageHeight);
+                // ⚠️ 遊び方を字で書かない。⭐ 空の台座を3つ置いて「ここに入る」を見せる
+                float slot = 132f;
+                for (int i = 0; i < Games.PartySize; i++)
+                {
+                    Ui.Block(body, $"Empty {i}", new Color32(0x24, 0x28, 0x22, 0xff),
+                        Ui.W / 2f - slot * 1.6f + i * slot * 1.2f,
+                        stageTop + stageHeight * 0.5f, slot, 26f);
+                }
             }
             else
             {
@@ -129,14 +132,8 @@ namespace EggCommand.View
 
         public static void Build(App app, RectTransform body, float height)
         {
-            float top = 0f;
-            if (app.Notice.Length > 0)
-            {
-                Ui.Block(body, "NoticeBg", Ui.Panel, 0f, 0f, Ui.W, 92f);
-                Ui.Label(body, "Notice", app.Notice, 28, Ui.Ink,
-                    TextAnchor.MiddleLeft, Ui.Margin, 0f, Ui.W - Ui.Margin * 2f, 92f);
-                top = 112f;
-            }
+            // ⚠️ 直前に何が起きたかを字で流さない
+            const float top = 0f;
 
             float contentHeight = (Nests.All.Length + 1) * (Row + 16f) + 32f;
             var content = Ui.Scroller(body, "Nests", 0f, top, Ui.W, height - top, contentHeight);
@@ -160,16 +157,18 @@ namespace EggCommand.View
 
             Ui.Label(panel, "Name", nest.Name, 36, Ui.Ink,
                 TextAnchor.UpperLeft, 140f, 22f, width - 300f, 46f);
-            Ui.Label(panel, "Meta",
-                $"段{nest.Tier} / {species.Name} / 素質 {Nests.WildTotalForTier(nest.Tier)}",
-                24, Ui.InkDim, TextAnchor.UpperLeft, 140f, 72f, width - 180f, 36f);
+            // 名前と数だけ。⚠️ 説明の語（「〜なので」「〜すると」）を混ぜない
+            Ui.Label(panel, "Meta", $"{species.Name}  {Nests.WildTotalForTier(nest.Tier)}",
+                24, Ui.InkDim, TextAnchor.UpperLeft, 140f, 74f, 300f, 36f);
+            ElementMark.Put(panel, species.Element, 140f, 116f);
 
-            // ⭐ 奥行きが「速度を積む意味」。ここで必要な飛距離が見える
+            // ⭐ 届くかどうかを字で言わない。帯の伸び方と色で見せる。
+            //    ⚠️ 「奥行き 290 / 飛距離 204」と書いても、引き算はプレイヤーの仕事になる
             double need = Steal.DepthForTier(nest.Tier);
             double have = Steal.DistanceFor(Games.PartyOf(app.Game));
-            Ui.Label(panel, "Depth", $"奥行き {need:F0} / 飛距離 {have:F0}",
-                24, have >= need ? Ui.Good : Ui.Danger,
-                TextAnchor.UpperRight, 140f, 22f, width - 164f, 36f);
+            float reach = need <= 0 ? 1f : Mathf.Clamp01((float)(have / need));
+            Ui.Bar(panel, "Reach", reach, reach >= 1f ? Ui.Good : Ui.Danger,
+                width - 320f, 34f, 280f, 18f);
 
             // ⭐ 二択は置かない。**引っ張って卵に届けば盗み、届かなければ戦闘**。
             // ⚠️ 以前は「親を倒す / 盗んで逃げる」を選ばせていたが、
@@ -191,9 +190,9 @@ namespace EggCommand.View
 
             Ui.Label(panel, "Name", Nests.BossName, 36, Ui.Ink,
                 TextAnchor.UpperLeft, 140f, 22f, width - 180f, 46f);
-            // ⚠️ 毎回同じ相手。だから「何が足りないか考えて、配合で作って、挑み直す」が働く
-            Ui.Label(panel, "Meta", "毎回同じ相手。鱗に有利を取るのは羽。", 24, Ui.InkDim,
-                TextAnchor.UpperLeft, 140f, 72f, width - 180f, 36f);
+            // ⚠️ 「鱗に有利を取るのは羽」と書かない。⭐ 属性の印を出せば、
+            //    同じ色の並びが戦闘でも出るので、負けた経験のほうが早く教える
+            ElementMark.Put(panel, species.Element, 140f, 78f);
 
             // ⭐ この画面で塗るのはここだけ。輪の目的地は1つしかない
             Ui.Tappable(panel, "Fight", "挑む", () => app.EnterBattle(null, true),

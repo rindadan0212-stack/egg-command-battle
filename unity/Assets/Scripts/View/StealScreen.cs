@@ -29,7 +29,6 @@ namespace EggCommand.View
             var side = app.Game.RngSteal.Chance(0.5) ? FieldSide.Left : FieldSide.Right;
             app.Field = Core.Steal.MakeField(nest.Tier, side);
             _result = null;
-            app.Notice = "";
             app.Show(Screen.Steal);
         }
 
@@ -63,36 +62,16 @@ namespace EggCommand.View
                     });
             }
 
-            // ── 上に重ねる案内 ──────────────────────────
-            Ui.Label(body, "Info", $"飛距離 {budget:F0} / 奥行き {field.Height:F0}", 28,
-                budget >= field.Height ? Ui.Good : Ui.Danger,
-                TextAnchor.UpperLeft, Ui.Margin, 16f, Ui.W - Ui.Margin * 2f, 38f);
-
-            if (_result == null)
-            {
-                Ui.Label(body, "Hint", "引っ張って離す", 30, Ui.Ink,
-                    TextAnchor.LowerCenter, 0f, height - 120f, Ui.W, 44f);
-                Ui.Label(body, "Hint2", "卵に届けば盗める。届かなければ戦闘になる。", 24, Ui.InkDim,
-                    TextAnchor.LowerCenter, 0f, height - 76f, Ui.W, 36f);
-                return;
-            }
+            // ⚠️ 「飛距離 204 / 奥行き 290」と字で出さない。
+            //    ⭐ どこまで届くかは、盤の上に引いた線（StealStage）が見せる。
+            // ⚠️ 「引っ張って離す」と書かない。⭐ 走者が脈打っていれば触る。
+            //    触れば線が伸びて、離せば飛ぶ。1回やれば分かることを字にしない。
+            if (_result == null) return;
 
             // ── 結果 ────────────────────────────────────
-            string message;
-            switch (_result.Outcome)
-            {
-                case StealOutcome.Success: message = "卵に届いた。盗んで逃げた。"; break;
-                case StealOutcome.Blocked: message = "親に見つかった。戦うしかない。"; break;
-                default: message = "届かなかった。親に気づかれた。"; break;
-            }
-
-            float panelTop = height - 260f;
-            Ui.Block(body, "ResultBg", new Color32(0x16, 0x12, 0x10, 0xee), 0f, panelTop, Ui.W, 260f);
-            Ui.Label(body, "Result", message, 32,
-                _result.Outcome == StealOutcome.Success ? Ui.Good : Ui.Danger,
-                TextAnchor.UpperLeft, Ui.Margin, panelTop + 20f, Ui.W - Ui.Margin * 2f, 44f);
-            Ui.Label(body, "Traveled", $"飛んだ距離 {_result.Traveled:F0} / {budget:F0}", 24, Ui.InkDim,
-                TextAnchor.UpperLeft, Ui.Margin, panelTop + 66f, Ui.W - Ui.Margin * 2f, 34f);
+            // ⚠️ 結果を文章で言わない。⭐ 盤の上に残った軌跡が既に語っている。
+            //    ここに残すのは「次にどうするか」の押しどころだけ。
+            float panelTop = height - 168f;
 
             if (_result.Outcome == StealOutcome.Success)
             {
@@ -101,11 +80,10 @@ namespace EggCommand.View
                     // ⚠️ 盗んだ卵は素質が落ちる（倒したほうが良い卵）
                     var egg = Games.GainEgg(app.Game, app.CurrentNest, EggOrigin.Stolen);
                     Games.AwardParty(Games.PartyOf(app.Game));
-                    app.Notice = $"{app.CurrentNest.Name} の卵（{egg.Id}）を盗んだ。";
                     _result = null;
                     Leave();
                     app.Show(Screen.Nests);
-                }, Ui.Margin, panelTop + 112f, Ui.W - Ui.Margin * 2f, Ui.Tap, true);
+                }, Ui.Margin, panelTop, Ui.W - Ui.Margin * 2f, Ui.Tap, true);
             }
             else
             {
@@ -116,7 +94,7 @@ namespace EggCommand.View
                     Leave();
                     // ⭐ 立ちはだかるのも親1体なので、そのまま戦闘へ繋がる
                     app.EnterBattle(nest, false);
-                }, Ui.Margin, panelTop + 112f, Ui.W - Ui.Margin * 2f, Ui.Tap, true);
+                }, Ui.Margin, panelTop, Ui.W - Ui.Margin * 2f, Ui.Tap, true);
             }
         }
     }

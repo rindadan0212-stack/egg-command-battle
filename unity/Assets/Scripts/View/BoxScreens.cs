@@ -16,24 +16,23 @@ namespace EggCommand.View
             var game = app.Game;
             float top = 0f;
 
-            if (app.Notice.Length > 0)
-            {
-                Ui.Label(body, "Notice", app.Notice, 26, Ui.InkDim,
-                    TextAnchor.UpperLeft, Ui.Margin, 16f, Ui.W - Ui.Margin * 2f, 40f);
-                top = 62f;
-            }
 
             if (Storages.IsFull(game.Storage))
             {
-                Ui.Label(body, "Full", $"保管庫が満杯（{game.Storage.Slots}枠）。BOX でどれかを逃がす。",
-                    28, Ui.Danger, TextAnchor.UpperLeft, Ui.Margin, top + 8f, Ui.W - Ui.Margin * 2f, 44f);
-                top += 60f;
+                // ⚠️ 対処法を字で書かない。⭐ 数を赤くすれば「詰まっている」は伝わる
+                Ui.Label(body, "Full", $"{game.Storage.Creatures.Count}/{game.Storage.Slots}",
+                    34, Ui.Danger, TextAnchor.UpperRight, Ui.Margin, top + 8f, Ui.W - Ui.Margin * 2f, 44f);
+                top += 56f;
             }
 
             if (game.Eggs.Count == 0)
             {
-                Ui.Label(body, "Empty", "卵がない。探索で巣から奪ってくる。", 30, Ui.InkDim,
-                    TextAnchor.MiddleCenter, Ui.Margin, top, Ui.W - Ui.Margin * 2f, height - top - 100f);
+                // ⚠️ 「探索で奪ってくる」と書かない。⭐ 空の棚を見せる
+                for (int i = 0; i < 3; i++)
+                {
+                    Ui.Block(body, $"Slot {i}", new Color32(0x22, 0x20, 0x1c, 0xff),
+                        Ui.Margin, top + 40f + i * (Row + 16f), Ui.W - Ui.Margin * 2f, Row);
+                }
                 return;
             }
 
@@ -68,7 +67,6 @@ namespace EggCommand.View
                 Ui.Tappable(panel, "Hatch", "孵す", () =>
                 {
                     var creature = Games.HatchEgg(app.Game, captured.Id);
-                    app.Notice = $"{creature.Id} が生まれた。";
                     app.Refresh();
                 }, width - 220f, Row - 128f, 200f, Ui.Tap, true, !Storages.IsFull(game.Storage));
 
@@ -80,9 +78,10 @@ namespace EggCommand.View
         {
             switch (how)
             {
-                case EggOrigin.Defeated: return "倒して奪った";
-                case EggOrigin.Stolen: return "盗んだ（素質は落ちる）";
-                default: return "配合";
+                // ⚠️ 「素質は落ちる」と書かない。素質の数がその場に出ているので比べれば分かる
+                case EggOrigin.Defeated: return "討";
+                case EggOrigin.Stolen: return "盗";
+                default: return "配";
             }
         }
     }
@@ -98,11 +97,6 @@ namespace EggCommand.View
         {
             var creatures = app.Game.Storage.Creatures;
 
-            if (app.Notice.Length > 0)
-            {
-                Ui.Label(body, "Notice", app.Notice, 26, Ui.InkDim,
-                    TextAnchor.UpperLeft, Ui.Margin, 12f, Ui.W - Ui.Margin * 2f, 40f);
-            }
 
             // ── 選んだ2体と、起こりうること ──────────────
             float panelTop = 56f;
@@ -124,22 +118,23 @@ namespace EggCommand.View
                     $"種族: {string.Join(" / ", speciesNames)}\n技の候補: {string.Join("・", skillPool)}",
                     22, Ui.InkDim, TextAnchor.UpperLeft, 24f, 124f, width - 48f, 66f);
                 // ⚠️ 無限強化のブレーキ。親のどちらかが 20 未満でなければ変異は出ない
-                Ui.Label(preview, "Mut", mutable ? "変異あり（2.5%×3回）" : "変異は出ない（両親とも上限）",
-                    22, mutable ? Ui.Accent : Ui.InkFaint,
-                    TextAnchor.UpperLeft, 24f, 192f, width - 48f, 32f);
+                // ⭐ 変異が出うるかは印1つで示す。⚠️ 確率を字で説明しない
+                Ui.Block(preview, "Mut", mutable ? Ui.Accent : new Color32(0x3a, 0x36, 0x30, 0xff),
+                    24f, 196f, 60f, 18f);
             }
-            else
-            {
-                Ui.Label(preview, "Hint", "下から2体えらぶ（同じ個体どうしは配合できない）", 24, Ui.InkDim,
-                    TextAnchor.UpperLeft, 24f, 124f, width - 48f, 40f);
-            }
+            // ⚠️ 手順（「下から2体えらぶ」）を字で書かない。
+            //    ⭐ 空の枠が2つ見えていれば「2体入る」は分かる
 
             Ui.Tappable(body, "Breed", "配合する", () =>
             {
                 var outcome = Games.BreedPair(app.Game, _a, _b);
-                app.Notice = outcome.Mutations > 0
-                    ? $"卵 {outcome.Egg.Id}。⭐ 変異が {outcome.Mutations} 回出た。"
-                    : $"卵 {outcome.Egg.Id} ができた。孵化で孵す。";
+                // ⭐ 変異が出たことは字でなく光で出す。⚠️ 回数の説明を添えない
+                if (outcome.Mutations > 0)
+                {
+                    var fx = Fx.Get(app.transform);
+                    fx.Number(fx.PointOf(preview, Vector2.zero),
+                        new string('★', outcome.Mutations), Ui.Accent, 64f);
+                }
                 _a = null;
                 _b = null;
                 app.Refresh();
@@ -297,10 +292,9 @@ namespace EggCommand.View
         private static void Detail(App app, RectTransform row, Creature creature, float top, float width)
         {
             int unspent = Creatures.UnspentOf(creature);
-            Ui.Label(row, "Train",
-                unspent > 0 ? $"振れる点 {unspent}（戻せない）" : "振れる点がない。戦闘に勝つと増える。",
-                24, unspent > 0 ? Ui.Ink : Ui.InkDim,
-                TextAnchor.UpperLeft, 24f, top + 8f, width - 48f, 34f);
+            // ⚠️ 「戻せない」「戦闘に勝つと増える」を書かない。⭐ 残り点の数だけ出す
+            Ui.Label(row, "Train", unspent > 0 ? $"＋{unspent}" : "", 28,
+                Ui.Accent, TextAnchor.UpperLeft, 24f, top + 8f, 200f, 34f);
 
             float buttonWidth = (width - 48f - 12f * 3f) / 4f;
             for (int i = 0; i < Stats.Keys.Length; i++)
@@ -317,8 +311,8 @@ namespace EggCommand.View
             for (int i = 0; i < skills.Length; i++)
             {
                 var skill = skills[i];
-                names.Add(skill == null ? "空き"
-                    : i == 0 ? $"{skill.Name}（枠1・いつでも）" : $"{skill.Name}（CT{skill.Ct}）");
+                // ⚠️ 「枠1・いつでも」のような但し書きを付けない。名前と数だけ
+                names.Add(skill == null ? "—" : i == 0 ? skill.Name : $"{skill.Name} {skill.Ct}");
             }
             Ui.Label(row, "Skills", string.Join(" / ", names), 22, Ui.InkDim,
                 TextAnchor.UpperLeft, 24f, top + 48f + Ui.Tap + 10f, width - 48f, 40f);

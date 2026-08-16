@@ -113,6 +113,16 @@ namespace EggCommand.View
                 (float)Steal.RunnerRadius * 2.6f, 1f);
             _runner = runner.transform;
 
+            // ⭐ どこまで届くかを線で見せる（字で「飛距離 204」と書かない）。
+            //    真上へ撃ったときに止まる高さ。届かない巣では卵の下に線が残る。
+            float reachY = (float)field.Start.Y - (float)budget;
+            if (reachY > 0f && reachY < (float)field.Height)
+            {
+                Solid("Reach", new Color32(0xff, 0xd9, 0x77, 0x55),
+                    ToWorld((float)Steal.FieldWidth / 2f, reachY),
+                    new Vector2((float)Steal.FieldWidth, 1.5f), 4.5f);
+            }
+
             // 狙いの線
             var guideGo = new GameObject("Guide");
             guideGo.transform.SetParent(transform, false);
@@ -157,6 +167,15 @@ namespace EggCommand.View
         private void Update()
         {
             if (_run != null) { StepFlight(); return; }
+
+            // ⭐ 触ってほしいものを脈打たせる。⚠️「引っ張って離す」と書く代わり。
+            //    引っ張っている間は止める（もう触れていると分かっているので）
+            if (_runner != null)
+            {
+                float pulse = _dragging ? 1f : 1f + Mathf.Sin(Time.time * 4.5f) * 0.09f;
+                float size = (float)Steal.RunnerRadius * 2.6f * pulse;
+                _runner.localScale = new Vector3(size, size, 1f);
+            }
 
             // ⚠️ マウスも指も同じ扱いにする（Editor と実機で操作が変わらないように）
             if (Input.GetMouseButtonDown(0))

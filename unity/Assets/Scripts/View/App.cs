@@ -36,7 +36,6 @@ namespace EggCommand.View
         public bool CurrentIsBoss;
         public StealField Field;
         public BattleState Battle;
-        public string Notice = "";
 
         /// <summary>強奪に成功したか（戦闘を挟まずに卵が手に入ったか）。</summary>
         public EggOrigin PendingOrigin = EggOrigin.Defeated;
@@ -105,6 +104,7 @@ namespace EggCommand.View
             // ⚠️ 強奪の盤はワールド空間に居るので、画面を離れるときに自分で片付ける。
             //    残すとカメラの寸法が戻らず、次の画面が拡大されたままになる。
             if (_screen == Screen.Steal && screen != Screen.Steal) StealScreen.Leave();
+            if (_screen == Screen.Battle && screen != Screen.Battle) BattleScreen.Leave();
 
             _screen = screen;
 
@@ -260,7 +260,6 @@ namespace EggCommand.View
             PendingOrigin = EggOrigin.Defeated;
             var enemies = boss ? Nests.MakeBossParty() : Games.DefendersOf(Game, nest);
             Battle = Core.Battle.CreateBattle(Games.PartyOf(Game), enemies);
-            Notice = "";
             Show(Screen.Battle);
         }
 
@@ -269,22 +268,14 @@ namespace EggCommand.View
         public void FinishBattle()
         {
             if (Battle == null || Battle.Result == null) return;
+            // ⚠️ 何が起きたかを字で残さない。⭐ 勝てば孵化の数が増えている。それが報告。
             if (Battle.Result == Outcome.Ally)
             {
                 Games.AwardParty(Games.PartyOf(Game));
-                if (CurrentIsBoss)
+                if (!CurrentIsBoss && CurrentNest != null)
                 {
-                    Notice = $"{Nests.BossName} を倒した。";
+                    Games.GainEgg(Game, CurrentNest, PendingOrigin);
                 }
-                else if (CurrentNest != null)
-                {
-                    var egg = Games.GainEgg(Game, CurrentNest, PendingOrigin);
-                    Notice = $"勝った。{CurrentNest.Name} の卵（{egg.Id}）を手に入れた。";
-                }
-            }
-            else
-            {
-                Notice = Battle.Result == Outcome.Draw ? "決着がつかなかった。" : "負けた。";
             }
             Battle = null;
             Show(Screen.Nests);
