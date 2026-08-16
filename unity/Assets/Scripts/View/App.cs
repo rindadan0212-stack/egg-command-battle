@@ -32,6 +32,9 @@ namespace EggCommand.View
         /// ⚠️ 1 が本番の速さ。出荷前に 1 へ戻すこと。</summary>
         public int HatchSpeed = 120;
 
+        /// <summary>保存を無視して最初から始める。⚠️ 試遊用。出荷前に false へ。</summary>
+        public bool FreshStart;
+
         public Game Game { get; set; }
 
         // 画面をまたいで持ち回るもの
@@ -57,9 +60,39 @@ namespace EggCommand.View
 
         private void Start()
         {
-            Game = Games.NewGame(Seed);
+            // ⭐ 保存があれば続きから。無ければ新しく始める
+            Game = FreshStart ? null : SaveFile.Read();
+            if (Game == null) Game = Games.NewGame(Seed);
             BuildCanvas();
             Show(Screen.Home);
+        }
+
+        // ⚠️ 保存は「画面を組み直したとき」に書く。操作のたびに Refresh が走るので、
+        //    そこに乗せておけば取りこぼさない。毎フレームは書かない（放置で焼き付く）
+        private float _sinceSave;
+        /// <summary>保存を書く間隔（秒）。⭐ 放置で溜まる素材はこの間隔で落ちる。</summary>
+        private const float SaveEvery = 20f;
+
+        private void Update()
+        {
+            if (Game == null) return;
+            _sinceSave += Time.unscaledDeltaTime;
+            if (_sinceSave < SaveEvery) return;
+            _sinceSave = 0f;
+            SaveFile.Write(Game);
+        }
+
+        // ⚠️ 閉じる/隠れるときに必ず書く。Android は OnApplicationQuit が来ないことがある
+        private void OnApplicationPause(bool paused) { if (paused) Save(); }
+        private void OnApplicationFocus(bool focused) { if (!focused) Save(); }
+        private void OnApplicationQuit() => Save();
+
+        /// <summary>いま書く。⭐ 状態が変わる操作のあとに呼ぶ。</summary>
+        public void Save()
+        {
+            if (Game == null) return;
+            _sinceSave = 0f;
+            SaveFile.Write(Game);
         }
 
         // ── 器 ──────────────────────────────────────────
@@ -169,8 +202,13 @@ namespace EggCommand.View
             }
         }
 
-        /// <summary>今の画面をそのまま組み直す（操作のあと）。</summary>
-        public void Refresh() => Show(_screen);
+        /// <summary>今の画面をそのまま組み直す（操作のあと）。
+        /// ⭐ 状態が変わったあとに必ず通るので、保存もここに乗せる。</summary>
+        public void Refresh()
+        {
+            Save();
+            Show(_screen);
+        }
 
         /// <summary>Prefab を1枚置く。⚠️ 読めなければ黙って飛ばさず、はっきり残す。</summary>
         public T Put<T>(RectTransform body, string name) where T : Component

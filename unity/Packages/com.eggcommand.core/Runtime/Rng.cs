@@ -93,6 +93,21 @@ namespace EggCommand.Core
         /// <summary>系統を分ける。同じ (親の種, 名前) からは必ず同じ系統が出る。</summary>
         public Rng Stream(string name) => new Rng(Seed ^ HashString(name));
 
+        /// <summary>いまの内部状態。⭐ 保存して再開するためだけにある。
+        /// ⚠️ ここを保存しないと、遊び直すたびに同じ卵・同じ巣が出る
+        /// （種は同じで、消費した回数だけが失われるため）。</summary>
+        public uint[] State() => new[] { _a, _b, _c, _d };
+
+        /// <summary>保存した状態へ戻す。⚠️ 長さが違えば触らない（壊れた保存で列を汚さない）。</summary>
+        public void Restore(uint[] state)
+        {
+            if (state == null || state.Length != 4) return;
+            _a = state[0];
+            _b = state[1];
+            _c = state[2];
+            _d = state[3];
+        }
+
         /// <summary>符号なし32bit整数。</summary>
         public uint U32Value() => Next();
 

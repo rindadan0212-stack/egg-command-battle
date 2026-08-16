@@ -49,8 +49,14 @@ public class IdleTests
     public void 十分でおよそ一体ぶんの素材が溜まる()
     {
         // ⭐ 「10分回せば最初の個体は MAX」が狙い。GrowMax ぶんの素材が要る
-        var run = Started();
-        Idle.Advance(run, Party(24, 22, 18, 20), T0 + 600);
+        // ⚠️ 手で作った編成ではなく**遊び始めの実物**で測る。
+        //    強すぎる編成で較正して、実物が毎回倒れていたことがある
+        var game = Games.NewGame(2026_08_16);
+        var real = Games.PartyOf(game);
+        var run = new IdleRun();
+        Idle.Advance(run, real, T0);
+        Idle.Advance(run, real, T0 + 600);
+        Assert.Empty(run.DownUntil);
         int levels = run.Materials / Idle.MaterialPerLevel;
         Assert.True(levels >= Levels.GrowMax * 0.7 && levels <= Levels.GrowMax * 1.6,
             $"10分で {run.Materials} 素材 = {levels}Lv（狙いは {Levels.GrowMax}Lv 前後）");
@@ -70,8 +76,11 @@ public class IdleTests
     [Fact]
     public void 弱いと倒れる_強いと倒れない()
     {
-        var weak = Started();
-        Idle.Advance(weak, Party(10, 5, 5, 5), T0 + 300);
+        // ⚠️ 「弱い」は1体だけ残った状態のこと。3体そろっていれば遊び始めでも間に合う
+        var lone = Party(2, 1, 1, 1, 1);
+        var weak = new IdleRun();
+        Idle.Advance(weak, lone, T0);
+        Idle.Advance(weak, lone, T0 + 300);
         Assert.NotEmpty(weak.DownUntil);
 
         var strong = Started();
@@ -100,7 +109,7 @@ public class IdleTests
     [Fact]
     public void 倒れた者は時間で起き上がる()
     {
-        var party = Party(10, 5, 5, 5);
+        var party = Party(2, 1, 1, 1, 1);
         var run = new IdleRun();
         Idle.Advance(run, party, T0);
         Idle.Advance(run, party, T0 + 10);
@@ -108,7 +117,7 @@ public class IdleTests
 
         long until = 0;
         foreach (var v in run.DownUntil.Values) until = v;
-        Assert.True(Idle.IsDown(run, party[0], until - 1) || Idle.IsDown(run, party[1], until - 1));
+        Assert.True(Idle.IsDown(run, party[0], until - 1));
         foreach (var c in party) Assert.False(Idle.IsDown(run, c, until + Idle.ReviveSeconds));
     }
 
