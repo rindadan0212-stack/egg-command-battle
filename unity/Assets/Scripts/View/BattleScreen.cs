@@ -7,17 +7,31 @@ namespace EggCommand.View
 {
     /// <summary>戦闘。3体同時・スピードゲージ制・スキルごとの CT。
     ///
-    /// ⭐ 配置はモック（タマゴハンター）に合わせた:
-    /// 上＝相手を大きく / 中＝味方3体を薄く / 下＝スキルシート（1を幅広、2・3を並列）。
+    /// ⭐ 配置はモック（参考/モック_タマゴハンター/mockshot-Battle.png）を**見て**合わせた:
+    ///   左＝味方3体を縦一列（円のアバター＋名前＋2本の帯）
+    ///   右＝相手を大きな円で1体
+    ///   下＝白いシートに、幅広の1と並列の2・3
     ///
-    /// ⚠️ モックにあって実装に無いものは置かない — WAVE / TURN / Lv / SPゲージ / 威力%。
-    /// 消したぶんは空けずに詰める。
+    /// ⚠️ 以前はこれを「文字の並び順」から推測して、上下に札を積むリストにしていた。
+    /// 別物だった。**モックは必ず描画して見る。**
     ///
-    /// ⚠️ 判定は <see cref="Core.Battle"/> が全部持つ。この画面は描いて枠を渡すだけ。
+    /// ⚠️ モックにあって実装に無いものは置かない — WAVE / TURN / Lv / SP / 威力%。
+    /// ⚠️ 判定は <see cref="Core.Battle"/>。この画面は描いて枠を渡すだけ。
     /// ⭐ 言葉で説明しない。何が起きたかは飛ぶ数字で見せる。
     /// </summary>
     public static class BattleScreen
     {
+        // 左の列（味方）
+        private const float ColLeft = 48f;
+        private const float ColWidth = 462f;
+        private const float RowTop = 250f;
+        private const float RowStep = 300f;
+        private const float Avatar = 150f;
+
+        // 右（相手）
+        private const float FoeLeft = 558f;
+        private const float FoeWidth = 474f;
+
         private static Unit _target;
         private static BattleDriver _driver;
 
@@ -38,29 +52,19 @@ namespace EggCommand.View
             if (_driver == null) _driver = BattleDriver.Create(app);
             _driver.Bind(app, state);
 
-            float y = 16f;
-            foreach (var unit in SideOf(state, Side.Enemy))
-            {
-                EnemyRow(app, body, unit, y, Core.Battle.LivingOf(state, Side.Enemy).Count > 1);
-                y += 236f;
-            }
-
-            y += 16f;
+            int i = 0;
             foreach (var unit in SideOf(state, Side.Ally))
             {
-                AllyRow(body, unit, y, _driver.Actor);
-                y += 124f;
+                Ally(body, unit, RowTop + RowStep * i, _driver.Actor);
+                i++;
             }
 
-            if (state.Result != null)
+            foreach (var unit in SideOf(state, Side.Enemy))
             {
-                Ui.Tappable(body, "Finish", "戻る", () => { Leave(); app.FinishBattle(); },
-                    Ui.Margin, height - 132f, Ui.W - Ui.Margin * 2f, Ui.Tap, true);
+                Foe(app, body, unit, Core.Battle.LivingOf(state, Side.Enemy).Count > 1);
             }
-            else if (_driver.Actor != null)
-            {
-                BuildHand(app, body, state, _driver.Actor, height);
-            }
+
+            Sheet(app, body, state, height);
         }
 
         private static List<Unit> SideOf(BattleState state, Side side)
@@ -73,106 +77,131 @@ namespace EggCommand.View
             return list;
         }
 
-        /// <summary>相手。⭐ 1体しか居ないので大きく構える（モックの BOSS 枠）。</summary>
-        private static void EnemyRow(App app, RectTransform body, Unit unit, float top, bool selectable)
+        /// <summary>味方。⭐ 円のアバター＋名前、その下に帯2本（モックの並び）。
+        /// ⚠️ 器（白い札）に入れない。モックは地の上に直接置いている。</summary>
+        private static void Ally(RectTransform body, Unit unit, float top, Unit actor)
         {
             bool alive = Core.Battle.IsAlive(unit);
-            float width = Ui.W - Ui.Margin * 2f;
-            var panel = Ui.Card(body, $"Unit {unit.Key}", Ui.Margin, top, width, 220f);
+            bool isActor = actor != null && ReferenceEquals(actor, unit);
 
-            var image = Ui.PixelOf(panel, "Art", unit.Creature, 24f, 24f, 172f);
-            if (!alive) image.color = new Color(1f, 1f, 1f, 0.22f);
+            var slot = Ui.Rect($"Unit {unit.Key}", body);
+            Ui.Place(slot, ColLeft, top, ColWidth, RowStep - 20f);
 
-            ElementMark.Put(panel, Creatures.SpeciesOf(unit.Creature).Element, 212f, 30f);
-            Ui.Label(panel, "Name", unit.Name, 38, alive ? Ui.Ink : Ui.InkFaint,
-                TextAnchor.UpperLeft, 248f, 24f, width - 440f, 46f);
+            // 円の地。⭐ 今動く者だけ縁を出す（「〜の番」と書かない）
+            Ui.Round(slot, "Disc", 0f, 0f, Avatar, isActor ? Ui.Accent : Color.white);
+            if (isActor) Ui.Round(slot, "Ring", 0f, 0f, Avatar, Color.white, outline: true);
 
-            // ⭐ 残りは割合で大きく（モックの「68%」）。実数も添えて数を隠さない
-            int percent = unit.MaxHp > 0 ? Mathf.RoundToInt(100f * unit.Hp / unit.MaxHp) : 0;
-            Ui.Label(panel, "Percent", percent + "%", 40, Ui.Danger,
-                TextAnchor.UpperRight, 248f, 22f, width - 272f, 50f);
-            Ui.Bar(panel, "HpBar", unit.MaxHp > 0 ? (float)unit.Hp / unit.MaxHp : 0f,
-                alive ? Ui.Danger : Ui.InkFaint, 212f, 92f, width - 236f, 22f);
-            Ui.Label(panel, "Hp", $"{unit.Hp}/{unit.MaxHp}", 24, Ui.InkDim,
-                TextAnchor.UpperRight, 212f, 120f, width - 236f, 32f);
-            Ui.Bar(panel, "Gauge", Mathf.Clamp01((float)unit.Gauge / Core.Battle.GaugeMax),
-                Ui.Accent, 212f, 158f, width - 236f, 8f);
+            var art = Ui.PixelOf(slot, "Art", unit.Creature, 22f, 22f, Avatar - 44f);
+            if (!alive) art.color = new Color(1f, 1f, 1f, 0.25f);
+
+            ElementMark.Put(slot, Creatures.SpeciesOf(unit.Creature).Element, Avatar + 20f, 46f);
+            Ui.Knockout(Ui.Label(slot, "Name", unit.Name, 32, Ui.Ink,
+                TextAnchor.UpperLeft, Avatar + 56f, 40f, ColWidth - Avatar - 56f, 42f));
+            Ui.Knockout(Ui.Label(slot, "Hp", $"{unit.Hp}/{unit.MaxHp}", 24, Ui.Ink,
+                TextAnchor.UpperLeft, Avatar + 20f, 92f, ColWidth - Avatar - 20f, 32f), 3);
+
+            // ⭐ 帯2本。上＝HP、下＝ゲージ（モックの HP/SP の位置）
+            Ui.Bar(slot, "HpBar", unit.MaxHp > 0 ? (float)unit.Hp / unit.MaxHp : 0f,
+                alive ? Ui.Good : Ui.InkFaint, 0f, Avatar + 12f, ColWidth, 26f);
+            Ui.Bar(slot, "Gauge", Mathf.Clamp01((float)unit.Gauge / Core.Battle.GaugeMax),
+                new Color32(0x2f, 0xa8, 0xff, 0xff), 0f, Avatar + 46f, ColWidth, 20f);
 
             var statuses = Core.Battle.ActiveStatuses(unit);
             if (statuses.Count > 0)
             {
-                Ui.Label(panel, "Status", string.Join("  ", statuses), 22, Ui.InkDim,
-                    TextAnchor.UpperLeft, 212f, 174f, width - 236f, 34f);
+                Ui.Knockout(Ui.Label(slot, "Status", string.Join(" ", statuses), 20, Ui.Ink,
+                    TextAnchor.UpperLeft, 0f, Avatar + 74f, ColWidth, 30f), 3);
+            }
+        }
+
+        /// <summary>相手。⭐ 1体しか居ないので大きな円で構える。帯は円の**上**（モックの並び）。</summary>
+        private static void Foe(App app, RectTransform body, Unit unit, bool selectable)
+        {
+            bool alive = Core.Battle.IsAlive(unit);
+            var slot = Ui.Rect($"Unit {unit.Key}", body);
+            Ui.Place(slot, FoeLeft, RowTop, FoeWidth, 760f);
+
+            // ⚠️ 印を名前と同じ位置に置かない（重なって字が読めなくなった）
+            ElementMark.Put(slot, Creatures.SpeciesOf(unit.Creature).Element, 0f, 2f);
+            Ui.Knockout(Ui.Label(slot, "Name", unit.Name, 30, Ui.Ink,
+                TextAnchor.UpperLeft, 36f, 0f, FoeWidth - 170f, 40f));
+            int percent = unit.MaxHp > 0 ? Mathf.RoundToInt(100f * unit.Hp / unit.MaxHp) : 0;
+            Ui.Knockout(Ui.Label(slot, "Percent", percent + "%", 32, Ui.Ink,
+                TextAnchor.UpperRight, 0f, 0f, FoeWidth, 40f));
+            Ui.Bar(slot, "HpBar", unit.MaxHp > 0 ? (float)unit.Hp / unit.MaxHp : 0f,
+                alive ? Ui.Danger : Ui.InkFaint, 0f, 46f, FoeWidth, 30f);
+
+            // 大きな円。⭐ 画面の主役はここ
+            const float Disc = 430f;
+            Ui.Round(slot, "Disc", (FoeWidth - Disc) / 2f, 110f, Disc, Color.white);
+            var art = Ui.PixelOf(slot, "Art", unit.Creature,
+                (FoeWidth - Disc) / 2f + 55f, 165f, Disc - 110f);
+            if (!alive) art.color = new Color(1f, 1f, 1f, 0.25f);
+
+            var statuses = Core.Battle.ActiveStatuses(unit);
+            if (statuses.Count > 0)
+            {
+                Ui.Knockout(Ui.Label(slot, "Status", string.Join(" ", statuses), 20, Ui.Ink,
+                    TextAnchor.UpperLeft, 0f, 556f, FoeWidth, 40f), 3);
             }
 
             if (selectable && alive)
             {
                 bool chosen = ReferenceEquals(_target, unit);
-                Ui.Tappable(panel, "Pick", chosen ? "狙う" : "選ぶ",
+                Ui.Tappable(slot, "Pick", chosen ? "狙う" : "選ぶ",
                     () => { _target = unit; app.Refresh(); },
-                    width - 200f, 220f - Ui.Tap - 12f, 180f, Ui.Tap, chosen);
+                    FoeWidth - 200f, 600f, 200f, Ui.Tap, chosen);
             }
         }
 
-        /// <summary>味方。⭐ 3体を薄く並べる。⚠️ Lv も SP も実装に無いので置かない。</summary>
-        private static void AllyRow(RectTransform body, Unit unit, float top, Unit actor)
-        {
-            bool alive = Core.Battle.IsAlive(unit);
-            bool isActor = actor != null && ReferenceEquals(actor, unit);
-            float width = Ui.W - Ui.Margin * 2f;
-            var panel = Ui.Card(body, $"Unit {unit.Key}", Ui.Margin, top, width, 112f);
-
-            if (isActor) Ui.Block(panel, "Now", Ui.Accent, 0f, 0f, 8f, 112f);
-
-            var image = Ui.PixelOf(panel, "Art", unit.Creature, 16f, 12f, 88f);
-            if (!alive) image.color = new Color(1f, 1f, 1f, 0.22f);
-
-            ElementMark.Put(panel, Creatures.SpeciesOf(unit.Creature).Element, 116f, 14f);
-            Ui.Label(panel, "Name", unit.Name, 28, alive ? Ui.Ink : Ui.InkFaint,
-                TextAnchor.UpperLeft, 152f, 10f, 300f, 36f);
-            Ui.Label(panel, "Hp", $"{unit.Hp}/{unit.MaxHp}", 24, Ui.InkDim,
-                TextAnchor.UpperRight, 152f, 10f, width - 176f, 34f);
-            Ui.Bar(panel, "HpBar", unit.MaxHp > 0 ? (float)unit.Hp / unit.MaxHp : 0f,
-                alive ? Ui.Good : Ui.InkFaint, 116f, 52f, width - 140f, 14f);
-            Ui.Bar(panel, "Gauge", Mathf.Clamp01((float)unit.Gauge / Core.Battle.GaugeMax),
-                Ui.Accent, 116f, 72f, width - 140f, 6f);
-
-            var statuses = Core.Battle.ActiveStatuses(unit);
-            if (statuses.Count > 0)
-            {
-                Ui.Label(panel, "Status", string.Join(" ", statuses), 20, Ui.InkDim,
-                    TextAnchor.UpperLeft, 116f, 82f, width - 140f, 26f);
-            }
-        }
-
-        /// <summary>スキルシート。⭐ モックどおり 1 を幅広1行、2・3 を並列。
+        /// <summary>白いシート。⭐ モックどおり 1 を幅広1行、2・3 を並列。
         /// 枠1は CT が無く必ず押せるので、幅がそのまま「いつでも打てる札」を表す。</summary>
-        private static void BuildHand(App app, RectTransform body, BattleState state, Unit actor, float height)
+        private static void Sheet(App app, RectTransform body, BattleState state, float height)
         {
+            const float SheetH = 396f;
             float full = Ui.W - Ui.Margin * 2f;
-            float half = (full - 20f) / 2f;
-            float top = height - 300f;
+            var sheet = Ui.Card(body, "Sheet", Ui.Margin, height - SheetH - 16f, full, SheetH);
 
-            SkillCard(app, body, state, actor, 0, Ui.Margin, top, full, 128f);
-            SkillCard(app, body, state, actor, 1, Ui.Margin, top + 144f, half, 128f);
-            SkillCard(app, body, state, actor, 2, Ui.Margin + half + 20f, top + 144f, half, 128f);
-        }
-
-        private static void SkillCard(App app, RectTransform body, BattleState state, Unit actor,
-            int slot, float left, float top, float width, float height)
-        {
-            var skill = Core.Battle.SkillAt(actor, slot);
-            if (skill == null)
+            if (state.Result != null)
             {
-                Ui.Block(body, $"Empty {slot}", new Color32(0x1e, 0x1b, 0x17, 0xff), left, top, width, height);
+                Ui.Tappable(sheet, "Finish", "戻る", () => { Leave(); app.FinishBattle(); },
+                    32f, (SheetH - Ui.Tap) / 2f, full - 64f, Ui.Tap, true);
                 return;
             }
 
+            // ⚠️ 相手の手番の間にシートを空にしない。白い箱だけが残って壊れて見える。
+            //    ⭐ 先頭の味方の札を**押せない状態で**出しておけば、次に何が打てるか分かる。
+            var actor = _driver.Actor;
+            if (actor == null)
+            {
+                foreach (var unit in SideOf(state, Side.Ally))
+                {
+                    if (!Core.Battle.IsAlive(unit)) continue;
+                    actor = unit;
+                    break;
+                }
+                if (actor == null) return;
+            }
+            bool myTurn = ReferenceEquals(actor, _driver.Actor);
+
+            float inner = full - 64f;
+            float half = (inner - 24f) / 2f;
+            SkillCard(app, sheet, state, actor, 0, 32f, 36f, inner, 148f, myTurn);
+            SkillCard(app, sheet, state, actor, 1, 32f, 208f, half, 148f, myTurn);
+            SkillCard(app, sheet, state, actor, 2, 32f + half + 24f, 208f, half, 148f, myTurn);
+        }
+
+        private static void SkillCard(App app, RectTransform sheet, BattleState state, Unit actor,
+            int slot, float left, float top, float width, float height, bool myTurn)
+        {
+            var skill = Core.Battle.SkillAt(actor, slot);
+            if (skill == null) return;
+
             int cooldown = actor.Cooldowns[slot];
-            bool usable = Core.Battle.IsUsable(actor, slot);
+            bool usable = myTurn && Core.Battle.IsUsable(actor, slot);
             int captured = slot;
 
-            var button = Ui.Tappable(body, $"Skill {slot}", "", () =>
+            var button = Ui.Tappable(sheet, $"Skill {slot}", "", () =>
             {
                 var chosen = Core.Battle.NeedsTarget(skill) ? _target : null;
                 int before = state.Log.Count;
@@ -183,12 +212,12 @@ namespace EggCommand.View
                 app.Refresh();
             }, left, top, width, height, slot == 0 && usable, usable);
 
-            Ui.Label(button.transform, "Name", skill.Name, slot == 0 ? 34 : 28,
-                usable ? (slot == 0 ? Ui.OnLead : Ui.Ink) : Ui.InkFaint,
-                TextAnchor.MiddleCenter, 4f, 0f, width - 8f, height);
-            // ⚠️ 威力%（モックの「全体 220%」）は実装に無い（段位で持っている）。待ち数だけ出す
+            Ui.Label(button.transform, "Name", skill.Name, slot == 0 ? 36 : 30,
+                usable ? Ui.OnLead : Ui.InkFaint,
+                TextAnchor.MiddleCenter, 8f, 0f, width - 16f, height);
+            // ⚠️ 威力%（モックの「全体 220%」）は実装に無い。待ち数だけ
             Ui.Label(button.transform, "Ct", cooldown > 0 ? cooldown.ToString() : "",
-                26, Ui.Danger, TextAnchor.LowerRight, 0f, height - 46f, width - 16f, 36f);
+                26, Ui.Danger, TextAnchor.LowerRight, 0f, height - 48f, width - 20f, 36f);
         }
     }
 }

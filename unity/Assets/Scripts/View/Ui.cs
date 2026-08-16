@@ -258,6 +258,21 @@ namespace EggCommand.View
         /// <summary>見えない押しどころ。⭐ 札そのものを押させたいときに重ねる。
         /// ⚠️ <see cref="Tappable"/> を使うと木の札が描かれてしまい、
         /// 中身の上に茶色い面が乗る（実際グリッドでそうなった）。</summary>
+        /// <summary>円。⭐ モックのアバターはすべて円。⚠️ 9スライスしない（伸ばすと歪む）。
+        /// <paramref name="outline"/> を立てると、地ではなく縁だけを描く。</summary>
+        public static RectTransform Round(Transform parent, string name,
+            float left, float top, float size, Color color, bool outline = false)
+        {
+            var rect = Rect(name, parent);
+            Place(rect, left, top, size, size);
+            var image = rect.gameObject.AddComponent<Image>();
+            image.sprite = SkinOf(outline ? "circle-outline" : "circle");
+            image.type = Image.Type.Simple;
+            image.color = color;
+            image.raycastTarget = false;
+            return rect;
+        }
+
         public static Button HitArea(Transform parent, string name, Action onClick,
             float left, float top, float width, float height)
         {
@@ -302,7 +317,8 @@ namespace EggCommand.View
         public static Image Bar(Transform parent, string name, float ratio, Color color,
             float left, float top, float width, float height)
         {
-            Block(parent, name + " Track", new Color32(0x14, 0x12, 0x10, 0xff), left, top, width, height);
+            // ⚠️ 下地を黒にしない。地が明るくなったので、黒い帯だけが浮いて見える
+            Block(parent, name + " Track", new Color32(0xff, 0xff, 0xff, 0xcc), left, top, width, height);
             float filled = Mathf.Clamp01(ratio) * width;
             var rect = Rect(name, parent);
             Place(rect, left, top, Mathf.Max(0f, filled), height);
