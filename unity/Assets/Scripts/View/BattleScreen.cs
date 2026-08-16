@@ -75,48 +75,44 @@ namespace EggCommand.View
             return list;
         }
 
-        /// <summary>1体を立たせる。⭐ 枠に入れず地の上へ。足元にゲージのピル。</summary>
+        private static GameObject _standPrefab;
+
+        /// <summary>1体を立たせる。
+        ///
+        /// ⭐ **中身の配置は Assets/Prefabs/UnitStand.prefab が持つ。**
+        /// ここは Prefab を置いて値を流し込むだけ。⚠️ 座標を書き足さない。
+        /// 見た目を直したいときは Unity Editor で Prefab を開く。それが移植の目的。
+        /// </summary>
         private static void Stand(App app, RectTransform body, Unit unit,
             float left, float top, float size, bool isFoe, Unit actor, bool pickable = false)
         {
-            bool alive = Core.Battle.IsAlive(unit);
-            bool isActor = actor != null && ReferenceEquals(actor, unit);
-
-            var slot = Ui.Rect($"Unit {unit.Key}", body);
-            Ui.Place(slot, left, top, size + 120f, size + 120f);
-
-            // ⭐ 今動く者だけ足元を光らせる（「〜の番」と書かない）
-            if (isActor) Ui.Round(slot, "Glow", -10f, size - 60f, size + 20f, new Color(1f, 0.85f, 0.3f, 0.55f));
-
-            var art = Ui.PixelOf(slot, "Art", unit.Creature, 0f, 0f, size);
-            if (!alive) art.color = new Color(1f, 1f, 1f, 0.25f);
-
-            // 足元のゲージ。⭐ 左の丸に残 HP、右に帯
-            Ui.GaugePill(slot, "Hp", unit.Hp.ToString(),
-                unit.MaxHp > 0 ? (float)unit.Hp / unit.MaxHp : 0f,
-                alive ? (isFoe ? Ui.Danger : Ui.Good) : Ui.InkFaint,
-                0f, size + 6f, size + 60f);
-
-            // 行動ゲージは細い帯で、その真下に
-            Ui.Bar(slot, "Gauge", Mathf.Clamp01((float)unit.Gauge / Core.Battle.GaugeMax),
-                new Color32(0x2f, 0xa8, 0xff, 0xff), 52f, size + 58f, size + 8f, 12f);
-
-            // ⚠️ 印を宙に浮かせない。ゲージの右端に添えて、誰の属性か分かるようにする
-            ElementMark.Put(slot, Creatures.SpeciesOf(unit.Creature).Element, size + 24f, size + 12f);
-
-            var statuses = Core.Battle.ActiveStatuses(unit);
-            if (statuses.Count > 0)
+            if (_standPrefab == null) _standPrefab = Resources.Load<GameObject>("Prefabs/UnitStand");
+            if (_standPrefab == null)
             {
-                Ui.Knockout(Ui.Label(slot, "Status", string.Join(" ", statuses), 20, Ui.Ink,
-                    TextAnchor.UpperLeft, 0f, size + 78f, size + 120f, 30f), 3);
+                // ⚠️ 黙って何も出さない、をしない。無いことに気づけないほうが困る
+                Debug.LogError("UnitStand.prefab が読めない（Resources/Prefabs にあるか）");
+                return;
             }
 
-            if (pickable && alive && isFoe)
+            var go = Object.Instantiate(_standPrefab, body);
+            go.name = $"Unit {unit.Key}";
+            var slot = (RectTransform)go.transform;
+            slot.anchorMin = new Vector2(0f, 1f);
+            slot.anchorMax = new Vector2(0f, 1f);
+            slot.pivot = new Vector2(0f, 1f);
+            slot.anchoredPosition = new Vector2(left, -top);
+            // ⭐ 相手は1体なので大きく見せる。Prefab の寸法に倍率を掛けるだけ
+            float scale = size / 200f;
+            slot.localScale = new Vector3(scale, scale, 1f);
+
+            go.GetComponent<UnitStand>().Bind(unit, actor != null && ReferenceEquals(actor, unit), isFoe);
+
+            if (pickable && Core.Battle.IsAlive(unit) && isFoe)
             {
                 bool chosen = ReferenceEquals(_target, unit);
                 Ui.Tappable(slot, "Pick", chosen ? "狙う" : "選ぶ",
                     () => { _target = unit; app.Refresh(); },
-                    0f, size + 110f, 200f, Ui.Tap, chosen);
+                    0f, 280f, 200f, Ui.Tap, chosen);
             }
         }
 
