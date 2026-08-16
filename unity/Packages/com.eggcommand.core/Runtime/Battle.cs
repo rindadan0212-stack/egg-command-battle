@@ -375,6 +375,41 @@ namespace EggCommand.Core
             state.Result = DecideOutcome(state);
         }
 
+        /// <summary>ゲージを少しだけ進める。⭐ **見せるため**の刻み。
+        ///
+        /// <see cref="NextActor"/> は「誰かが満ちる瞬間」まで一気に飛ぶので、
+        /// 画面ではゲージが一瞬で切り替わり、競り合いが見えない。
+        /// これを毎フレーム少しずつ呼べば、同じ結果のまま競り合いが目に見える。
+        ///
+        /// ⚠️ 最初の1体が満ちるところで必ず止める。行き過ぎると全員が余分に貰い、
+        /// 「内部ゲージが最も多い者が動く」の順位が変わって <see cref="NextActor"/> と
+        /// 結果が食い違う（＝見せるためのコードが勝敗を変えてしまう）。
+        /// </summary>
+        /// <returns>実際に進めた刻み数。0 なら誰かが既に満ちている。</returns>
+        public static int AdvanceGauges(BattleState state, int ticks)
+        {
+            if (ticks <= 0 || state.Result != null) return 0;
+
+            var living = new List<Unit>();
+            foreach (var unit in state.Units)
+            {
+                if (IsAlive(unit)) living.Add(unit);
+            }
+            if (living.Count == 0) return 0;
+
+            int limit = int.MaxValue;
+            foreach (var unit in living)
+            {
+                int t = TicksToAct(unit.Gauge, SpeedOf(unit), unit.Tempo);
+                if (t < limit) limit = t;
+            }
+            if (limit <= 0 || limit == int.MaxValue) return 0;
+
+            int step = ticks < limit ? ticks : limit;
+            foreach (var unit in living) unit.Gauge += step * GaugeRate(SpeedOf(unit), unit.Tempo);
+            return step;
+        }
+
         /// <summary>次に行動する者まで時間を進める。
         /// ⚠️ 毒で倒れた者・スタン中の者は、ここで手番を消費して次へ送る。</summary>
         public static Unit? NextActor(BattleState state)

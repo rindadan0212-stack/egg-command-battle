@@ -25,6 +25,44 @@ namespace EggCommand.View
         private float _hpFullWidth = -1f;
         private float _gaugeFullWidth = -1f;
 
+        // ⭐ ゲージは「いま出している値」と「本当の値」を分けて持つ。
+        //    Core は誰かが満ちる瞬間まで飛ぶので、そのまま描くと目で追えない。
+        private float _gaugeShown = -1f;
+        private float _gaugeTarget;
+        private string _key;
+
+        /// <summary>いま出している帯の値。⚠️ 画面を組み直すとこの器は作り直されるので、
+        /// 器の外に覚えておく。持たないと組み直すたびに帯が飛ぶ。</summary>
+        private static readonly System.Collections.Generic.Dictionary<string, float> Shown =
+            new System.Collections.Generic.Dictionary<string, float>();
+
+        /// <summary>戦闘を始めるときに忘れる。⚠️ 前の戦闘の値が残ると初手から満タンに見える。</summary>
+        public static void ForgetGauges() => Shown.Clear();
+
+        /// <summary>1秒で詰められる割合。⚠️ 速すぎると結局パッと見える。</summary>
+        private const float GaugeCatchUp = 6f;
+
+        /// <summary>帯だけ描き直す。⚠️ 画面を組み直さない
+        /// （毎フレーム組み直すと、押しどころが作り直されて触れなくなる）。</summary>
+        public void Retick(Unit unit)
+        {
+            _gaugeTarget = Mathf.Clamp01((float)unit.Gauge / Core.Battle.GaugeMax);
+        }
+
+        private void Update()
+        {
+            if (_gaugeShown < 0f || _gaugeFullWidth < 0f) return;
+            if (Mathf.Approximately(_gaugeShown, _gaugeTarget)) return;
+
+            // ⚠️ 手番を使った直後は本当の値が下がる。そこは追いかけず、すぐ合わせる
+            //    （じわじわ戻ると「まだ溜まっている」に見える）
+            _gaugeShown = _gaugeTarget < _gaugeShown
+                ? _gaugeTarget
+                : Mathf.MoveTowards(_gaugeShown, _gaugeTarget, GaugeCatchUp * Time.deltaTime);
+            if (_key != null) Shown[_key] = _gaugeShown;
+            Fill(_gaugeFill, _gaugeShown, _gaugeFullWidth, null);
+        }
+
         public void Bind(Unit unit, bool isActor, bool isFoe)
         {
             if (_hpFullWidth < 0f && _hpFill != null) _hpFullWidth = _hpFill.rectTransform.sizeDelta.x;
@@ -51,7 +89,13 @@ namespace EggCommand.View
                 _hpNumber.horizontalOverflow = HorizontalWrapMode.Overflow;
             }
 
-            Fill(_gaugeFill, Mathf.Clamp01((float)unit.Gauge / Core.Battle.GaugeMax), _gaugeFullWidth, null);
+            // ⚠️ 組み直しのたびに出し直さない。前に出していた値から続ける
+            _key = unit.Key;
+            _gaugeTarget = Mathf.Clamp01((float)unit.Gauge / Core.Battle.GaugeMax);
+            float shown;
+            _gaugeShown = Shown.TryGetValue(_key, out shown) ? shown : _gaugeTarget;
+            Shown[_key] = _gaugeShown;
+            Fill(_gaugeFill, _gaugeShown, _gaugeFullWidth, null);
 
             if (_glow != null) _glow.SetActive(isActor);
 

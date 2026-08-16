@@ -41,6 +41,18 @@ namespace EggCommand.View
         private void OnEnable() => Live = this;
         private void OnDisable() { if (Live == this) Live = null; }
 
+        /// <summary>ゲージだけ描き直す。⭐ 競り合いを見せるために毎フレーム呼ぶ。
+        /// ⚠️ ここで画面を組み直さない。組み直すと押しどころが毎フレーム作り直され、
+        /// 触れないうえに帯が飛んで見える（それが「パッパッ」の正体だった）。</summary>
+        public void Retick(BattleState state)
+        {
+            foreach (var unit in state.Units)
+            {
+                UnitStand stand;
+                if (_byKey.TryGetValue(unit.Key, out stand) && stand != null) stand.Retick(unit);
+            }
+        }
+
         /// <summary>体の四角を引く。⚠️ 居なければ null（黙って画面の隅に出さない）。</summary>
         public RectTransform StandOf(string key)
         {

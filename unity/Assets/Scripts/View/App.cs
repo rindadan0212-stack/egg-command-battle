@@ -236,6 +236,8 @@ namespace EggCommand.View
             PendingOrigin = EggOrigin.Defeated;
             var enemies = boss ? Nests.MakeBossParty() : Games.DefendersOf(Game, nest);
             Battle = Core.Battle.CreateBattle(Games.PartyOf(Game), enemies);
+            // ⚠️ 前の戦闘の帯を忘れる。残ると初手から満タンに見える
+            UnitStand.ForgetGauges();
             Show(Screen.Battle);
         }
 
