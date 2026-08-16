@@ -86,6 +86,124 @@ namespace EggCommand.EditorTools
             Debug.Log($"書き出した: {Path}。以後はここを Editor で直す");
         }
 
+        private const string ScreenPath = Dir + "/BattleScreen.prefab";
+
+        /// <summary>戦闘の画面を丸ごと Prefab に書き出す。⚠️ 一度だけ。</summary>
+        [MenuItem("Egg Command/戦闘の画面を Prefab に書き出す")]
+        public static void BuildScreen()
+        {
+            if (System.IO.File.Exists(ScreenPath))
+            {
+                Debug.LogWarning($"{ScreenPath} が既にある。手で直した位置を消さないよう、消してから実行する");
+                return;
+            }
+            var stand = AssetDatabase.LoadAssetAtPath<GameObject>(Path);
+            if (stand == null) { Debug.LogError("先に UnitStand.prefab を書き出す"); return; }
+
+            var root = new GameObject("BattleScreen", typeof(RectTransform));
+            var rr = (RectTransform)root.transform;
+            rr.anchorMin = Vector2.zero; rr.anchorMax = Vector2.one;
+            rr.offsetMin = Vector2.zero; rr.offsetMax = Vector2.zero;
+
+            // 味方3体。⭐ ここの数値は初期値。以後は Editor で動かす
+            var allies = new UnitStand[3];
+            for (int i = 0; i < 3; i++)
+            {
+                var go = (GameObject)PrefabUtility.InstantiatePrefab(stand, root.transform);
+                go.name = $"Ally {i}";
+                Put((RectTransform)go.transform, 60f, 150f + 300f * i, 1f);
+                allies[i] = go.GetComponent<UnitStand>();
+            }
+            var foeGo = (GameObject)PrefabUtility.InstantiatePrefab(stand, root.transform);
+            foeGo.name = "Foe";
+            Put((RectTransform)foeGo.transform, 600f, 300f, 1.6f);
+
+            // 手札
+            float full = 1080f - 96f;
+            float wide = full * 0.66f;
+            float half = (full - 24f) / 2f;
+            var slots = new SkillSlot[3];
+            slots[0] = Skill(root, "Skill 0", (1080f - wide) / 2f, 1130f, wide, 130f, "button-lead", 34);
+            slots[1] = Skill(root, "Skill 1", 48f, 1276f, half, 130f, "button", 28);
+            slots[2] = Skill(root, "Skill 2", 48f + half + 24f, 1276f, half, 130f, "button", 28);
+
+            var finish = Tap(root, "Finish", 48f, 1290f, full, 112f, "button-lead", "戻る");
+            var pick = Tap(root, "Pick", 600f, 620f, 200f, 112f, "button", "選ぶ");
+
+            var view = root.AddComponent<BattleView>();
+            var so = new SerializedObject(view);
+            var a = so.FindProperty("_allies");
+            a.arraySize = 3;
+            for (int i = 0; i < 3; i++) a.GetArrayElementAtIndex(i).objectReferenceValue = allies[i];
+            so.FindProperty("_foe").objectReferenceValue = foeGo.GetComponent<UnitStand>();
+            var s = so.FindProperty("_skills");
+            s.arraySize = 3;
+            for (int i = 0; i < 3; i++)
+            {
+                var e = s.GetArrayElementAtIndex(i);
+                e.FindPropertyRelative("Button").objectReferenceValue = slots[i].Button;
+                e.FindPropertyRelative("Plate").objectReferenceValue = slots[i].Plate;
+                e.FindPropertyRelative("Name").objectReferenceValue = slots[i].Name;
+                e.FindPropertyRelative("Ct").objectReferenceValue = slots[i].Ct;
+                e.FindPropertyRelative("CtPill").objectReferenceValue = slots[i].CtPill;
+            }
+            so.FindProperty("_finish").objectReferenceValue = finish;
+            so.FindProperty("_pick").objectReferenceValue = pick;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            PrefabUtility.SaveAsPrefabAsset(root, ScreenPath);
+            Object.DestroyImmediate(root);
+            AssetDatabase.Refresh();
+            Debug.Log($"書き出した: {ScreenPath}");
+        }
+
+        private static void Put(RectTransform r, float left, float top, float scale)
+        {
+            r.anchorMin = new Vector2(0f, 1f);
+            r.anchorMax = new Vector2(0f, 1f);
+            r.pivot = new Vector2(0f, 1f);
+            r.anchoredPosition = new Vector2(left, -top);
+            r.localScale = new Vector3(scale, scale, 1f);
+        }
+
+        private static SkillSlot Skill(GameObject parent, string name,
+            float left, float top, float width, float height, string skin, int size)
+        {
+            var button = Tap(parent, name, left, top, width, height, skin, "");
+            var t = Add(button.gameObject, "Name", 8f, 16f, width - 16f, 44f);
+            Text(t, "", size, Ui.OnLead, TextAnchor.UpperCenter);
+            var pill = Add(button.gameObject, "CtPill", (width - 150f) / 2f, 70f, 150f, 40f);
+            var pillImage = pill.gameObject.AddComponent<Image>();
+            pillImage.sprite = Resources.Load<Sprite>("UI/pill");
+            pillImage.type = Image.Type.Sliced;
+            pillImage.color = new Color32(0x2b, 0x33, 0x50, 0xff);
+            pillImage.raycastTarget = false;
+            var ct = Add(pill.gameObject, "Ct", 0f, 0f, 150f, 40f);
+            Text(ct, "", 22, Color.white, TextAnchor.MiddleCenter);
+            return new SkillSlot
+            {
+                Button = button, Plate = button.GetComponent<Image>(),
+                Name = t.GetComponent<Text>(), Ct = ct.GetComponent<Text>(), CtPill = pillImage,
+            };
+        }
+
+        private static Button Tap(GameObject parent, string name,
+            float left, float top, float width, float height, string skin, string label)
+        {
+            var rect = Add(parent, name, left, top, width, height);
+            var image = rect.gameObject.AddComponent<Image>();
+            image.sprite = Resources.Load<Sprite>("UI/" + skin);
+            image.type = Image.Type.Sliced;
+            var button = rect.gameObject.AddComponent<Button>();
+            button.targetGraphic = image;
+            if (label.Length > 0)
+            {
+                var t = Add(rect.gameObject, "Label", 0f, 0f, width, height);
+                Text(t, label, 32, Ui.OnLead, TextAnchor.MiddleCenter);
+            }
+            return button;
+        }
+
         /// <summary>左上を原点に置く（Ui.Place と同じ約束）。</summary>
         private static RectTransform Add(GameObject parent, string name,
             float left, float top, float width, float height)

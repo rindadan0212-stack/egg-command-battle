@@ -123,6 +123,9 @@ namespace EggCommand.View
 
         private static readonly Dictionary<string, Sprite> Skin = new Dictionary<string, Sprite>();
 
+        /// <summary>意匠の絵を名前で引く。⭐ View 側が絵を差し替えるときに使う。</summary>
+        public static Sprite SkinSprite(string name) => SkinOf(name);
+
         private static Sprite SkinOf(string name)
         {
             Sprite sprite;
