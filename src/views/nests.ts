@@ -1,29 +1,26 @@
 /** 巣の画面。輪の入口。
  *
  *  ```
- *  巣を選ぶ → 挑む → 二択（倒す / 盗んで逃げる）→ 卵 → 孵す → 保管庫
+ *  巣を選ぶ → 発射（届けば強奪）→ 外せば戦闘（勝てば卵）→ 孵す → 保管庫
  *  ```
  *
- *  ⭐ **強い親ほど良い卵**なので、難易度と報酬が自動で結ばれている。
+ *  ⚠️ **入るまで親の能力は分からない。見える情報は姿だけ。**
+ *  ⭐ 強奪はスピード合計で決まるので、速度に寄せた編成ほど届く。
+ *     だが外れたときはその編成のまま戦うことになる ── ここが張り合い。
  */
 
-import type { Outcome } from '../game/battle.ts'
 import { wildTotalOf, type Creature } from '../game/creature.ts'
-import {
-  BOSS_NAME,
-  makeBossParty,
-  NESTS,
-  wildTotalForTier,
-  type Egg,
-  type Nest,
-} from '../game/nest.ts'
-import { skillById } from '../game/skills.ts'
+import { BOSS_NAME, makeBossParty, NESTS, type Egg, type Nest } from '../game/nest.ts'
+import type { Outcome } from '../game/battle.ts'
+import { effectiveCt, skillById } from '../game/skills.ts'
+import { makeField } from '../game/steal.ts'
 import { ELEMENT_LABELS, speciesById } from '../game/species.ts'
 import { WILD_TOTAL_MAX } from '../game/stats.ts'
 import { awardParty, defendersOf, gainEgg, hatchEgg, partyOf, type Game } from '../game/state.ts'
 import { isFull } from '../game/storage.ts'
 import { spriteToCanvas } from '../render/sprite.ts'
 import { renderBattle, type BattleView } from './battle.ts'
+import { renderSteal, type StealView } from './steal.ts'
 
 export interface NestView {
   readonly element: HTMLElement
@@ -34,10 +31,13 @@ export function renderNests(game: Game, onChange: () => void): NestView {
   const element = document.createElement('div')
   element.className = 'nests'
   let battle: BattleView | null = null
+  let steal: StealView | null = null
 
   function clearBattle(): void {
     battle?.dispose()
     battle = null
+    steal?.dispose()
+    steal = null
   }
 
   function buildNestRow(nest: Nest): HTMLElement {
@@ -55,21 +55,20 @@ export function renderNests(game: Game, onChange: () => void): NestView {
     const name = document.createElement('span')
     name.className = 'name'
     name.textContent = nest.name
+    // ⚠️ **巣に入るまで能力は分からない。見た目だけ。**
+    //    段階も素質もスキルも出さない。分かるのは「どの姿の親がいるか」だけ。
+    //    ⭐ 姿から種族は読めるので、「この技が欲しいならこの姿」という知識は育つ
     const tags = document.createElement('span')
     tags.className = 'tags'
-    tags.textContent = `${species.name} · ${ELEMENT_LABELS[species.element]} · 段階${nest.tier}`
-    const gain = document.createElement('span')
-    gain.className = 'cid mono'
-    // ⭐ 「この巣で何が手に入るか」を先に見せる。輪の駆動力はここから出る
-    gain.textContent = `素質 ~${wildTotalForTier(nest.tier)}/${WILD_TOTAL_MAX} · ◆${skillById(species.skill1).name}`
-    ident.append(name, tags, gain)
+    tags.textContent = `${species.name} · ${ELEMENT_LABELS[species.element]}`
+    ident.append(name, tags)
 
     const go = document.createElement('div')
     go.className = 'controls'
     const button = document.createElement('button')
     button.type = 'button'
     button.textContent = '挑む'
-    button.addEventListener('click', () => startBattle(nest))
+    button.addEventListener('click', () => enterNest(nest))
     go.append(button)
 
     row.append(art, ident, go)
@@ -87,7 +86,7 @@ export function renderNests(game: Game, onChange: () => void): NestView {
     const note = document.createElement('p')
     note.className = 'note'
     note.textContent =
-      '倒せば確実に良い卵が手に入る。盗めば格上の巣からも狙えるが、逃げ切れるかは速度しだい。'
+      '引っ張って飛ばし、親をかわして卵まで届けば奪える。外せばそのまま戦闘になる。'
 
     element.append(lead, note)
 
@@ -128,7 +127,18 @@ export function renderNests(game: Game, onChange: () => void): NestView {
     const hint = document.createElement('span')
     hint.className = 'cid mono'
     // ⚠️ 何を要求してくる相手かを先に見せる。隠すと「運が悪かった」で終わる
-    hint.textContent = `高防御 · 速度を奪う · ◆${skillById(species.skill1).name}（CT${skillById(species.skill1).ct}の全体大技）`
+    // ⚠️ **文章で書かない。**「CT3の全体大技」と直書きしていて、
+    //    枠1が CT0 になった後もその表示のままだった（実物と食い違う）
+    const bossSkills = [species.skill1, ...(lord?.skills23 ?? [])]
+    hint.textContent = bossSkills
+      .map((id, slot) => {
+        if (!id) return null
+        const skill = skillById(id)
+        const ct = effectiveCt(slot, skill)
+        return `${slot === 0 ? '◆' : ''}${skill.name}${ct === 0 ? '（毎回）' : `（CT${ct}）`}`
+      })
+      .filter(Boolean)
+      .join(' · ')
     ident.append(name, tags, hint)
 
     const go = document.createElement('div')
@@ -158,7 +168,7 @@ export function renderNests(game: Game, onChange: () => void): NestView {
     lead.textContent = BOSS_NAME
     element.append(lead)
 
-    // ⚠️ ボスからは卵を盗めない（stealRng を渡さない）。倒すしか道が無い
+    // ⚠️ ボスには卵が無い。発射フェーズも無く、倒すしか道が無い
     const view = renderBattle(party, makeBossParty(), (outcome) => paintBossResult(outcome, party))
     battle = view
     element.append(view.element)
@@ -276,7 +286,8 @@ export function renderNests(game: Game, onChange: () => void): NestView {
     element.append(lead, art, detail, back)
   }
 
-  function startBattle(nest: Nest): void {
+  /** ⭐ 巣に入るとまず発射フェーズ。届けば強奪、外せば戦闘。 */
+  function enterNest(nest: Nest): void {
     clearBattle()
     element.replaceChildren()
 
@@ -286,23 +297,58 @@ export function renderNests(game: Game, onChange: () => void): NestView {
       return
     }
 
-    const lead = document.createElement('p')
-    lead.className = 'lead'
-    lead.textContent = nest.name
-    element.append(lead)
+    const heading = document.createElement('p')
+    heading.className = 'lead'
+    heading.textContent = nest.name
+    element.append(heading)
 
-    const view = renderBattle(
-      party,
-      defendersOf(game, nest),
-      (outcome) => paintResult(nest, outcome, party),
-      game.rng.steal,
+    // 親がどちらへ寄るかだけ乱数。⚠️ 挑むたびに変わるので、同じ手は通じない
+    const side = game.rng.steal.chance(0.5) ? 'left' : 'right'
+    const defenders = defendersOf(game, nest)
+    const parent = defenders[0] as Creature
+
+    const view = renderSteal(makeField(nest.tier, side), party, parent, (outcome) => {
+      if (outcome === 'success') {
+        paintResult(nest, 'stolen', party)
+        return
+      }
+      startBattle(nest, defenders, party, outcome)
+    })
+    steal = view
+    element.append(view.element)
+  }
+
+  function startBattle(
+    nest: Nest,
+    defenders: readonly Creature[],
+    party: readonly Creature[],
+    why: 'blocked' | 'stalled',
+  ): void {
+    clearBattle()
+    element.replaceChildren()
+
+    const heading = document.createElement('p')
+    heading.className = 'lead'
+    heading.textContent = nest.name
+    const why2 = document.createElement('p')
+    why2.className = 'note'
+    why2.textContent = why === 'blocked' ? '親にぶつかった。戦闘。' : '届かなかった。戦闘。'
+    element.append(heading, why2)
+
+    const view = renderBattle(party, [...defenders], (outcome) =>
+      paintResult(nest, outcome === 'ally' ? 'defeated' : null, party),
     )
     battle = view
     element.append(view.element)
   }
 
-  function paintResult(nest: Nest, outcome: Outcome, party: readonly Creature[]): void {
-    const got = outcome === 'ally' ? 'defeated' : outcome === 'stolen' ? 'stolen' : null
+  function paintResult(
+    nest: Nest,
+    got: 'defeated' | 'stolen' | null,
+    party: readonly Creature[],
+  ): void {
+    clearBattle()
+    element.replaceChildren()
     const box = document.createElement('div')
     box.className = 'result'
 
@@ -313,13 +359,18 @@ export function renderNests(game: Game, onChange: () => void): NestView {
 
     if (got) {
       const egg = gainEgg(game, nest, got)
-      line.textContent = `卵を手に入れた（${egg.id} · 素質 ${sumOf(egg)}）`
+      line.textContent =
+        got === 'stolen'
+          ? `掠め取った（${egg.id} · 素質 ${sumOf(egg)}）`
+          : `倒して奪った（${egg.id} · 素質 ${sumOf(egg)}）`
       // ⭐ 出撃していた個体だけが育成ポイントをもらう
       awardParty(party)
-      sub.textContent = `出撃した ${party.map((c) => c.id).join(' / ')} に育成 +1`
+      sub.textContent =
+        `出撃した ${party.map((c) => c.id).join(' / ')} に育成 +1` +
+        (got === 'stolen' ? '　⚠️ 掠め取った卵は素質が落ちる' : '')
       onChange()
     } else {
-      line.textContent = outcome === 'enemy' ? '追い返された' : '決着がつかなかった'
+      line.textContent = '追い返された'
       sub.textContent = '育成ポイントは入らない。'
     }
 

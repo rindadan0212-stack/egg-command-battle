@@ -9,7 +9,6 @@
  *  強さの計算はここが唯一の出所。画面もシミュレータもこの関数群を呼ぶ。
  */
 
-import type { Rng } from '../core/rng.ts'
 import { paletteOf, skillsOf, speciesOf, statsOf, type Creature } from './creature.ts'
 import {
   BUFF_PERCENT,
@@ -105,17 +104,7 @@ export interface Unit {
 }
 
 /** ⚠️ 「たたかう」は無い。**枠1（種族固定・CTなし）がその役目を兼ねる。** */
-export type Action =
-  | { readonly kind: 'skill'; readonly slot: number }
-  /** ⭐ 巣でだけ選べる。卵を持って離脱する */
-  | { readonly kind: 'steal' }
-
-/** 盗みの成功率。⭐ **速度比で決まる。**⚠️ 長居するほど下がる。 */
-export function stealChance(actorSpeed: number, guardSpeed: number, actions: number): number {
-  const base = actorSpeed / (actorSpeed + Math.max(1, guardSpeed))
-  const wary = Math.max(0.35, 1 - actions * 0.02)
-  return Math.max(0.05, Math.min(0.95, base * wary))
-}
+export type Action = { readonly kind: 'skill'; readonly slot: number }
 
 export type BattleEvent =
   | { kind: 'act'; actor: string; skill: string }
@@ -136,18 +125,14 @@ export type BattleEvent =
   | { kind: 'immune'; unit: string }
   | { kind: 'blocked'; unit: string }
   | { kind: 'down'; unit: string }
-  | { kind: 'steal'; unit: string; chance: number; ok: boolean }
 
-/** `stolen` = 卵を持って離脱した。勝ちでも負けでもない第三の終わり方。 */
-export type Outcome = 'ally' | 'enemy' | 'draw' | 'stolen'
+export type Outcome = 'ally' | 'enemy' | 'draw'
 
 export interface BattleState {
   readonly units: readonly Unit[]
   actions: number
   log: BattleEvent[]
   outcome: Outcome | null
-  /** ⚠️ 巣での戦闘のときだけ入る。盗みの判定にだけ使う */
-  stealRng: Rng | null
 }
 
 // ── 唯一の出所となる計算 ──────────────────────────────
@@ -232,7 +217,6 @@ export function makeUnit(creature: Creature, side: Side, slot: number): Unit {
 export function createBattle(
   allies: readonly Creature[],
   enemies: readonly Creature[],
-  stealRng: Rng | null = null,
 ): BattleState {
   return {
     units: [
@@ -242,7 +226,6 @@ export function createBattle(
     actions: 0,
     log: [],
     outcome: null,
-    stealRng,
   }
 }
 
@@ -258,22 +241,12 @@ export function speedOf(unit: Unit): number {
   return effectiveStat(statsOf(unit.creature).spd, unit.status.spd)
 }
 
-export function canSteal(state: BattleState): boolean {
-  return state.stealRng !== null && state.outcome === null && livingOf(state, 'enemy').length > 0
-}
-
-export function fastestGuard(state: BattleState): Unit | null {
-  const foes = livingOf(state, 'enemy')
-  return [...foes].sort((a, b) => speedOf(b) - speedOf(a) || a.slot - b.slot)[0] ?? null
-}
-
 export function skillAt(unit: Unit, slot: number): Skill | null {
   const list = skillsOf(unit.creature)
   return list[slot] ?? null
 }
 
-export function isUsable(unit: Unit, action: Action, state?: BattleState): boolean {
-  if (action.kind === 'steal') return state ? canSteal(state) : false
+export function isUsable(unit: Unit, action: Action): boolean {
   const skill = skillAt(unit, action.slot)
   if (!skill) return false
   // ⭐ 枠1は CT 0 なので常に使える。これが「たたかう」の代わり
@@ -281,7 +254,6 @@ export function isUsable(unit: Unit, action: Action, state?: BattleState): boole
 }
 
 export function actionSkill(unit: Unit, action: Action): Skill {
-  if (action.kind === 'steal') throw new Error('盗みはスキルではない')
   const skill = skillAt(unit, action.slot)
   if (!skill) throw new Error(`${unit.key} の枠 ${action.slot} は空`)
   return skill
@@ -347,8 +319,6 @@ function consumeTurn(state: BattleState, unit: Unit): void {
 /** 次に行動する者まで時間を進める。
  *  ⚠️ 毒で倒れた者・スタン中の者は、ここで手番を消費して次へ送る。 */
 export function nextActor(state: BattleState): Unit | null {
-  if (state.outcome === 'stolen') return null
-
   for (let guard = 0; guard < MAX_ACTIONS * 2; guard++) {
     state.outcome = decideOutcome(state)
     if (state.outcome !== null) return null
@@ -574,27 +544,6 @@ function applyEffect(state: BattleState, actor: Unit, target: Unit, effect: Effe
   }
 }
 
-/** 盗んで逃げる。成功なら卵を持って離脱、失敗なら見張りの一撃をもらう。 */
-function attemptSteal(state: BattleState, actor: Unit): void {
-  const rng = state.stealRng
-  const guard = fastestGuard(state)
-  if (!rng || !guard) throw new Error('ここでは盗めない')
-
-  const chance = stealChance(speedOf(actor), speedOf(guard), state.actions)
-  const ok = rng.chance(chance)
-  state.log.push({ kind: 'steal', unit: actor.key, chance, ok })
-
-  if (ok) {
-    state.outcome = 'stolen'
-    return
-  }
-  // ⚠️ 失敗にはちゃんと代償を置く。無料で何度も試せると二択が二択でなくなる
-  applyEffect(state, guard, actor, { kind: 'damage', power: '小', scale: 'atk' })
-  actor.gauge = 0
-  state.actions++
-  state.outcome = decideOutcome(state)
-}
-
 /** その者に行動させる。ゲージを引き、CT を進める。 */
 export function performAction(
   state: BattleState,
@@ -602,12 +551,8 @@ export function performAction(
   action: Action,
   chosen?: Unit | null,
 ): void {
-  if (!isUsable(actor, action, state)) {
+  if (!isUsable(actor, action)) {
     throw new Error(`${actor.key} は今その行動を選べない`)
-  }
-  if (action.kind === 'steal') {
-    attemptSteal(state, actor)
-    return
   }
   const skill = actionSkill(actor, action)
   state.log.push({ kind: 'act', actor: actor.key, skill: skill.name })

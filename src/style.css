@@ -414,16 +414,24 @@ h1 {
   overflow-y: auto;
 }
 
-/* 盗みは「もう一方の道」なので、攻撃コマンドと並べつつ質感を変える */
-.commands button.steal {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px #3a352c;
-  color: var(--ink-dim);
+/* ── 卵の強奪（発射） ──────────────────────────── */
+
+.steal {
+  margin: 1.5rem 0 0;
 }
 
-.commands button.steal:hover:not(:disabled) {
-  background: var(--bg-raised);
-  color: var(--ink);
+/* ⭐ 主役はフィールドそのもの。周りは徹底して引っ込める */
+.stealfield {
+  display: block;
+  margin: 1.25rem 0 0.75rem;
+  background: #1a1713;
+  cursor: grab;
+  touch-action: none;
+  image-rendering: pixelated;
+}
+
+.stealfield:active {
+  cursor: grabbing;
 }
 
 /* ── 巣 ────────────────────────────────────────── */

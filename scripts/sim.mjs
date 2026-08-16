@@ -12,6 +12,7 @@
  *    npm run sim -- --speed     速度一強の検算（⭐ 企画.md §5）
  *    npm run sim -- --elements  属性3すくみが効いているか
  *    npm run sim -- --random    無作為個体どうし
+ *    npm run sim -- --steal     卵強奪（発射）が編成ごとにどこまで届くか
  */
 
 // ⚠️ パスは URL のまま組み立てる。プロジェクトの場所に空白が入っているので、
@@ -34,6 +35,8 @@ const { applyTotalCap, STAT_KEYS } = await import(src('game/stats.ts'))
 const { SPECIES_LIST, ELEMENT_LABELS, auditSpecies } = await import(src('game/species.ts'))
 const { skillById } = await import(src('game/skills.ts'))
 const { Rng } = await import(src('core/rng.ts'))
+const { statsOf } = await import(src('game/creature.ts'))
+const Steal = await import(src('game/steal.ts'))
 
 auditSpecies()
 
@@ -522,6 +525,118 @@ function runRandom() {
   console.log('  ⚠️ 引分が多ければ、決着しない組み合わせがある（回復役どうしなど）')
 }
 
+
+// ── --steal ───────────────────────────────────────────
+/** 卵強奪（発射）の走査。
+ *
+ *  ⭐ **確かめたいのは1つだけ** ──
+ *  「速度に寄せた編成ほど深い巣へ届き、耐久だけの編成は届かない」。
+ *  これが成り立っていないと、この段は編成に何も要求していないことになる。
+ *
+ *  ⚠️ 角度の幅（狙いの厳しさ）も併せて出す。届くだけで幅が 1°しか無ければ、
+ *  それは「編成の差」ではなく「手先の器用さ」を測っている。 */
+function stealWindow(field, budget) {
+  const SAMPLES = 1600
+  const SWEEP = 160
+  let hits = 0
+  for (let i = 0; i < SAMPLES; i++) {
+    const angle = (-SWEEP / 2 + (SWEEP * i) / (SAMPLES - 1)) * (Math.PI / 180)
+    if (Steal.launch(field, angle, budget).outcome === 'success') hits++
+  }
+  return (hits / SAMPLES) * SWEEP
+}
+
+function runSteal() {
+  const TIERS = [1, 2, 3, 4, 5]
+  const LINEUPS = [
+    ['耐久ぞろい', [BUILDS.体耐, BUILDS.体耐, BUILDS.体耐]],
+    ['均等ぞろい', [BUILDS.均等, BUILDS.均等, BUILDS.均等]],
+    ['混成(壁/火力/速)', [BUILDS.体耐, BUILDS.攻耐, BUILDS.攻速]],
+    ['速度ぞろい', [BUILDS.攻速, BUILDS.攻速, BUILDS.攻速]],
+  ]
+  const speciesId = SPECIES_LIST[0].id
+
+  console.log('卵強奪（発射）の走査')
+  console.log(
+    `  幅 ${Steal.FIELD_WIDTH} / 奥行き ${TIERS.map((t) => Steal.depthForTier(t)).join(', ')}` +
+      ` / 距離 = スピード合計 × ${Steal.SPEED_TO_DISTANCE}`,
+  )
+  console.log('')
+  console.log('  届くか（○ = 親が左右どちらに寄っても通せる / △ = 片側だけ / × = 届かない）')
+  console.log('                     飛距離   段1  段2  段3  段4  段5')
+
+  const budgets = new Map()
+  for (const [label, builds] of LINEUPS) {
+    const party = builds.map((wild, i) => makeCreature(`s${i}`, speciesId, wild))
+    const budget = Steal.distanceFor(party)
+    budgets.set(label, budget)
+    const cells = TIERS.map((tier) => {
+      const sides = ['left', 'right'].map((side) =>
+        Steal.findSolution(Steal.makeField(tier, side), budget, 720),
+      )
+      const mark = sides.every(Boolean) ? '○' : sides.some(Boolean) ? '△' : '×'
+      return `   ${mark} `
+    })
+    console.log(`  ${label.padEnd(16)} ${String(budget).padStart(6)}${cells.join('')}`)
+  }
+
+  console.log('')
+  console.log('  成功する角度の幅（度）─ 狭いほど狙いが厳しい')
+  console.log('                              段1  段2  段3  段4  段5')
+  for (const [label] of LINEUPS) {
+    const budget = budgets.get(label)
+    const cells = TIERS.map((tier) =>
+      (stealWindow(Steal.makeField(tier, 'right'), budget).toFixed(1) + '°').padStart(7),
+    )
+    console.log(`  ${label.padEnd(24)}${cells.join('')}`)
+  }
+
+  // ⚠️ 文章ではなく測った値で判定する。
+  //    「こうなっているはず」を印刷するだけなら、測っていないのと同じ。
+  const NARROW = 2
+  const faults = []
+  for (const [label] of LINEUPS) {
+    const budget = budgets.get(label)
+    for (const tier of TIERS) {
+      for (const side of ['left', 'right']) {
+        const w = stealWindow(Steal.makeField(tier, side), budget)
+        if (w > 0 && w < NARROW) faults.push(`${label} × 段${tier}(${side}) = ${w.toFixed(1)}°`)
+      }
+    }
+  }
+  // ⚠️ **まっすぐ撮って通ってはいけない。**
+  //    隠間を広げたときこれを壊して、親が塗り絵だけの存在になっていた。
+  //    角度の幅だけ見ていても気づけない（幅はむしろ広がって良く見えた）。
+  const straightThrough = []
+  for (const tier of TIERS) {
+    for (const side of ['left', 'right']) {
+      if (Steal.launch(Steal.makeField(tier, side), 0, 100000).outcome === 'success') {
+        straightThrough.push(`段${tier}(${side})`)
+      }
+    }
+  }
+
+  const tankBudget = budgets.get('耐久ぞろい')
+  const tankReaches = TIERS.some((tier) =>
+    ['left', 'right'].some((side) => Steal.findSolution(Steal.makeField(tier, side), tankBudget, 720)),
+  )
+
+  console.log('')
+  if (tankReaches) console.log('  ⚠️ 耐久ぞろいが届いている。速度に寄せる理由が消えている')
+  else console.log('  耐久ぞろいはどの段にも届かない。速度に寄せる理由はある')
+  if (straightThrough.length > 0) {
+    console.log(`  ⚠️ まっすぐ撮つだけで通る巣がある。親が塗り絵になっている: ${straightThrough.join(' ')}`)
+  } else {
+    console.log('  どの巣もまっすぐでは通らない。親を避ける必要がある')
+  }
+  if (faults.length > 0) {
+    console.log(`  ⚠️ 幅が ${NARROW}° 未満のマスがある。そこは編成ではなく手先を測っている:`)
+    for (const f of faults) console.log(`     ${f}`)
+  } else {
+    console.log(`  届くマスはすべて幅 ${NARROW}° 以上。境目が刃になっていない`)
+  }
+}
+
 const mode = process.argv[2] ?? '--pace'
 const modes = {
   '--pace': runPace,
@@ -530,6 +645,7 @@ const modes = {
   '--progress': runProgress,
   '--elements': runElements,
   '--random': runRandom,
+  '--steal': runSteal,
 }
 const run = modes[mode]
 if (!run) {
