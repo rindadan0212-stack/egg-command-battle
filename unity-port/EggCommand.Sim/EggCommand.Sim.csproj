@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>EggCommand.Sim</RootNamespace>
+    <LangVersion>9.0</LangVersion>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!-- ⭐ 遊びの規則は Core を**そのまま**呼ぶ。ここに計算を写さない。
+       写した瞬間に「測ったもの」と「遊ぶもの」が別になり、測る意味が消える。 -->
+  <ItemGroup>
+    <ProjectReference Include="..\EggCommand.Core\EggCommand.Core.csproj" />
+  </ItemGroup>
+
+</Project>

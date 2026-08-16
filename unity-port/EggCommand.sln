@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EggCommand.Core", "EggComma
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EggCommand.Tests", "EggCommand.Tests\EggCommand.Tests.csproj", "{945322E6-7DA1-42C5-AF49-D7F837317076}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EggCommand.Sim", "EggCommand.Sim\EggCommand.Sim.csproj", "{4EBC7B45-3791-4AF1-9055-CBCCB10BD0BE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,6 +43,18 @@ Global
 		{945322E6-7DA1-42C5-AF49-D7F837317076}.Release|x64.Build.0 = Release|Any CPU
 		{945322E6-7DA1-42C5-AF49-D7F837317076}.Release|x86.ActiveCfg = Release|Any CPU
 		{945322E6-7DA1-42C5-AF49-D7F837317076}.Release|x86.Build.0 = Release|Any CPU
+		{4EBC7B45-3791-4AF1-9055-CBCCB10BD0BE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4EBC7B45-3791-4AF1-9055-CBCCB10BD0BE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4EBC7B45-3791-4AF1-9055-CBCCB10BD0BE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4EBC7B45-3791-4AF1-9055-CBCCB10BD0BE}.Debug|x64.Build.0 = Debug|Any CPU
+		{4EBC7B45-3791-4AF1-9055-CBCCB10BD0BE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4EBC7B45-3791-4AF1-9055-CBCCB10BD0BE}.Debug|x86.Build.0 = Debug|Any CPU
+		{4EBC7B45-3791-4AF1-9055-CBCCB10BD0BE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4EBC7B45-3791-4AF1-9055-CBCCB10BD0BE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4EBC7B45-3791-4AF1-9055-CBCCB10BD0BE}.Release|x64.ActiveCfg = Release|Any CPU
+		{4EBC7B45-3791-4AF1-9055-CBCCB10BD0BE}.Release|x64.Build.0 = Release|Any CPU
+		{4EBC7B45-3791-4AF1-9055-CBCCB10BD0BE}.Release|x86.ActiveCfg = Release|Any CPU
+		{4EBC7B45-3791-4AF1-9055-CBCCB10BD0BE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
