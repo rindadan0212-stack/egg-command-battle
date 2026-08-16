@@ -125,7 +125,10 @@ namespace EggCommand.View
         public static Text Knockout(Text text, int thickness = 4)
         {
             text.color = Color.white;
-            var outline = text.gameObject.AddComponent<Outline>();
+            // ⚠️ 足す前に探す。Prefab で既に付いている字へ実行時にもう1枚足すと、
+            //    縁が二重になって太る（毎回 Bind で呼ぶので、放置すると増え続ける）
+            var outline = text.GetComponent<Outline>();
+            if (outline == null) outline = text.gameObject.AddComponent<Outline>();
             outline.effectColor = new Color32(0x2b, 0x33, 0x50, 0xff);
             outline.effectDistance = new Vector2(thickness, thickness);
             outline.useGraphicAlpha = false;

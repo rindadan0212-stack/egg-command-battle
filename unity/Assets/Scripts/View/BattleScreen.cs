@@ -30,7 +30,7 @@ namespace EggCommand.View
             }
         }
 
-        public static void Build(App app, RectTransform body, float height)
+        public static void Build(App app, RectTransform body)
         {
             var state = app.Battle;
             if (state == null) { app.Show(Screen.Nests); return; }

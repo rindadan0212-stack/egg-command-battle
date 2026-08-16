@@ -42,7 +42,7 @@ namespace EggCommand.View
             }
         }
 
-        public static void Build(App app, RectTransform body, float height)
+        public static void Build(App app, RectTransform body)
         {
             var field = app.Field;
             if (field == null) { app.Show(Screen.Nests); return; }
@@ -70,32 +70,28 @@ namespace EggCommand.View
 
             // ── 結果 ────────────────────────────────────
             // ⚠️ 結果を文章で言わない。⭐ 盤の上に残った軌跡が既に語っている。
-            //    ここに残すのは「次にどうするか」の押しどころだけ。
-            float panelTop = height - 168f;
+            //    ここに残すのは「次にどうするか」の押しどころだけ。配置は Prefab が持つ。
+            var view = app.Put<StealResultView>(body, "StealResult");
+            if (view == null) return;
 
-            if (_result.Outcome == StealOutcome.Success)
-            {
-                Ui.Tappable(body, "Take", "卵を持ち帰る", () =>
+            view.Bind(_result.Outcome == StealOutcome.Success,
+                onTake: () =>
                 {
-                    // ⚠️ 盗んだ卵は素質が落ちる（倒したほうが良い卵）
-                    var egg = Games.GainEgg(app.Game, app.CurrentNest, EggOrigin.Stolen);
+                    var nest = app.CurrentNest;
                     Games.AwardParty(Games.PartyOf(app.Game));
                     _result = null;
                     Leave();
-                    app.Show(Screen.Nests);
-                }, Ui.Margin, panelTop, Ui.W - Ui.Margin * 2f, Ui.Tap, true);
-            }
-            else
-            {
-                Ui.Tappable(body, "Fight", "戦闘へ", () =>
+                    // ⚠️ 盗んだ卵は素質が落ちる（倒したほうが良い卵）
+                    app.GainEgg(nest, EggOrigin.Stolen);
+                },
+                onFight: () =>
                 {
                     var nest = app.CurrentNest;
                     _result = null;
                     Leave();
                     // ⭐ 立ちはだかるのも親1体なので、そのまま戦闘へ繋がる
                     app.EnterBattle(nest, false);
-                }, Ui.Margin, panelTop, Ui.W - Ui.Margin * 2f, Ui.Tap, true);
-            }
+                });
         }
     }
 }

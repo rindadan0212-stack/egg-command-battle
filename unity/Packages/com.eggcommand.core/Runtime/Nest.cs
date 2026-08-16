@@ -48,10 +48,16 @@ namespace EggCommand.Core
         public readonly string? Skill2;
         public readonly string? Skill3;
 
+        /// <summary>希少さ 1〜5。⭐ 孵るまでの時間はここだけで決まる。
+        /// ⚠️ 素質（<see cref="Wild"/>）とは別の軸にしてある。混ぜると
+        /// 「時間をかけた＝強い」が確定してしまい、待つ以外の選択が消える。</summary>
+        public readonly int Rarity;
+
         public Egg(string id, string speciesId, StatBlock wild, int mutationCounter, int paletteIndex,
             string? parentA, string? parentB, int generation, EggOrigin how,
-            bool hasSkills, string? skill2, string? skill3)
+            bool hasSkills, string? skill2, string? skill3, int rarity = 1)
         {
+            Rarity = rarity < 1 ? 1 : rarity > Rarities.Max ? Rarities.Max : rarity;
             Id = id;
             SpeciesId = speciesId;
             Wild = wild;
@@ -168,7 +174,7 @@ namespace EggCommand.Core
 
         /// <summary>親から卵を作る。
         /// ⚠️ 盗んだ卵は素質が落ちる。倒したほうが良い卵、という企画どおりにするため。</summary>
-        public static Egg MakeEgg(Rng rng, Nest nest, EggOrigin how, int serial)
+        public static Egg MakeEgg(Rng rng, Nest nest, EggOrigin how, int serial, int rarity = 1)
         {
             int baseTotal = WildTotalForTier(nest.Tier);
             double quality = how == EggOrigin.Defeated ? 1.0 : 0.78;
@@ -182,7 +188,8 @@ namespace EggCommand.Core
                 nest.SpeciesId,
                 SpreadWild(rng, total),
                 0, 0, null, null, 1, how,
-                hasSkills: false, skill2: null, skill3: null); // 野生の卵。孵すときにガチャ
+                hasSkills: false, skill2: null, skill3: null, // 野生の卵。孵すときにガチャ
+                rarity: rarity);
         }
 
         /// <summary>孵す。⭐ 野生の卵はここでスキル2・3のガチャを引く。

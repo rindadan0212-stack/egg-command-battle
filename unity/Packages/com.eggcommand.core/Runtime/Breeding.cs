@@ -58,7 +58,9 @@ namespace EggCommand.Core
         public static bool MutationAllowed(Creature a, Creature b) =>
             a.MutationCounter < MutationCounterLimit || b.MutationCounter < MutationCounterLimit;
 
-        public static BreedOutcome Breed(Rng rng, Creature a, Creature b, int serial)
+        /// <summary><paramref name="rarity"/> は 0 のとき「世代と変異から決める」。
+        /// ⚠️ ここで乱数を引かない。既にある breed の系統がずれると較正済みの検査が無効になる。</summary>
+        public static BreedOutcome Breed(Rng rng, Creature a, Creature b, int serial, int rarity = 0)
         {
             if (!CanBreed(a, b)) throw new InvalidOperationException("同じ個体どうしは配合できない");
 
@@ -102,6 +104,13 @@ namespace EggCommand.Core
             string? skill2, skill3;
             InheritSkills(rng, a, b, childSpecies.Skill1, childSpecies.Id, out skill2, out skill3);
 
+            int generation = Math.Max(a.Generation, b.Generation) + 1;
+            // ⭐ 重ねた世代ぶん孵るのが遅くなる。深い血統ほど時間を払う、という形にする。
+            //    ⚠️ 乱数ではなく世代と変異から決める（同じ親からは同じ重さになる）
+            int childRarity = rarity > 0
+                ? rarity
+                : Rarities.Clamp(generation + (mutations > 0 ? 1 : 0));
+
             var egg = new Egg(
                 $"e{serial.ToString().PadLeft(3, '0')}",
                 childSpecies.Id,
@@ -109,9 +118,10 @@ namespace EggCommand.Core
                 mutationCounter,
                 paletteIndex,
                 a.Id, b.Id,
-                Math.Max(a.Generation, b.Generation) + 1,
+                generation,
                 EggOrigin.Bred,
-                hasSkills: true, skill2: skill2, skill3: skill3);
+                hasSkills: true, skill2: skill2, skill3: skill3,
+                rarity: childRarity);
 
             return new BreedOutcome(egg, mutations);
         }

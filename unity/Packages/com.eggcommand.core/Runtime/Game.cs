@@ -13,12 +13,19 @@ namespace EggCommand.Core
     {
         public readonly int Seed;
         public Storage Storage;
-        /// <summary>手に入れてまだ孵していない卵。</summary>
+        /// <summary>手に入れてまだ孵化器へ入れていない卵。</summary>
         public readonly List<Egg> Eggs = new List<Egg>();
+        /// <summary>いま温めている卵。⚠️ 上限は <see cref="Hatchery.Slots"/>。</summary>
+        public readonly List<Incubation> Incubating = new List<Incubation>();
+        /// <summary>いま探索に出ている巣。⚠️ 上限は <see cref="Encounters.Shown"/>。</summary>
+        public readonly List<Encounter> Encounters = new List<Encounter>();
         /// <summary>出撃させる3体の id。⚠️ 空なら素質の高い順に自動で選ぶ。</summary>
         public readonly List<string> Party = new List<string>();
         /// <summary>通し番号。id を一意にするためだけに使う。</summary>
         public int Serial;
+        /// <summary>探索の巣の通し番号。⚠️ <see cref="Serial"/> と分ける。
+        /// 混ぜると巣を1つ引き直すたびに卵や個体の id が飛び、較正済みの検査がずれる。</summary>
+        public int EncounterSerial;
 
         // 系統ごとの乱数
         public readonly Rng RngNest;
@@ -26,6 +33,10 @@ namespace EggCommand.Core
         public readonly Rng RngHatch;
         public readonly Rng RngSteal;
         public readonly Rng RngBreed;
+        // ⚠️ 後から足した系統。既にある5本の消費順を1つも変えていないので、
+        //    較正済みの検査（45件）はそのまま通る。混ぜて引かないこと。
+        public readonly Rng RngRarity;
+        public readonly Rng RngEncounter;
 
         public Game(int seed)
         {
@@ -37,6 +48,8 @@ namespace EggCommand.Core
             RngHatch = root.Stream("hatch");
             RngSteal = root.Stream("steal");
             RngBreed = root.Stream("breed");
+            RngRarity = root.Stream("rarity");
+            RngEncounter = root.Stream("encounter");
         }
     }
 
@@ -56,6 +69,7 @@ namespace EggCommand.Core
                 string id = $"c{game.Serial.ToString().PadLeft(3, '0')}";
                 game.Storage = Storages.Accept(game.Storage, Nests.Hatch(game.RngHatch, egg, id));
             }
+            Encounters.Refill(game);
             return game;
         }
 
@@ -65,7 +79,10 @@ namespace EggCommand.Core
 
         public static Egg GainEgg(Game game, Nest nest, EggOrigin how)
         {
-            var egg = Nests.MakeEgg(game.RngEgg, nest, how, ++game.Serial);
+            // ⚠️ 希少さは別の系統で引く。ここを RngEgg に混ぜると素質の列がずれて、
+            //    較正済みの検査が無効になる
+            int rarity = Rarities.Roll(game.RngRarity, nest.Tier, how);
+            var egg = Nests.MakeEgg(game.RngEgg, nest, how, ++game.Serial, rarity);
             game.Eggs.Add(egg);
             return egg;
         }

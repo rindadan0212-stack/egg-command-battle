@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using EggCommand.Core;
@@ -19,15 +18,20 @@ namespace EggCommand.View
 
     /// <summary>画面の器と行き来。⭐ ホームがハブ。各画面は ‹ でホームへ戻る。
     ///
-    /// ⚠️ 常時タブにしない（モックがそうなっている）。下段の4パネルはホームだけに出る。
-    ///
     /// ⭐ 状態の唯一の出所は <see cref="Core.Game"/>。この層は**それを描くだけ**で、
     /// 勝敗も遺伝も飛距離もここでは決めない（決めた瞬間に第2の出所ができる）。
+    ///
+    /// ⭐ **配置はすべて Assets/Resources/Prefabs/*.prefab が持つ。**
+    /// この層に座標は無い。見た目を直したいときは Unity Editor で Prefab を開く。
     /// </summary>
     public sealed class App : MonoBehaviour
     {
         /// <summary>⚠️ 種を固定しておくと、同じ話が何度でも再現できる。</summary>
         public int Seed = 20260816;
+
+        /// <summary>試遊のための短縮。⭐ 孵化の待ち時間をこの数で割る。
+        /// ⚠️ 1 が本番の速さ。出荷前に 1 へ戻すこと。</summary>
+        public int HatchSpeed = 120;
 
         public Game Game { get; set; }
 
@@ -42,21 +46,26 @@ namespace EggCommand.View
 
         private Screen _screen = Screen.Home;
         private RectTransform _root;
-        private RectTransform _body;
-        private Text _title;
-        private Text _badge;
-        private RectTransform _backSlot;
+        private Image _sky;
+        private FrameView _frame;
+
+        /// <summary>いまの時刻（Unix 秒）。⚠️ Core は時計を持たない。ここが唯一の出所。</summary>
+        public long Now() => Hatchery.Now(DateTime.UtcNow);
+
+        /// <summary>演出を載せる場所。⚠️ App 本体ではなく Canvas。
+        /// 本体に載せると RectTransform の親が無く、画面のどこにも出ない。</summary>
+        public RectTransform Overlay => _root;
 
         private void Start()
         {
             Game = Games.NewGame(Seed);
-            BuildFrame();
+            BuildCanvas();
             Show(Screen.Home);
         }
 
         // ── 器 ──────────────────────────────────────────
 
-        private void BuildFrame()
+        private void BuildCanvas()
         {
             var canvasGo = new GameObject("App Canvas",
                 typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -84,6 +93,19 @@ namespace EggCommand.View
                     typeof(UnityEngine.EventSystems.StandaloneInputModule));
                 events.transform.SetParent(transform, false);
             }
+
+            var sky = Ui.Rect("Sky", _root);
+            Ui.Stretch(sky);
+            _sky = sky.gameObject.AddComponent<Image>();
+
+            var frame = Resources.Load<GameObject>("Prefabs/AppFrame");
+            if (frame == null)
+            {
+                // ⚠️ 黙って何も出さない、をしない。無いことに気づけないほうが困る
+                Debug.LogError("AppFrame.prefab が読めない（Egg Command/画面を Prefab に書き出す を走らせる）");
+                return;
+            }
+            _frame = Instantiate(frame, _root).GetComponent<FrameView>();
         }
 
         /// <summary>画面を差し替える。⚠️ 毎回すべて組み直す。
@@ -100,6 +122,7 @@ namespace EggCommand.View
                 Battle = null;
                 Field = null;
             }
+            if (_frame == null) return;
 
             // ⚠️ 強奪の盤はワールド空間に居るので、画面を離れるときに自分で片付ける。
             //    残すとカメラの寸法が戻らず、次の画面が拡大されたままになる。
@@ -107,65 +130,60 @@ namespace EggCommand.View
             if (_screen == Screen.Battle && screen != Screen.Battle) BattleScreen.Leave();
 
             _screen = screen;
+            bool home = screen == Screen.Home;
 
+            // ⚠️ 強奪だけは盤がワールド空間に居る。地を塗ると UI が世界を隠してしまう
+            var sky = SkyOf(screen);
+            _sky.sprite = screen == Screen.Steal ? null : Ui.SkySpriteOf(sky);
+            _sky.color = screen == Screen.Steal ? new Color(0f, 0f, 0f, 0f)
+                : _sky.sprite != null ? Color.white : Ui.SkyOf(sky);
+            _sky.raycastTarget = screen != Screen.Steal;
+
+            _frame.Bind(home, TitleOf(screen), BadgeOf(screen), () => Show(Screen.Home));
+            _frame.BindPanel(0, "探索", $"{Game.Encounters.Count}", () => Show(Screen.Nests));
+            _frame.BindPanel(1, "孵化", $"{Game.Eggs.Count + Game.Incubating.Count}", () => Show(Screen.Hatch));
+            _frame.BindPanel(2, "配合", $"{Game.Storage.Creatures.Count}体", () => Show(Screen.Breed));
+            _frame.BindPanel(3, "BOX", $"{Game.Storage.Creatures.Count}/{Game.Storage.Slots}",
+                () => Show(Screen.Box));
+
+            var body = _frame.Body;
             // ⚠️ Destroy はフレームの終わりまで効かない。
             //    そのまま組み直すと、同じフレームのあいだ古い画面が生きていて、
             //    見えない古いボタンがクリックを受け取る（実測で3枚積み重なった）。
-            //    親から外して無効にし、その場で居なくする。
-            for (int i = _root.childCount - 1; i >= 0; i--)
+            for (int i = body.childCount - 1; i >= 0; i--)
             {
-                var child = _root.GetChild(i).gameObject;
+                var child = body.GetChild(i).gameObject;
                 child.SetActive(false);
                 child.transform.SetParent(null, false);
                 Destroy(child);
             }
 
-            var back = Ui.Rect("Sky", _root);
-            Ui.Stretch(back);
-            var backImage = back.gameObject.AddComponent<Image>();
-            // ⚠️ 強奪だけは盤がワールド空間に居る。地を塗ると UI が世界を隠してしまうので、
-            //    ここは透明にしてカメラの背景を見せる。
-            if (screen == Screen.Steal)
-            {
-                backImage.color = new Color(0f, 0f, 0f, 0f);
-            }
-            else
-            {
-                var sky = SkyOf(screen);
-                // ⭐ 空→砂のグラデーション。地平線があると「立っている場所」が分かる
-                backImage.sprite = Ui.SkySpriteOf(sky);
-                // ⚠️ 絵が無いときは単色へ落ちる。黙って透明にしない
-                backImage.color = backImage.sprite != null ? Color.white : Ui.SkyOf(sky);
-            }
-            backImage.raycastTarget = screen != Screen.Steal;
-
-            bool home = screen == Screen.Home;
-            float bodyTop = Ui.TopBarHeight;
-            float bodyHeight = Ui.H - bodyTop - (home ? Ui.DockHeight : 0f);
-
-            _body = Ui.Rect("Body", _root);
-            Ui.Place(_body, 0f, bodyTop, Ui.W, bodyHeight);
-
             switch (screen)
             {
-                case Screen.Home: HomeScreen.Build(this, _body, bodyHeight); break;
-                case Screen.Nests: NestsScreen.Build(this, _body, bodyHeight); break;
-                case Screen.Steal: StealScreen.Build(this, _body, bodyHeight); break;
-                case Screen.Battle: BattleScreen.Build(this, _body, bodyHeight); break;
-                case Screen.Hatch: HatchScreen.Build(this, _body, bodyHeight); break;
-                case Screen.Breed: BreedScreen.Build(this, _body, bodyHeight); break;
-                case Screen.Box: BoxScreen.Build(this, _body, bodyHeight); break;
+                case Screen.Home: HomeScreen.Build(this, body); break;
+                case Screen.Nests: NestsScreen.Build(this, body); break;
+                case Screen.Steal: StealScreen.Build(this, body); break;
+                case Screen.Battle: BattleScreen.Build(this, body); break;
+                case Screen.Hatch: HatchScreen.Build(this, body); break;
+                case Screen.Breed: BreedScreen.Build(this, body); break;
+                case Screen.Box: BoxScreen.Build(this, body); break;
             }
-
-            // ⚠️ 上段は本体を組んだ**あと**に作る。
-            //    先に作ると、戦闘画面が敵の手番を進める前の数（行動 0）を出してしまう。
-            BuildTopBar(screen);
-
-            if (home) BuildDock();
         }
 
         /// <summary>今の画面をそのまま組み直す（操作のあと）。</summary>
         public void Refresh() => Show(_screen);
+
+        /// <summary>Prefab を1枚置く。⚠️ 読めなければ黙って飛ばさず、はっきり残す。</summary>
+        public T Put<T>(RectTransform body, string name) where T : Component
+        {
+            var prefab = Resources.Load<GameObject>("Prefabs/" + name);
+            if (prefab == null)
+            {
+                Debug.LogError($"{name}.prefab が読めない（Egg Command/画面を Prefab に書き出す を走らせる）");
+                return null;
+            }
+            return Instantiate(prefab, body).GetComponent<T>();
+        }
 
         private static Sky SkyOf(Screen screen)
         {
@@ -179,29 +197,6 @@ namespace EggCommand.View
                 case Screen.Breed: return Sky.Breed;
                 default: return Sky.Box;
             }
-        }
-
-        private void BuildTopBar(Screen screen)
-        {
-            // ⚠️ 帯を敷かない。字を濃紺にしたので、暗い帯の上では題字が消える。
-            //    モックも上段に帯を持たず、地の上に直接置いている。
-            var bar = Ui.Rect("TopBar", _root);
-            Ui.Place(bar, 0f, 0f, Ui.W, Ui.TopBarHeight);
-
-            // ⚠️ ホーム以外は必ず戻れる。戻れない画面を作らない
-            if (screen != Screen.Home)
-            {
-                Ui.Tappable(bar, "Back", "‹", () => Show(Screen.Home),
-                    12f, 10f, 112f, 112f);
-            }
-
-            // STAR: text placed straight on the sky is knocked out, so it reads on any colour
-            _title = Ui.Knockout(Ui.Label(bar, "Title", TitleOf(screen), 40, Ui.Ink,
-                TextAnchor.MiddleCenter, 140f, 0f, Ui.W - 280f, Ui.TopBarHeight));
-
-            string badge = BadgeOf(screen);
-            _badge = Ui.Knockout(Ui.Label(bar, "Badge", badge, 28, Ui.InkDim,
-                TextAnchor.MiddleRight, Ui.W - 300f, 0f, 300f - Ui.Margin, Ui.TopBarHeight), 3);
         }
 
         private string TitleOf(Screen screen)
@@ -223,45 +218,12 @@ namespace EggCommand.View
         {
             switch (screen)
             {
-                case Screen.Hatch: return $"卵 {Game.Eggs.Count}";
+                case Screen.Hatch: return $"{Game.Incubating.Count}/{Hatchery.Slots}";
                 case Screen.Box:
                 case Screen.Breed: return $"{Game.Storage.Creatures.Count}/{Game.Storage.Slots}";
                 case Screen.Battle: return Battle == null ? "" : $"行動 {Battle.Actions}";
                 default: return "";
             }
-        }
-
-        private void BuildDock()
-        {
-            // WARN: no dark strip. Text turned navy, so a dark strip swallows the sub-labels.
-            var dock = Ui.Rect("Dock", _root);
-            Ui.Place(dock, 0f, Ui.H - Ui.DockHeight, Ui.W, Ui.DockHeight);
-
-            float gap = 16f;
-            float width = (Ui.W - Ui.Margin * 2f - gap * 3f) / 4f;
-            float top = (Ui.DockHeight - 148f) / 2f;
-
-            // ⭐ 主導線は1つだけ塗る
-            Panel(dock, "探索", $"巣 {Nests.All.Length}", true, Ui.Margin, top, width,
-                () => Show(Screen.Nests));
-            Panel(dock, "孵化", $"{Game.Eggs.Count}", false, Ui.Margin + (width + gap), top, width,
-                () => Show(Screen.Hatch));
-            Panel(dock, "配合", $"{Game.Storage.Creatures.Count}体", false, Ui.Margin + (width + gap) * 2f, top, width,
-                () => Show(Screen.Breed));
-            Panel(dock, "BOX", $"{Game.Storage.Creatures.Count}/{Game.Storage.Slots}", false,
-                Ui.Margin + (width + gap) * 3f, top, width, () => Show(Screen.Box));
-        }
-
-        private void Panel(Transform parent, string label, string count, bool lead,
-            float left, float top, float width, Action onGo)
-        {
-            var button = Ui.Tappable(parent, $"Dock {label}", "", onGo, left, top, width, 148f, lead);
-            Ui.Label(button.transform, "Name", label, 32,
-                lead ? new Color32(0x1a, 0x16, 0x12, 0xff) : Ui.Ink,
-                TextAnchor.UpperCenter, 0f, 28f, width, 44f);
-            // ⚠️ 淡い字を色の札の上に置かない。数が読めなくなる（実測で消えていた）
-            Ui.Label(button.transform, "Count", count, 24, Ui.Ink,
-                TextAnchor.UpperCenter, 0f, 84f, width, 36f);
         }
 
         // ── 進行 ────────────────────────────────────────
@@ -282,17 +244,30 @@ namespace EggCommand.View
         public void FinishBattle()
         {
             if (Battle == null || Battle.Result == null) return;
-            // ⚠️ 何が起きたかを字で残さない。⭐ 勝てば孵化の数が増えている。それが報告。
-            if (Battle.Result == Outcome.Ally)
+            var won = Battle.Result == Outcome.Ally;
+            var nest = CurrentNest;
+            Battle = null;
+
+            if (won)
             {
                 Games.AwardParty(Games.PartyOf(Game));
-                if (!CurrentIsBoss && CurrentNest != null)
+                if (!CurrentIsBoss && nest != null)
                 {
-                    Games.GainEgg(Game, CurrentNest, PendingOrigin);
+                    GainEgg(nest, PendingOrigin);
+                    return;
                 }
             }
-            Battle = null;
+            // ⚠️ 負けた巣も引き直す。同じ相手を叩き続ける形にしない
+            if (!CurrentIsBoss && nest != null) Encounters.Replace(Game, nest);
             Show(Screen.Nests);
+        }
+
+        /// <summary>卵を1個手に入れる。⭐ 手に入れた瞬間だけは演出を出す。</summary>
+        public void GainEgg(Nest nest, EggOrigin how)
+        {
+            var egg = Games.GainEgg(Game, nest, how);
+            Encounters.Replace(Game, nest);
+            Fanfare.EggGot(_root, egg, () => Show(Screen.Nests));
         }
     }
 }
