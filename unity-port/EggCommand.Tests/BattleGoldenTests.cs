@@ -177,8 +177,11 @@ public class StealGoldenTests
         var golden = Golden.Load("steal");
         Assert.Equal(golden.GetProperty("fieldWidth").GetDouble(), Steal.FieldWidth);
         Assert.Equal(golden.GetProperty("speedToDistance").GetDouble(), Steal.SpeedToDistance);
-        Assert.Equal(golden.GetProperty("gapWidth").GetDouble(), Steal.GapWidth);
-        Assert.Equal(golden.GetProperty("lean").GetDouble(), Steal.Lean);
+        // ⚠️ gapWidth / lean は移植後に**意図して変えた**（塞ぐ幅を絵1体ぶんにするため）。
+        //    移植元と同じであることを求めるのは、もうこの遊びを表していない。
+        //    代わりに「塞ぐ幅 ＝ 絵1体ぶん」という今の規則を検査する。
+        Assert.Equal(Steal.FieldWidth - Steal.ParentWidth, Steal.GapWidth);
+        Assert.Equal(Steal.ParentWidth + Steal.GapWidth / 2 - Steal.FieldWidth / 2, Steal.Lean);
         Assert.Equal(golden.GetProperty("eggRadius").GetDouble(), Steal.EggRadius);
         Assert.Equal(golden.GetProperty("runnerRadius").GetDouble(), Steal.RunnerRadius);
 
@@ -200,14 +203,21 @@ public class StealGoldenTests
         {
             int tier = entry.GetProperty("tier").GetInt32();
             var side = Golden.Side(entry.GetProperty("side").GetString()!);
-            var field = Steal.MakeField(tier, side);
             string where = $"tier={tier} {side}";
+            // ⚠️ 盤の寸法は意図して変えたので MakeField で作らない。
+            //    ここが確かめたいのは**跳ね返りと当たり判定**なので、
+            //    移植元と同じ寸法の盤を組んでから、その上で飛ばして比べる。
+            double height = entry.GetProperty("height").GetDouble();
+            var field = new StealField(
+                height, side,
+                entry.GetProperty("gapFrom").GetDouble(),
+                entry.GetProperty("gapTo").GetDouble(),
+                entry.GetProperty("bandTop").GetDouble(),
+                entry.GetProperty("bandBottom").GetDouble(),
+                new Point(Steal.FieldWidth / 2, 26),
+                new Point(Steal.FieldWidth / 2, height - 14));
 
-            Assert.True(entry.GetProperty("height").GetDouble() == field.Height, $"{where}: 奥行き");
-            Assert.True(entry.GetProperty("gapFrom").GetDouble() == field.GapFrom, $"{where}: 隙間の左");
-            Assert.True(entry.GetProperty("gapTo").GetDouble() == field.GapTo, $"{where}: 隙間の右");
-            Assert.True(entry.GetProperty("bandTop").GetDouble() == field.BandTop, $"{where}: 帯の上");
-            Assert.True(entry.GetProperty("bandBottom").GetDouble() == field.BandBottom, $"{where}: 帯の下");
+            Assert.True(Steal.DepthForTier(tier) == height, $"{where}: 奥行き");
 
             var spans = Steal.ParentSpans(field);
             var spansJson = entry.GetProperty("spans");

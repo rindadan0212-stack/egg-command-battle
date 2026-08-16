@@ -136,10 +136,19 @@ namespace EggCommand.Core
         /// 各段 11〜18 スピードぶん続き、そこに落ちた編成は手先を測られる。
         /// 90 にするとその帯が 0〜10 に縮み、届くマスはすべて幅 2°以上になる。
         /// ⚠️ さらに 106 まで広げると帯は消えるが、狙いが完全に無意味になる。</summary>
-        public const double GapWidth = 90;
+        /// ⚠️ 90 のときは塞ぐ幅が 92 もあり、親の絵1体では埋まらなかった。
+        /// 絵を並べて埋めると「増殖している」ように見えるので、**塞ぐ幅のほうを狭めた**。
+        public const double GapWidth = FieldWidth - ParentWidth;
 
-        /// <summary>親の寄り具合（中央からのずれ）。⚠️ まっすぐでは通らない程度に寄せる。</summary>
-        public const double Lean = 57;
+        /// <summary>親が塞ぐ幅。⭐ **絵1体ぶん**。
+        /// ⚠️ ここを広げると絵1体では埋まらず、並べて誤魔化すことになる。
+        /// 見た目と当たり判定を一致させるための上限でもある。</summary>
+        public const double ParentWidth = 28;
+
+        /// <summary>親の寄り具合（中央からのずれ）。
+        /// ⭐ 隙間が片方の壁に届くように寄せる ＝ 親は反対側の端で <see cref="ParentWidth"/> だけ塞ぐ。
+        /// ⚠️ 手で決めた数を置かない。塞ぐ幅から出す（食い違いようがない）。</summary>
+        public const double Lean = ParentWidth + GapWidth / 2 - FieldWidth / 2;
 
         /// <summary>⚠️ 1マス幅の切れ端を返さない。
         /// 隙間が壁に接すると反対側に幅 1 の帯が残り、当たり判定には効かないのに

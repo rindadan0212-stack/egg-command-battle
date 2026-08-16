@@ -103,25 +103,17 @@ namespace EggCommand.View
             float bandMid = (float)(field.BandTop + field.BandBottom) / 2f;
             float bandHeight = (float)(field.BandBottom - field.BandTop);
 
-            // ⭐ 塞いでいる帯を**絵そのもの**で埋める。薄い箱は描かない。
-            // ⚠️ 箱を描いて中央に1体だけ立たせると、「箱が当たり判定で絵は飾り」に見える。
-            //    当たるのは Core の帯なので、その帯を絵で敷き詰めれば見た目と一致する。
-            // ⚠️ 引き伸ばさない。ドット絵は縦横比を崩すと潰れて見える。
-            //    1体ぶんの幅で並べ、端は帯からはみ出さないところで止める。
+            // ⭐ 塞いでいる幅を**絵そのもの**で埋める。薄い箱は描かない。
+            // ⚠️ 箱を描いて中に立たせると、「箱が当たり判定で絵は飾り」に見える。
+            // ⚠️ 絵を並べて幅を埋めない（増殖して見える）。塞ぐ幅のほうを
+            //    Steal.ParentWidth ＝ 絵1体ぶん に狭めてある。
             var species = SpeciesTable.ById(nestSpeciesId);
             foreach (var span in Steal.ParentSpans(field))
             {
-                float from = (float)span.From;
-                float to = (float)span.To;
-                float size = bandHeight;
-                // 帯を割り切れる数に丸める。⚠️ 端に隙間が空くと「通れそう」に見える
-                int count = Mathf.Max(1, Mathf.RoundToInt((to - from) / size));
-                float step = (to - from) / count;
-                for (int i = 0; i < count; i++)
-                {
-                    PixelObject("Parent", species.Sprite, species.Palettes[0],
-                        ToWorld(from + step * (i + 0.5f), bandMid), step, 3f);
-                }
+                float centerX = (float)(span.From + span.To) / 2f;
+                float size = Mathf.Min((float)(span.To - span.From), bandHeight);
+                PixelObject("Parent", species.Sprite, species.Palettes[0],
+                    ToWorld(centerX, bandMid), size, 3f);
             }
 
             // 卵
