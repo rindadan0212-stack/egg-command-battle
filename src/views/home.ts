@@ -13,6 +13,18 @@ import { distanceFor } from '../game/steal.ts'
 import { partyOf, type Game } from '../game/state.ts'
 import { spriteToCanvas } from '../render/sprite.ts'
 
+/** 舞台の高さから、リーダーのドット倍率を選ぶ。
+ *
+ *  ⭐ **整数倍だけ。**ドット絵は小数倍で拡大するとボケる。
+ *  ⚠️ 実機は 568（SE）〜 932（Pro Max）まで縦が違うので、
+ *  倍率を決め打ちすると狭い端末で潰れる（実際 320×568 で重なった）。 */
+function scaleFor(stageHeight: number): { lead: number; side: number } {
+  if (stageHeight >= 380) return { lead: 10, side: 6 }
+  if (stageHeight >= 300) return { lead: 8, side: 5 }
+  if (stageHeight >= 230) return { lead: 6, side: 4 }
+  return { lead: 5, side: 3 }
+}
+
 function buildStanding(creature: Creature, scale: number, role: string): HTMLElement {
   const box = document.createElement('div')
   box.className = 'stand'
@@ -65,39 +77,54 @@ export function buildHome(game: Game): HTMLElement {
   cloudB.className = 'cloud b'
   stage.append(cloudA, cloudB)
 
-  if (party.length === 0) {
-    const empty = document.createElement('p')
-    empty.className = 'note'
-    empty.textContent = 'BOX で3体を「出撃」にすると、ここに並ぶ。'
-    stage.append(empty)
-  } else {
-    const [lead, second, third] = party
-    // ⭐ 三角配置。手前のリーダーを一番大きく
-    if (second) {
-      const left = buildStanding(second, 6, '02')
-      left.classList.add('side', 'left')
-      stage.append(left)
-    }
-    if (third) {
-      const right = buildStanding(third, 6, '03')
-      right.classList.add('side', 'right')
-      stage.append(right)
-    }
-    if (lead) {
-      const center = buildStanding(lead, 10, 'LEADER')
-      center.classList.add('leader')
-      stage.append(center)
-    }
-  }
-
   // 台座。モックと同じ「楕円 + その下の帯」
   const ground = document.createElement('span')
   ground.className = 'ground'
   const soil = document.createElement('span')
   soil.className = 'soil'
-  stage.append(ground, soil)
 
+  const figures = document.createElement('div')
+  figures.className = 'figures'
+
+  function layout(): void {
+    const height = stage.getBoundingClientRect().height || 400
+    const scale = scaleFor(height)
+    figures.replaceChildren()
+
+    if (party.length === 0) {
+      const empty = document.createElement('p')
+      empty.className = 'note'
+      empty.textContent = 'BOX で3体を「出撃」にすると、ここに並ぶ。'
+      figures.append(empty)
+      return
+    }
+
+    const [lead, second, third] = party
+    // ⭐ 三角配置。手前のリーダーを一番大きく
+    if (second) {
+      const left = buildStanding(second, scale.side, '02')
+      left.classList.add('side', 'left')
+      figures.append(left)
+    }
+    if (third) {
+      const right = buildStanding(third, scale.side, '03')
+      right.classList.add('side', 'right')
+      figures.append(right)
+    }
+    if (lead) {
+      const center = buildStanding(lead, scale.lead, 'LEADER')
+      center.classList.add('leader')
+      figures.append(center)
+    }
+  }
+
+  stage.append(figures, ground, soil)
   wrap.append(stage)
+
+  // ⚠️ 回転・バーの出入りで舞台の高さは変わる。変わったら倍率を選び直す
+  const observer = new ResizeObserver(() => layout())
+  observer.observe(stage)
+  layout()
 
   // ⭐ 編成の総スピードは飛距離そのもの。ホームで見えることに意味がある
   const facts = document.createElement('div')

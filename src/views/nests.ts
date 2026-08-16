@@ -90,15 +90,19 @@ export function renderNests(
     setTitle('巣をえらぶ')
     element.replaceChildren()
 
+    // ⭐ 巣の数は増える。一覧だけスクロールさせ、遊び方の一行は下に残す
+    const scroller = document.createElement('div')
+    scroller.className = 'scroller'
     const list = document.createElement('div')
     list.className = 'nestlist'
     list.append(...NESTS.map(buildNestRow), buildBossRow())
+    scroller.append(list)
 
     const hint = document.createElement('p')
     hint.className = 'hint'
     hint.textContent = '引っ張って飛ばし、親をかわして卵まで届けば奪える。外せばそのまま戦闘。'
 
-    element.append(list, hint)
+    element.append(scroller, hint)
   }
 
   /** ⭐ 輪の終点。ここで詰まったとき「何が足りないか」を考えるのが遊びの中心。 */

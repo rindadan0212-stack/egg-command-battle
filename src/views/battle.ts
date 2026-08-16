@@ -124,8 +124,13 @@ export function renderBattle(
 
   // ⭐ モックの構成: 左に味方を小さくリスト、右に敵を大きく。
   //    下は白いシートで、そこがコマンドの場だと形で分かるようにする
+  // ⭐ 場は縦に伸びうる（敵が多い / 状態が付く）ので**スクロールさせる**。
+  //    スキルシートは下に貼り付けたまま動かさない。指の位置が変わらない
+  const arenaScroll = document.createElement('div')
+  arenaScroll.className = 'scroller arenascroll'
   const arena = document.createElement('div')
   arena.className = 'arena'
+  arenaScroll.append(arena)
   const allyRow = document.createElement('div')
   allyRow.className = 'field allies'
   const enemyRow = document.createElement('div')
@@ -140,7 +145,7 @@ export function renderBattle(
   logBox.className = 'battlelog mono'
   sheet.append(commands, logBox)
 
-  element.append(arena, sheet)
+  element.append(arenaScroll, sheet)
 
   function buildFighter(unit: Unit): HTMLElement {
     const box = document.createElement('div')

@@ -26,8 +26,12 @@ export function renderBreed(root: HTMLElement, game: Game, onChange: () => void)
   pickLabel.className = 'sheetlabel mono'
   pickLabel.textContent = 'SELECT PARTNER'
 
+  // ⭐ 上の2枠は常に見えていないと選べない。下の一覧だけスクロールさせる
+  const scroller = document.createElement('div')
+  scroller.className = 'scroller'
   const list = document.createElement('div')
   list.className = 'roster picker'
+  scroller.append(list)
 
   function buildCard(creature: Creature): HTMLElement {
     const species = speciesOf(creature)
@@ -161,5 +165,8 @@ export function renderBreed(root: HTMLElement, game: Game, onChange: () => void)
   }
 
   paint()
-  root.append(bench, preview, pickLabel, list)
+  const wrap = document.createElement('div')
+  wrap.className = 'breedview'
+  wrap.append(bench, preview, pickLabel, scroller)
+  root.append(wrap)
 }

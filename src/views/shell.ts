@@ -20,6 +20,9 @@ export interface TopBar {
   readonly title?: string | undefined
   /** 右肩の状態ピル。数えられる事実だけを置く */
   readonly badge?: string | undefined
+  /** ⭐ 画面が自分の中でスクロール層を持つとき true。
+   *  ⚠️ 器と画面の**二重スクロールを避ける**ための指定。 */
+  readonly layered?: boolean
 }
 
 export interface Frame {
@@ -67,6 +70,7 @@ export function buildFrame(sky: Sky, top: TopBar): Frame {
 
   const screen = document.createElement('div')
   screen.className = 'screen'
+  if (top.layered) screen.dataset['layered'] = 'true'
 
   element.append(bar, screen)
   return {

@@ -92,10 +92,18 @@ function paint(): void {
   }
   const view = ui.view as Exclude<ViewId, 'home'>
 
+  // ⚠️ 自分の中でスクロール層を持つ画面は、器の側でスクロールさせない
+  const LAYERED: Record<Exclude<ViewId, 'home'>, boolean> = {
+    nests: true,
+    hatch: false,
+    breed: true,
+    box: true,
+  }
   const frame = buildFrame(SKY[view], {
     back: home,
     title: titles[view],
     badge: badges[view],
+    layered: LAYERED[view],
   })
   root.replaceChildren(frame.element)
 

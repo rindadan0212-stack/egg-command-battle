@@ -2,7 +2,11 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- ⚠️ `viewport-fit=cover` が無いと `env(safe-area-inset-*)` が常に 0 になり、
+         ノッチやホームバーの下に UI が潜り込む。安全域を使うなら必須。 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#fff6e5" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <title>Egg Command Battle</title>
     <link
       rel="icon"
@@ -20,6 +24,11 @@
   </head>
   <body>
     <main id="app"></main>
+    <!-- 横持ちの電話でだけ出る。CSS が出し分ける（デスクトップの横長には出さない） -->
+    <div class="rotate">
+      <span class="mark"></span>
+      <span>縦にしてください</span>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

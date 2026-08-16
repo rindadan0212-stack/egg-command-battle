@@ -20,14 +20,12 @@ import {
 } from '../game/steal.ts'
 import { spriteToCanvas } from '../render/sprite.ts'
 
-/** 画面に置ける最大の枠。⚠️ **縦持ち1本の中に収める。**
- *
- *  この枠に**内接**させる（縦横比は保つ）ので、
- *  ⭐ 奥が深い巣ほど「細く高く」見え、浅い巣ほど「幅広く短く」見える。
- *  ⚠️ 以前は高さを固定して幅を可変にしていたが、段1で幅 387px になり
- *  390px の画面からはみ出し、段5では 189px まで痩せた。 */
-const MAX_WIDTH = 350
-const MAX_HEIGHT = 540
+/** 収まりの下限。⚠️ これを下回るなら、そもそも遊べる大きさではない。 */
+const MIN_WIDTH = 200
+
+/** 実寸を測るまでの仮の大きさ。⚠️ 1フレームだけ使われる。 */
+const FALLBACK_WIDTH = 340
+const FALLBACK_HEIGHT = 480
 
 /** ⚠️ 唯一の暗色。style.css の `--ink` と同じ値。
  *  canvas は CSS 変数を直接読めないので、ここだけ二重に持つことになる。
@@ -46,7 +44,6 @@ export function renderSteal(
   onDone: (outcome: StealOutcome) => void,
 ): StealView {
   const budget = distanceFor(party)
-  const scale = Math.min(MAX_WIDTH / FIELD_WIDTH, MAX_HEIGHT / field.height)
 
   const element = document.createElement('div')
   element.className = 'steal'
@@ -64,15 +61,39 @@ export function renderSteal(
 
   const canvas = document.createElement('canvas')
   canvas.className = 'stealfield'
-  canvas.width = Math.round(FIELD_WIDTH * scale)
-  canvas.height = Math.round(field.height * scale)
   canvas.id = 's-field'
+
+  /** ⭐ **実際に空いている寸法に内接させる。**
+   *
+   *  ⚠️ 以前は 350×540 の決め打ちだった。実機は 320（SE）〜 430（Pro Max）まであり、
+   *  高さも安全域とブラウザのバーで変わるので、決め打ちだと**必ずどこかで見切れる**。
+   *  縦横比は保つので、奥が深い巣ほど「細く高く」見えるのは変わらない。 */
+  let scale = 1
+
+  function fit(): void {
+    const box = holder.getBoundingClientRect()
+    // ⚠️ **枠線ぶんを引く。**canvas の width/height は描画面の大きさで、
+    //    CSS の border はその外側に付く。引かないと枠線の太さ×2 だけはみ出す。
+    const style = getComputedStyle(canvas)
+    const chrome = (parseFloat(style.borderTopWidth) || 0) * 2
+    const availableWidth = Math.max(MIN_WIDTH, (box.width || FALLBACK_WIDTH) - chrome)
+    const availableHeight = (box.height || FALLBACK_HEIGHT) - chrome
+    scale = Math.min(availableWidth / FIELD_WIDTH, availableHeight / field.height)
+    canvas.width = Math.round(FIELD_WIDTH * scale)
+    canvas.height = Math.round(field.height * scale)
+    draw()
+  }
 
   const hint = document.createElement('p')
   hint.className = 'note'
   hint.textContent = `親は${field.side === 'right' ? '右' : '左'}に寄っている。`
 
-  element.append(lead, note, canvas, hint)
+  // 測る対象。⚠️ canvas 自身を測ると、自分の大きさで自分を決めることになる
+  const holder = document.createElement('div')
+  holder.className = 'stealholder'
+  holder.append(canvas)
+
+  element.append(lead, note, holder, hint)
 
   const ctx = canvas.getContext('2d')
   let aim: { from: { x: number; y: number }; to: { x: number; y: number } } | null = null
@@ -258,13 +279,20 @@ export function renderSteal(
     lead.textContent = '放った。'
   })
 
-  draw()
+  // ⚠️ 回転・バーの出入り・ふきだしで寸法は変わる。**変わったら測り直す。**
+  const observer = new ResizeObserver(() => {
+    if (!disposed) fit()
+  })
+  observer.observe(holder)
+
+  fit()
   frame = requestAnimationFrame(animate)
 
   return {
     element,
     dispose() {
       disposed = true
+      observer.disconnect()
       if (frame !== 0) cancelAnimationFrame(frame)
     },
   }

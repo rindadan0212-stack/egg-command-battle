@@ -58,10 +58,16 @@
   box-sizing: border-box;
 }
 
+/* ⚠️ **ページ自体を絶対にスクロールさせない。**
+   スマホのブラウザはページがスクロールできると、上下のバーが出入りして
+   高さが変わり、固定したはずの下段が動く。器の外側で殺す。 */
 html,
 body {
   margin: 0;
   padding: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
@@ -71,6 +77,10 @@ body {
   font-size: 13px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  /* ⚠️ 長押しで文字が選択される / タップで灰色が光る のはゲームでは事故 */
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* ドット絵は必ず nearest-neighbor で拡大する */
@@ -79,23 +89,54 @@ img.pixel {
   image-rendering: pixelated;
 }
 
-/* ⭐ 縦持ちの1本。横に広げない。
-   ⚠️ **端末の枠は描かない。**モックの角丸 + 太枠 + 影は
-   「7画面を並べて見せるための台紙」であって、設計ではない。 */
+/* ⚠️ **ダブルタップ拡大の 300ms 待ちを消す。**
+   これが無いとボタンの反応が一拍遅れて「効いていない」と感じる。
+   ⚠️ `user-scalable=no` は使わない（拡大できないのはアクセシビリティの後退）。 */
+button,
+.stealfield {
+  touch-action: manipulation;
+}
+
+/* ⭐ 押せるものは最低 44px 角（Apple HIG）。これを下回ると指で外す。
+   ⚠️ 見た目の大きさではなく**当たり判定**の話。小さく見せたいときは
+   中身を小さくして、ボタン自体は 44 を保つ。 */
+button {
+  font-family: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* ── 器（3層） ─────────────────────────────────── */
+
+/*  ┌─ topbar ── 固定
+ *  ├─ screen ── ここだけスクロール
+ *  └─ dock ──── 固定（ホームだけ）
+ *
+ *  ⚠️ 高さは `100svh`（最小ビューポート）。`100dvh` はバーの出入りで
+ *  値が変わり、固定した下段がその都度動く。ページを固定するなら `svh` が正しい。 */
 #app {
+  height: 100vh;
+  height: 100svh;
   display: flex;
   justify-content: center;
-  padding: 0;
+  overflow: hidden;
 }
 
 .phone {
   position: relative;
-  width: 390px;
-  max-width: 100%;
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
+  /* ⚠️ 390px 固定にしない。実機は 320（SE）〜 430（Pro Max）まである */
+  width: min(100%, 430px);
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
+  /* ノッチとホームバーを避ける。⚠️ 端末に無いときは 0 になるので max() で下限を置く */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 /* ⭐ どの画面にいるかを地の色で示す。ラベルではなく色で分かるように */
@@ -118,11 +159,45 @@ img.pixel {
   background: #dff1fa;
 }
 
+/* ⚠️ 横持ちの電話では縦持ち前提の画面が破綻する。
+   「粗いポインタ（＝指）× 低い横長」だけを狙って知らせる。
+   デスクトップの横長ウィンドウには出さない。 */
+.rotate {
+  display: none;
+}
+
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  #app > .phone {
+    display: none;
+  }
+  .rotate {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: var(--paper);
+    font-weight: 900;
+    text-align: center;
+    padding: 20px;
+  }
+  .rotate .mark {
+    width: 44px;
+    height: 72px;
+    border: 4px solid var(--ink);
+    border-radius: 10px;
+  }
+}
+
 /* ── 上段 ──────────────────────────────────────── */
 
+/* ⚠️ 左の枠を常に 48px 取ると、狭い端末で見出しが入らない。
+   戻る が無いときは畳む（`auto` なので中身ぶんだけになる）。 */
 .topbar {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   padding: 14px;
@@ -130,16 +205,16 @@ img.pixel {
 
 .topbar .slot {
   display: flex;
-  min-width: 44px;
 }
 
 .topbar .slot.end {
   justify-content: flex-end;
 }
 
+/* ⚠️ px 固定だと 320px の端末で見出しが切れる。幅なりに縮める */
 .topbar .title {
   font-family: var(--display);
-  font-size: 17px;
+  font-size: clamp(13px, 4.4vw, 17px);
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
@@ -147,8 +222,8 @@ img.pixel {
 }
 
 .topbar .back {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   font-size: 18px;
   font-weight: 900;
   line-height: 1;
@@ -174,12 +249,38 @@ img.pixel {
   white-space: nowrap;
 }
 
+/* ⭐ **唯一のスクロール層。**器の他の行は動かない。
+   ⚠️ `overscroll-behavior: contain` が無いと、端まで来たときページ側へ
+   スクロールが伝わって（＝スクロール連鎖）バーが動く。 */
 .screen {
-  flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 0 14px 16px;
+}
+
+/* 画面が自分の中で層を分ける場合（下に固定の板を敷くなど）は、
+   ⚠️ **この層ではスクロールさせない。**二重スクロールは指が迷う。 */
+.screen[data-layered='true'] {
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+/* 画面の中のスクロール領域。⚠️ flex の中では min-height:0 が要る。
+   ⚠️ **横には絶対にスクロールさせない**（縦持ちの画面で横に動くのは事故）。 */
+.scroller {
+  overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  /* スクロールの端で中身が切れて見えないよう、下に余白を残す */
+  padding-bottom: 16px;
 }
 
 /* ── 下段の4パネル（ホームだけ） ─────────────────── */
@@ -188,11 +289,14 @@ img.pixel {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
-  padding: 0 14px 16px;
+  /* ⚠️ 上の余白はバッジ（`.dcount`）が飛び出す分。詰めると角が切れる */
+  padding: 8px 14px 16px;
 }
 
 .dock button {
   position: relative;
+  /* ⚠️ バッジが枠外に出るので、ここで overflow を切らない */
+  overflow: visible;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -293,12 +397,6 @@ img.pixel {
 }
 
 /* ── 押せるもの ────────────────────────────────── */
-
-button {
-  font-family: inherit;
-  color: var(--ink);
-  cursor: pointer;
-}
 
 .controls {
   display: flex;
@@ -477,14 +575,30 @@ button {
   font-weight: 900;
 }
 
+/* ⚠️ 見た目は小さいが**当たり判定は 44 角**。
+   透明な余白で広げ、色の付いた部分だけを小さく見せる。 */
 .stat .train {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1;
+  background: none;
+  border: 0;
+  padding: 0;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+}
+
+.stat .train::before {
+  content: '+';
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
   background: var(--sun);
   border: 2.5px solid var(--ink);
   border-radius: 9px;
-  padding: 3px 7px;
 }
 
 .stat .train:active {
@@ -500,11 +614,12 @@ button {
   min-height: 0;
 }
 
-/* ⭐ モックの構成。左に味方を小さくリスト、右に敵を大きく置く */
+/* ⭐ モックの構成。左に味方を小さくリスト、右に敵を大きく置く。
+   ⚠️ **列幅を px で決めない。**158px 固定にしていて、320px の端末で
+   横スクロールが出ていた（縦のスクロール層の中なので見切れ検査もすり抜けた）。 */
 .arena {
-  flex: 1;
   display: grid;
-  grid-template-columns: 158px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
   gap: 10px;
   align-items: start;
   padding: 4px 0 12px;
@@ -517,6 +632,7 @@ button {
 }
 
 .field.allies .fighter {
+  min-width: 0;
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr);
   column-gap: 8px;
@@ -552,6 +668,7 @@ button {
 
 /* ⭐ 敵は絵を主役に。札にしないで場に立たせる */
 .field.enemies .fighter {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -566,6 +683,9 @@ button {
 
 .field.enemies .fname {
   order: 1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 11px;
   font-weight: 900;
   background: var(--card);
@@ -583,7 +703,8 @@ button {
 
 .field.enemies .meter.hp {
   order: 4;
-  width: 148px;
+  width: 100%;
+  max-width: 148px;
   height: 13px;
   border-width: 3px;
 }
@@ -594,7 +715,8 @@ button {
 
 .field.enemies .meter.gauge {
   order: 5;
-  width: 148px;
+  width: 100%;
+  max-width: 148px;
 }
 
 .field.enemies .badges {
@@ -676,7 +798,9 @@ button {
   border-top: 4px solid var(--ink);
   border-radius: 26px 26px 0 0;
   padding: 14px 14px 16px;
-  margin: 0 -14px -16px;
+  /* 左右は端まで届かせる。⚠️ **下の負のマージンは使わない**
+     （器の外へ 16px 押し出して、狭い端末でシートの底が切れていた） */
+  margin: 0 -14px 0;
 }
 
 .commands {
@@ -764,8 +888,10 @@ button {
   background: var(--sunk);
   border-radius: var(--small-radius);
   padding: 8px 10px;
-  max-height: 92px;
+  /* ⚠️ 高さを px で固定しない。狭い端末ではログが場を圧迫する */
+  max-height: min(92px, 14vh);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* ── 卵の強奪（発射） ──────────────────────────── */
@@ -774,14 +900,25 @@ button {
   margin: 12px 0 0;
 }
 
+/* ⭐ ここが「空いている寸法」。`ResizeObserver` がこの箱を測る。
+   ⚠️ `min-height: 0` が無いと flex が中身に合わせて伸び、測る値が固定されない */
+.stealholder {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 0 6px;
+}
+
 /* ⭐ 主役はフィールドそのもの。周りは徹底して引っ込める */
 .stealfield {
   display: block;
-  margin: 12px auto 8px;
   border: 4px solid var(--ink);
   border-radius: var(--card-radius);
   box-shadow: var(--lift-deep);
   cursor: grab;
+  /* ⚠️ ここだけ `none`。引っ張る操作をブラウザのスクロールに取られない */
   touch-action: none;
   image-rendering: pixelated;
 }
@@ -796,11 +933,19 @@ button {
 .hatch,
 .home,
 .steal,
-.battle {
+.battle,
+.boxview,
+.breedview {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+/* ⭐ ホームは**収まりきる**のが仕様。スクロールさせない。
+   舞台が縮んで全部が1画面に入る。 */
+.home {
+  overflow: hidden;
 }
 
 /* ── ホーム ────────────────────────────────────── */
@@ -835,11 +980,22 @@ button {
   font-weight: 900;
 }
 
-/* ⭐ 編成が主役。三角に置いてリーダーを手前に大きく */
+/* ⭐ 編成が主役。三角に置いてリーダーを手前に大きく。
+   ⚠️ `min-height` を大きく取ると、狭い端末で他を押し出す。**縮める側に倒す。** */
 .stage {
   position: relative;
   flex: 1;
-  min-height: 380px;
+  min-height: 180px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+/* 図の層。台座より前に出す */
+.figures {
+  position: relative;
+  z-index: 2;
+  flex: 1;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -894,20 +1050,21 @@ button {
   z-index: 1;
 }
 
+/* ⚠️ px で置くと、舞台が縮んだとき台座を突き抜ける。**比率で置く。** */
 .stand.left {
   left: 0;
-  bottom: 132px;
+  bottom: 32%;
 }
 
 .stand.right {
   right: 0;
-  bottom: 148px;
+  bottom: 37%;
 }
 
 .stand.leader {
   position: relative;
   z-index: 2;
-  margin-bottom: 40px;
+  margin-bottom: 9%;
 }
 
 /* ⚠️ 役割の文字を台座の上に置くと、**台座のラベルに見える**。
@@ -934,11 +1091,12 @@ button {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  width: 268px;
+  width: min(268px, 84%);
   border: 4px solid var(--ink);
 }
 
 .ground {
+  z-index: 1;
   bottom: 26px;
   height: 66px;
   border-radius: 50%;
@@ -946,6 +1104,7 @@ button {
 }
 
 .soil {
+  z-index: 0;
   bottom: 16px;
   height: 36px;
   border-top: none;
@@ -1371,15 +1530,17 @@ button {
 }
 
 /* ⭐ 下はアイコンのグリッド。50枠まで増えても一覧できる */
+/* ⚠️ 列数を固定すると狭い端末で1升が 44px を切る。**幅で決める。** */
 .boxgrid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
   gap: 8px;
   margin: 12px 0 0;
 }
 
 .cell {
   position: relative;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;

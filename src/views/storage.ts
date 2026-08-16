@@ -106,7 +106,7 @@ export function buildUnitRow(creature: Creature, actions?: RowActions): HTMLElem
       const plus = document.createElement('button')
       plus.type = 'button'
       plus.className = 'train'
-      plus.textContent = '+'
+      // ⚠️ 記号は CSS の ::before が描く（当たり判定 44 角と見た目を分けるため）
       plus.title = `${STAT_LABELS[key]} に育成ポイントを1振る（戻せない）`
       plus.addEventListener('click', () => {
         spendPoint(creature, key)
@@ -154,8 +154,13 @@ export function renderStorage(root: HTMLElement, game: Game, state: { sort: Sort
   const controls = document.createElement('div')
   controls.className = 'controls sorts'
 
+  // ⭐ 上（選んだ1体）は動かさず、下の一覧だけスクロールさせる。
+  //    選んでいる個体が視界から消えると、比べる作業が成り立たない
+  const scroller = document.createElement('div')
+  scroller.className = 'scroller'
   const grid = document.createElement('div')
   grid.className = 'boxgrid'
+  scroller.append(grid)
 
   function paint(): void {
     const party = partyOf(game).map((c) => c.id)
@@ -221,5 +226,8 @@ export function renderStorage(root: HTMLElement, game: Game, state: { sort: Sort
   }
 
   paint()
-  root.append(detail, controls, grid)
+  const wrap = document.createElement('div')
+  wrap.className = 'boxview'
+  wrap.append(detail, controls, scroller)
+  root.append(wrap)
 }
