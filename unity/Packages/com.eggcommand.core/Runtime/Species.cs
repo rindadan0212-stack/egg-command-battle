@@ -374,22 +374,22 @@ namespace EggCommand.Core
 
             new Species("nobiru", "ノビル", "attack-twice", // 多段・攻撃スケール
                 new StatBlock(18, 22, 16, 24), NobiruSprite, NobiruPalettes,
-                new[] { "dash", "curse", "attack-thrice", "spd-up", "venom-fang", "ct-short" }),
+                new[] { "dash", "curse", "attack-thrice", "spd-up", "venom-fang", "ct-lock" }),
 
             // ⚠️ 最初は枠1を防御スケールにしていたら、総合勝率 81.1% で突出した。
             //    防御寄りの配分と防御スケールが重なって**防御を二重に得**にしていた
             //    （この罠は上の注意書きどおり）。攻撃スケールに変え、低い攻撃を弱点として効かせる。
             new Species("hirabe", "ヒラベ", "attack", // 攻撃スケール。硬いが攻めは細い
                 new StatBlock(26, 14, 26, 14), HirabeSprite, HirabePalettes,
-                new[] { "harden", "bulwark", "attack-def-twice", "heal-big", "slow-all", "guts" }),
+                new[] { "harden", "bulwark", "attack-def-twice", "heal-big", "shield-wall", "guts-deep" }),
 
             new Species("togeru", "トゲル", "venom-fang", // 削って待つ
                 new StatBlock(20, 24, 20, 16), TogeruSprite, TogeruPalettes,
-                new[] { "venom-heavy", "crush", "attack-twice", "curse", "immune", "atk-up" }),
+                new[] { "venom-heavy", "crush", "attack-twice", "curse", "stun-heavy", "atk-up" }),
 
             new Species("marumi", "マルミ", "attack", // 素直。支える側
                 new StatBlock(24, 16, 18, 22), MarumiSprite, MarumiPalettes,
-                new[] { "heal-big", "harden", "slow-all", "regen", "dash", "shield" }),
+                new[] { "heal-big", "heal-miracle", "slow-all", "immune-long", "dash", "shield" }),
 
             // ⚠️ ボス専用。巣は持たないので卵からは出ない
             // ⚠️ 3すくみは 炎 → 木 → 水 → 炎。水に有利を取るのは木（ハネル）。

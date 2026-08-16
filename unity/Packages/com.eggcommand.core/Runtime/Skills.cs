@@ -64,6 +64,10 @@ namespace EggCommand.Core
     /// 意味の無い組み合わせを外から作れないようにしている。</summary>
     public sealed class Effect
     {
+        /// <summary>確率の下限。⚠️ これより低いと「たまたま通った」だけの技になり、
+        /// 選ぶ判断ができなくなる。</summary>
+        public const int MinChance = 20;
+
         public readonly EffectKind Kind;
         /// <summary>damage</summary>
         public readonly PowerTier Power;
@@ -90,15 +94,21 @@ namespace EggCommand.Core
         /// ⭐ これを足すだけで「連続攻撃」「追撃」が段位の掛け算で書ける。
         /// **新しい効果の種類を足さずに**表現が増えるのがこの欄の狙い。
         /// ⭐ 盾は1発につき1枚剥がれるので、多段は「大きな一撃」と違う役割を持つ。
-        /// ⚠️ ダメージそのものに外れは無い。外れがあるのは弱化だけ（<see cref="Chance"/>）。</summary>
+        /// ⚠️ ダメージそのものに外れは無い（<see cref="Chance"/> が付かない唯一の効果）。</summary>
         public readonly int Repeat;
 
-        /// <summary>弱化が通る率（%）。⭐ 100 なら必ず通る（乱数を1度も引かない）。
+        /// <summary>効果が通る率（%）。⭐ 100 なら必ず通る（乱数を1度も引かない）。
         ///
-        /// ⭐ 弱化に確率があるのは、**外れることが読みの一部**だから。
-        /// 必ず通るなら「弱化を持っているかどうか」だけの話になり、掛ける順や相手を選ぶ意味が消える。
-        /// ⚠️ 実際の率は速度差で上下する（<see cref="Battle.LandChanceOf"/>）。
-        /// ここは「素の通しやすさ」で、速い相手には落ちる。
+        /// ⭐ **効果量と確率をトレードオフにする欄。**
+        /// 「効き目は小さいが必ず通る」と「効き目は大きいが半分外す」を、
+        /// 同じ効果の種類のまま**別の技として並べられる**。技を増やす軸がこれで1本増える。
+        ///
+        /// ⚠️ 確率が付くのは **ダメージと強化以外**（弱化・状態異常・回復・盾・挑発・ガッツ・免疫・CT）。
+        /// ダメージに外れを作ると、攻撃役の出力が運で決まってしまう。
+        /// 強化（自分に掛ける側）は外す意味が無い。
+        ///
+        /// ⚠️ **相手に掛けるもの**だけ、実際の率が速度差で上下する（<see cref="Battle.LandChanceOf"/>）。
+        /// 自分・味方に掛けるものは速度と関係なく、素の率がそのまま「賭け」になる。
         ///
         /// ⚠️ **100 のときは乱数を引かない。** これで移植した21技の試合は
         /// 1手も変わらず、較正済みの照合がそのまま生きる。</summary>
@@ -109,7 +119,7 @@ namespace EggCommand.Core
             int chance = 100)
         {
             Repeat = repeat < 1 ? 1 : repeat;
-            Chance = chance < 1 ? 1 : chance > 100 ? 100 : chance;
+            Chance = chance < MinChance ? MinChance : chance > 100 ? 100 : chance;
             Kind = kind;
             Power = power;
             Scale = scale;
@@ -145,17 +155,20 @@ namespace EggCommand.Core
                 1, chance);
 
         /// <summary>リジェネ。1行動ごとに回復。</summary>
-        public static Effect Regen(int stacks, int turns) =>
-            new Effect(EffectKind.Regen, default, default, default, 0, turns, stacks, 0, 0, 0, 0);
+        public static Effect Regen(int stacks, int turns, int chance = 100) =>
+            new Effect(EffectKind.Regen, default, default, default, 0, turns, stacks, 0, 0, 0, 0,
+                1, chance);
 
         /// <summary>HP割合回復。即時。</summary>
-        public static Effect HealRatio(int percent) =>
-            new Effect(EffectKind.HealRatio, default, default, default, 0, 0, 0, percent, 0, 0, 0);
+        public static Effect HealRatio(int percent, int chance = 100) =>
+            new Effect(EffectKind.HealRatio, default, default, default, 0, 0, 0, percent, 0, 0, 0,
+                1, chance);
 
         /// <summary>シールド。1回の攻撃につき1枚消費し、その攻撃を威力に関係なく完全に無効化する。
         /// ⭐ つまり「大きな一撃」に強く、「手数」に弱い。</summary>
-        public static Effect Shield(int count) =>
-            new Effect(EffectKind.Shield, default, default, default, 0, 0, 0, 0, count, 0, 0);
+        public static Effect Shield(int count, int chance = 100) =>
+            new Effect(EffectKind.Shield, default, default, default, 0, 0, 0, 0, count, 0, 0,
+                1, chance);
 
         /// <summary>スタン。その回数ぶん手番を飛ばす。</summary>
         public static Effect Stun(int turns, int chance = 100) =>
@@ -163,20 +176,24 @@ namespace EggCommand.Core
                 1, chance);
 
         /// <summary>CT短縮（負）/ CT延長（正）。⚠️ 枠1には効かない。</summary>
-        public static Effect Ct(int delta) =>
-            new Effect(EffectKind.Ct, default, default, default, 0, 0, 0, 0, 0, delta, 0);
+        public static Effect Ct(int delta, int chance = 100) =>
+            new Effect(EffectKind.Ct, default, default, default, 0, 0, 0, 0, 0, delta, 0,
+                1, chance);
 
         /// <summary>挑発。味方への単体攻撃を、あと hits 回ぶん自分が引き受ける。</summary>
-        public static Effect Taunt(int hits) =>
-            new Effect(EffectKind.Taunt, default, default, default, 0, 0, 0, 0, 0, 0, hits);
+        public static Effect Taunt(int hits, int chance = 100) =>
+            new Effect(EffectKind.Taunt, default, default, default, 0, 0, 0, 0, 0, 0, hits,
+                1, chance);
 
         /// <summary>ガッツ。致死のダメージを HP1 で耐える。</summary>
-        public static Effect Guts(int turns) =>
-            new Effect(EffectKind.Guts, default, default, default, 0, turns, 0, 0, 0, 0, 0);
+        public static Effect Guts(int turns, int chance = 100) =>
+            new Effect(EffectKind.Guts, default, default, default, 0, turns, 0, 0, 0, 0, 0,
+                1, chance);
 
         /// <summary>免疫。DOWN・毒・スタンを受けない。</summary>
-        public static Effect Immune(int turns) =>
-            new Effect(EffectKind.Immune, default, default, default, 0, turns, 0, 0, 0, 0, 0);
+        public static Effect Immune(int turns, int chance = 100) =>
+            new Effect(EffectKind.Immune, default, default, default, 0, turns, 0, 0, 0, 0, 0,
+                1, chance);
     }
 
     public sealed class Skill
@@ -345,6 +362,29 @@ namespace EggCommand.Core
             // ⚠️ 全体なので通りは低め。全員に確実に入ると1手で試合が決まる
             new Skill("slow-all", "鎮めの風", "敵全体のスピードを下げる", 6, Target.EnemyAll,
                 Effect.Buff(StatKey.Spd, -1, 3, chance: 60)),
+
+            // ── 効き目と確率のトレードオフ（2026-08-17）─────────────
+            // ⭐ **同じ効果の種類のまま、別の技として並べる軸。**
+            //    「小さいが必ず通る」の隣に「大きいが半分外す」を置くと、
+            //    どちらを枠に入れるかが**編成ごとに変わる判断**になる。
+            // ⚠️ 上に並んでいる移植ぶんが「確実side」の役を兼ねているので、
+            //    ここは主に博打sideを足している。
+            // ⚠️ 自分・味方に掛けるものは速度で率が動かない。素の率がそのまま賭けになる。
+
+            new Skill("heal-miracle", "奇跡の手当て", "HP を全快させる。半分は失敗する", 6, Target.AllyLowest,
+                Effect.HealRatio(100, chance: 50)),
+            new Skill("shield-wall", "鉄壁", "盾を4枚張る。3回に1回は失敗する", 6, Target.Self,
+                Effect.Shield(4, chance: 65)),
+            new Skill("guts-deep", "不屈", "長く粘れるが、掛かるかは五分", 6, Target.Self,
+                Effect.Guts(6, chance: 50)),
+            new Skill("immune-long", "浄化の衣", "長く効く免疫。4割は失敗する", 6, Target.Self,
+                Effect.Immune(6, chance: 60)),
+
+            // ⚠️ 相手に掛ける側は速度差で ±30pt 動く。速い個体が使うと通りやすい
+            new Skill("stun-heavy", "強打", "2回ぶん手番を飛ばす。よく外す", 7, Target.EnemyOne,
+                Effect.Stun(2, chance: 40)),
+            new Skill("ct-lock", "封じ", "敵の技の待ちを大きく延ばす", 6, Target.EnemyOne,
+                Effect.Ct(4, chance: 55)),
         };
 
         public static IReadOnlyList<Skill> All => List;

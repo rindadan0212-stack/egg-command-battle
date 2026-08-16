@@ -590,17 +590,23 @@ namespace EggCommand.Core
             if (target.Hp == 0) state.Log.Add(new BattleEvent(BattleEventKind.Down, target.Key));
         }
 
-        /// <summary>弱化が実際に通る率（%）。
+        /// <summary>効果が実際に通る率（%）。
         ///
-        /// ⭐ **速い側が通しやすく、速い相手には通りにくい。**
+        /// ⭐ **相手に掛けるものだけ、速い側が通しやすく速い相手には通りにくい。**
         /// これで「スピードが高い個体＝弱化役」という役割が数字の上でも成立する
         /// （速度が行動回数にしか効かないと、弱化役を作る理由が薄い）。
+        ///
+        /// ⚠️ 自分・味方に掛けるもの（回復・盾・ガッツ・免疫）は速度で動かさない。
+        /// 誰も抵抗していないのに速さで成否が変わるのは筋が通らない。
+        /// そこでは素の率がそのまま**賭け**になる（効き目が大きいぶん外れる）。
         ///
         /// ⚠️ 素の率から動かせる幅は ±<see cref="LandSwing"/> まで。
         /// 速度差だけで 0% や 100% にすると、速さが弱化の全部になってしまう。</summary>
         public static int LandChanceOf(Effect effect, Unit actor, Unit target)
         {
             if (effect.Chance >= 100) return 100;
+            // 相手が抵抗しないものは、速度差で動かさない
+            if (!Skills.IsHarmful(effect)) return effect.Chance;
 
             int mine = SpeedOf(actor);
             int yours = SpeedOf(target);
