@@ -40,15 +40,17 @@ namespace EggCommand.View
             return texture;
         }
 
-        /// <summary>そのまま UI に貼れる形で返す。</summary>
-        public static Sprite ToSprite(PixelSprite pixelSprite, Palette palette)
+        /// <summary>そのまま貼れる形で返す。
+        /// ⚠️ <paramref name="pixelsPerUnit"/> に絵の幅を渡すと、1体ぶんが world の 1 単位になる。
+        /// ワールド空間に置くときは、そこから実寸へ scale で伸ばすと寸法が読みやすい。</summary>
+        public static Sprite ToSprite(PixelSprite pixelSprite, Palette palette, float pixelsPerUnit = 16f)
         {
             var texture = ToTexture(pixelSprite, palette);
             return Sprite.Create(
                 texture,
                 new Rect(0f, 0f, texture.width, texture.height),
                 new Vector2(0.5f, 0.5f),
-                pixelsPerUnit: 16f,
+                pixelsPerUnit,
                 extrude: 0,
                 meshType: SpriteMeshType.FullRect);
         }

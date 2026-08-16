@@ -29,7 +29,7 @@ namespace EggCommand.View
         /// <summary>⚠️ 種を固定しておくと、同じ話が何度でも再現できる。</summary>
         public int Seed = 20260816;
 
-        public Game Game { get; private set; }
+        public Game Game { get; set; }
 
         // 画面をまたいで持ち回るもの
         public Nest CurrentNest;
@@ -91,6 +91,21 @@ namespace EggCommand.View
         /// 差分で描くと、状態と見た目が食い違ったときに追えなくなる。</summary>
         public void Show(Screen screen)
         {
+            // ⚠️ Play 中にスクリプトを直すと Unity はドメインを作り直す。
+            //    Game はただの C# オブジェクトなので、そこで null に戻る（Start は再実行されない）。
+            //    握りつぶすと「押しても何も起きない」になって原因が見えないので、作り直して続ける。
+            if (Game == null)
+            {
+                Debug.LogWarning("Game が失われていた（Play 中の再コンパイル）。作り直して続ける");
+                Game = Games.NewGame(Seed);
+                Battle = null;
+                Field = null;
+            }
+
+            // ⚠️ 強奪の盤はワールド空間に居るので、画面を離れるときに自分で片付ける。
+            //    残すとカメラの寸法が戻らず、次の画面が拡大されたままになる。
+            if (_screen == Screen.Steal && screen != Screen.Steal) StealScreen.Leave();
+
             _screen = screen;
 
             // ⚠️ Destroy はフレームの終わりまで効かない。
@@ -105,10 +120,14 @@ namespace EggCommand.View
                 Destroy(child);
             }
 
-            var sky = SkyOf(screen);
             var back = Ui.Rect("Sky", _root);
             Ui.Stretch(back);
-            back.gameObject.AddComponent<Image>().color = Ui.SkyOf(sky);
+            // ⚠️ 強奪だけは盤がワールド空間に居る。地を塗ると UI が世界を隠してしまうので、
+            //    ここは透明にしてカメラの背景を見せる。
+            back.gameObject.AddComponent<Image>().color = screen == Screen.Steal
+                ? new Color(0f, 0f, 0f, 0f)
+                : Ui.SkyOf(SkyOf(screen));
+            back.GetComponent<Image>().raycastTarget = screen != Screen.Steal;
 
             bool home = screen == Screen.Home;
             float bodyTop = Ui.TopBarHeight;

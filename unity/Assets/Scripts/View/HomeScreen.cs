@@ -162,13 +162,13 @@ namespace EggCommand.View
                 24, have >= need ? Ui.Good : Ui.Danger,
                 TextAnchor.UpperRight, 140f, 22f, width - 164f, 36f);
 
-            // ⚠️ ここを塗らない。5行すべてを塗ると「主役は1つ」が崩れて、
-            //    どれも同じ重さに見える。この画面の主役はゴール（ヌシ）だけ。
-            float buttonWidth = (width - 24f * 3f) / 2f;
-            Ui.Tappable(panel, "Fight", "親を倒す", () => app.EnterBattle(nest, false),
-                24f, Row - 132f, buttonWidth, Ui.Tap);
-            Ui.Tappable(panel, "Steal", "盗んで逃げる", () => StealScreen.Enter(app, nest),
-                24f + buttonWidth + 24f, Row - 132f, buttonWidth, Ui.Tap);
+            // ⭐ 二択は置かない。**引っ張って卵に届けば盗み、届かなければ戦闘**。
+            // ⚠️ 以前は「親を倒す / 盗んで逃げる」を選ばせていたが、
+            //    どちらを選ぶかを先に決めさせると、飛ばした結果で決まるという芯が消える。
+            //    選ぶのは「どの巣へ行くか」と「どう飛ばすか」だけでよい。
+            // ⚠️ ここを塗らない。5行すべてを塗ると「主役は1つ」が崩れる
+            Ui.Tappable(panel, "Go", "卵をねらう", () => StealScreen.Enter(app, nest),
+                24f, Row - 132f, width - 48f, Ui.Tap);
         }
 
         private static void BossRow(App app, RectTransform content, float top)
