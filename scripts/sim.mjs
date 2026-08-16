@@ -56,15 +56,15 @@ const BUILDS = {
 }
 
 /** 比較を濁らせないよう、**型**を比べるときは全員同じ枠2・3にする。 */
-const NEUTRAL_SKILLS = ['guard', 'mend']
+const NEUTRAL_SKILLS = ['def-up', 'heal-ratio']
 
 /** ⚠️ 戦闘の長さを測るときはこちらを使う。
  *  全員に手当を持たせると回復役3体どうしになり、実際には起きない持久戦になる
  *  （既定値は「代表的な状態」ではない）。役割を散らした編成で測る。 */
 const MIXED_SKILLS = [
-  ['strike', 'guard'],
-  ['haste', 'slow'],
-  ['mend', 'stall'],
+  ['attack', 'def-up'],
+  ['spd-up', 'spd-down'],
+  ['heal-ratio', 'ct-long'],
 ]
 
 function makeCreature(id, speciesId, wild, skills23 = NEUTRAL_SKILLS) {
@@ -73,6 +73,7 @@ function makeCreature(id, speciesId, wild, skills23 = NEUTRAL_SKILLS) {
     speciesId,
     wild: applyTotalCap(wild),
     trained: { hp: 0, atk: 0, def: 0, spd: 0 },
+    earned: 0,
     mutationCounter: 0,
     skills23: [skills23[0] ?? null, skills23[1] ?? null],
     paletteIndex: 0,
@@ -234,29 +235,29 @@ function runSpeedCheck() {
  *  「同じ特化型を3体並べたもの」ではない（壁役がいない編成は誰も組まない）。 */
 const PARTIES = {
   役割分担: [
-    { wild: BUILDS.体耐, skills: ['cover', 'guard'] }, // 壁（かばう）
-    { wild: BUILDS.攻速, skills: ['strike', 'haste'] }, // 火力
-    { wild: BUILDS.速耐, skills: ['mend', 'slow'] }, // 補助
+    { wild: BUILDS.体耐, skills: ['taunt', 'def-up'] }, // 壁（かばう）
+    { wild: BUILDS.攻速, skills: ['attack', 'spd-up'] }, // 火力
+    { wild: BUILDS.速耐, skills: ['heal-ratio', 'spd-down'] }, // 補助
   ],
   役割分担_壁なし: [
-    { wild: BUILDS.体耐, skills: ['guard', 'mend'] }, // 肩代わりを持たない壁
-    { wild: BUILDS.攻速, skills: ['strike', 'haste'] },
-    { wild: BUILDS.速耐, skills: ['slow', 'stall'] },
+    { wild: BUILDS.体耐, skills: ['def-up', 'heal-ratio'] }, // 肩代わりを持たない壁
+    { wild: BUILDS.攻速, skills: ['attack', 'spd-up'] },
+    { wild: BUILDS.速耐, skills: ['spd-down', 'ct-long'] },
   ],
   均等ぞろい: [
-    { wild: BUILDS.均等, skills: ['guard', 'mend'] },
-    { wild: BUILDS.均等, skills: ['strike', 'haste'] },
-    { wild: BUILDS.均等, skills: ['slow', 'stall'] },
+    { wild: BUILDS.均等, skills: ['def-up', 'heal-ratio'] },
+    { wild: BUILDS.均等, skills: ['attack', 'spd-up'] },
+    { wild: BUILDS.均等, skills: ['spd-down', 'ct-long'] },
   ],
   火力ぞろい: [
-    { wild: BUILDS.攻速, skills: ['strike', 'haste'] },
-    { wild: BUILDS.攻速, skills: ['strike', 'guard'] },
-    { wild: BUILDS.攻速, skills: ['strike', 'mend'] },
+    { wild: BUILDS.攻速, skills: ['attack', 'spd-up'] },
+    { wild: BUILDS.攻速, skills: ['attack', 'def-up'] },
+    { wild: BUILDS.攻速, skills: ['attack', 'heal-ratio'] },
   ],
   耐久ぞろい: [
-    { wild: BUILDS.体耐, skills: ['guard', 'mend'] },
-    { wild: BUILDS.体耐, skills: ['guard', 'slow'] },
-    { wild: BUILDS.体耐, skills: ['mend', 'stall'] },
+    { wild: BUILDS.体耐, skills: ['def-up', 'heal-ratio'] },
+    { wild: BUILDS.体耐, skills: ['def-up', 'spd-down'] },
+    { wild: BUILDS.体耐, skills: ['heal-ratio', 'ct-long'] },
   ],
 }
 

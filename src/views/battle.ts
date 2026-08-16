@@ -10,7 +10,7 @@
 import type { Rng } from '../core/rng.ts'
 import {
   actionSkill,
-  activeStages,
+  activeStatuses,
   canSteal,
   createBattle,
   fastestGuard,
@@ -47,10 +47,10 @@ export interface BattleView {
   dispose(): void
 }
 
-/** その技の威力の段位。⭐ 数値ではなく段位で見せる（企画の決め方に合わせる）。 */
+/** その技の効き目の段位。⭐ 数値ではなく段位で見せる（企画の決め方に合わせる）。 */
 function tierOf(skill: Skill): string {
   for (const effect of skill.effects) {
-    if (effect.kind === 'damage' || effect.kind === 'heal') return effect.power
+    if ('power' in effect) return effect.power
   }
   return ''
 }
@@ -64,17 +64,38 @@ function describe(state: BattleState, event: BattleEvent): string {
     case 'act':
       return `${nameOf(event.actor)} → ${event.skill}`
     case 'damage':
-      return `　${nameOf(event.unit)} に ${event.amount} ダメージ（残 ${event.hp}）`
+      return (
+        `　${nameOf(event.unit)} に ${event.amount} ダメージ（残 ${event.hp}）` +
+        (event.absorbed > 0 ? ` ※盾が ${event.absorbed} 受けた` : '')
+      )
     case 'heal':
       return `　${nameOf(event.unit)} を ${event.amount} 回復（残 ${event.hp}）`
-    case 'stage':
-      return `　${nameOf(event.unit)} の${STAT_LABELS[event.stat]} 段階 ${event.now > 0 ? '+' : ''}${event.now}`
-    case 'gauge':
-      return `　${nameOf(event.unit)} のゲージ ${event.delta > 0 ? '+' : ''}${event.delta}`
-    case 'cover':
-      return `　${nameOf(event.unit)} がかばう（あと ${event.hits} 回）`
+    case 'buff':
+      return `　${nameOf(event.unit)} の${STAT_LABELS[event.stat]} ${event.percent > 0 ? '+' : ''}${event.percent}%（${event.turns}回）`
+    case 'applied':
+      return `　${nameOf(event.unit)} に ${event.label}（${event.turns}回）`
+    case 'poison':
+      return `　${nameOf(event.unit)} が毒で ${event.amount} 減った（残 ${event.hp}）`
+    case 'regen':
+      return `　${nameOf(event.unit)} がリジェネで ${event.amount} 回復（残 ${event.hp}）`
+    case 'shield':
+      return `　${nameOf(event.unit)} に盾 ${event.amount}`
+    case 'stun':
+      return `　${nameOf(event.unit)} はスタン（${event.turns}回）`
+    case 'skipped':
+      return `　${nameOf(event.unit)} は動けない`
     case 'ct':
       return `　${nameOf(event.unit)} の技の待ちが ${event.delta > 0 ? '延びた' : '縮んだ'}`
+    case 'taunt':
+      return `　${nameOf(event.unit)} が挑発（あと ${event.hits} 回）`
+    case 'guts':
+      return `　${nameOf(event.unit)} にガッツ`
+    case 'gutsSaved':
+      return `　${nameOf(event.unit)} がガッツで耐えた`
+    case 'immune':
+      return `　${nameOf(event.unit)} に免疫`
+    case 'blocked':
+      return `　${nameOf(event.unit)} は免疫で受けなかった`
     case 'down':
       return `　${nameOf(event.unit)} が倒れた`
     case 'steal':
@@ -173,11 +194,7 @@ export function renderBattle(
     const badges = document.createElement('span')
     badges.className = 'badges mono'
     // ⚠️ 速度の数値は出さない。ゲージの伸び方で読ませる
-    const parts = activeStages(unit).map(
-      ([stat, n]) => `${STAT_LABELS[stat]}${n > 0 ? '+' : ''}${n}`,
-    )
-    if (unit.cover > 0) parts.push(`かばう${unit.cover}`)
-    badges.textContent = parts.join(' ')
+    badges.textContent = activeStatuses(unit).join(' ')
 
     box.append(art, label, hp, nums, gauge, badges)
     return box

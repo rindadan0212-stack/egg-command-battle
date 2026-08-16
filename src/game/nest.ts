@@ -205,15 +205,15 @@ export function makeBossParty(): Creature[] {
     //    「一度も触れないまま負ける」になる（残 HP 最少から狙う仕様のため）。
     //    敵3体の総 HP がパーティの出せる総ダメージを超えないところに置く。
     // ⭐ 震撼は枠2へ。枠1は CT が無いので、大技はここに置いて CT7 を効かせる
-    unit(0, 'nushi', { hp: 16, atk: 22, def: 21, spd: 3 }, ['quake', 'slow'], 4),
+    unit(0, 'nushi', { hp: 16, atk: 22, def: 21, spd: 3 }, ['attack-all-heavy', 'spd-down'], 4),
     // 壁。
     // ⚠️ 回復役にしない（2枚重ねると持久戦になって削り切れない）。
     // ⚠️ **かばうも持たせない。** 敵側のかばうは高防御と噛み合って
     //    「ボスに一度も触れない」状態を作る（実測: 総ダメージ0のまま敗北）。
     //    これは「戦略を要求する」ではなく「無理」なので外した。
-    unit(1, 'tamaru', { hp: 16, atk: 16, def: 21, spd: 3 }, ['guard', 'shellbash']),
+    unit(1, 'tamaru', { hp: 16, atk: 16, def: 21, spd: 3 }, ['def-up', 'attack-def']),
     // 撹乱。速い。⭐ ここを先に落とせるかが最初の関門
-    unit(2, 'haneru', { hp: 11, atk: 24, def: 4, spd: 24 }, ['haste', 'slow']),
+    unit(2, 'haneru', { hp: 11, atk: 24, def: 4, spd: 24 }, ['spd-up', 'spd-down']),
   ]
 }
 

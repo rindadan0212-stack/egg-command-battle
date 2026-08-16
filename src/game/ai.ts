@@ -9,18 +9,23 @@
 
 import {
   actionSkill,
+  damageOf,
   effectiveStat,
   elementMultiplier,
-  damageOf,
   isUsable,
   livingOf,
-  STAGE_LIMIT,
   type Action,
   type BattleState,
   type Unit,
 } from './battle.ts'
 import { speciesOf, statsOf } from './creature.ts'
-import { DAMAGE_POWER, HEAL_POWER, type PowerTier } from './skills.ts'
+import {
+  BUFF_PERCENT,
+  DAMAGE_POWER,
+  RATIO_PERCENT,
+  TICK_PERCENT,
+  type PowerTier,
+} from './skills.ts'
 
 /** ⚠️ 「たたかう」は無い。枠1（種族固定・CTなし）がその役目を兼ねる。 */
 const ALL_ACTIONS: readonly Action[] = [
@@ -29,14 +34,16 @@ const ALL_ACTIONS: readonly Action[] = [
   { kind: 'skill', slot: 2 },
 ]
 
-/** 段階を1つ動かすことの価値。倒しきる算段より優先させない程度に置く。 */
-const STAGE_VALUE = 14
-/** 相手のゲージを戻すことの価値（1ゲージあたり）。 */
-const GAUGE_VALUE = 0.03
-/** 肩代わり1回ぶんの価値。 */
-const COVER_VALUE = 7
+/** ステータスを1%動かすことの価値。 */
+const BUFF_VALUE = 0.5
+/** 相手の手番を1つ奪うことの価値。⭐ 行動回数は全出力への倍率なので高く見る。 */
+const STUN_VALUE = 26
 /** CT を1つ動かすことの価値。 */
 const CT_VALUE = 6
+/** 肩代わり1回ぶんの価値。 */
+const TAUNT_VALUE = 7
+/** ガッツ・免疫の価値（状況が読みにくいので控えめの固定値）。 */
+const GUARDIAN_VALUE = 10
 
 function estimateDamage(
   actor: Unit,
@@ -47,9 +54,14 @@ function estimateDamage(
   const a = statsOf(actor.creature)
   const t = statsOf(target.creature)
   const attackStat =
-    scale === 'atk' ? effectiveStat(a.atk, actor.stages.atk) : effectiveStat(a.def, actor.stages.def)
-  const defenseStat = effectiveStat(t.def, target.stages.def)
-  const mult = elementMultiplier(speciesOf(actor.creature).element, speciesOf(target.creature).element)
+    scale === 'atk'
+      ? effectiveStat(a.atk, actor.status.atk)
+      : effectiveStat(a.def, actor.status.def)
+  const defenseStat = effectiveStat(t.def, target.status.def)
+  const mult = elementMultiplier(
+    speciesOf(actor.creature).element,
+    speciesOf(target.creature).element,
+  )
   return damageOf(DAMAGE_POWER[tier], attackStat, defenseStat, mult)
 }
 
@@ -63,6 +75,8 @@ function scoreOf(state: BattleState, actor: Unit, action: Action): number {
   const weakest = [...friends].sort(
     (a, b) => a.hp / a.maxHp - b.hp / b.maxHp || a.slot - b.slot,
   )[0] as Unit
+  /** その効果が誰に向くか */
+  const subject = skill.target === 'self' ? actor : skill.target === 'allyLowest' ? weakest : focus
 
   let score = 0
   for (const effect of skill.effects) {
@@ -78,48 +92,70 @@ function scoreOf(state: BattleState, actor: Unit, action: Action): number {
         }
         break
       }
-      case 'heal': {
-        // ⚠️ 「HPを18戻す」と「敵のHPを8削る」は同じ単位ではない。
-        // 削るのは勝利に近づき、戻すのは敗北を遅らせるだけ。
-        // 素点で比べると回復が常に勝ち、戦闘が終わらなくなる（実測: 1体落とすのに62行動）。
-        // 減っていない相手に撃っても意味がないので、不足分と緊急度で割り引く。
-        const missing = weakest.maxHp - weakest.hp
-        const urgency = 0.5 + 0.5 * (1 - weakest.hp / weakest.maxHp)
-        score += Math.min(HEAL_POWER[effect.power], missing) * urgency
+      case 'buff': {
+        // 既に同じ向きで掛かっているなら重ねる意味が薄い
+        const now = subject.status[effect.stat]
+        const next = BUFF_PERCENT[effect.power] * effect.sign
+        const gain = now.turns > 0 && Math.sign(now.percent) === effect.sign ? 0 : Math.abs(next)
+        score += gain * BUFF_VALUE
         break
       }
-      case 'stage': {
-        const subject = skill.target === 'self' ? actor : focus
-        const now = subject.stages[effect.stat]
-        const next = Math.max(-STAGE_LIMIT, Math.min(STAGE_LIMIT, now + effect.delta))
-        // 上限に張り付いていたら効果が無い
-        score += next === now ? 0 : STAGE_VALUE
+      case 'poison': {
+        // 効き切るまでの総量。⚠️ 相手の残 HP で頭打ち
+        const total = Math.floor((subject.maxHp * TICK_PERCENT[effect.power]) / 100) * effect.turns
+        score += subject.status.poison.turns > 0 ? 0 : Math.min(subject.hp, total)
         break
       }
-      case 'gauge': {
-        score += Math.abs(effect.delta) * GAUGE_VALUE
+      case 'regen': {
+        const total = Math.floor((subject.maxHp * TICK_PERCENT[effect.power]) / 100) * effect.turns
+        const missing = subject.maxHp - subject.hp
+        score += subject.status.regen.turns > 0 ? 0 : Math.min(missing, total) * 0.7
+        break
+      }
+      case 'healRatio': {
+        // ⚠️ 「HPを戻す」と「敵のHPを削る」は同じ単位ではない。緊急度で割り引く
+        const amount = Math.floor((subject.maxHp * RATIO_PERCENT[effect.power]) / 100)
+        const missing = subject.maxHp - subject.hp
+        const urgency = 0.5 + 0.5 * (1 - subject.hp / subject.maxHp)
+        score += Math.min(amount, missing) * urgency
+        break
+      }
+      case 'shield': {
+        const amount = Math.floor((subject.maxHp * RATIO_PERCENT[effect.power]) / 100)
+        // 既に盾があるなら上書きになるので価値が薄い
+        score += subject.status.shield > 0 ? 0 : amount * 0.6
+        break
+      }
+      case 'stun': {
+        score += subject.status.stun > 0 ? 0 : STUN_VALUE * effect.turns
         break
       }
       case 'ct': {
-        // ⚠️ 枠1には効かないので、枠2・3 が実際に動くぶんだけ価値がある。
-        // 短縮は自分の空き枠には無意味、延長は相手が既に空いていると無意味。
-        const subject = skill.target === 'self' ? actor : focus
+        // ⚠️ 枠1には効かないので、枠2・3 が実際に動くぶんだけ価値がある
         let moved = 0
         for (let i = 1; i < subject.cooldowns.length; i++) {
           const now = subject.cooldowns[i] ?? 0
-          const next = Math.max(0, now + effect.delta)
-          moved += Math.abs(next - now)
+          moved += Math.abs(Math.max(0, now + effect.delta) - now)
         }
         score += moved * CT_VALUE
         break
       }
-      case 'cover': {
-        // 自分より脆い味方がいるときだけ意味がある。
-        // 「脆い」は残 HP の割合ではなく **あと何発耐えられるか** で見る
-        // （割合が高くても打たれ弱ければ先に落ちる）。
+      case 'taunt': {
+        // 自分より脆い味方がいるときだけ意味がある
         const mine = actor.hp / Math.max(1, actor.maxHp)
         const fragile = friends.filter((f) => f !== actor && f.hp / f.maxHp < mine).length
-        score += fragile > 0 ? effect.hits * COVER_VALUE : 0
+        score += fragile > 0 && actor.status.taunt === 0 ? effect.hits * TAUNT_VALUE : 0
+        break
+      }
+      case 'guts': {
+        // 追い詰められているときだけ価値がある
+        const hurt = actor.hp / actor.maxHp < 0.5
+        score += hurt && actor.status.guts === 0 ? GUARDIAN_VALUE : 0
+        break
+      }
+      case 'immune': {
+        // 既に弱化を受けているなら、掛け直しても消えないので価値は低い
+        score += actor.status.immune === 0 ? GUARDIAN_VALUE : 0
         break
       }
     }

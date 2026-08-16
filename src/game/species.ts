@@ -177,7 +177,7 @@ const LIST: readonly Species[] = [
     id: 'tamaru',
     name: 'タマル',
     element: 'scale',
-    skill1: 'shellbash', // 防御スケール
+    skill1: 'attack-def', // 防御スケール
     base: { hp: 24, atk: 18, def: 22, spd: 16 },
     sprite: TAMARU_SPRITE,
     palettes: TAMARU_PALETTES,
@@ -186,7 +186,7 @@ const LIST: readonly Species[] = [
     id: 'tsunoga',
     name: 'ツノガ',
     element: 'fang',
-    skill1: 'strike', // 攻撃スケール・単体
+    skill1: 'attack', // 攻撃スケール・単体
     base: { hp: 22, atk: 24, def: 18, spd: 16 },
     sprite: TSUNOGA_SPRITE,
     palettes: TSUNOGA_PALETTES,
@@ -195,7 +195,7 @@ const LIST: readonly Species[] = [
     id: 'haneru',
     name: 'ハネル',
     element: 'plume',
-    skill1: 'sweep', // 攻撃スケール・全体
+    skill1: 'attack-all', // 攻撃スケール・全体（全体なので威力は小）
     base: { hp: 20, atk: 18, def: 16, spd: 26 },
     sprite: HANERU_SPRITE,
     palettes: HANERU_PALETTES,
@@ -209,7 +209,7 @@ const LIST: readonly Species[] = [
     element: 'scale',
     // ⚠️ 枠1は CT が無いので、大技を置くと毎回撃ててしまう。
     //    震撼（CT7 の全体大技）は枠2へ回し、ここは中程度に留める。
-    skill1: 'shellbash',
+    skill1: 'attack-def',
     base: { hp: 26, atk: 20, def: 24, spd: 10 },
     sprite: NUSHI_SPRITE,
     palettes: NUSHI_PALETTES,
@@ -254,7 +254,7 @@ export function auditSpecies(): void {
     //    実際にヌシの枠1へ震撼（全体・大）を置いてしまい、決着が8行動になった。
     const first = skillById(species.skill1)
     for (const effect of first.effects) {
-      if (effect.kind !== 'damage' && effect.kind !== 'heal') continue
+      if (!('power' in effect)) continue
       if (effect.power === '大' || effect.power === '特大') {
         problems.push(
           `${species.id}: 枠1の「${first.name}」が威力${effect.power}。枠1は CT が無いので 小〜中 に留める`,
