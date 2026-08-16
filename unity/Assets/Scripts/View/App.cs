@@ -185,12 +185,13 @@ namespace EggCommand.View
                     12f, 10f, 112f, 112f);
             }
 
-            _title = Ui.Label(bar, "Title", TitleOf(screen), 38, Ui.Ink,
-                TextAnchor.MiddleCenter, 140f, 0f, Ui.W - 280f, Ui.TopBarHeight);
+            // STAR: text placed straight on the sky is knocked out, so it reads on any colour
+            _title = Ui.Knockout(Ui.Label(bar, "Title", TitleOf(screen), 40, Ui.Ink,
+                TextAnchor.MiddleCenter, 140f, 0f, Ui.W - 280f, Ui.TopBarHeight));
 
             string badge = BadgeOf(screen);
-            _badge = Ui.Label(bar, "Badge", badge, 28, Ui.InkDim,
-                TextAnchor.MiddleRight, Ui.W - 300f, 0f, 300f - Ui.Margin, Ui.TopBarHeight);
+            _badge = Ui.Knockout(Ui.Label(bar, "Badge", badge, 28, Ui.InkDim,
+                TextAnchor.MiddleRight, Ui.W - 300f, 0f, 300f - Ui.Margin, Ui.TopBarHeight), 3);
         }
 
         private string TitleOf(Screen screen)
@@ -222,8 +223,9 @@ namespace EggCommand.View
 
         private void BuildDock()
         {
-            var dock = Ui.Block(_root, "Dock", new Color32(0x12, 0x10, 0x0e, 0xff),
-                0f, Ui.H - Ui.DockHeight, Ui.W, Ui.DockHeight);
+            // WARN: no dark strip. Text turned navy, so a dark strip swallows the sub-labels.
+            var dock = Ui.Rect("Dock", _root);
+            Ui.Place(dock, 0f, Ui.H - Ui.DockHeight, Ui.W, Ui.DockHeight);
 
             float gap = 16f;
             float width = (Ui.W - Ui.Margin * 2f - gap * 3f) / 4f;
@@ -247,8 +249,8 @@ namespace EggCommand.View
             Ui.Label(button.transform, "Name", label, 32,
                 lead ? new Color32(0x1a, 0x16, 0x12, 0xff) : Ui.Ink,
                 TextAnchor.UpperCenter, 0f, 28f, width, 44f);
-            Ui.Label(button.transform, "Count", count, 24,
-                lead ? new Color32(0x4a, 0x3c, 0x22, 0xff) : Ui.InkDim,
+            // ⚠️ 淡い字を色の札の上に置かない。数が読めなくなる（実測で消えていた）
+            Ui.Label(button.transform, "Count", count, 24, Ui.Ink,
                 TextAnchor.UpperCenter, 0f, 84f, width, 36f);
         }
 

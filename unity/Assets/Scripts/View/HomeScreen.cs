@@ -18,10 +18,10 @@ namespace EggCommand.View
 
             // ⭐ 輪の目的地をここに置く。企画の駆動力は「この壁を越えるには何が要るか」なので、
             //    ホームで常に壁の名前が見えているのが素直。
-            Ui.Label(body, "GoalLabel", "GOAL", 24, Ui.Accent,
-                TextAnchor.UpperLeft, Ui.Margin, 32f, 300f, 32f);
-            Ui.Label(body, "GoalName", $"{Nests.BossName} を倒す", 40, Ui.Ink,
-                TextAnchor.UpperLeft, Ui.Margin, 68f, Ui.W - Ui.Margin * 2f, 56f);
+            Ui.Knockout(Ui.Label(body, "GoalLabel", "GOAL", 24, Ui.Accent,
+                TextAnchor.UpperLeft, Ui.Margin, 32f, 300f, 32f), 3);
+            Ui.Knockout(Ui.Label(body, "GoalName", $"{Nests.BossName} を倒す", 42, Ui.Ink,
+                TextAnchor.UpperLeft, Ui.Margin, 68f, Ui.W - Ui.Margin * 2f, 60f));
 
             // ⚠️ 「勝った」「卵を手に入れた」といった事後報告を置かない。
             //    孵化の数が増えていることが、そのまま報告になっている。
@@ -69,7 +69,7 @@ namespace EggCommand.View
 
                 // 台座。⭐ 足元だけを一段明るくする（線を引かず面で示す）
                 float standWidth = leadSize + 300f;
-                Ui.Block(body, "Ground", new Color32(0x1f, 0x24, 0x1c, 0xff),
+                Ui.Block(body, "Ground", new Color32(0xf2, 0xb3, 0x4b, 0xff),
                     centerX - standWidth / 2f, baseline + 6f, standWidth, 26f);
 
                 // ⭐ 三角配置。手前のリーダーを一番大きく。脇は奥に見えるよう少し上へ。
@@ -102,19 +102,19 @@ namespace EggCommand.View
             float left, float top)
         {
             // ⚠️ 役割は名札の側へ寄せる。絵の下に置くと台座の帯と重なって読めなくなった
-            Ui.Label(body, $"Tag {creature.Id}", Creatures.SpeciesOf(creature).Name, 28, Ui.Ink,
-                TextAnchor.LowerCenter, left - 60f, top - 46f, size + 120f, 40f);
-            Ui.Label(body, $"Role {creature.Id}", role, 20, Ui.InkFaint,
-                TextAnchor.UpperCenter, left - 60f, top - 78f, size + 120f, 30f);
+            Ui.Knockout(Ui.Label(body, $"Tag {creature.Id}", Creatures.SpeciesOf(creature).Name, 30, Ui.Ink,
+                TextAnchor.LowerCenter, left - 60f, top - 46f, size + 120f, 40f));
+            Ui.Knockout(Ui.Label(body, $"Role {creature.Id}", role, 20, Ui.InkFaint,
+                TextAnchor.UpperCenter, left - 60f, top - 78f, size + 120f, 30f), 3);
             Ui.PixelOf(body, $"Art {creature.Id}", creature, left, top, size);
         }
 
         private static void Fact(RectTransform body, string label, string value, float left, float top, float width)
         {
-            Ui.Label(body, $"K {label}", label, 22, Ui.InkDim,
-                TextAnchor.UpperLeft, left, top, width, 32f);
-            Ui.Label(body, $"V {label}", value, 40, Ui.Ink,
-                TextAnchor.UpperLeft, left, top + 34f, width, 52f);
+            Ui.Knockout(Ui.Label(body, $"K {label}", label, 22, Ui.InkDim,
+                TextAnchor.UpperLeft, left, top, width, 32f), 3);
+            Ui.Knockout(Ui.Label(body, $"V {label}", value, 42, Ui.Ink,
+                TextAnchor.UpperLeft, left, top + 34f, width, 54f));
         }
     }
 

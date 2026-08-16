@@ -73,30 +73,47 @@ namespace EggCommand.View
         // ── フォント ────────────────────────────────────
         private static Font _font;
 
-        /// <summary>⭐ DotGothic16（SIL OFL 1.1）。日本語のドットフォント。
+        /// <summary>⭐ Mochiy Pop One（SIL OFL 1.1）。丸くて太いポップ体。
         ///
-        /// キャラがドット絵なので、字も同じ格子に乗るものを選んだ。
-        /// OFL なので APK に埋め込んで販売してよい。詳細は Assets/Fonts/NOTICE.md。
+        /// ⚠️ ドットフォント（DotGothic16）から替えた。
+        /// 器がカジュアルな丸角になったので、字だけドットだと様式が2つ同居する。
+        /// モックが使っているのもこれ。
         ///
-        /// ⚠️ OS のフォントを借りない。Editor では出ても Android では出ないうえ、
-        /// Windows 同梱フォントは配布物に埋め込めない。
-        /// ⚠️ Resources から読むので、フォントは Assets/Resources/Fonts/ に置く。</summary>
+        /// ⭐ 太いので**白抜き**が効く（<see cref="Knockout"/>）。
+        /// OFL なので APK に埋め込んで販売してよい。詳細は Assets/Resources/Fonts/NOTICE.md。
+        ///
+        /// ⚠️ OS のフォントを借りない。Editor では出ても Android では出ない。</summary>
         public static Font TheFont
         {
             get
             {
                 if (_font == null)
                 {
-                    _font = Resources.Load<Font>("Fonts/DotGothic16-Regular");
+                    _font = Resources.Load<Font>("Fonts/MochiyPopOne-Regular");
                     if (_font == null)
                     {
                         // ⚠️ 黙って別の字で描かない。無いことに気づけないほうが困る
-                        Debug.LogError("DotGothic16 が読めない。Assets/Resources/Fonts/ にあるか確認する");
+                        Debug.LogError("Mochiy Pop One が読めない。Assets/Resources/Fonts/ にあるか確認する");
                         _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
                     }
                 }
                 return _font;
             }
+        }
+
+        /// <summary>白抜き。⭐ 白い字に濃紺の縁を付ける。
+        ///
+        /// 絵や色の上に置く字はこれにする。地の色が何であっても読めるので、
+        /// 「背景ごとに字の色を選び直す」が要らなくなる。
+        /// ⚠️ 白い器の上では使わない（縁だけが見えて濁る）。そこは濃紺の字。</summary>
+        public static Text Knockout(Text text, int thickness = 4)
+        {
+            text.color = Color.white;
+            var outline = text.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color32(0x2b, 0x33, 0x50, 0xff);
+            outline.effectDistance = new Vector2(thickness, thickness);
+            outline.useGraphicAlpha = false;
+            return text;
         }
 
         // ── Kenney の意匠（CC0） ────────────────────────

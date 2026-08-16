@@ -1,5 +1,21 @@
 # 同梱しているフォント
 
+## Mochiy Pop One（⭐ 画面で使っているのはこちら）
+
+| | |
+|---|---|
+| ファイル | `MochiyPopOne-Regular.ttf` |
+| 著作権 | Copyright 2020 The Mochiypop Project Authors |
+| ライセンス | **SIL Open Font License 1.1**（全文 `OFL-MochiyPopOne.txt`） |
+| 出所 | https://github.com/google/fonts/tree/main/ofl/mochiypopone |
+
+丸くて太いポップ体。⭐ 太いので**白抜き**（白い字＋濃紺の縁）が効く。
+モックが使っているのもこれ。
+
+⚠️ DotGothic16 から替えた。器がカジュアルな丸角になったので、
+字だけドットだと様式が2つ同居する。DotGothic16 は残してあるが未使用。
+
+
 ## DotGothic16
 
 日本語のドットフォント。⭐ キャラがドット絵なので、字も同じ格子に乗るものを選んだ。
