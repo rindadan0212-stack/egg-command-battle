@@ -137,7 +137,25 @@ namespace EggCommand.EditorTools
         {
             var detail = Find(root, "Detail");
             if (detail == null) { Debug.LogError("BoxScreen に Detail が無い"); return false; }
-            if (Find(detail.gameObject, "Trait") != null) return false;
+
+            // ⚠️ 世代・変異（Point）は「逃がす」ボタンの真下に置かれていて、
+            //    ボタンの面に隠れて読めなかった（字どうしは被っていないので、
+            //    字だけを比べる検査では見つからない）。
+            //    ⭐ ステの最終行(452)と押しどころ(560)の間の空きへ動かす
+            var point = Find(detail.gameObject, "Point");
+            if (point != null)
+            {
+                var pr = (RectTransform)point;
+                pr.anchorMin = new Vector2(0f, 1f);
+                pr.anchorMax = new Vector2(0f, 1f);
+                pr.pivot = new Vector2(0f, 1f);
+                pr.sizeDelta = new Vector2(420f, 40f);
+                pr.anchoredPosition = new Vector2(26f, -472f);
+                var pt = point.GetComponent<Text>();
+                if (pt != null) pt.alignment = TextAnchor.MiddleLeft;
+            }
+
+            if (Find(detail.gameObject, "Trait") != null) return true;
 
             // ⚠️ Slant（y 152〜190）の下、ステ1行目（y 250）の上に置く
             var trait = Add(detail, "Trait", 268f, 192f, 700f, 40f);
