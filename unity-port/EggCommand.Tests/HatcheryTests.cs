@@ -223,6 +223,42 @@ public class HatcheryTests
         Assert.Equal(0, Encounters.Expire(game, 9_999_999_999));
     }
 
+    /// <summary>⭐ 期限を持たない巣は、**いまから数え直す**。
+    /// ⚠️ 消さない ── 起動しただけで探索が丸ごと作り替わってしまう。</summary>
+    [Fact]
+    public void 期限を持たない巣にいまから期限を与える()
+    {
+        const long T0 = 1_700_000_000;
+        var game = Games.NewGame(11);                 // ⚠️ 時刻を渡していないので期限 0
+        var before = new List<string>();
+        foreach (var e in game.Encounters) before.Add(e.Nest.Id);
+
+        int stamped = Encounters.Stamp(game, T0);
+
+        Assert.Equal(before.Count, stamped);
+        for (int i = 0; i < game.Encounters.Count; i++)
+        {
+            var e = game.Encounters[i];
+            Assert.Equal(before[i], e.Nest.Id);       // ⭐ 巣そのものは入れ替えない
+            Assert.Equal(T0 + Encounters.SecondsFor(e.Nest.Tier), e.UntilUnix);
+        }
+    }
+
+    /// <summary>⚠️ 既に期限を持っている巣には触らない（延命させない）。</summary>
+    [Fact]
+    public void 期限のある巣は数え直さない()
+    {
+        const long T0 = 1_700_000_000;
+        var game = Games.NewGame(11, T0);
+        var was = new List<long>();
+        foreach (var e in game.Encounters) was.Add(e.UntilUnix);
+
+        Assert.Equal(0, Encounters.Stamp(game, T0 + 999));
+
+        for (int i = 0; i < game.Encounters.Count; i++)
+            Assert.Equal(was[i], game.Encounters[i].UntilUnix);
+    }
+
     /// <summary>⚠️ **開幕の3件も期限を持つこと。**
     /// 時刻を渡さないと期限0＝永久に居座り、「安全に稼げる場所」が全員に配られる。</summary>
     [Fact]

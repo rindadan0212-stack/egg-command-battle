@@ -17,6 +17,9 @@ namespace EggCommand.View
         [SerializeField] private Text _point;
         [SerializeField] private Text _level;
         [SerializeField] private Text _slant;
+        /// <summary>特性。⭐ **名前だけでは何も伝わらない**ので働きも並べる。
+        /// ⚠️ 無ければ空にする（「特性なし」と書かない ── 無いことは書かなくても分かる）。</summary>
+        [SerializeField] private Text _trait;
         [SerializeField] private StatRow[] _stats;      // 4本。HP/ATK/DEF/SPD の順
         [SerializeField] private Text[] _skills;        // 3枠
         [SerializeField] private Text[] _skillCts;
@@ -31,9 +34,10 @@ namespace EggCommand.View
         /// <summary><paramref name="food"/> は餌に選んである個体（無ければ null）。
         /// ⭐ 一覧を押すのは「見る」だけ。餌にするかどうかは詳細の札で決める
         /// （押すたびに意味が変わると、何が起きるか分からない画面になる）。</summary>
+        /// <param name="onTrain">技を鍛える札を押した。⭐ 卵を素材にする画面を開く。</param>
         public void Bind(Game game, Creature creature, SortKey sort, IReadOnlyList<Creature> sorted,
             Action<SortKey> onSort, Action<string> onPick, Action onParty, Action onRelease,
-            Creature food, Action onMarkFood, Action onFeed, Action onGrow)
+            Creature food, Action onMarkFood, Action onFeed, Action onGrow, Action onTrain)
         {
             bool has = creature != null;
             if (_detail != null) _detail.SetActive(has);
@@ -80,6 +84,12 @@ namespace EggCommand.View
             }
             if (_point != null) _point.gameObject.SetActive(false);
 
+            if (_trait != null)
+            {
+                var trait = Creatures.TraitOf(creature);
+                _trait.text = trait == null ? "" : $"{trait.Name} — {trait.Gist}";
+            }
+
             // ⭐ ステ振りの4枠を「餌にする」「合成」の2枠に置き換える。
             //    Prefab の位置はそのまま使えるので、器を作り直さない
             bool isFood = food != null && food.Id == creature.Id;
@@ -94,7 +104,12 @@ namespace EggCommand.View
             // ⚠️ 「素材が足りません」と書かない。⭐ 要る数を出せば足りる
             Repurpose(2, $"そだてる ●{Core.Idle.MaterialPerLevel}", canGrow, canGrow, onGrow);
 
-            for (int i = 3; i < _spend.Length; i++)
+            // ⭐ 卵の「孵さない使い道」への入口。⚠️ 棚に卵が1個も無いなら押させない
+            //    （押しても何も選べない画面が開くだけになる）
+            bool canTrain = game.Eggs.Count > 0 && HasRoom(creature);
+            Repurpose(3, "技を鍛える", canTrain, false, onTrain);
+
+            for (int i = 4; i < _spend.Length; i++)
             {
                 if (_spend[i] != null) _spend[i].gameObject.SetActive(false);
             }
@@ -130,7 +145,18 @@ namespace EggCommand.View
                 }
                 if (i < _skillCts.Length && _skillCts[i] != null)
                 {
-                    _skillCts[i].text = skill != null && i > 0 ? skill.Ct.ToString() : "";
+                    // ⭐ **レベルは常に出す。**出さないと「鍛えられる」ことに気づけない。
+                    // ⚠️ CT は枠1 だけ 0 固定なので出さない（そこは通常攻撃）
+                    if (skill == null) _skillCts[i].text = "";
+                    else
+                    {
+                        var boost = Creatures.SkillBoostOf(creature, i);
+                        int ct = Skills.EffectiveCt(i, skill, boost);
+                        int level = Creatures.SkillLevelOf(creature, i);
+                        _skillCts[i].text = i == 0 ? $"Lv{level}" : $"Lv{level} CT{ct}";
+                    }
+                    _skillCts[i].color = skill != null && Creatures.SkillLevelOf(creature, i) > 1
+                        ? Ui.Accent : Ui.InkDim;
                 }
             }
 
@@ -149,6 +175,17 @@ namespace EggCommand.View
                 _release.onClick.AddListener(() => onRelease());
             }
 
+        }
+
+        /// <summary>まだ鍛えられる枠が1つでもあるか。⚠️ 全部上限なら入口を閉じる。</summary>
+        private static bool HasRoom(Creature creature)
+        {
+            var skills = Creatures.SkillsOf(creature);
+            for (int i = 0; i < skills.Length; i++)
+            {
+                if (skills[i] != null && !SkillCosts.IsMaxed(creature.SkillPoints[i])) return true;
+            }
+            return false;
         }
 
         /// <summary>ステ振りだった枠を別の押しどころに使い回す。

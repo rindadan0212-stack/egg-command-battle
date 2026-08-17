@@ -151,8 +151,7 @@ namespace EggCommand.Core
         }
 
         /// <summary>あと何秒で居なくなるか。⚠️ 期限を持たない巣（古い保存）は 0。
-        /// ⚠️ **まだ誰も呼んでいない。**残り時間を出す画面が無いため。
-        /// ⭐ 巣が黙って消えると理不尽なので、画面には必ず出すこと。</summary>
+        /// ⭐ 画面に必ず出すこと（巣が黙って消えると理不尽にしかならない）。</summary>
         public static int LeftOf(Encounter encounter, long nowUnix)
         {
             if (encounter.UntilUnix <= 0) return 0;
@@ -162,6 +161,28 @@ namespace EggCommand.Core
 
         public static bool IsGone(Encounter encounter, long nowUnix) =>
             encounter.UntilUnix > 0 && nowUnix >= encounter.UntilUnix;
+
+        /// <summary>期限を持たない巣に、いまから期限を与える。
+        ///
+        /// ⚠️ **時刻を渡さずに始めた保存には、期限の無い巣が残っている。**
+        /// そのままだと居座り続け、残り時間も出せない（0 は「切れた」ではなく「無い」）。
+        /// ⭐ 消さずに**いまから数え直す**。消すと、遊んでいた人の探索が
+        /// 起動しただけで作り替わってしまう。</summary>
+        /// <returns>期限を与えた件数。⚠️ 既に持っている巣には触らない。</returns>
+        public static int Stamp(Game game, long nowUnix)
+        {
+            if (nowUnix <= 0) return 0;
+            int stamped = 0;
+            for (int i = 0; i < game.Encounters.Count; i++)
+            {
+                var encounter = game.Encounters[i];
+                if (encounter.UntilUnix > 0) continue;
+                game.Encounters[i] = new Encounter(encounter.Nest, encounter.Level,
+                    nowUnix + SecondsFor(encounter.Nest.Tier));
+                stamped++;
+            }
+            return stamped;
+        }
 
         /// <summary>期限切れの巣を差し替える。⭐ **巣が入れ替わる唯一のもう1つの経路。**
         ///

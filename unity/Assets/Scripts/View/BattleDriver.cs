@@ -209,12 +209,18 @@ namespace EggCommand.View
             if (view == null) return;
             var fx = Fx.Get(_app.transform);
 
+            // ⚠️ 同じ体に2つ以上出ることがある（殴って毒を盛って CT を伸ばす、など）。
+            //    ⭐ 同じ場所に重ねると**下の字が読めない**ので、1つ出すごとに上へ積む。
+            //    ⚠️ 「数を減らす」方向では直さない — 起きたことを隠すことになる。
+            var stacked = new System.Collections.Generic.Dictionary<string, int>();
+
             for (int i = from; i < state.Log.Count; i++)
             {
                 var e = state.Log[i];
                 var rect = view.StandOf(e.Unit);
                 if (rect == null) continue;
                 var head = HeadOf(UnitOf(state, e.Unit));
+                if (e.Kind != BattleEventKind.Act) head = Stack(stacked, e.Unit, head);
 
                 switch (e.Kind)
                 {
@@ -264,8 +270,50 @@ namespace EggCommand.View
                     case BattleEventKind.Down:
                         fx.Number(fx.PointOf(rect, Body), "…", Ui.InkFaint, 48f);
                         break;
+
+                    // ⭐ 以下は**盤に一度も出ていなかった**もの。
+                    //    ⚠️ 出ないと「効いたのか外れたのか」が読めず、
+                    //    弱化を持つ技が「何も起きない技」に見える。
+
+                    case BattleEventKind.Missed:
+                        // ⭐ 弱化が外れた。⚠️ 免疫で弾いた（Blocked ＝ ◇）とは別物なので字を変える
+                        fx.Number(fx.PointOf(rect, head), "スカ", Ui.InkDim, 40f);
+                        break;
+                    case BattleEventKind.Applied:
+                        // ⭐ 毒・リジェネが乗った。何が何個乗ったかは Core が札にしている
+                        fx.Number(fx.PointOf(rect, head), e.Label ?? "", Ui.Ink, 34f);
+                        break;
+                    case BattleEventKind.Ct:
+                        // ⚠️ **増える方が悪い**（待たされる）。符号ではなく色で読ませる
+                        fx.Number(fx.PointOf(rect, head),
+                            e.Delta > 0 ? $"CT+{e.Delta}" : $"CT{e.Delta}",
+                            e.Delta > 0 ? Ui.Danger : Ui.Good, 36f);
+                        break;
+                    case BattleEventKind.Taunt:
+                        fx.Number(fx.PointOf(rect, head),
+                            e.Hits > 0 ? $"挑発×{e.Hits}" : "挑発", Ui.Accent, 34f);
+                        break;
+                    case BattleEventKind.Guts:
+                        fx.Number(fx.PointOf(rect, head), "根性", Ui.Accent, 34f);
+                        break;
+                    case BattleEventKind.Immune:
+                        fx.Number(fx.PointOf(rect, head), "免疫", Ui.Good, 34f);
+                        break;
                 }
             }
         }
+
+        /// <summary>同じ体に重ねて出さないように、1つ出すごとに上へ積む。</summary>
+        private static Vector2 Stack(System.Collections.Generic.Dictionary<string, int> seen,
+            string key, Vector2 head)
+        {
+            int n;
+            seen.TryGetValue(key, out n);
+            seen[key] = n + 1;
+            return head + new Vector2(0f, n * StackStep);
+        }
+
+        /// <summary>積むときの間隔。⭐ 字の高さより広く取る（縁が触れると読みにくい）。</summary>
+        private const float StackStep = 46f;
     }
 }

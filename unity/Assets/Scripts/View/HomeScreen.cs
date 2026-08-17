@@ -47,12 +47,15 @@ namespace EggCommand.View
             // ⭐ 居座る時間が切れた巣を先に片付けてから補充する
             //    ⚠️ 順が逆だと、消えるはずの巣が枠を埋めたまま残る
             long now = app.Now();
+            // ⚠️ 期限を持たない巣（時刻を渡さずに始めた古い保存）に、いまから期限を与える。
+            //    ⭐ 消さずに数え直す ── 起動しただけで探索が作り替わらないように
+            Encounters.Stamp(app.Game, now);
             Encounters.Expire(app.Game, now);
             Encounters.Refill(app.Game, now);
 
             var view = app.Put<NestsView>(body, "NestsScreen");
             if (view == null) return;
-            view.Bind(app.Game,
+            view.Bind(app,
                 encounter => StealScreen.Enter(app, encounter.Nest),
                 () => app.EnterBattle(null, true));
         }

@@ -93,7 +93,9 @@ namespace EggCommand.View
                     _food = null;
                     app.Refresh();
                 },
-                onGrow: () => { Core.Idle.Spend(game.Idle, creature); app.Refresh(); });
+                onGrow: () => { Core.Idle.Spend(game.Idle, creature); app.Refresh(); },
+                // ⭐ 卵を素材にして技を鍛える。⚠️ 画面を組み直しても覆いは残す
+                onTrain: () => SkillEggPanel.Show(app, creature.Id));
         }
     }
 }

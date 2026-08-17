@@ -13,8 +13,10 @@ namespace EggCommand.View
         [SerializeField] private Image _bossArt;
         [SerializeField] private Button _boss;
 
-        public void Bind(Game game, Action<Encounter> onGo, Action onBoss)
+        /// <param name="app">⭐ 時計の出所。⚠️ 札は残り時間を秒ごとに描き直すので要る。</param>
+        public void Bind(App app, Action<Encounter> onGo, Action onBoss)
         {
+            var game = app.Game;
             for (int i = 0; i < _cards.Length; i++)
             {
                 if (_cards[i] == null) continue;
@@ -22,7 +24,8 @@ namespace EggCommand.View
                 _cards[i].gameObject.SetActive(has);
                 if (!has) continue;
                 var encounter = game.Encounters[i];
-                _cards[i].Bind(encounter, () => onGo(encounter));
+                // ⭐ 居座る時間が切れたら組み直す（Expire → Refill で次の巣が出る）
+                _cards[i].Bind(encounter, () => onGo(encounter), app.Now, () => app.Refresh());
             }
 
             if (_bossArt != null)

@@ -13,6 +13,9 @@ namespace EggCommand.View
         [SerializeField] private Image _element;
         [SerializeField] private Text _wild;
         [SerializeField] private GameObject _mark;   // 選ばれている印
+        /// <summary>特性を持っている印。⭐ 一覧で持ち主を見つけるためだけの丸。
+        /// ⚠️ 名前は出さない（升が小さい）。何を持っているかは詳細で読ませる。</summary>
+        [SerializeField] private GameObject _trait;
         [SerializeField] private Button _button;
 
         public void Bind(Creature creature, bool picked, Action onTap)
@@ -26,6 +29,7 @@ namespace EggCommand.View
             if (_element != null) _element.color = ElementMark.ColorOf(creature.Element);
             if (_wild != null) _wild.text = Creatures.WildTotalOf(creature).ToString();
             if (_mark != null) _mark.SetActive(picked);
+            if (_trait != null) _trait.SetActive(creature.TraitId != null);
             if (_button != null)
             {
                 _button.onClick.RemoveAllListeners();

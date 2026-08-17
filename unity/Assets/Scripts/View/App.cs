@@ -71,7 +71,9 @@ namespace EggCommand.View
         {
             // ⭐ 保存があれば続きから。無ければ新しく始める
             Game = FreshStart ? null : SaveFile.Read();
-            if (Game == null) Game = Games.NewGame(Seed);
+            // ⚠️ 時刻を渡す。渡さないと最初の3つの巣が**期限を持たない**まま作られ、
+            //    「巣ごとに居座る時間がある」という規則がその巣にだけ効かない
+            if (Game == null) Game = Games.NewGame(Seed, Now());
             // ⭐ 編成をここで確定させる。⚠️ 通さないと、良い個体を手に入れた瞬間に
             //    「素質の高い順」で埋め直されて、選んだ3体が黙って入れ替わる
             Games.LockParty(Game);
@@ -172,7 +174,7 @@ namespace EggCommand.View
             if (Game == null)
             {
                 Debug.LogWarning("Game が失われていた（Play 中の再コンパイル）。作り直して続ける");
-                Game = Games.NewGame(Seed);
+                Game = Games.NewGame(Seed, Now());
                 Battle = null;
                 Infiltration = null;
                 CurrentMob = -1;

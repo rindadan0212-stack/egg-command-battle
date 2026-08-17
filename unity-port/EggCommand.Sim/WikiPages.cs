@@ -241,6 +241,12 @@ namespace EggCommand.Sim
             md.Append("⚠️ **配合の継承はこの下限を見ません。**");
             md.Append("親が持っていれば、子は★に関係なく受け継ぎます。\n");
 
+            md.Append("\n## どこで見えるか\n\n");
+            md.Append("**BOX** の詳細に、名前とすることが1行で出ます。\n\n");
+            md.Append("⭐ 一覧の升では、持っている個体の**右上に丸い印**が付きます。\n");
+            md.Append("⚠️ 升には名前を出しません（狭いので）。");
+            md.Append("何を持っているかは詳細で読んでください。\n");
+
             md.Append("\n## 関連\n\n- [レアリティ](レアリティ.md)\n- [技一覧](技一覧.md)\n")
               .Append("- [配合](配合.md)\n");
             return md.ToString();
