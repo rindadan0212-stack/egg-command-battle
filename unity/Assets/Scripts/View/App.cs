@@ -82,7 +82,8 @@ namespace EggCommand.View
             _sinceSave += Time.unscaledDeltaTime;
             if (_sinceSave < SaveEvery) return;
             _sinceSave = 0f;
-            SaveFile.Write(Game);
+            // ⚠️ 定期の書き出しも同じ憶えを通す（変わっていなければ書かない）
+            _lastSaved = SaveFile.Write(Game, _lastSaved);
         }
 
         // ⚠️ 閉じる/隠れるときに必ず書く。Android は OnApplicationQuit が来ないことがある
@@ -90,13 +91,22 @@ namespace EggCommand.View
         private void OnApplicationFocus(bool focused) { if (!focused) Save(); }
         private void OnApplicationQuit() => Save();
 
-        /// <summary>いま書く。⭐ 状態が変わる操作のあとに呼ぶ。</summary>
+        /// <summary>いま書く。⭐ 状態が変わる操作のあとに呼ぶ。
+        ///
+        /// ⚠️ **中身が変わっていなければ書かない。**
+        /// <see cref="Refresh"/> は演出の拍ごとに呼ばれる（戦闘は1手に3〜4回）ので、
+        /// 素通しにすると1戦で 60〜200回のフル書き込みになる。
+        /// ⭐ 書き出した文字を憶えておいて、同じなら捨てる。
+        /// ⚠️ 「保存する場所を減らす」方向で直さない ── 呼び忘れた瞬間に遊んだ結果が消える。</summary>
         public void Save()
         {
             if (Game == null) return;
             _sinceSave = 0f;
-            SaveFile.Write(Game);
+            _lastSaved = SaveFile.Write(Game, _lastSaved);
         }
+
+        /// <summary>最後に書き出した中身。⚠️ 比べるためだけに持つ。</summary>
+        private string _lastSaved;
 
         // ── 器 ──────────────────────────────────────────
 

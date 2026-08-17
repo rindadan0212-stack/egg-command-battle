@@ -5,9 +5,15 @@ using EggCommand.Core;
 
 namespace EggCommand.View
 {
-    /// <summary>卵強奪の盤。⭐ ここだけは UI ではなく**ワールド空間の 2D**で作る。
+    /// <summary>潜入の盤。⭐ ここだけは UI ではなく**ワールド空間の 2D**で作る。
     ///
-    /// 引っ張って離すと飛んでいき、壁で跳ね返る。卵に届けば盗み、届かなければ戦闘。
+    /// ⭐ **3体を1体ずつ投げる。**着地した個体は盤に残り、次の発射台になる。
+    /// 飛距離は**飛ぶ個体の速度**で決まる（編成の合計ではない）。
+    /// 卵に届けば盗み、親に触れたら戦闘、3体使い切っても戦闘。
+    ///
+    /// ⚠️ **以前はここが旧 <see cref="Core.Steal.Launch"/>（一投・合計速度・関門なし）**
+    /// を呼んでいた。盤の生成側は「3体リレー＋関門で解ける盤」だけを出荷していたので、
+    /// **検査が保証している性質と、遊ばれる性質が無関係**だった。
     ///
     /// ⚠️ 当たり判定も跳ね返りも <see cref="Core.Steal"/> が全部決める。
     /// ここは Core が返した軌跡を**なぞって見せるだけ**。
@@ -46,8 +52,23 @@ namespace EggCommand.View
         private const float CameraCatchUp = 90f;
 
         private StealField _field;
-        private double _budget;
         private Action<StealRun> _onDone;
+
+        /// <summary>潜入そのもの。⭐ **判定も発射台も Core が持つ。**画面は選ばせて描くだけ。</summary>
+        private Steal.Infiltration _infil;
+        /// <summary>いま投げようとしている個体（<see cref="Steal.Infiltration.Party"/> の添字）。</summary>
+        private int _member = -1;
+        /// <summary>どこから投げるか。⚠️ **-1 は初期位置**。それ以外は Pads の添字。</summary>
+        private int _pad = -1;
+
+        /// <summary>まだ投げていない個体の絵（出発点に並ぶ）。</summary>
+        private readonly Dictionary<int, Transform> _waiting = new Dictionary<int, Transform>();
+        /// <summary>着地した個体の絵（＝発射台）。</summary>
+        private readonly List<Transform> _pads = new List<Transform>();
+        /// <summary>関門の絵。⭐ 壁を壊したら消すので持っておく。</summary>
+        private readonly List<GameObject> _gates = new List<GameObject>();
+        /// <summary>いま届く距離を見せる線。⭐ 選んだ個体で変わるので作り直す。</summary>
+        private GameObject _reach;
 
         private Transform _runner;
         private LineRenderer _guide;
@@ -72,23 +93,24 @@ namespace EggCommand.View
 
         public bool Flying { get { return _run != null; } }
 
-        public static StealStage Create(StealField field, double budget, Creature leader,
+        /// <param name="party">⭐ **3体そのまま**渡す。誰をいつ投げるかは盤で選ぶ。</param>
+        public static StealStage Create(StealField field, IReadOnlyList<Creature> party,
             string nestSpeciesId, Action<StealRun> onDone)
         {
             var go = new GameObject("Steal Stage");
             var stage = go.AddComponent<StealStage>();
-            stage.Build(field, budget, leader, nestSpeciesId, onDone);
+            stage.Build(field, party, nestSpeciesId, onDone);
             return stage;
         }
 
         // ── 盤を組む ────────────────────────────────────
 
-        private void Build(StealField field, double budget, Creature leader,
+        private void Build(StealField field, IReadOnlyList<Creature> party,
             string nestSpeciesId, Action<StealRun> onDone)
         {
             _field = field;
-            _budget = budget;
             _onDone = onDone;
+            _infil = new Steal.Infiltration(field, party);
 
             _camera = Camera.main;
             _cameraSizeBefore = _camera.orthographicSize;
@@ -112,36 +134,31 @@ namespace EggCommand.View
             // ⚠️ 箱を描いて中に立たせると、「箱が当たり判定で絵は飾り」に見える。
             // ⚠️ 絵を並べて幅を埋めない（増殖して見える）。塞ぐ幅のほうを
             //    Steal.ParentWidth ＝ 絵1体ぶん に狭めてある。
+            // ⚠️ **等方に縮めない。**以前は Mathf.Min(幅, 帯の厚み) で正方形にしていたので、
+            //    塞ぐ幅が 56〜75 まで広がるのに絵は最大 30 しか無く、
+            //    盤幅の 1/4 が「見えないのに当たる」状態だった。
+            // ⭐ 判定（ParentSpans）の幅そのままに伸ばす。絵と当たりが必ず一致する。
             var species = SpeciesTable.ById(nestSpeciesId);
             foreach (var span in Steal.ParentSpans(field))
             {
                 float centerX = (float)(span.From + span.To) / 2f;
-                float size = Mathf.Min((float)(span.To - span.From), bandHeight);
-                PixelObject("Parent", species.Sprite, species.Palettes[0],
-                    ToWorld(centerX, bandMid), size, 3f);
+                float width = (float)(span.To - span.From);
+                var parent = PixelObject("Parent", species.Sprite, species.Palettes[0],
+                    ToWorld(centerX, bandMid), 1f, 3f);
+                parent.transform.localScale = new Vector3(width, bandHeight, 1f);
             }
+
+            // ⭐ 関門。⚠️ 以前は1枚も描いていなかった（盤に在るのに見えなかった）
+            BuildGates();
 
             // 卵
             PixelObject("Egg", EggArt.Sprite, EggArt.Shell,
                 ToWorld((float)field.Egg.X, (float)field.Egg.Y),
                 (float)Steal.EggRadius * 2.4f, 2f);
 
-            // 走る者。⭐ 出撃の先頭をそのまま飛ばす
-            var runner = PixelObject("Runner",
-                Creatures.SpeciesOf(leader).Sprite, Creatures.PaletteOf(leader),
-                ToWorld((float)field.Start.X, (float)field.Start.Y),
-                (float)Steal.RunnerRadius * 2.6f, 1f);
-            _runner = runner.transform;
-
-            // ⭐ どこまで届くかを線で見せる（字で「飛距離 204」と書かない）。
-            //    真上へ撃ったときに止まる高さ。届かない巣では卵の下に線が残る。
-            float reachY = (float)field.Start.Y - (float)budget;
-            if (reachY > 0f && reachY < (float)field.Height)
-            {
-                Skinned("Reach", "pill", new Color32(0xff, 0xd9, 0x77, 0x88),
-                    ToWorld((float)Steal.FieldWidth / 2f, reachY),
-                    new Vector2((float)Steal.FieldWidth, 2.2f), 4.5f);
-            }
+            // ⭐ まだ投げていない3体を出発点に並べる。触れば選べる
+            BuildWaiting();
+            Select(_infil.Left.Count > 0 ? _infil.Left[0] : -1);
 
             // ⭐ 画面の端に目盛り。距離が字と線の両方で分かる
             BuildMeters();
@@ -225,6 +242,152 @@ namespace EggCommand.View
             }
         }
 
+
+        // ── 選ぶ ────────────────────────────────────────
+
+        /// <summary>関門を描く。⭐ **要求するステと値を絵の上に出す。**
+        /// ⚠️ 「攻撃力が足りないと壊せません」と文で書かない。
+        /// 要求は比べるための数なので、数のまま出す。</summary>
+        private void BuildGates()
+        {
+            for (int i = 0; i < _field.Gimmicks.Count; i++)
+            {
+                var gate = _field.Gimmicks[i];
+                float mid = (float)(gate.Top + gate.Bottom) / 2f;
+                float width = (float)(gate.To - gate.From);
+                float height = (float)(gate.Bottom - gate.Top);
+
+                var body = Skinned($"Gate {i}", "pill", GateColor(gate.Kind),
+                    ToWorld((float)(gate.From + gate.To) / 2f, mid),
+                    new Vector2(width, height), 4.2f);
+
+                var label = new GameObject($"Gate {i} 要求");
+                label.transform.SetParent(body.transform, false);
+                label.transform.position = new Vector3(
+                    body.transform.position.x, body.transform.position.y, 4.1f);
+                var text = label.AddComponent<TextMesh>();
+                text.text = $"{Stats.LabelOf(Steal.StatOf(gate.Kind))} {gate.Requires}";
+                text.font = Ui.TheFont;
+                text.fontSize = 64;
+                text.characterSize = 0.44f;
+                text.anchor = TextAnchor.MiddleCenter;
+                text.color = new Color(1f, 1f, 1f, 0.95f);
+                label.GetComponent<MeshRenderer>().sharedMaterial = Ui.TheFont.material;
+
+                _gates.Add(body);
+            }
+        }
+
+        /// <summary>関門の色。⚠️ 種類が読めればよい（塗り分けだけ）。</summary>
+        private static Color GateColor(GimmickKind kind)
+        {
+            switch (kind)
+            {
+                case GimmickKind.Wall: return new Color32(0x8a, 0x6f, 0x4e, 0xdd);
+                case GimmickKind.Damage: return new Color32(0xb0, 0x53, 0x4a, 0xcc);
+                default: return new Color32(0x4a, 0x63, 0xa8, 0xcc);
+            }
+        }
+
+        /// <summary>壊れた壁を盤から消す。⭐ 開通が目で分かる。</summary>
+        private void RefreshGates()
+        {
+            for (int i = 0; i < _gates.Count && i < _field.Gimmicks.Count; i++)
+            {
+                if (_gates[i] == null) continue;
+                bool broken = _field.Gimmicks[i].Kind == GimmickKind.Wall
+                    && _infil.Broken.Contains(i);
+                if (broken) _gates[i].SetActive(false);
+            }
+        }
+
+        /// <summary>まだ投げていない個体を出発点に並べる。</summary>
+        private void BuildWaiting()
+        {
+            var left = new List<int>(_infil.Left);
+            for (int i = 0; i < left.Count; i++)
+            {
+                int member = left[i];
+                var creature = _infil.Party[member];
+                // ⚠️ 重ならないように少しずらす。⭐ 触り分けられる間隔にする
+                float offset = (i - (left.Count - 1) / 2f) * 18f;
+                var go = PixelObject($"待機 {member}",
+                    Creatures.SpeciesOf(creature).Sprite, Creatures.PaletteOf(creature),
+                    ToWorld((float)_field.Start.X + offset, (float)_field.Start.Y),
+                    (float)Steal.RunnerRadius * 2.2f, 1.2f);
+                _waiting[member] = go.transform;
+            }
+        }
+
+        /// <summary>投げる個体を選ぶ。⭐ 届く距離の線も引き直す（個体ごとに違う）。</summary>
+        private void Select(int member)
+        {
+            _member = member;
+            if (_member < 0) return;
+            _pad = -1;
+            PlaceRunner();
+            DrawReach();
+        }
+
+        /// <summary>選んだ個体を、選んだ発射台の上に立たせる。</summary>
+        private void PlaceRunner()
+        {
+            if (_member < 0) return;
+            Transform mark;
+            if (!_waiting.TryGetValue(_member, out mark)) return;
+            _runner = mark;
+
+            var at = _pad < 0 ? _field.Start : _infil.Pads[_pad];
+            _runner.position = new Vector3(
+                ToWorld((float)at.X, (float)at.Y).x, ToWorld((float)at.X, (float)at.Y).y, 1.2f);
+        }
+
+        /// <summary>⭐ どこまで届くかを線で見せる（字で「飛距離 204」と書かない）。
+        /// ⚠️ **選んだ個体の速度**で決まる。誰を選ぶかで線が動くのが、この遊びの芯。</summary>
+        private void DrawReach()
+        {
+            if (_reach != null) Destroy(_reach);
+            if (_member < 0) return;
+
+            double budget = Steal.DistanceFor(_infil.Party[_member]);
+            var from = _pad < 0 ? _field.Start : _infil.Pads[_pad];
+            float reachY = (float)from.Y - (float)budget;
+            if (reachY <= 0f || reachY >= (float)_field.Height) return;
+
+            _reach = Skinned("Reach", "pill", new Color32(0xff, 0xd9, 0x77, 0x88),
+                ToWorld((float)Steal.FieldWidth / 2f, reachY),
+                new Vector2((float)Steal.FieldWidth, 2.2f), 4.5f);
+        }
+
+        /// <summary>触った先にある「選べるもの」を拾う。⚠️ 走者そのものは掴んで引っ張る。</summary>
+        /// <returns>何かを選んだら true。</returns>
+        private bool PickAt(Vector2 touch)
+        {
+            // ⭐ 発射台（着地した個体）を選ぶ
+            for (int i = 0; i < _infil.Pads.Count; i++)
+            {
+                var at = ToWorld((float)_infil.Pads[i].X, (float)_infil.Pads[i].Y);
+                if (Vector2.Distance(touch, at) <= GrabRadius)
+                {
+                    _pad = i;
+                    PlaceRunner();
+                    DrawReach();
+                    return true;
+                }
+            }
+            // ⭐ 待機している個体を選ぶ
+            foreach (var pair in _waiting)
+            {
+                if (pair.Key == _member) continue;
+                if (Vector2.Distance(touch, pair.Value.position) <= GrabRadius)
+                {
+                    Select(pair.Key);
+                    return true;
+                }
+            }
+            return false;
+        }
+
         /// <summary>盤の外を見ないように挟む。
         /// ⚠️ 始まりと終わりだけは端に張り付く（ここが「その限りでない」ところ）。</summary>
         private float ClampCamera(float y)
@@ -252,7 +415,7 @@ namespace EggCommand.View
             if (_runner != null)
             {
                 float pulse = _dragging ? 1f : 1f + Mathf.Sin(Time.time * 4.5f) * 0.09f;
-                float size = (float)Steal.RunnerRadius * 2.6f * pulse;
+                float size = (float)Steal.RunnerRadius * 2.2f * pulse;
                 _runner.localScale = new Vector3(size, size, 1f);
             }
 
@@ -262,13 +425,15 @@ namespace EggCommand.View
                 // ⭐ 走者を掴んだら狙う。離れたところなら**上を見に行く**。
                 //    飛ばす前に奥行きを確かめて、位置を決められるようにする
                 var touch = _camera.ScreenToWorldPoint(Input.mousePosition);
-                if (Vector2.Distance(touch, _runner.position) <= GrabRadius)
+                if (_runner != null && Vector2.Distance(touch, _runner.position) <= GrabRadius)
                 {
                     _dragging = true;
                     _dragFrom = Input.mousePosition;
                     _dragTo = _dragFrom;
                 }
-                else
+                // ⭐ 走者の外を触ったら、まず「選ぶ」を試す（発射台 / 待機している個体）。
+                //    何も無ければ盤を見回す
+                else if (!PickAt(touch))
                 {
                     _looking = true;
                     _lookFrom = Input.mousePosition.y;
@@ -320,13 +485,17 @@ namespace EggCommand.View
             }
         }
 
-        /// <summary>離した。⚠️ 角度以外に入力は無い。飛距離は編成のスピード合計。</summary>
+        /// <summary>離した。⚠️ 入力は「誰を・どこから・どの角度で」の3つだけ。
+        /// ⭐ 飛距離は**その個体の速度**（編成の合計ではない）。</summary>
         private void Fire(Vector2 pull)
         {
+            if (_member < 0 || _infil.Result != null) return;
+
             Vector2 direction = pull.normalized;
             // Core の角度は「上向きが 0、時計回り」。世界は y が上なのでこの式になる
             double angle = Mathf.Atan2(direction.x, direction.y);
-            _run = Steal.Launch(_field, angle, _budget);
+            // ⚠️ 判定は Core が全部持つ。ここでやり直さない
+            _run = Steal.Hop(_infil, _member, _pad, angle);
             _travelled = 0f;
         }
 
@@ -351,7 +520,7 @@ namespace EggCommand.View
                 _runner.position = ToWorld((float)last.X, (float)last.Y);
                 var finished = _run;
                 _run = null;
-                if (_onDone != null) _onDone(finished);
+                Land(finished);
                 return;
             }
 
@@ -370,6 +539,35 @@ namespace EggCommand.View
                     ToWorld((float)point.X, (float)point.Y), new Vector2(2.4f, 2.4f), 4f);
                 _trail.Add(dot.transform);
             }
+        }
+
+        /// <summary>1投ぶんが終わった。⭐ **決着していなければ盤は続く。**
+        ///
+        /// ⚠️ 以前はここで必ず画面を閉じていた（一投しか無かったため）。
+        /// リレーでは3体ぶん続くので、決着した時だけ呼び側へ返す。</summary>
+        private void Land(StealRun finished)
+        {
+            // ⭐ 壊した壁を消す（開通が目で分かる）
+            RefreshGates();
+
+            if (finished.Outcome == StealOutcome.Landed)
+            {
+                // ⭐ 着地した個体はその場に残り、次の発射台になる
+                _waiting.Remove(_member);
+                _pads.Add(_runner);
+                _runner.localScale = new Vector3(
+                    (float)Steal.RunnerRadius * 2.2f, (float)Steal.RunnerRadius * 2.2f, 1f);
+                _runner = null;
+            }
+
+            if (_infil.Result != null)
+            {
+                if (_onDone != null) _onDone(finished);
+                return;
+            }
+
+            // ⭐ 次の個体へ。⚠️ 発射台は初期位置に戻す（前線は選び直せる）
+            Select(_infil.Left.Count > 0 ? _infil.Left[0] : -1);
         }
 
         // ── 部品 ────────────────────────────────────────

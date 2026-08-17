@@ -62,13 +62,13 @@ namespace EggCommand.View
             if (field == null) { app.Show(Screen.Nests); return; }
 
             var party = Games.PartyOf(app.Game);
-            double budget = Core.Steal.DistanceFor(party);
 
             // ── 盤（ワールド空間） ──────────────────────
             // ⚠️ まだ飛ばしていないときだけ作る。結果を見せている間は残しておく
             if (_stage == null && _result == null && party.Count > 0)
             {
-                _stage = StealStage.Create(field, budget, party[0], app.CurrentNest.SpeciesId,
+                // ⭐ 3体そのまま渡す。誰をいつどこから投げるかは盤で選ぶ
+                _stage = StealStage.Create(field, party, app.CurrentNest.SpeciesId,
                     run =>
                     {
                         _result = run;

@@ -18,21 +18,33 @@ namespace EggCommand.View
 
         /// <summary>書き出す。⚠️ 直接上書きしない。
         /// 書いている途中で落ちると、遊んだ結果が丸ごと消える。</summary>
-        public static void Write(Game game)
+        /// <param name="lastWritten">前に書き出した中身。⭐ 同じなら書かない。</param>
+        /// <returns>実際に持っている中身（次回の比較に使う）。</returns>
+        public static string Write(Game game, string lastWritten = null)
         {
             try
             {
                 string json = JsonUtility.ToJson(Snapshots.Save(game));
+                // ⭐ 変わっていなければ触らない。⚠️ 書き込みは落ちる窓を開ける操作なので、
+                //    必要のない書き込みは「安全な操作」ではない
+                if (json == lastWritten) return lastWritten;
+
                 string temp = Path + ".tmp";
                 File.WriteAllText(temp, json);
-                // ⭐ 出来上がってから置き換える。落ちても前の保存が残る
-                if (File.Exists(Path)) File.Delete(Path);
-                File.Move(temp, Path);
+                // ⭐ 出来上がってから**原子的に**置き換える。
+                // ⚠️ 以前は Delete → Move だった。この2つの**間で落ちると保存が消える**
+                //    （残るのは .tmp で、Read はそれを見ない）。コメントは
+                //    「落ちても前の保存が残る」と言っていたが、そうなっていなかった。
+                if (File.Exists(Path)) File.Replace(temp, Path, null);
+                else File.Move(temp, Path);
+                return json;
             }
             catch (Exception error)
             {
                 // ⚠️ 黙って諦めない。保存できていないことに気づけないほうが困る
                 Debug.LogError($"保存に失敗した: {error.Message}");
+                // ⚠️ 失敗したら憶えない（次回は必ず書き直す）
+                return null;
             }
         }
 
