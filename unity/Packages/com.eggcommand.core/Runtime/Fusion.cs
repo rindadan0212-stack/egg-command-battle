@@ -62,8 +62,9 @@ namespace EggCommand.Core
         /// ここは卵を作るだけにしておく（消してから例外を投げたら取り返しがつかない）。</summary>
         /// <param name="element">⚠️ 親のどちらを継ぐかは呼び側が別の系統で引く。
         /// ここで引くと配合の系統がずれて、較正済みの検査が無効になる。</param>
+        /// <param name="traitId">特性。⚠️ <paramref name="element"/> と同じ約束（呼び側が引く）。</param>
         public static BreedOutcome Fuse(Rng rng, Creature a, Creature b, int serial, int rarity = 0,
-            Element? element = null)
+            Element? element = null, string? traitId = null)
         {
             if (!CanFuse(a, b)) throw new InvalidOperationException("同じ個体どうしは配合できない");
 
@@ -117,7 +118,9 @@ namespace EggCommand.Core
                 a.Id, b.Id, generation, EggOrigin.Bred,
                 hasSkills: true, skill2: skill2, skill3: skill3,
                 rarity: childRarity, strong: strong, weak: weak,
-                element: element ?? a.Element);
+                element: element ?? a.Element,
+                // ⚠️ 呼び側が引かなかったときは親A のものを継ぐ（黙って無くさない）
+                traitId: traitId ?? a.TraitId ?? b.TraitId);
 
             return new BreedOutcome(egg, mutations);
         }

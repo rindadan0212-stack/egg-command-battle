@@ -24,13 +24,24 @@ namespace EggCommand.View
         /// ⚠️ 画面が組み直されるたびに告知を作らないための札。</summary>
         private static bool _handing;
 
-        /// <summary>巣を選んで発射へ。⚠️ 親がどちらへ寄るかだけは巣ごとの乱数で決まる。</summary>
+        /// <summary>巣を選んで潜入へ。
+        ///
+        /// ⚠️ **盤は必ず <see cref="Core.Steal.MakeValidatedField"/> を通す。**
+        /// 素の MakeField は検査を通らない盤も返す（関門の車線の出目しだいで、
+        /// 通る角度が 1度しか無い盤ができる）。
+        ///
+        /// ⚠️ 種は**巣と盗んだ回数だけ**から作る。挑むたびに引くと、
+        /// 画面を出入りするだけで盤を選び直せてしまう。
+        /// ⭐ 親がどちらへ寄るかも同じ理由で巣の乱数に載せない。</summary>
         public static void Enter(App app, Nest nest)
         {
             app.CurrentNest = nest;
             app.CurrentIsBoss = false;
-            var side = app.Game.RngSteal.Chance(0.5) ? FieldSide.Left : FieldSide.Right;
-            app.Field = Core.Steal.MakeField(nest.Tier, side);
+
+            int raids = Games.RaidsOn(app.Game, nest);
+            var rng = Core.Steal.RngFor(nest, raids);
+            var side = rng.Chance(0.5) ? FieldSide.Left : FieldSide.Right;
+            app.Field = Core.Steal.MakeValidatedField(nest.Tier, side, raids, rng);
             _result = null;
             app.Show(Screen.Steal);
         }
@@ -88,7 +99,10 @@ namespace EggCommand.View
                 {
                     Games.GrowParty(Games.PartyOf(app.Game));
                     // ⚠️ 盗んだ卵は素質が落ちる（倒したほうが良い卵）
-                    app.GainEgg(nest, EggOrigin.Stolen);
+                    // ⭐ 盗んだ巣は**残る**。次はもっと固くなっているだけ
+                    app.GainEgg(nest, EggOrigin.Stolen, closeNest: false);
+                    // ⭐ 盗まれた巣は次から守りを固める（関門が増え、隙間が狭まる）
+                    Games.RecordRaid(app.Game, nest);
                 }
                 else
                 {

@@ -196,6 +196,52 @@ namespace EggCommand.Core
                 1, chance);
     }
 
+    /// <summary>スキルレベルが1つ上がったときに伸びるもの。
+    ///
+    /// ⭐ **語彙をここで固定する。**技ごとに数値を置かない（効果のプリミティブと同じ約束）。
+    /// 技が選ぶのは「どの段でどれが伸びるか」だけで、伸び幅は語彙ごとに1つ。
+    ///
+    /// ⚠️ 増やす前に、既にある語彙で書けないか疑うこと。</summary>
+    public enum SkillGain
+    {
+        /// <summary>威力 +<see cref="Skills.GainPowerPercent"/>%。
+        /// ⭐ **段位（小/中/大/特大）は動かさない。**
+        /// 動かすと「全体は1段下げる」という規則ごと崩れる。</summary>
+        Power,
+        /// <summary>CT −1。⚠️ 枠1 では効かない（元から 0）。</summary>
+        Ct,
+        /// <summary>通る率 +<see cref="Skills.GainChancePoints"/>pt。</summary>
+        Chance,
+        /// <summary>継続の回数 +1。</summary>
+        Turns,
+        /// <summary>多段の発数 +1。</summary>
+        Repeat,
+        /// <summary>割合回復の割合 +<see cref="Skills.GainHealPoints"/>pt。</summary>
+        Percent,
+        /// <summary>盾の枚数 +1。</summary>
+        Count,
+        /// <summary>CT を動かす技の動かし幅 +1 / 引き受ける回数 +1。
+        /// ⭐ 「その技が持っている数」を伸ばす最後の受け皿。</summary>
+        Amount,
+    }
+
+    /// <summary>スキルレベルぶんの上乗せ。⭐ Lv1 なら全部 0 ＝ **1ビットも変わらない**。</summary>
+    public struct SkillBoost
+    {
+        public int PowerPercent;
+        public int CtCut;
+        public int ChancePoints;
+        public int ExtraTurns;
+        public int ExtraRepeat;
+        public int ExtraPercent;
+        public int ExtraCount;
+        public int ExtraAmount;
+
+        public bool IsNone => PowerPercent == 0 && CtCut == 0 && ChancePoints == 0
+            && ExtraTurns == 0 && ExtraRepeat == 0 && ExtraPercent == 0 && ExtraCount == 0
+            && ExtraAmount == 0;
+    }
+
     public sealed class Skill
     {
         public readonly string Id;
@@ -254,6 +300,168 @@ namespace EggCommand.Core
         /// <summary>ステータス系が動かす割合（%）。⭐ ステータスの数値そのものに掛かる。
         /// ⚠️ 段位を使わない。威力とは別の軸なので揃えない。UP も DOWN も一律この値。</summary>
         public const int BuffPercent = 30;
+
+        // ── スキルレベル ─────────────────────────────────
+        // ⭐ 伸び幅は語彙ごとに1つだけ。技ごとの数値は置かない。
+
+        /// <summary>スキルの最大レベル。⚠️ Lv1 が素の状態。</summary>
+        public const int MaxLevel = 5;
+
+        public const int GainPowerPercent = 10;
+        public const int GainChancePoints = 10;
+        public const int GainHealPoints = 5;
+
+        /// <summary>手で書いた成長表。⚠️ **例外だけ。**既定は効果から導く（<see cref="GrowthOf"/>）。</summary>
+        private static readonly Dictionary<string, SkillGain[]> GrowthOverrides =
+            new Dictionary<string, SkillGain[]>();
+
+        /// <summary>その技の成長表（Lv2・Lv3・Lv4・Lv5 の順）。
+        ///
+        /// ⭐ **既定は効果から導く。**手で 33技 × 4段 を書くと、必ずどこかに
+        /// 「上げても何も起きない段」が混じる（ダメージの無い技に威力を付ける等）。
+        /// ⚠️ 導いた結果が気に入らない技だけ <see cref="GrowthOverrides"/> に書く。</summary>
+        /// <param name="slot">どの枠に入っているか。⚠️ **枠1（0）では CT を外す。**
+        /// 枠1 の CT は常に 0 なので、縮める段があっても何も起きない。
+        /// ⭐ -1 なら枠を問わない一覧（図鑑がこれを出す）。</param>
+        public static IReadOnlyList<SkillGain> GrowthOf(Skill skill, int slot = -1)
+        {
+            SkillGain[]? written;
+            if (GrowthOverrides.TryGetValue(skill.Id, out written) && written != null)
+            {
+                return slot == 0 ? WithoutCt(skill, written) : written;
+            }
+
+            // ⭐ その技が実際に持っている軸だけを並べ、最後に CT を足して順繰りに割り当てる
+            var axes = new List<SkillGain>();
+            if (HasDamage(skill)) axes.Add(SkillGain.Power);
+            if (HasRepeat(skill)) axes.Add(SkillGain.Repeat);
+            if (HasChance(skill)) axes.Add(SkillGain.Chance);
+            if (HasTurns(skill)) axes.Add(SkillGain.Turns);
+            // ⚠️ 回復の割合と盾の枚数は Turns でも Power でも表せない。
+            //    これが無いと、それらの技は伸びる軸が CT しか無くなり、
+            //    4段とも CT ＝ 途中で下限 0 に当たって**死に段**になる（導出して初めて見えた）
+            if (HasPercent(skill)) axes.Add(SkillGain.Percent);
+            if (HasCount(skill)) axes.Add(SkillGain.Count);
+            if (HasAmount(skill)) axes.Add(SkillGain.Amount);
+            if (skill.Ct > 0) axes.Add(SkillGain.Ct);
+
+            // ⚠️ 枠1 では CT が効かないので、軸から外してから割り当てる
+            if (slot == 0) axes.Remove(SkillGain.Ct);
+            if (axes.Count == 0)
+            {
+                // ⚠️ 伸ばせる軸が1つも無い技。⭐ Audit が読める形で報告できるよう、
+                //    ここでは落とさずに空を返す（0除算で落ちると原因が読めない）
+                return new SkillGain[0];
+            }
+
+            var growth = new SkillGain[MaxLevel - 1];
+            for (int i = 0; i < growth.Length; i++) growth[i] = axes[i % axes.Count];
+            return growth;
+        }
+
+        /// <summary>手で書いた成長表から CT を抜いて詰め直す。⚠️ 枠1 用。</summary>
+        private static SkillGain[] WithoutCt(Skill skill, SkillGain[] written)
+        {
+            var kept = new List<SkillGain>();
+            foreach (var gain in written) if (gain != SkillGain.Ct) kept.Add(gain);
+            if (kept.Count == 0) return new SkillGain[0];
+
+            var growth = new SkillGain[MaxLevel - 1];
+            for (int i = 0; i < growth.Length; i++) growth[i] = kept[i % kept.Count];
+            return growth;
+        }
+
+        /// <summary>Lv までに積み上がった上乗せ。⚠️ Lv1 なら何も乗らない。</summary>
+        /// <param name="slot">どの枠に入っているか。⚠️ **枠1 では CT の成長が効かない**
+        /// （元から CT 0）ので、その段を詰めて別の軸に置き換える。
+        /// ⭐ 渡さないと「★5の卵を払って何も変わらない段」が残る
+        /// （tamaru・tsunoga など5種の枠1 で Lv3・Lv5 が死んでいた）。</param>
+        public static SkillBoost BoostOf(Skill skill, int level, int slot = -1)
+        {
+            var boost = new SkillBoost();
+            if (level <= 1) return boost;
+
+            var growth = GrowthOf(skill, slot);
+            int steps = level - 1;
+            if (steps > growth.Count) steps = growth.Count;
+            for (int i = 0; i < steps; i++)
+            {
+                switch (growth[i])
+                {
+                    case SkillGain.Power: boost.PowerPercent += GainPowerPercent; break;
+                    case SkillGain.Ct: boost.CtCut += 1; break;
+                    case SkillGain.Chance: boost.ChancePoints += GainChancePoints; break;
+                    case SkillGain.Turns: boost.ExtraTurns += 1; break;
+                    case SkillGain.Repeat: boost.ExtraRepeat += 1; break;
+                    case SkillGain.Percent: boost.ExtraPercent += GainHealPoints; break;
+                    case SkillGain.Count: boost.ExtraCount += 1; break;
+                    case SkillGain.Amount: boost.ExtraAmount += 1; break;
+                }
+            }
+            return boost;
+        }
+
+        /// <summary>その成長がその技で死んでいる理由。⚠️ 効くなら null。</summary>
+        private static string? DeadGain(Skill skill, SkillGain gain)
+        {
+            switch (gain)
+            {
+                case SkillGain.Power: return HasDamage(skill) ? null : "ダメージが無い";
+                case SkillGain.Repeat: return HasDamage(skill) ? null : "ダメージが無い";
+                case SkillGain.Chance: return HasChance(skill) ? null : "外れる効果が無い";
+                case SkillGain.Turns: return HasTurns(skill) ? null : "続く効果が無い";
+                case SkillGain.Percent: return HasPercent(skill) ? null : "割合で効くものが無い";
+                case SkillGain.Count: return HasCount(skill) ? null : "枚数で効くものが無い";
+                case SkillGain.Amount: return HasAmount(skill) ? null : "回数で効くものが無い";
+                case SkillGain.Ct: return skill.Ct > 0 ? null : "CT が元から 0";
+                default: return "知らない成長";
+            }
+        }
+
+        private static bool HasDamage(Skill skill)
+        {
+            foreach (var e in skill.Effects) if (e.Kind == EffectKind.Damage) return true;
+            return false;
+        }
+
+        private static bool HasRepeat(Skill skill)
+        {
+            foreach (var e in skill.Effects) if (e.Kind == EffectKind.Damage && e.Repeat > 1) return true;
+            return false;
+        }
+
+        private static bool HasChance(Skill skill)
+        {
+            foreach (var e in skill.Effects) if (e.Chance < 100) return true;
+            return false;
+        }
+
+        private static bool HasTurns(Skill skill)
+        {
+            foreach (var e in skill.Effects) if (e.Turns > 0) return true;
+            return false;
+        }
+
+        private static bool HasPercent(Skill skill)
+        {
+            foreach (var e in skill.Effects) if (e.Kind == EffectKind.HealRatio) return true;
+            return false;
+        }
+
+        private static bool HasCount(Skill skill)
+        {
+            foreach (var e in skill.Effects) if (e.Kind == EffectKind.Shield) return true;
+            return false;
+        }
+
+        private static bool HasAmount(Skill skill)
+        {
+            foreach (var e in skill.Effects)
+            {
+                if (e.Kind == EffectKind.Ct || e.Kind == EffectKind.Taunt) return true;
+            }
+            return false;
+        }
 
         /// <summary>毒・リジェネの1スタックが、1行動ごとに動かす最大HP の割合（%）。
         /// ⭐ スタックする。2重なら 10%、3重なら 15%。
@@ -415,10 +623,36 @@ namespace EggCommand.Core
         /// 同じ技が、ある種族では枠1（CTなし）に、別の種族では枠2・3（CTあり）に入りうるため。</summary>
         public static int EffectiveCt(int slot, Skill skill) => slot == 0 ? 0 : skill.Ct;
 
-        /// <summary>弱い側の効果か（免疫が防ぐ対象）。</summary>
+        /// <summary>スキルレベルぶん縮めた CT。⚠️ 枠1 は元から 0 なので変わらない。</summary>
+        public static int EffectiveCt(int slot, Skill skill, SkillBoost boost)
+        {
+            int ct = EffectiveCt(slot, skill) - boost.CtCut;
+            return ct < 0 ? 0 : ct;
+        }
+
+        /// <summary>スキルレベルぶん上乗せした威力。
+        /// ⭐ 段位の表（<see cref="DamagePowerOf"/>）が唯一の出所のまま。ここは掛けるだけ。</summary>
+        public static int BoostedPower(PowerTier tier, SkillBoost boost)
+        {
+            int power = DamagePowerOf(tier);
+            if (boost.PowerPercent == 0) return power;
+            return (int)Math.Floor((double)(power * (100 + boost.PowerPercent)) / 100);
+        }
+
+        /// <summary>弱い側の効果か。⭐ **免疫が防ぐのはここが true のものすべて。**
+        ///
+        /// ⚠️ この判定は3つを同時に決めている:
+        /// 免疫が弾くか / 速度差で通る率が動くか / 特性（狙い澄まし・意地）が効くか。
+        /// ⭐ 「弱化」というひとつの括りなので、3つが揃って動くのが正しい。
+        ///
+        /// ⚠️ **CT延長・封じが漏れていた**（2026-08-17 修正）。
+        /// 免疫で防げず、速度差でも動かず、狙い澄ましも効かない**唯一の弱化**になっていた。
+        /// ⚠️ CT の効果は短縮（自分に掛ける）と延長（相手に掛ける）が同じ種類なので、
+        /// **向きで見分ける**（延長だけが弱化）。</summary>
         public static bool IsHarmful(Effect effect)
         {
             if (effect.Kind == EffectKind.Buff) return effect.Sign < 0;
+            if (effect.Kind == EffectKind.Ct) return effect.Delta > 0;
             return effect.Kind == EffectKind.Poison || effect.Kind == EffectKind.Stun;
         }
 
@@ -443,6 +677,38 @@ namespace EggCommand.Core
                 if (skill.Name.Length == 0) problems.Add($"{skill.Id}: 名前が空");
                 if (skill.Gist.Length == 0) problems.Add($"{skill.Id}: 画面に出す短い説明が空");
                 if (skill.Ct < 0) problems.Add($"{skill.Id}: CT が {skill.Ct}");
+
+                // ⚠️ **上げても何も起きない段**を弾く。これが無いと
+                //    「Lv3 にしたのに何も変わらない」が黙って通る（画面には出るのに実体が無い）
+                var growth = GrowthOf(skill);
+                if (growth.Count != MaxLevel - 1)
+                {
+                    problems.Add($"{skill.Id}: 伸ばせる軸が1つも無い（成長表が {growth.Count} 段）");
+                }
+                // ⚠️ 枠1（種族固定）に入る技は、CT の段が死ぬ。詰め替えが効いているか数える
+                foreach (var species in SpeciesTable.All)
+                {
+                    if (species.Skill1 != skill.Id) continue;
+                    var asSlot1 = GrowthOf(skill, 0);
+                    foreach (var gain in asSlot1)
+                    {
+                        if (gain == SkillGain.Ct)
+                            problems.Add($"{skill.Id}: {species.Id} の枠1 なのに CT の段がある（効かない）");
+                    }
+                    if (asSlot1.Count != MaxLevel - 1)
+                        problems.Add($"{skill.Id}: {species.Id} の枠1 で伸ばせる軸が無い");
+                }
+                int cuts = 0;
+                foreach (var gain in growth)
+                {
+                    string? dead = DeadGain(skill, gain);
+                    if (dead != null) problems.Add($"{skill.Id}: {gain} が効かない（{dead}）");
+                    // ⚠️ CT は 0 が下限。技の CT より多く縮める段は**何も起きない**
+                    if (gain == SkillGain.Ct && ++cuts > skill.Ct)
+                    {
+                        problems.Add($"{skill.Id}: CT を {cuts} 回縮めるが、元の CT は {skill.Ct}");
+                    }
+                }
 
                 foreach (var effect in skill.Effects)
                 {

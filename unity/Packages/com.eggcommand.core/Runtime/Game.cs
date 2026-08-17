@@ -23,6 +23,12 @@ namespace EggCommand.Core
         public readonly IdleRun Idle = new IdleRun();
         /// <summary>出撃させる3体の id。⚠️ 空なら素質の高い順に自動で選ぶ。</summary>
         public readonly List<string> Party = new List<string>();
+        /// <summary>巣ごとに何回盗んだか。⭐ **盤の難易度と巣の寿命の唯一の出所。**
+        ///
+        /// ⚠️ 盗んだ回数で関門が増え、隙間が狭まり、いずれ親が塞ぎ切る。
+        /// ここを持たないと、挑むたびに盤が振り直せてしまう（粘れば良い盤が出る）。</summary>
+        public readonly Dictionary<string, int> Raids = new Dictionary<string, int>();
+
         /// <summary>通し番号。id を一意にするためだけに使う。</summary>
         public int Serial;
         /// <summary>探索の巣の通し番号。⚠️ <see cref="Serial"/> と分ける。
@@ -42,6 +48,8 @@ namespace EggCommand.Core
         public readonly Rng RngSlant;
         /// <summary>属性を引く系統。⚠️ 後から足したもの。既にある系統の消費順を1つも変えていない。</summary>
         public readonly Rng RngElement;
+        /// <summary>特性を引く系統。⚠️ 同上。混ぜて引かないこと。</summary>
+        public readonly Rng RngTrait;
 
         public Game(int seed)
         {
@@ -57,6 +65,7 @@ namespace EggCommand.Core
             RngEncounter = root.Stream("encounter");
             RngSlant = root.Stream("slant");
             RngElement = root.Stream("element");
+            RngTrait = root.Stream("trait");
         }
     }
 
@@ -64,7 +73,9 @@ namespace EggCommand.Core
     {
         public const int PartySize = 3;
 
-        public static Game NewGame(int seed)
+        /// <param name="nowUnix">いまの時刻。⚠️ **渡さないと開幕の3件が永久に消えません**
+        /// （期限 0 ＝「期限を持たない」扱いになるため）。⭐ 既定 0 は較正済みの照合のため。</param>
+        public static Game NewGame(int seed, long nowUnix = 0)
         {
             var game = new Game(seed);
 
@@ -77,16 +88,58 @@ namespace EggCommand.Core
                 string id = $"c{game.Serial.ToString().PadLeft(3, '0')}";
                 StatKey strong, weak;
                 Nests.RollSlant(game.RngSlant, out strong, out weak);
+                // ⭐ 最初の3体は★1 なので特性を持たない。
+                //    ⚠️ ここが「始めた瞬間から読むものが多い」の入口だった
                 game.Storage = Storages.Accept(game.Storage,
-                    Nests.Hatch(game.RngHatch, egg, id, strong, weak));
+                    Nests.Hatch(game.RngHatch, egg, id, strong, weak,
+                        Traits.RollFor(game.RngTrait, egg.Rarity)));
             }
-            Encounters.Refill(game);
+            Encounters.Refill(game, nowUnix);
             return game;
         }
 
         /// <summary>巣の守り手。⚠️ 挑むたびに作り直す（同じ巣でも顔ぶれが変わる）。</summary>
         public static List<Creature> DefendersOf(Game game, Nest nest) =>
             Nests.MakeDefenders(game.RngNest, nest, SpeciesTable.Roll(game.RngElement));
+
+        /// <summary>その巣から何回盗んだか。⚠️ 一度も盗んでいなければ 0。</summary>
+        public static int RaidsOn(Game game, Nest nest)
+        {
+            int count;
+            return game.Raids.TryGetValue(nest.Id, out count) ? count : 0;
+        }
+
+        /// <summary>盗みが成った。⭐ **次からこの巣は難しくなる。**
+        /// ⚠️ 戦って勝ったときは数えない（守りを固めるのは盗まれたときだけ）。</summary>
+        public static void RecordRaid(Game game, Nest nest) =>
+            game.Raids[nest.Id] = RaidsOn(game, nest) + 1;
+
+        /// <summary>片付いた巣の記録を捨てる。⚠️ 巣の id は再利用されないので、
+        /// 残しても害は無い**ように見えて**、辞書が単調に増えて保存が膨らみ続ける。
+        /// ⭐ 差し替えるたびに捨てる（<see cref="Encounters.Replace"/> が呼ぶ）。</summary>
+        public static void ForgetRaids(Game game, string nestId) => game.Raids.Remove(nestId);
+
+        /// <summary>もう**潜入では**届かない巣か。⭐ 親が完全にふさいでいる。
+        ///
+        /// ⚠️ **巣が消えるわけではない。**探索には残り続ける。
+        /// ⭐ 塞がった巣に入ると、どう投げても親に当たる ＝ **必ず親との戦闘になる**。
+        /// そこで勝てば最後の卵が手に入り、**親が失われるので巣が消える**。
+        /// ⚠️ 塞がりは壁ではなく、**戦闘へ向かわせる漏斗**。
+        /// ここで巣を消してしまうと、最後の1個を取り上げることになる。</summary>
+        public static bool IsNestSealed(Game game, Nest nest) =>
+            Steal.IsSealed(RaidsOn(game, nest));
+
+        /// <summary>巣から卵を取る（**遊びで使うほう**）。⭐ 素質も孵化時間も★だけで決まる。
+        /// ⚠️ <see cref="GainEgg"/> は移植元の規則。較正済みの照合が踏んでいるので残す。</summary>
+        public static Egg TakeEgg(Game game, Nest nest, EggOrigin how)
+        {
+            // ⚠️ 希少さは別の系統で引く。ここを RngEgg に混ぜると素質の列がずれる
+            int rarity = Rarities.Roll(game.RngRarity, nest.Tier, how);
+            var egg = Nests.MakeEggOfRarity(game.RngEgg, nest, how, ++game.Serial, rarity,
+                element: SpeciesTable.Roll(game.RngElement));
+            game.Eggs.Add(egg);
+            return egg;
+        }
 
         public static Egg GainEgg(Game game, Nest nest, EggOrigin how)
         {
@@ -159,12 +212,53 @@ namespace EggCommand.Core
             var b = CreatureById(game, bId);
             // ⭐ 属性は親のどちらかから受け継ぐ。⚠️ 別の系統で引く（配合の列をずらさない）
             var element = game.RngElement.Chance(0.5) ? a.Element : b.Element;
-            var outcome = Fusion.Fuse(game.RngBreed, a, b, ++game.Serial, element: element);
+            // ⭐ 特性も同じく親から。⚠️ 片方が持たないなら持っているほうを継ぐ
+            //    （半分の確率で「特性の無い子」が生まれると、配合が特性を減らす手段になる）
+            var traitId = game.RngTrait.Chance(0.5)
+                ? a.TraitId ?? b.TraitId
+                : b.TraitId ?? a.TraitId;
+            var outcome = Fusion.Fuse(game.RngBreed, a, b, ++game.Serial,
+                element: element, traitId: traitId);
             game.Eggs.Add(outcome.Egg);
 
             ReleaseCreature(game, aId);
             ReleaseCreature(game, bId);
             return outcome;
+        }
+
+        /// <summary>孵化前の卵を素材にして、スキルを1枠ぶん鍛える。
+        /// ⭐ **卵の唯一の「孵さない使い道」。**★＝強さを成立させている支え。
+        ///
+        /// ⚠️ 孵化器に入っている卵は使えない（棚にあるものだけ）。
+        /// 温め始めたものを取り上げると、待った時間が黙って消える。
+        /// ⚠️ 上限に達している枠には食わせない。⭐ 押したのに何も起きず卵だけ減る、を作らない。</summary>
+        /// <returns>実際に入ったポイント。0 なら何も起きていない（卵も減らない）。</returns>
+        public static int FeedEggToSkill(Game game, string creatureId, int slot, string eggId)
+        {
+            var creature = CreatureById(game, creatureId);
+            if (slot < 0 || slot >= creature.SkillPoints.Length)
+                throw new ArgumentException($"枠 {slot} は無い");
+            // ⚠️ 空き枠には注げない（技が無いのにレベルだけ上がる状態を作らない）
+            if (Creatures.SkillsOf(creature)[slot] == null) return 0;
+            if (SkillCosts.IsMaxed(creature.SkillPoints[slot])) return 0;
+
+            int index = -1;
+            for (int i = 0; i < game.Eggs.Count; i++)
+            {
+                if (game.Eggs[i].Id == eggId) { index = i; break; }
+            }
+            if (index < 0) throw new ArgumentException($"{eggId} という卵は棚に無い");
+
+            // ⚠️ **上限を超える卵は受け取らない。**丸めて受け取ると、
+            //    上限の1つ手前に★5（81pt）を入れたとき 80pt が黙って消えて、
+            //    画面には「+81」と出る（2時間待った卵が蒸発する）。
+            int points = Rarities.PointsOf(game.Eggs[index].Rarity);
+            int room = SkillCosts.TotalFor(Skills.MaxLevel) - creature.SkillPoints[slot];
+            if (points > room) return 0;
+
+            game.Eggs.RemoveAt(index);
+            creature.SkillPoints[slot] += points;
+            return points;
         }
 
         /// <summary>合成＝個体を食わせて育てる。⭐ **食わせた側は失われる**。</summary>

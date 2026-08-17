@@ -61,11 +61,18 @@ namespace EggCommand.Core
         /// <summary>孵ったときの属性。⭐ 卵の時点で決まっている（孵るまでの楽しみは希少さと素質）。</summary>
         public readonly Element Element;
 
+        /// <summary>持って生まれる特性。⭐ null なら孵すときに引く（野生の卵）。
+        /// ⚠️ <see cref="HasSkills"/>・<see cref="Strong"/> と同じ約束。
+        /// 配合で親から継いだものを孵化時に引き直さない。</summary>
+        public readonly string? TraitId;
+
         public Egg(string id, string speciesId, StatBlock wild, int mutationCounter, int paletteIndex,
             string? parentA, string? parentB, int generation, EggOrigin how,
             bool hasSkills, string? skill2, string? skill3, int rarity = 1,
-            StatKey? strong = null, StatKey? weak = null, Element? element = null)
+            StatKey? strong = null, StatKey? weak = null, Element? element = null,
+            string? traitId = null)
         {
+            TraitId = traitId;
             Element = element ?? Migrations.ElementOf(speciesId);
             Rarity = rarity < 1 ? 1 : rarity > Rarities.Max ? Rarities.Max : rarity;
             Strong = strong;
@@ -209,13 +216,48 @@ namespace EggCommand.Core
                 rarity: rarity, element: element);
         }
 
+        /// <summary>★が約束する素質の合計。⭐ **★が唯一の見える予告。**
+        ///
+        /// ⭐ 「★が高い＝強い個体が出る」。孵るまでの時間も★で決まるので、
+        /// **見る数字が1つになる**（段階・希少さ・レベルを別々に読まなくてよい）。
+        ///
+        /// ⚠️ 正典はもともと「希少さは強さを決めない」と決めていた。理由は
+        /// 「長く待った卵が必ず強いなら、どれを孵化器に入れるかの選択が消える」。
+        /// ⭐ **孵さない使い道（強化素材）ができたので、この懸念は解ける** ──
+        /// ★5は「2時間待って強い個体」と「いま強化に使う」の二択になる。
+        /// ⚠️ **素材の出口が入るまでは、この選択は成立していない。**先に消すと元の問題が戻る。</summary>
+        public static int WildTotalForRarity(int rarity) => WildTotalForTier(Rarities.Clamp(rarity));
+
+        /// <summary>親から卵を作る（**遊びで使うほう**）。⭐ 素質は★だけで決まる。
+        ///
+        /// ⚠️ <see cref="MakeEgg"/> は移植元の規則で、較正済みの照合が踏んでいるので残してある。
+        /// 両方を混ぜないこと（<see cref="Breeding"/> と <see cref="Fusion"/> と同じ関係）。
+        ///
+        /// ⚠️ **盗んだ卵の割引をここでは掛けない。**★を引くときに1段下げてあるので、
+        /// ここでも掛けると二重に罰することになる（`Rarities.Roll` が唯一の出所）。</summary>
+        public static Egg MakeEggOfRarity(Rng rng, Nest nest, EggOrigin how, int serial, int rarity,
+            Element? element = null)
+        {
+            int total = WildTotalForRarity(rarity) + rng.Int(-3, 4);
+            if (total < 4) total = 4;
+            if (total > Stats.WildTotalMax) total = Stats.WildTotalMax;
+
+            return new Egg(
+                $"e{serial.ToString().PadLeft(3, '0')}",
+                nest.SpeciesId,
+                SpreadWild(rng, total),
+                0, 0, null, null, 1, how,
+                hasSkills: false, skill2: null, skill3: null,
+                rarity: rarity, element: element);
+        }
+
         /// <summary>孵す。⭐ 野生の卵はここでスキル2・3のガチャを引く。
         /// 配合の卵は既に決まっているのでそのまま使う。</summary>
-        /// <summary><paramref name="strong"/>/<paramref name="weak"/> は卵が持っていないときの
-        /// 引き直し結果。⚠️ ここで乱数を引かない — 引くと既にある hatch の系統がずれて、
-        /// 較正済みの検査が無効になる。呼び側が別の系統で引いて渡す。</summary>
+        /// <summary><paramref name="strong"/>/<paramref name="weak"/>/<paramref name="traitId"/> は
+        /// 卵が持っていないときの引き直し結果。⚠️ ここで乱数を引かない — 引くと既にある hatch の
+        /// 系統がずれて、較正済みの検査が無効になる。呼び側が別の系統で引いて渡す。</summary>
         public static Creature Hatch(Rng rng, Egg egg, string id,
-            StatKey? strong = null, StatKey? weak = null)
+            StatKey? strong = null, StatKey? weak = null, string? traitId = null)
         {
             var species = SpeciesTable.ById(egg.SpeciesId);
             string? skill2 = egg.Skill2;
@@ -228,7 +270,8 @@ namespace EggCommand.Core
             return new Creature(id, egg.SpeciesId, egg.Wild, new StatBlock(0, 0, 0, 0), 0,
                 egg.MutationCounter, skill2, skill3, egg.PaletteIndex,
                 egg.ParentA, egg.ParentB, egg.Generation,
-                egg.Strong ?? strong, egg.Weak ?? weak, egg.Element);
+                egg.Strong ?? strong, egg.Weak ?? weak, egg.Element,
+                egg.TraitId ?? traitId);
         }
 
         /// <summary>得意・不得意を引く。⚠️ 同じステにならないよう2つ別々に取る。</summary>

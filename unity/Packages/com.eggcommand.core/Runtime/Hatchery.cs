@@ -125,11 +125,14 @@ namespace EggCommand.Core
 
                 game.Incubating.RemoveAt(i);
                 string id = $"c{(++game.Serial).ToString().PadLeft(3, '0')}";
-                // ⚠️ 得意・不得意は別の系統で引く。hatch の系統に混ぜると
+                // ⚠️ 得意・不得意と特性は別の系統で引く。hatch の系統に混ぜると
                 //    技のガチャの列がずれて、較正済みの検査が無効になる
                 StatKey strong, weak;
                 Nests.RollSlant(game.RngSlant, out strong, out weak);
-                var creature = Nests.Hatch(game.RngHatch, slot.Egg, id, strong, weak);
+                // ⭐ 巣の卵＝**新しい特性を入れる唯一の入口**。配合の卵は既に持っている
+                // ⚠️ 特性は★の低い卵には付かない（序盤に読むものを増やさない）
+                var creature = Nests.Hatch(game.RngHatch, slot.Egg, id, strong, weak,
+                    Traits.RollFor(game.RngTrait, slot.Egg.Rarity));
                 game.Storage = Storages.Accept(game.Storage, creature);
                 return creature;
             }

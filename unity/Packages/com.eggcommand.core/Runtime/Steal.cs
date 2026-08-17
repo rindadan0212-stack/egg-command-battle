@@ -27,6 +27,45 @@ namespace EggCommand.Core
         Success,
         Blocked,
         Stalled,
+        /// <summary>飛び切って盤面に降りた。⚠️ **失敗ではない** — 以降の発射台になる。
+        /// ⭐ 後ろに足す（既にある3つの値を動かさない）。</summary>
+        Landed,
+    }
+
+    /// <summary>経路上の関門。⭐ **要求するステが種類で決まる**（値は個別に持たない）。
+    ///
+    /// ⭐ これがある理由: 飛距離だけが問われると、編成は速度一色になる。
+    /// 道の途中で他のステを要求すれば、3体それぞれに別の役目が生まれる。
+    /// ⚠️ 関門ごとに「何を要求するか」を自由に書けるようにしない。
+    /// 種類と要求値の対応が1箇所で決まっていないと、画面の絵と判定が食い違う。</summary>
+    public enum GimmickKind
+    {
+        /// <summary>壁。攻撃力が足りれば**壊して貫通**し、以降は誰でも通れる。</summary>
+        Wall,
+        /// <summary>ダメージ床。HP が足りなければ踏破中に力尽きる。</summary>
+        Damage,
+        /// <summary>重圧のエリア。防御力が足りなければ耐えられない。</summary>
+        Pressure,
+    }
+
+    /// <summary>関門ひとつ。盤を横切る帯として置く。</summary>
+    public sealed class Gimmick
+    {
+        public readonly GimmickKind Kind;
+        public readonly double From, To;
+        public readonly double Top, Bottom;
+        /// <summary>通るのに要るステの値。⚠️ どのステかは <see cref="Kind"/> が決める。</summary>
+        public readonly int Requires;
+
+        public Gimmick(GimmickKind kind, double from, double to, double top, double bottom, int requires)
+        {
+            Kind = kind;
+            From = from;
+            To = to;
+            Top = top;
+            Bottom = bottom;
+            Requires = requires;
+        }
     }
 
     public sealed class StealField
@@ -42,9 +81,12 @@ namespace EggCommand.Core
         public readonly double BandBottom;
         public readonly Point Egg;
         public readonly Point Start;
+        /// <summary>経路上の関門。⚠️ 空でもよい（移植元の盤には無い）。</summary>
+        public readonly IReadOnlyList<Gimmick> Gimmicks;
 
         public StealField(double height, FieldSide side, double gapFrom, double gapTo,
-            double bandTop, double bandBottom, Point egg, Point start)
+            double bandTop, double bandBottom, Point egg, Point start,
+            IReadOnlyList<Gimmick>? gimmicks = null)
         {
             Height = height;
             Side = side;
@@ -54,6 +96,7 @@ namespace EggCommand.Core
             BandBottom = bandBottom;
             Egg = egg;
             Start = start;
+            Gimmicks = gimmicks ?? new Gimmick[0];
         }
     }
 
@@ -63,12 +106,24 @@ namespace EggCommand.Core
         /// <summary>通った軌跡。画面がこれをなぞって描く。</summary>
         public readonly List<Point> Path;
         public readonly double Traveled;
+        /// <summary>止まった場所。⭐ 次の発射台になる。</summary>
+        public readonly Point Landing;
+        /// <summary>通れずに止められた関門の添字。⚠️ 無ければ -1。</summary>
+        public readonly int StoppedBy;
+        /// <summary>この一投で壊した壁の添字。⭐ 以降は誰でも通れる。</summary>
+        public readonly IReadOnlyList<int> Broke;
 
-        public StealRun(StealOutcome outcome, List<Point> path, double traveled)
+        private static readonly int[] Nothing = new int[0];
+
+        public StealRun(StealOutcome outcome, List<Point> path, double traveled,
+            int stoppedBy = -1, IReadOnlyList<int>? broke = null)
         {
             Outcome = outcome;
             Path = path;
             Traveled = traveled;
+            Landing = path.Count > 0 ? path[path.Count - 1] : new Point(0, 0);
+            StoppedBy = stoppedBy;
+            Broke = broke ?? Nothing;
         }
     }
 
@@ -153,6 +208,43 @@ namespace EggCommand.Core
         /// ⚠️ 手で決めた数を置かない。塞ぐ幅から出す（食い違いようがない）。</summary>
         public const double Lean = ParentWidth + GapWidth / 2 - FieldWidth / 2;
 
+        /// <summary>親が塞ぎ切るまでに盗める回数。⭐ **巣には寿命がある。**
+        ///
+        /// ⚠️ 無限に盗めると、良い巣を1つ見つけたら探索が要らなくなる。
+        /// 上限があるので「次の巣を探す」が輪の駆動力として残る。</summary>
+        /// ⚠️ 5 にしていたとき、最後の1回（raids 3）は隙間 20 に対し走者が 14 で、
+        /// 通る角度が 2〜7度しか無かった。**幾何の上では通れるのに遊べない**状態。
+        /// 4 にすると幾何の封鎖（隙間 &lt; 走者）と遊べる限界が一致する。
+        public const int RaidsToSeal = 4;
+
+        /// <summary>その回数だけ盗まれたあとの隙間の幅。⭐ **盗むほど狭まる。**
+        /// ⚠️ 数値を上げるのではなく道を狭める（「親が強くなった」ではなく「守りを固めた」）。
+        /// ⚠️ <see cref="RaidsToSeal"/> に達すると 0 ＝ 親が完全にふさぐ。もう潜入できない。</summary>
+        /// <summary>最後まで残す隙間の幅。⚠️ **0 へ向けて直線的に詰めない。**
+        ///
+        /// ⚠️ 直線で詰めていたとき、最後に潜れる回（隙間 25.5・走者 14）の通る角度が
+        /// **2〜5度**しかなかった。「難しい」ではなく「遊べない」。
+        /// ⭐ 潜れるあいだは通れる幅を保ち、**塞ぐときは一気に塞ぐ**。
+        /// 難易度の上がりぶんは関門の数が持つ（仕様が言う「ギミックが増える」ほう）。</summary>
+        public const double GapFloor = 32;
+
+        public static double GapWidthFor(int raids)
+        {
+            if (raids <= 0) return GapWidth;
+            // ⭐ 塞ぎ切るのは一度きり。手前までは通れる幅を残す
+            if (raids >= RaidsToSeal) return 0;
+            double t = (double)raids / (RaidsToSeal - 1);
+            if (t > 1) t = 1;
+            return GapWidth + (GapFloor - GapWidth) * t;
+        }
+
+        /// <summary>隙間が走者より狭ければ、どう狙っても通れない ＝ その巣は死んでいる。</summary>
+        public static bool IsSealed(int raids) => GapWidthFor(raids) <= RunnerRadius * 2;
+
+        /// <summary>親の寄り。⭐ 隙間が必ず片方の壁に接する（親は反対側の端に固まる）。
+        /// ⚠️ <see cref="Lean"/> は raids 0 のときのこの値。定数のほうは移植元の照合が踏んでいる。</summary>
+        public static double LeanFor(double gap) => FieldWidth / 2 - gap / 2;
+
         /// <summary>⚠️ 1マス幅の切れ端を返さない。
         /// 隙間が壁に接すると反対側に幅 1 の帯が残り、当たり判定には効かないのに
         /// 画面には線が出る。見た目が「何かある」と言っているのに実体が無いのは嘘。</summary>
@@ -160,21 +252,292 @@ namespace EggCommand.Core
 
         private static double JsRound(double value) => Math.Floor(value + 0.5);
 
-        public static StealField MakeField(int tier, FieldSide side)
+        /// <param name="raids">その巣から今までに盗んだ回数。⭐ **関門が増える**。
+        /// ⚠️ 数値を上げるのではなく関門を増やす（「強くなった」ではなく「守りが厚くなった」）。
+        /// ⚠️ 既定 0 なら移植元の盤とまったく同じ（較正済みの照合が生きる）。</param>
+        /// <param name="rng">関門の車線を振る乱数。⚠️ **null なら決め打ち**（移植元の照合と検査用）。
+        /// ⚠️ 遊びから呼ぶときは <see cref="MakeValidatedField"/> を通すこと。
+        /// ここは検査を通らない盤も返す。</param>
+        public static StealField MakeField(int tier, FieldSide side, int raids = 0, Rng? rng = null)
         {
             double height = DepthForTier(tier);
+            double gap = GapWidthFor(raids);
+            double lean = LeanFor(gap);
             // 親が右へ寄る＝隙間は左寄り
-            double center = side == FieldSide.Right ? FieldWidth / 2 - Lean : FieldWidth / 2 + Lean;
+            double center = side == FieldSide.Right ? FieldWidth / 2 - lean : FieldWidth / 2 + lean;
             double bandTop = JsRound(height * 0.36);
+            var start = new Point(FieldWidth / 2, height - 14);
             return new StealField(
                 height,
                 side,
-                Math.Max(0, center - GapWidth / 2),
-                Math.Min(FieldWidth, center + GapWidth / 2),
+                Math.Max(0, center - gap / 2),
+                Math.Min(FieldWidth, center + gap / 2),
                 bandTop,
                 bandTop + BandThickness,
                 new Point(FieldWidth / 2, 26),
-                new Point(FieldWidth / 2, height - 14));
+                start,
+                MakeGimmicks(tier, raids, side, bandTop + BandThickness, start.Y, rng));
+        }
+
+        /// <summary>関門の帯の厚み。
+        /// ⚠️ 厚いほど、迂回する側は「空いた車線に留まったまま」越える距離が伸びる。
+        /// 18 では迂回できる角度が 0.1度しか無かった（走査で発覚）。</summary>
+        public const double GimmickThickness = 12;
+
+        /// <summary>関門が塞ぐ横幅の割合。⭐ **塞ぎ切らない。**
+        /// ⚠️ 全幅を塞ぐと「要求を満たす個体を持っているか」だけの検査になる。
+        /// 空きを残せば「満たして直進する / 迂回して距離を払う」の二択になり、
+        /// 速さが**どこで消費するかの資源**だという芯とつながる。
+        ///
+        /// ⚠️ 0.62 では迂回が**実質不能**だった。空いた車線が 40 しかないのに、
+        /// 帯を越えるのに 32 ぶん上がる必要があり、留まれる角度の幅が 0.1度になる。
+        /// しかも外へ寄せすぎると壁で跳ね返って関門へ戻る。⭐ **走査で決めた値。**</summary>
+        public const double GimmickSpan = 0.5;
+
+        /// <summary>関門が要求する値。⭐ **想定編成から導く。手で置かない。**
+        ///
+        /// ⭐ 返すのは「その段階の想定編成の中で、そのステが一番高い個体の値」。
+        /// つまり**寄せた1体はちょうど通り、他の2体は通れない**。
+        /// これで関門が「誰に任せるか」の問いになる。
+        ///
+        /// ⚠️ 手で 28/32/36/40/44 と書いていたとき、段1 の壁は攻撃力 28 を要求するのに
+        /// 段1 の想定編成は最大 27 だった ── **誰にも通れない関門**が1つ混じっていた。
+        /// ⭐ ランダマイザが「持っていない鍵の後ろに扉を置かない」ために
+        /// 到達可能な集合から逆算するのと同じ考え方。表に書くと必ずいつかずれる。</summary>
+        public static int RequirementFor(int tier, GimmickKind kind)
+        {
+            var key = StatOf(kind);
+            int best = 0;
+            foreach (var creature in ReferenceParty(tier))
+            {
+                int value = Creatures.StatsOf(creature)[key];
+                if (value > best) best = value;
+            }
+            return best;
+        }
+
+        /// <summary>関門の並び。⚠️ 乱数を渡さないときの決め打ち（移植元の照合と検査用）。</summary>
+        private static readonly GimmickKind[] Order =
+        {
+            GimmickKind.Wall, GimmickKind.Damage, GimmickKind.Pressure,
+        };
+
+        /// <summary>縦の位置を枠の何割まで揺らすか。
+        /// ⚠️ 大きくすると隣と重なるか、親の帯や出発点に食い込む。</summary>
+        public const double JitterShare = 0.6;
+
+        /// <summary>その盤に出す関門の種類を選ぶ。
+        ///
+        /// ⭐ **同じ種類を2つ出さない。** 関門がある理由は「3体それぞれに別の役目を作る」ことなので、
+        /// 壁を3枚並べると「攻撃力を持っているか」だけの検査に戻ってしまう。
+        ///
+        /// ⚠️ **壁を一番奥にしない。** 壁は壊すと後続が通れるのが値打ちで、
+        /// 一番奥だと後続がもう通らないから、その値打ちが丸ごと消える。
+        /// ⭐ 消えても壊れはしないが、**種類ごとの違いが無くなる**ので避ける。</summary>
+        private static List<GimmickKind> PickKinds(int count, Rng? rng)
+        {
+            var kinds = new List<GimmickKind>();
+            if (rng == null)
+            {
+                for (int i = 0; i < count; i++) kinds.Add(Order[i]);
+                return kinds;
+            }
+
+            kinds = rng.Sample(Order, count);
+            if (count >= 2 && kinds[count - 1] == GimmickKind.Wall)
+            {
+                kinds[count - 1] = kinds[0];
+                kinds[0] = GimmickKind.Wall;
+            }
+            return kinds;
+        }
+
+        /// <summary>関門の数。⚠️ 段階と、盗まれた回数で増える。上限は <see cref="Order"/> の長さ。</summary>
+        public static int GimmickCountFor(int tier, int raids)
+        {
+            int count = tier - 1 + raids;
+            if (count < 0) count = 0;
+            return count > Order.Length ? Order.Length : count;
+        }
+
+        /// <summary>関門を置く。⭐ **空ける車線を先に決めてから塞ぐ。**
+        ///
+        /// ⭐ Spelunky が「解の道を先に彫ってから飾る」のと同じ考え方。
+        /// 後から置くものが道を壊しようがない形にしておけば、検査は確認で済む。
+        ///
+        /// ⚠️ 左右を機械的に交互にすると、隣り合う関門の縦の間隔しだいで
+        /// 車線を乗り換える角度が立ちすぎ、**通れるのに通れない**盤ができる。
+        /// 乗り換えに要る角度が 45度を超えるなら、同じ側に空けて素直な道を残す。</summary>
+        private static List<Gimmick> MakeGimmicks(int tier, int raids, FieldSide side,
+            double corridorTop, double corridorBottom, Rng? rng)
+        {
+            var list = new List<Gimmick>();
+            int count = GimmickCountFor(tier, raids);
+            if (count == 0) return list;
+
+            double span = FieldWidth * GimmickSpan;
+            double lane = FieldWidth - span;          // 空けておく車線の幅
+            double swap = FieldWidth - lane;          // 車線を乗り換えるのに要る横移動
+            double slot = (corridorBottom - corridorTop) / (count + 1.0);
+
+            var kinds = PickKinds(count, rng);
+
+            // ── 縦の位置。⭐ 枠の中で揺らす（同じ段でも盤の顔つきが変わる）
+            // ⚠️ 揺らすと隣り合う関門の間隔が変わる。**その実測値で**車線の乗り換えを決める
+            //    （名目の間隔で決めると、詰まった箇所で乗り換えを要求してしまう）
+            var ys = new double[count];
+            for (int i = 0; i < count; i++)
+            {
+                double t = (i + 1.0) / (count + 1.0);
+                double y = corridorBottom - (corridorBottom - corridorTop) * t;
+                if (rng != null)
+                {
+                    // ⚠️ 枠の 1/3 まで。これ以上振ると隣と重なるか、親や出発点に食い込む
+                    y += (rng.Float() - 0.5) * slot * JitterShare;
+                }
+                double top = corridorTop + GimmickThickness;
+                double bottom = corridorBottom - GimmickThickness;
+                if (y < top) y = top;
+                if (y > bottom) y = bottom;
+                ys[i] = y;
+            }
+
+            // ⭐ **出口から逆算する。**親が右へ寄っている＝隙間は左なので、
+            //    一番奥の関門は左を空ける。ここを揃えないと、最後の一投が盤を横断させられる。
+            // ⚠️ 車線と隙間を独立に決めていたときは、段1 でも通る角度が 1度になる盤が出た。
+            //    Spelunky が「解の道を先に彫る」のと同じで、**出口まで含めて**先に決める。
+            bool openRight = side != FieldSide.Right;
+            var lanes = new bool[count];
+            for (int i = count - 1; i >= 0; i--)
+            {
+                lanes[i] = openRight;
+                if (i > 0)
+                {
+                    // ⭐ 乗り換えられるだけの縦の余裕があるときだけ、車線を反対側へ振る。
+                    //    ⚠️ 余裕が無いのに振ると、要る角度が立ちすぎて通れない盤になる
+                    bool canSwap = ys[i - 1] - ys[i] >= swap;
+                    bool wantSwap = rng == null ? true : rng.Chance(0.6);
+                    if (canSwap && wantSwap) openRight = !openRight;
+                }
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                // ⚠️ **空いているのが車線。**塞ぐ側はその裏返しとして出す（食い違いようがない）
+                double from = lanes[i] ? 0 : lane;
+                // ⚠️ 要求値は関門の種類ごとに違う（要求するステが違うので当然）
+                list.Add(new Gimmick(kinds[i], from, from + span,
+                    ys[i] - GimmickThickness / 2, ys[i] + GimmickThickness / 2,
+                    RequirementFor(tier, kinds[i])));
+            }
+            return list;
+        }
+
+        // ── 生成の検査 ────────────────────────────────────
+
+        /// <summary>通る角度の幅がこれ未満の盤は出荷しない。
+        /// ⭐ 旧設計（一投）の実測が 6〜17度だったので、その下限を借りている。
+        /// ⚠️ 幅1度の盤は「解ける」が遊べない。プレイヤーには運が悪いとしか見えない。</summary>
+        public const int MinWindowDegrees = 6;
+
+        /// <summary>その段階で来ると想定している編成。⭐ **検査の相手はこれ。**
+        ///
+        /// ⚠️ 関門の鍵は**盤の外**（プレイヤーの編成）にある。
+        /// だから「解ける盤か」は盤だけでは決まらない。
+        /// ⭐ 線引き: **参照編成で解けないのはバグ / プレイヤーの編成で解けないのは仕様**
+        /// （「壁に対して正しい個体を作れたか」が game の核なので、後者は起きてよい）。
+        ///
+        /// ⚠️ 形は「役割分担」。実測でこれだけが全段を通ったので、想定編成として妥当。</summary>
+        public static List<Creature> ReferenceParty(int tier)
+        {
+            int total = Nests.WildTotalForTier(tier);
+            int high = total * 3 / 8;
+            int low = total / 8;
+            var species = SpeciesTable.Fallback.Id;
+            // ⚠️ 得意を明示する。⭐ 育てた分は得意へ自動で乗るので、
+            //    ここを省くと「速」役の伸びが防御へ流れて、想定編成が届かなくなる
+            var shapes = new[]
+            {
+                new StatBlock(low, high, low, high),    // 攻め
+                new StatBlock(high, low, high, low),    // 壁
+                new StatBlock(low, low, high, high),    // 速
+            };
+            var strong = new[] { StatKey.Atk, StatKey.Hp, StatKey.Spd };
+            var weak = new[] { StatKey.Def, StatKey.Spd, StatKey.Atk };
+
+            var party = new List<Creature>();
+            for (int i = 0; i < shapes.Length; i++)
+            {
+                var creature = new Creature($"ref{i}", species, Stats.ApplyTotalCap(shapes[i]),
+                    new StatBlock(0, 0, 0, 0), 0, 0, null, null, 0, null, null, 1,
+                    strong[i], weak[i]);
+                // ⭐ 育てた分も持たせる。⚠️ 素の孵化直後で検査すると、想定より弱い相手で測ることになる
+                //    （段1 は速度合計 69 に対し必要 65 で、通る角度が 1度しか無かった）
+                Creatures.Grow(creature, Creatures.TrainMax);
+                party.Add(creature);
+            }
+            return party;
+        }
+
+        /// <summary>その巣の盤を作る乱数。⭐ **種は巣と盗んだ回数だけで決まる。**
+        ///
+        /// ⚠️ 挑むたびに振り直すと、画面を出入りするだけで盤を選び直せる。
+        /// 盗むまでは同じ盤、盗んだら別の盤 ── これで「粘って良い盤を引く」が消える。</summary>
+        public static Rng RngFor(Nest nest, int raids) =>
+            new Rng(0).Stream($"field:{nest.Id}:{raids}");
+
+        /// <summary>生成して**検査して**、駄目なら振り直す。⭐ 出荷する盤はここを必ず通す。
+        ///
+        /// ⚠️ 検査を生成の外に置くと、悪い出目がそのまま出る。
+        /// Brogue は地形を置く前に連結を判定し、駄目なら盤ごと巻き戻して、湖20回・machine10回で打ち切る。
+        /// ここも同じ形にする — **振り直す / 上限で打ち切る / 一番マシなものへ落ちる**。
+        ///
+        /// ⚠️ 塞ぎ切った巣（<see cref="IsSealed"/>）は**解けないのが仕様**なので検査しない。</summary>
+        /// <param name="rng">⚠️ 巣と raids から作った専用の系統を渡すこと。
+        /// 呼ぶたびに違う種を渡すと、画面を出入りするだけで盤が振り直せてしまう。</param>
+        /// <param name="window">出荷する盤で、参照編成が通れる角度の幅。
+        /// ⚠️ <see cref="MinWindowDegrees"/> 未満なら**検査に落ちたまま出している**。
+        /// 呼び側はここを見て記録できる（黙って悪い盤を出さないための唯一の手掛かり）。</param>
+        public static StealField MakeValidatedField(int tier, FieldSide side, int raids, Rng rng,
+            out int window, int tries = 8, int samples = 13)
+        {
+            // ⚠️ 塞ぎ切った巣は解けないのが仕様。検査しない（走査するだけ無駄）
+            if (IsSealed(raids))
+            {
+                window = 0;
+                return MakeField(tier, side, raids, rng);
+            }
+
+            var party = ReferenceParty(tier);
+            StealField best = MakeField(tier, side, raids, rng);
+            int bestWindow = -1;
+
+            for (int attempt = 0; attempt < tries; attempt++)
+            {
+                var field = attempt == 0 ? best : MakeField(tier, side, raids, rng);
+                List<Shot> plan;
+                int found;
+                FindRoomySolution(field, party, samples, MinWindowDegrees, 12, out plan, out found);
+                if (found >= MinWindowDegrees)
+                {
+                    window = found;
+                    return field;
+                }
+                if (found > bestWindow)
+                {
+                    bestWindow = found;
+                    best = field;
+                }
+            }
+            // ⚠️ 諦めた出目をそのまま返さない。測った中で一番マシなものを返す
+            window = bestWindow < 0 ? 0 : bestWindow;
+            return best;
+        }
+
+        public static StealField MakeValidatedField(int tier, FieldSide side, int raids, Rng rng)
+        {
+            int window;
+            return MakeValidatedField(tier, side, raids, rng, out window);
         }
 
         /// <summary>飛べる距離。⭐ 編成のスピード合計から決まる。</summary>
@@ -212,17 +575,33 @@ namespace EggCommand.Core
             return dx * dx + dy * dy <= reach * reach;
         }
 
-        /// <summary>発射して結果を出す。⚠️ 角度以外に入力は無い（完全に決まる）。</summary>
+        /// <summary>発射して結果を出す。⚠️ 角度以外に入力は無い（完全に決まる）。
+        /// ⚠️ **移植元の一投。**関門も発射元の指定も無い。較正済みの照合が踏んでいるので残す。
+        /// 遊びで使うのは <see cref="Hop"/>。</summary>
         /// <param name="angle">上向きを 0 とし、時計回りの弧度。</param>
-        public static StealRun Launch(StealField field, double angle, double budget)
+        public static StealRun Launch(StealField field, double angle, double budget) =>
+            Fly(field, field.Start, angle, budget, null, null);
+
+        /// <summary>飛ばす。**唯一の出所。** <see cref="Launch"/> も <see cref="Hop"/> もここを通る。
+        ///
+        /// ⚠️ <paramref name="runner"/> が null なら関門を一切見ない ＝ 移植元と1ビットも変わらない。</summary>
+        /// <param name="broken">既に壊れている壁の添字。⭐ 開通は盤に残るので、投げるたびに渡す。</param>
+        private static StealRun Fly(StealField field, Point from, double angle, double budget,
+            Creature? runner, HashSet<int>? broken)
         {
-            var path = new List<Point> { field.Start };
-            double x = field.Start.X;
-            double y = field.Start.Y;
+            var path = new List<Point> { from };
+            double x = from.X;
+            double y = from.Y;
             // 上向きが -y。角度は上向き基準の時計回り
             double dx = Math.Sin(angle);
             double dy = -Math.Cos(angle);
             double traveled = 0;
+            List<int>? broke = null;
+            // ⚠️ ステは1度だけ引く。⭐ 以前は関門の判定で**1歩ごとに引き直して**いた
+            //    （種族表引き＋StatBlock 生成＋得意不得意を1飛行あたり200〜380回）
+            var runnerStats = runner == null
+                ? new StatBlock(0, 0, 0, 0)
+                : Creatures.StatsOf(runner);
 
             while (traveled < budget)
             {
@@ -255,10 +634,149 @@ namespace EggCommand.Core
                 var here = new Point(x, y);
                 path.Add(here);
 
-                if (HitsEgg(field, here)) return new StealRun(StealOutcome.Success, path, traveled);
-                if (HitsParent(field, here)) return new StealRun(StealOutcome.Blocked, path, traveled);
+                // ⚠️ 壊した壁は**どの終わり方でも**持って帰る。
+                //    親に当たった投で落とすと、盤の開通と画面の絵が食い違う
+                if (HitsEgg(field, here))
+                    return new StealRun(StealOutcome.Success, path, traveled, -1, broke);
+                if (HitsParent(field, here))
+                    return new StealRun(StealOutcome.Blocked, path, traveled, -1, broke);
+
+                if (runner == null) continue;
+
+                // ⭐ 関門は**通過したときに**判定する（着地点だけでは、飛び越えれば無効になる）
+                int blockedBy = StepThrough(field, here, runnerStats, broken, ref broke);
+                if (blockedBy >= 0)
+                {
+                    // ⚠️ **関門の手前まで下がって**止まる。⭐ 使用済みになるだけで、台にはなる。
+                    // ⚠️ 関門の中で止めると、そこを発射台にした次の個体が一歩目で
+                    //    同じ関門に捕まり、**その台が必ず詰む**（実測で発覚）
+                    var gate = field.Gimmicks[blockedBy];
+                    while (path.Count > 1 && Inside(gate, path[path.Count - 1]))
+                    {
+                        path.RemoveAt(path.Count - 1);
+                        traveled -= Step;
+                    }
+                    return new StealRun(StealOutcome.Landed, path, traveled, blockedBy, broke);
+                }
             }
-            return new StealRun(StealOutcome.Stalled, path, traveled);
+            return new StealRun(runner == null ? StealOutcome.Stalled : StealOutcome.Landed,
+                path, traveled, -1, broke);
+        }
+
+        /// <summary>いま居る点の関門をさばく。
+        /// ⭐ 足りていれば通す（壁なら壊して開通させる）。足りなければその添字を返す。</summary>
+        /// <returns>止められた関門の添字。通れたなら -1。</returns>
+        private static int StepThrough(StealField field, Point here, StatBlock stats,
+            HashSet<int>? broken, ref List<int>? broke)
+        {
+            for (int i = 0; i < field.Gimmicks.Count; i++)
+            {
+                var gate = field.Gimmicks[i];
+                if (broken != null && gate.Kind == GimmickKind.Wall && broken.Contains(i)) continue;
+                if (!Inside(gate, here)) continue;
+
+                if (stats[StatOf(gate.Kind)] < gate.Requires) return i;
+
+                // ⭐ 壁だけは通った跡が盤に残る。床と重圧は通った本人にしか効かない
+                if (gate.Kind == GimmickKind.Wall)
+                {
+                    broken?.Add(i);
+                    if (broke == null) broke = new List<int>();
+                    if (!broke.Contains(i)) broke.Add(i);
+                }
+            }
+            return -1;
+        }
+
+        /// <summary>その関門が要求するステ。⚠️ **対応はここだけで決める**（画面もここを引く）。</summary>
+        public static StatKey StatOf(GimmickKind kind)
+        {
+            switch (kind)
+            {
+                case GimmickKind.Wall: return StatKey.Atk;
+                case GimmickKind.Damage: return StatKey.Hp;
+                case GimmickKind.Pressure: return StatKey.Def;
+                default: throw new ArgumentOutOfRangeException(nameof(kind));
+            }
+        }
+
+        public static bool Inside(Gimmick gate, Point p) =>
+            p.X + RunnerRadius > gate.From && p.X - RunnerRadius < gate.To &&
+            p.Y + RunnerRadius > gate.Top && p.Y - RunnerRadius < gate.Bottom;
+
+        /// <summary>その個体ひとりで飛べる距離。⭐ **編成合計ではない。**
+        ///
+        /// ⚠️ 以前は編成のスピード合計で1体を飛ばしていた。
+        /// 「3体ぶんの速さで1体が飛ぶ」理屈が画面から読めず、課題に上がっていた。
+        /// ⭐ 3回に分けても**合計は変わらない**ので、<see cref="DepthForTier"/> の較正はそのまま生きる。</summary>
+        public static double DistanceFor(Creature runner) =>
+            Creatures.StatsOf(runner).Spd * SpeedToDistance;
+
+        /// <summary>一度の潜入。⭐ **3体を順に投げる**。着地した個体は盤に残り、次の発射台になる。
+        ///
+        /// ⭐ ここが設計の芯: 速い個体を先に使えば前線基地ができて遅い個体が奥へ届くが、
+        /// **最終区間の飛距離を失う**。温存すればラスト1本は確実だが、序盤を遅い個体だけで処理する。
+        /// ⚠️ 速さは「強さ」ではなく **「どこで消費するか」の資源**。
+        ///
+        /// ⚠️ 乱数を使わない。入力は「誰を・どこから・どの角度で」の3つだけ。</summary>
+        public sealed class Infiltration
+        {
+            public readonly StealField Field;
+            public readonly IReadOnlyList<Creature> Party;
+            /// <summary>まだ投げていない個体の添字。</summary>
+            public readonly List<int> Left = new List<int>();
+            /// <summary>着地した個体の場所。⭐ そのまま発射台の並び。</summary>
+            public readonly List<Point> Pads = new List<Point>();
+            /// <summary>各発射台が誰か（<see cref="Party"/> の添字）。画面が絵を出すのに使う。</summary>
+            public readonly List<int> PadOwner = new List<int>();
+            /// <summary>壊れた壁。⭐ 開通は盤に残るので、次の個体も通れる。</summary>
+            public readonly HashSet<int> Broken = new HashSet<int>();
+            /// <summary>決着。⚠️ null なら続行中。</summary>
+            public StealOutcome? Result;
+
+            public Infiltration(StealField field, IReadOnlyList<Creature> party)
+            {
+                Field = field;
+                Party = party;
+                for (int i = 0; i < party.Count; i++) Left.Add(i);
+            }
+        }
+
+        /// <summary>投げる。
+        ///
+        /// ⚠️ 決着しているのに投げようとしたら投げる（黙って何もしないと、
+        /// 画面が「押したのに何も起きない」になる）。</summary>
+        /// <param name="member"><see cref="Infiltration.Party"/> の添字。⚠️ まだ投げていない個体だけ。</param>
+        /// <param name="pad">発射元。⚠️ **-1 は初期位置**（何体着地しても初期位置からは投げ続けられる）。
+        /// それ以外は <see cref="Infiltration.Pads"/> の添字。</param>
+        public static StealRun Hop(Infiltration run, int member, int pad, double angle)
+        {
+            if (run.Result != null)
+                throw new InvalidOperationException("この潜入はもう決着している");
+            if (!run.Left.Contains(member))
+                throw new ArgumentException($"{member} 番はもう投げている");
+            if (pad < -1 || pad >= run.Pads.Count)
+                throw new ArgumentException($"発射台 {pad} は無い（-1 が初期位置）");
+
+            var from = pad < 0 ? run.Field.Start : run.Pads[pad];
+            var runner = run.Party[member];
+            var flight = Fly(run.Field, from, angle, DistanceFor(runner), runner, run.Broken);
+
+            run.Left.Remove(member);
+
+            if (flight.Outcome == StealOutcome.Landed)
+            {
+                run.Pads.Add(flight.Landing);
+                run.PadOwner.Add(member);
+            }
+
+            // ⚠️ 親に触れた時点で戦闘。残りの個体は投げられない
+            if (flight.Outcome == StealOutcome.Blocked) run.Result = StealOutcome.Blocked;
+            else if (flight.Outcome == StealOutcome.Success) run.Result = StealOutcome.Success;
+            // ⭐ 3体使い切って届かなければ、そこで戦闘へ
+            else if (run.Left.Count == 0) run.Result = StealOutcome.Stalled;
+
+            return flight;
         }
 
         /// <summary>その飛距離で成功する角度が1つでもあるか（と、その角度）。
@@ -285,6 +803,256 @@ namespace EggCommand.Core
                 }
             }
             return found;
+        }
+
+        /// <summary>一投ぶんの手。⭐ 誰を・どこから・どの角度で。</summary>
+        public struct Shot
+        {
+            public int Member;
+            /// <summary>-1 は初期位置。</summary>
+            public int Pad;
+            public double Angle;
+        }
+
+        /// <summary>その編成でこの巣が**解けるか**（と、解く手順）。
+        ///
+        /// ⭐ 画面には出さない。設計が解けるものになっているかを機械で確かめるために使う。
+        /// ⚠️ 「解けない巣」を出荷したら、プレイヤーは運が悪いのだと思ってしまう。
+        /// ⚠️ リレーが入ったぶん、一投ぶんの走査では足りない。**順番と発射台まで含めて**探す。</summary>
+        public static bool FindRelaySolution(StealField field, IReadOnlyList<Creature> party,
+            int samples, out List<Shot> plan)
+        {
+            plan = new List<Shot>();
+            var run = new Infiltration(field, party);
+            return Solve(run, samples, plan);
+        }
+
+        private static bool Solve(Infiltration run, int samples, List<Shot> plan)
+        {
+            // ⚠️ 手を1つ試すたびに状態が変わるので、枝ごとに写して戻す
+            var left = new List<int>(run.Left);
+            foreach (int member in left)
+            {
+                for (int pad = -1; pad < run.Pads.Count; pad++)
+                {
+                    for (int i = 0; i < samples; i++)
+                    {
+                        double angle = (-80 + 160.0 * i / (samples - 1)) * (Math.PI / 180.0);
+                        var snapshot = Copy(run);
+                        var flight = Hop(run, member, pad, angle);
+                        plan.Add(new Shot { Member = member, Pad = pad, Angle = angle });
+
+                        if (flight.Outcome == StealOutcome.Success) return true;
+                        // ⭐ 親に触れた枝は死に枝。⚠️ 失速（着地）はまだ続く
+                        if (flight.Outcome == StealOutcome.Landed && run.Result == null
+                            && Solve(run, samples, plan)) return true;
+
+                        plan.RemoveAt(plan.Count - 1);
+                        Restore(run, snapshot);
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>その手順が成功し続ける角度の幅（度）。⭐ **返すのは一番狭い一投の幅。**
+        ///
+        /// ⚠️ **「解が在るか」だけでは足りない。** 走査は等間隔のサンプルなので、
+        /// 「解あり」も「解なし」も証明ではない。幅で見れば刻みの粗さに強くなるうえ、
+        /// **手先の勝負になっていないか**も同じ数字で分かる。
+        ///
+        /// ⚠️ 実際に踏んだ: 関門の幅を 62% にしたとき解は在ったが、通る角度は 0.1度しか無かった。
+        /// 旧設計（一投）は「成功する角度の幅 6〜17度」を測っていた。リレーでもその指標を持つ。</summary>
+        /// <param name="budget">測るのに投げてよい回数。⚠️ **上限の外に置かない。**
+        /// 幅の測定は1解あたり最大 320回の再生を回すので、探索の上限だけ絞っても
+        /// ここが野放しだと「総当たりを止める」という狙いが効かない。</param>
+        public static int WindowOf(StealField field, IReadOnlyList<Creature> party,
+            IReadOnlyList<Shot> plan, int budget = int.MaxValue)
+        {
+            int narrowest = int.MaxValue;
+            int spent = 0;
+            for (int i = 0; i < plan.Count; i++)
+            {
+                double center = plan[i].Angle * 180.0 / Math.PI;
+                int width = 1;   // 選んだ角度そのもの
+                for (int dir = -1; dir <= 1; dir += 2)
+                {
+                    for (int step = 1; step <= 160; step++)
+                    {
+                        double deg = center + dir * step;
+                        if (deg < -80 || deg > 80) break;
+                        if (spent >= budget) break;
+                        spent += plan.Count;
+                        if (!Replay(field, party, plan, i, deg * Math.PI / 180.0)) break;
+                        width++;
+                    }
+                }
+                if (width < narrowest) narrowest = width;
+            }
+            return narrowest == int.MaxValue ? 0 : narrowest;
+        }
+
+        /// <summary>1投だけ角度を差し替えて、手順を最後まで流し直す。
+        /// ⚠️ 前の投の着地が変わると台の場所も変わる。**そこまで含めて**測る。</summary>
+        private static bool Replay(StealField field, IReadOnlyList<Creature> party,
+            IReadOnlyList<Shot> plan, int changeAt, double angle)
+        {
+            var run = new Infiltration(field, party);
+            for (int i = 0; i < plan.Count; i++)
+            {
+                if (run.Result != null) break;
+                var shot = plan[i];
+                // ⚠️ 前の投が着地しなかったら台の番号がずれる。そこで打ち切る
+                if (shot.Pad >= run.Pads.Count) return false;
+                if (!run.Left.Contains(shot.Member)) return false;
+                Hop(run, shot.Member, shot.Pad, i == changeAt ? angle : shot.Angle);
+            }
+            return run.Result == StealOutcome.Success;
+        }
+
+        /// <summary>**通る角度に幅がある**解を探す。⭐ 生成が検査に使うのはこちら。
+        ///
+        /// ⚠️ <see cref="FindRelaySolution"/> は最初に見つけた解を返すので、
+        /// 幅 1度の針の穴でも「解けます」と答える。それを出荷すると、
+        /// プレイヤーには「運が悪い」としか見えない。</summary>
+        /// <param name="wantDegrees">これだけの幅が取れたら即座に良しとする。</param>
+        /// <param name="give">解を何本まで測るか。⚠️ 上限が無いと総当たりになる。</param>
+        /// <summary>探索で投げてよい回数の上限。⭐ **無いと総当たりになる。**
+        ///
+        /// ⚠️ 上限を入れる前、段5 の盤を1枚検査するのに **7.2秒**かかっていた。
+        /// 解が狭い盤ほど枝が枯れずに探索が膨らむ ── つまり**一番遅いのが一番出したくない盤**。
+        /// ⭐ Brogue も湖20回・machine10回で打ち切る。上限で諦めた盤は「駄目」として振り直す。</summary>
+        public const int SearchBudget = 20000;
+
+        /// <summary>その発射元から試す角度を、**卵の方角に近い順**に並べる。
+        ///
+        /// ⭐ 上限つきの探索では、**どこから試すか**が「見つかるか」を決める。
+        /// 端の -80度から順に試すと、解に届く前に上限で尽きた（段3以上が全滅した）。
+        /// ⚠️ 上限を上げるのではなく順序を直す。上限を上げると遅い盤がそのまま遅くなる。</summary>
+        private static double[] AnglesToward(Point from, StealField field, int samples)
+        {
+            // 上向きを 0 とし時計回り。dx = sin, dy = -cos の逆算
+            double toEgg = Math.Atan2(field.Egg.X - from.X, from.Y - field.Egg.Y) * 180.0 / Math.PI;
+            var degrees = new double[samples];
+            for (int i = 0; i < samples; i++) degrees[i] = -80 + 160.0 * i / (samples - 1);
+            Array.Sort(degrees, (a, b) =>
+            {
+                double da = Math.Abs(a - toEgg);
+                double db = Math.Abs(b - toEgg);
+                return da != db ? da.CompareTo(db) : a.CompareTo(b);
+            });
+            for (int i = 0; i < samples; i++) degrees[i] *= Math.PI / 180.0;
+            return degrees;
+        }
+
+        public static bool FindRoomySolution(StealField field, IReadOnlyList<Creature> party,
+            int samples, int wantDegrees, int give, out List<Shot> plan, out int window,
+            int budget = SearchBudget)
+        {
+            var best = new List<Shot>();
+            int bestWindow = 0;
+            int measured = 0;
+            int flights = 0;
+
+            var run = new Infiltration(field, party);
+            var found = new List<Shot>();
+            SolveRoomy(run, samples, found, field, party, wantDegrees, give,
+                ref measured, ref bestWindow, best, ref flights, budget);
+
+            plan = best;
+            window = bestWindow;
+            return bestWindow > 0;
+        }
+
+        private static bool SolveRoomy(Infiltration run, int samples, List<Shot> plan,
+            StealField field, IReadOnlyList<Creature> party, int wantDegrees, int give,
+            ref int measured, ref int bestWindow, List<Shot> best, ref int flights, int budget)
+        {
+            var left = new List<int>(run.Left);
+            foreach (int member in left)
+            {
+                for (int pad = -1; pad < run.Pads.Count; pad++)
+                {
+                    var order = AnglesToward(pad < 0 ? run.Field.Start : run.Pads[pad],
+                        run.Field, samples);
+                    for (int i = 0; i < samples; i++)
+                    {
+                        if (flights >= budget) return false;
+
+                        double angle = order[i];
+                        var snapshot = Copy(run);
+                        var flight = Hop(run, member, pad, angle);
+                        flights++;
+                        plan.Add(new Shot { Member = member, Pad = pad, Angle = angle });
+
+                        if (flight.Outcome == StealOutcome.Success)
+                        {
+                            measured++;
+                            // ⚠️ 幅の測定も上限の内側で数える
+                            int width = WindowOf(field, party, plan, budget - flights);
+                            flights += plan.Count * 8;
+                            if (width > bestWindow)
+                            {
+                                bestWindow = width;
+                                best.Clear();
+                                best.AddRange(plan);
+                            }
+                            // ⭐ 十分な幅が取れたら打ち切る。⚠️ measured の上限でも打ち切る
+                            if (bestWindow >= wantDegrees || measured >= give)
+                            {
+                                plan.RemoveAt(plan.Count - 1);
+                                Restore(run, snapshot);
+                                return true;
+                            }
+                        }
+                        else if (flight.Outcome == StealOutcome.Landed && run.Result == null)
+                        {
+                            if (SolveRoomy(run, samples, plan, field, party, wantDegrees, give,
+                                ref measured, ref bestWindow, best, ref flights, budget))
+                            {
+                                plan.RemoveAt(plan.Count - 1);
+                                Restore(run, snapshot);
+                                return true;
+                            }
+                        }
+
+                        plan.RemoveAt(plan.Count - 1);
+                        Restore(run, snapshot);
+                    }
+                }
+            }
+            return false;
+        }
+
+        private sealed class Snapshot
+        {
+            public List<int> Left = new List<int>();
+            public List<Point> Pads = new List<Point>();
+            public List<int> PadOwner = new List<int>();
+            public HashSet<int> Broken = new HashSet<int>();
+            public StealOutcome? Result;
+        }
+
+        private static Snapshot Copy(Infiltration run) => new Snapshot
+        {
+            Left = new List<int>(run.Left),
+            Pads = new List<Point>(run.Pads),
+            PadOwner = new List<int>(run.PadOwner),
+            Broken = new HashSet<int>(run.Broken),
+            Result = run.Result,
+        };
+
+        private static void Restore(Infiltration run, Snapshot from)
+        {
+            run.Left.Clear();
+            run.Left.AddRange(from.Left);
+            run.Pads.Clear();
+            run.Pads.AddRange(from.Pads);
+            run.PadOwner.Clear();
+            run.PadOwner.AddRange(from.PadOwner);
+            run.Broken.Clear();
+            foreach (int i in from.Broken) run.Broken.Add(i);
+            run.Result = from.Result;
         }
     }
 }

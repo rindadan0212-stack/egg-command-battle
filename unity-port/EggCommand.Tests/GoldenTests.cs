@@ -141,6 +141,15 @@ public class StatsGoldenTests
 
 public class SkillsGoldenTests
 {
+    /// <summary>意図して移植元から「弱化」の扱いを変えた技。
+    /// ⭐ **ここに書いたものだけが許される。**書いていない技が変わったら落ちる。
+    ///
+    /// ⚠️ 移植元では CT を動かす効果が弱化に数えられておらず、
+    /// 免疫で防げず・速度差でも動かず・狙い澄ましも効かない**唯一の弱化**になっていた。
+    /// 「免疫はすべての弱化を防ぐ」と決めたので、CT延長を弱化に加えた（2026-08-17）。</summary>
+    private static readonly HashSet<string> Reclassified = new HashSet<string> { "ct-long" };
+
+
     [Fact]
     public void 威力と割合の表が一致する()
     {
@@ -234,7 +243,16 @@ public class SkillsGoldenTests
 
                 // 免疫が防ぐ対象か
                 bool harmful = entry.GetProperty("harmful")[e].GetBoolean();
-                Assert.Equal(harmful, Skills.IsHarmful(effect));
+                if (Reclassified.Contains(id))
+                {
+                    // ⭐ 意図して移植元と変えた技。⚠️ **下の表に書いたものだけが許される**
+                    Assert.False(harmful, $"{id}: 移植元では既に弱化扱いだった（表から外す）");
+                    Assert.True(Skills.IsHarmful(effect), $"{id}: 弱化扱いになっていない");
+                }
+                else
+                {
+                    Assert.Equal(harmful, Skills.IsHarmful(effect));
+                }
                 e++;
             }
         }
@@ -272,6 +290,16 @@ public class SkillsGoldenTests
 
 public class SpeciesGoldenTests
 {
+    /// <summary>意図して移植元から変えた枠1。⭐ **ここに書いたものだけが許される。**
+    /// ⚠️ 枠1 に CT が無いのは「行動できない手番を作らない」ためで、大技だからではない。
+    /// 全体攻撃や状態異常付きが毎手番飛ぶのは通常攻撃ではないので差し替えた。</summary>
+    private static readonly Dictionary<string, (string Was, string Now)> Rebuilt =
+        new Dictionary<string, (string, string)>
+        {
+            ["haneru"] = ("attack-all", "attack-twice"),
+        };
+
+
     [Fact]
     public void 三すくみが一致する()
     {
@@ -315,14 +343,31 @@ public class SpeciesGoldenTests
             //    ⭐ ここが一致していれば、その表が移植元に忠実であることの証明になる。
             Assert.Equal(Golden.Element(entry.GetProperty("element").GetString()!),
                 Migrations.ElementOf(species.Id));
-            Assert.Equal(entry.GetProperty("skill1").GetString(), species.Skill1);
+            // ⚠️ 枠1＝**その種族の通常攻撃**と定めた（2026-08-17）ので、
+            //    通常攻撃として読めなかった種族の枠1 を差し替えた。
+            // ⭐ **差し替えたものは下の表に書く。**書いていない種族が移植元と違ったら落ちる
+            //    （属性の語を変えたときと同じ扱い方）。
+            string id = species.Id;
+            if (Rebuilt.ContainsKey(id))
+            {
+                Assert.Equal(Rebuilt[id].Was, entry.GetProperty("skill1").GetString());
+                Assert.Equal(Rebuilt[id].Now, species.Skill1);
+            }
+            else
+            {
+                Assert.Equal(entry.GetProperty("skill1").GetString(), species.Skill1);
+            }
             Assert.Equal(Golden.Block(entry.GetProperty("base")), species.Base);
 
             // ⚠️ 種族ごとに基礎値の合計を変えない
             Assert.Equal(entry.GetProperty("baseTotal").GetInt32(), Stats.TotalOf(species.Base));
             Assert.Equal(SpeciesTable.BaseTotal, Stats.TotalOf(species.Base));
 
-            Assert.Equal(entry.GetProperty("skill1Name").GetString(), Skills.ById(species.Skill1).Name);
+            // ⚠️ 枠1 を差し替えた種族は名前も当然変わる（上の表が根拠）
+            if (!Rebuilt.ContainsKey(id))
+            {
+                Assert.Equal(entry.GetProperty("skill1Name").GetString(), Skills.ById(species.Skill1).Name);
+            }
             Assert.Same(species, SpeciesTable.ById(species.Id));
         }
     }

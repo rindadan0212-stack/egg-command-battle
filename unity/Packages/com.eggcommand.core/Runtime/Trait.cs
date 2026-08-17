@@ -4,10 +4,10 @@ using System.Collections.Generic;
 
 namespace EggCommand.Core
 {
-    /// <summary>素質が働く場面。
+    /// <summary>特性が働く場面。
     ///
-    /// ⭐ **語彙をここで固定する。** 素質は「戦闘のあちこちに割り込むもの」なので、
-    /// 条件を自由に書けるようにすると <see cref="Battle"/> が素質だらけになる。
+    /// ⭐ **語彙をここで固定する。** 特性は「戦闘のあちこちに割り込むもの」なので、
+    /// 条件を自由に書けるようにすると <see cref="Battle"/> が特性だらけになる。
     /// 割り込む場所をこの数に限れば、フックも同じ数で足りる。
     ///
     /// ⚠️ 増やす前に、既にある条件で書けないか必ず疑う（効果のプリミティブと同じ約束）。</summary>
@@ -27,14 +27,14 @@ namespace EggCommand.Core
         OnDown,
     }
 
-    /// <summary>個体が1つ持つ素質。⭐ **技の3枠とは別枠**（枠を奪わない）。
+    /// <summary>個体が1つ持つ特性。⭐ **技の3枠とは別枠**（枠を奪わない）。
     ///
     /// ⭐ これがある理由: 技を選ぶ側（個体）に個性が無いと、
     /// どの個体にどの技を付けても同じように働いてしまい、**判断が生まれない**。
-    /// 素質は「特定の技・特定の動きだけを強くする」ので、
+    /// 特性は「特定の技・特定の動きだけを強くする」ので、
     /// 「この個体には低確率の大技を持たせる」という組み合わせの判断ができる。
     ///
-    /// ⚠️ 素質は**技そのものを強くしない**。強くするのは「動き」のほう。
+    /// ⚠️ 特性は**技そのものを強くしない**。強くするのは「動き」のほう。
     /// 技を直に強くすると、結局その技を持つのが正解、で終わる。</summary>
     public sealed class Trait
     {
@@ -44,7 +44,7 @@ namespace EggCommand.Core
         /// <summary>画面に出す短い説明。⚠️ 凝った言い回しにしない。</summary>
         public readonly string Gist;
         /// <summary>何と噛み合うか。⭐ **図鑑に出す。**
-        /// 素質の値打ちは単体では読めず、組み合わせでしか読めないため。</summary>
+        /// 特性の値打ちは単体では読めず、組み合わせでしか読めないため。</summary>
         public readonly string Pairs;
 
         public Trait(string id, string name, TraitWhen when, string gist, string pairs)
@@ -57,15 +57,33 @@ namespace EggCommand.Core
         }
     }
 
-    /// <summary>素質表。
+    /// <summary>特性表。⭐ 6件すべてが <see cref="Battle"/> に繋がっている（2026-08-17）。
     ///
-    /// ⚠️ **まだ戦闘に繋がっていない。** ここにあるのは「何を作るか」を決めるための一覧で、
-    /// <see cref="Battle"/> 側のフックはまだ無い。図鑑に出して形を見てから実装する。
-    /// ⚠️ 繋いでいないものを増やさないこと（繋いだ数と表の数は <see cref="Audit"/> が数える）。</summary>
+    /// 割り込み先は4つだけ:
+    /// | 常時 | <see cref="Battle.LandChanceOf"/>（弱化の通る率） |
+    /// | 当てた / 受けた / 盾が剥がれた | <c>Battle.DealDamage</c> |
+    /// | 当てた（発数） | <see cref="Battle.PerformAction"/>（技の待ち） |
+    ///
+    /// ⚠️ <see cref="TraitWhen.BattleStart"/> と <see cref="TraitWhen.OnDown"/> は
+    /// **どの特性も使っていないので繋いでいない**。使う特性を足すときに一緒に繋ぐこと。
+    /// ⚠️ 繋いでいないものを増やさない（繋いだ数と表の数は <see cref="Audit"/> が突き合わせる）。</summary>
     public static class Traits
     {
-        /// <summary>いま戦闘に繋がっている素質の数。⚠️ 実装したらここを上げる。</summary>
-        public const int Wired = 0;
+        /// <summary>いま戦闘に繋がっている特性の数。⚠️ 足したらここと <see cref="WiredIds"/> を両方上げる。</summary>
+        public const int Wired = 6;
+
+        // ⭐ 戦闘が割り込み先を探すための id。⚠️ <see cref="Battle"/> に文字を直接書かない。
+        //    書くと綴り違いが「何も起きない」として通ってしまい、繋いだつもりで繋がっていない
+        //    状態に気づけない（<see cref="Audit"/> がここを表と突き合わせる）。
+        public const string Aim = "aim";
+        public const string Stubborn = "stubborn";
+        public const string Spite = "spite";
+        public const string Grit = "grit";
+        public const string Flurry = "flurry";
+        public const string Leech = "leech";
+
+        /// <summary>戦闘が参照する id の一覧。⚠️ 繋いだものだけを並べる。</summary>
+        private static readonly string[] WiredIds = { Aim, Stubborn, Spite, Grit, Flurry, Leech };
 
         public static string LabelOf(TraitWhen when)
         {
@@ -110,6 +128,34 @@ namespace EggCommand.Core
 
         public static IReadOnlyList<Trait> All => List;
 
+        /// <summary>1つ引く。⭐ **全員が必ず1つ持つ**（属性・得意/不得意と同じ扱い）。
+        ///
+        /// ⭐ 一部だけが持つ形にしなかったのは、持たない個体が「特性という軸が無い個体」になり、
+        /// 厳選の目盛りが1本増えるどころか濁るため。全員が持つなら、どの個体も
+        /// 「どの特性と技を噛み合わせるか」という同じ問いの上に乗る。
+        ///
+        /// ⚠️ 専用の系統（RngTrait）で引くこと。既にある系統に混ぜると列がずれて、
+        /// 較正済みの検査が無効になる。</summary>
+        public static string Roll(Rng rng) => rng.Pick(List).Id;
+
+        /// <summary>これ未満の★の卵からは特性が出ない。
+        ///
+        /// ⭐ **理由は強さではなく、覚えることの量。**
+        /// 始めたばかりの人に「種族・技3枠・属性・得意/不得意・素質」に加えて特性まで出すと、
+        /// まだ何も分かっていないうちに読むものが増えて、そこで離れてしまう。
+        /// ⭐ 浅い巣からは低い★しか出ないので、**序盤は自然に特性なし**になる。
+        /// 深い巣へ行けるようになった頃 ── つまり他を覚えた頃 ── に初めて出てくる。
+        ///
+        /// ⚠️ 配合の継承はこの下限を見ない。⭐ 親が持っているのに子が失うほうが分かりにくい。
+        /// ⚠️ 「弱いから出さない」ではない。効き目の釣り合いは別途取る話で、ここと混同しない。</summary>
+        public const int MinRarity = 3;
+
+        /// <summary>その★の卵に特性が付くか。</summary>
+        public static bool AppearsAt(int rarity) => rarity >= MinRarity;
+
+        /// <summary>★に応じて引く。⚠️ 低い★では null（＝持たない）。</summary>
+        public static string? RollFor(Rng rng, int rarity) => AppearsAt(rarity) ? Roll(rng) : null;
+
         public static bool Has(string id)
         {
             foreach (var trait in List)
@@ -125,7 +171,7 @@ namespace EggCommand.Core
             {
                 if (trait.Id == id) return trait;
             }
-            throw new ArgumentException($"素質表に {id} が無い");
+            throw new ArgumentException($"特性表に {id} が無い");
         }
 
         public static void Audit()
@@ -134,25 +180,38 @@ namespace EggCommand.Core
             var seen = new HashSet<string>();
             foreach (var trait in List)
             {
-                if (!seen.Add(trait.Id)) problems.Add($"素質 id が重複している: {trait.Id}");
+                if (!seen.Add(trait.Id)) problems.Add($"特性 id が重複している: {trait.Id}");
                 if (trait.Name.Length == 0) problems.Add($"{trait.Id}: 名前が空");
                 if (trait.Gist.Length == 0) problems.Add($"{trait.Id}: 説明が空");
                 if (trait.Pairs.Length == 0) problems.Add($"{trait.Id}: 何と噛み合うかが空");
             }
 
-            // ⚠️ 繋いでいない素質が増え続けるのを止める。
+            // ⚠️ 繋いでいない特性が増え続けるのを止める。
             //    表だけ長くなって戦闘では何も起きない、が一番気づきにくい
-            if (Wired < List.Length && List.Length > 8)
+            // ⚠️ 以前ここに `&& List.Length > 8` が付いていた。7件目・8件目は素通りするので、
+            //    守りたいと書いてあることを条件自体が打ち消していた
+            if (Wired < List.Length)
             {
                 problems.Add(
                     $"戦闘に繋がっているのは {Wired} 件だが表には {List.Length} 件ある。" +
                     "繋ぐ前に増やしすぎている");
             }
 
+            // ⚠️ 綴り違いの id で繋ぐと、戦闘では**黙って何も起きない**。
+            //    実際に効いているかを目で確かめる術が無いので、ここで突き合わせる
+            foreach (var id in WiredIds)
+            {
+                if (!seen.Contains(id)) problems.Add($"戦闘が {id} を見ているが特性表に無い");
+            }
+            if (WiredIds.Length != Wired)
+            {
+                problems.Add($"Wired は {Wired} だが、戦闘が見ている id は {WiredIds.Length} 件");
+            }
+
             if (problems.Count > 0)
             {
                 throw new InvalidOperationException(
-                    "素質表の不備:" + Environment.NewLine + "  " +
+                    "特性表の不備:" + Environment.NewLine + "  " +
                     string.Join(Environment.NewLine + "  ", problems));
             }
         }

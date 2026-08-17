@@ -31,6 +31,11 @@ namespace EggCommand.Core
         public int Strong = -1, Weak = -1;
         /// <summary>属性。⚠️ -1 は「属性を個体に持たせる前の保存」。種族の昔の属性で埋める。</summary>
         public int Element = -1;
+        /// <summary>特性の id。⚠️ null は「持たない」（特性より前の保存もここに来る）。</summary>
+        public string? Trait;
+        /// <summary>枠ごとのスキルポイント。⚠️ 短い／空なら 0（スキルレベルより前の保存）。
+        /// ⭐ レベルは保存しない（ポイントから導出する）。</summary>
+        public List<int> SkillPoints = new List<int>();
     }
 
     [Serializable]
@@ -43,6 +48,8 @@ namespace EggCommand.Core
         public string? Skill2, Skill3, ParentA, ParentB;
         public int Strong = -1, Weak = -1;
         public int Element = -1;
+        /// <summary>配合で親から継いだ特性。⚠️ null なら孵すときに引く（野生の卵）。</summary>
+        public string? Trait;
     }
 
     [Serializable]
@@ -58,6 +65,8 @@ namespace EggCommand.Core
     {
         public string NestId = "", Name = "", SpeciesId = "";
         public int Tier, Level;
+        /// <summary>いつ居なくなるか。⚠️ 0 は「期限を持たない」（巣の寿命より前の保存）。</summary>
+        public long UntilUnix;
     }
 
     [Serializable]
@@ -82,7 +91,11 @@ namespace EggCommand.Core
         public List<EncounterSave> Encounters = new List<EncounterSave>();
         public List<string> Party = new List<string>();
         public IdleSave Idle = new IdleSave();
-        /// <summary>乱数7系統ぶんの状態を平らに並べたもの（4語 × 7）。</summary>
+        /// <summary>巣ごとに盗んだ回数。⚠️ 2本を添字で対にする（JsonUtility が辞書を書けない）。</summary>
+        public List<string> RaidNests = new List<string>();
+        public List<int> RaidCounts = new List<int>();
+        /// <summary>乱数の系統ぶんの状態を平らに並べたもの（4語 × 系統数）。
+        /// ⚠️ 件数は書かない。系統を足すたびに直す羽目になり、直し忘れが嘘になる。</summary>
         public List<uint> Rng = new List<uint>();
     }
 
@@ -101,7 +114,7 @@ namespace EggCommand.Core
         {
             game.RngNest, game.RngEgg, game.RngHatch, game.RngSteal,
             game.RngBreed, game.RngRarity, game.RngEncounter, game.RngSlant,
-            game.RngElement,
+            game.RngElement, game.RngTrait,
         };
 
         public static GameSave Save(Game game)
@@ -129,7 +142,7 @@ namespace EggCommand.Core
                 save.Encounters.Add(new EncounterSave
                 {
                     NestId = e.Nest.Id, Name = e.Nest.Name, SpeciesId = e.Nest.SpeciesId,
-                    Tier = e.Nest.Tier, Level = e.Level,
+                    Tier = e.Nest.Tier, Level = e.Level, UntilUnix = e.UntilUnix,
                 });
             }
             save.Party.AddRange(game.Party);
@@ -143,6 +156,12 @@ namespace EggCommand.Core
             {
                 save.Idle.DownIds.Add(pair.Key);
                 save.Idle.DownUntil.Add(pair.Value);
+            }
+
+            foreach (var pair in game.Raids)
+            {
+                save.RaidNests.Add(pair.Key);
+                save.RaidCounts.Add(pair.Value);
             }
 
             foreach (var rng in StreamsOf(game)) save.Rng.AddRange(rng.State());
@@ -166,7 +185,14 @@ namespace EggCommand.Core
             game.EncounterSerial = save.EncounterSerial;
 
             var creatures = new List<Creature>();
-            foreach (var c in save.Creatures) creatures.Add(To(c, notes));
+            foreach (var c in save.Creatures)
+            {
+                var creature = To(c, notes);
+                // ⚠️ 届いたぶんだけ戻す。古い保存は空なので 0 のまま＝素のスキル
+                int slots = Math.Min(c.SkillPoints.Count, creature.SkillPoints.Length);
+                for (int i = 0; i < slots; i++) creature.SkillPoints[i] = c.SkillPoints[i];
+                creatures.Add(creature);
+            }
             game.Storage = new Storage(save.Slots > 0 ? save.Slots : game.Storage.Slots, creatures);
 
             foreach (var e in save.Eggs) game.Eggs.Add(To(e, notes));
@@ -177,7 +203,8 @@ namespace EggCommand.Core
             foreach (var e in save.Encounters)
             {
                 game.Encounters.Add(new Encounter(
-                    new Nest(e.NestId, e.Name, ResolveSpecies(e.SpeciesId, notes), e.Tier), e.Level));
+                    new Nest(e.NestId, e.Name, ResolveSpecies(e.SpeciesId, notes), e.Tier),
+                    e.Level, e.UntilUnix));
             }
             game.Party.AddRange(save.Party);
 
@@ -190,6 +217,13 @@ namespace EggCommand.Core
             for (int i = 0; i < pairs; i++)
             {
                 game.Idle.DownUntil[save.Idle.DownIds[i]] = save.Idle.DownUntil[i];
+            }
+
+            // ⚠️ 短いほうに合わせる。片方だけ壊れた保存で巣の難易度を捏造しない
+            int raidPairs = Math.Min(save.RaidNests.Count, save.RaidCounts.Count);
+            for (int i = 0; i < raidPairs; i++)
+            {
+                game.Raids[save.RaidNests[i]] = save.RaidCounts[i];
             }
 
             var streams = StreamsOf(game);
@@ -222,13 +256,26 @@ namespace EggCommand.Core
 
         private static string? ResolveSkill(string? id, List<string>? notes)
         {
-            if (id == null) return null;
+            // ⚠️ 空文字も「無い」。Unity の JsonUtility は null 文字列を書けず "" にするので、
+            //    null だけ見ていると空き枠のたびに嘘の引っ越し記録が1行出る
+            if (string.IsNullOrEmpty(id)) return null;
             string moved = Migrations.SkillOf(id);
             if (Skills.Has(moved)) return moved;
 
             // ⚠️ 別の技で埋めない。埋めると「持っていない技を持っている」状態になる。
             //    枠が空くほうが、まだ読める
             notes?.Add($"技 {id} が表に無いので枠を空けた");
+            return null;
+        }
+
+        /// <summary>⚠️ 別の特性で埋めない。埋めると「持っていない特性を持っている」状態になる。
+        /// 空にするほうが、まだ読める（技と同じ扱い）。</summary>
+        private static string? ResolveTrait(string? id, List<string>? notes)
+        {
+            // ⚠️ <see cref="ResolveSkill"/> と同じ理由で空文字も「持たない」
+            if (string.IsNullOrEmpty(id)) return null;
+            if (Traits.Has(id)) return id;
+            notes?.Add($"特性 {id} が表に無いので持たない扱いにした");
             return null;
         }
 
@@ -265,6 +312,8 @@ namespace EggCommand.Core
             Skill2 = c.Skill2, Skill3 = c.Skill3, PaletteIndex = c.PaletteIndex,
             ParentA = c.ParentA, ParentB = c.ParentB, Generation = c.Generation,
             Strong = Key(c.Strong), Weak = Key(c.Weak), Element = (int)c.Element,
+            Trait = c.TraitId,
+            SkillPoints = new List<int>(c.SkillPoints),
         };
 
         private static Creature To(CreatureSave s, List<string>? notes) => new Creature(
@@ -272,7 +321,7 @@ namespace EggCommand.Core
             s.MutationCounter, ResolveSkill(s.Skill2, notes), ResolveSkill(s.Skill3, notes),
             s.PaletteIndex,
             s.ParentA, s.ParentB, s.Generation, Key(s.Strong), Key(s.Weak),
-            Elem(s.Element));
+            Elem(s.Element), ResolveTrait(s.Trait, notes));
 
         private static EggSave Of(Egg e) => new EggSave
         {
@@ -282,12 +331,14 @@ namespace EggCommand.Core
             HasSkills = e.HasSkills, Skill2 = e.Skill2, Skill3 = e.Skill3,
             ParentA = e.ParentA, ParentB = e.ParentB,
             Strong = Key(e.Strong), Weak = Key(e.Weak), Element = (int)e.Element,
+            Trait = e.TraitId,
         };
 
         private static Egg To(EggSave s, List<string>? notes) => new Egg(
             s.Id, ResolveSpecies(s.SpeciesId, notes), s.Wild.To(), s.MutationCounter, s.PaletteIndex,
             s.ParentA, s.ParentB, s.Generation, (EggOrigin)s.How,
             s.HasSkills, ResolveSkill(s.Skill2, notes), ResolveSkill(s.Skill3, notes),
-            s.Rarity, Key(s.Strong), Key(s.Weak), Elem(s.Element));
+            s.Rarity, Key(s.Strong), Key(s.Weak), Elem(s.Element),
+            ResolveTrait(s.Trait, notes));
     }
 }

@@ -44,7 +44,11 @@ namespace EggCommand.View
         public static void Build(App app, RectTransform body)
         {
             // ⚠️ 減っていたら補う。空欄のまま置かない
-            Encounters.Refill(app.Game);
+            // ⭐ 居座る時間が切れた巣を先に片付けてから補充する
+            //    ⚠️ 順が逆だと、消えるはずの巣が枠を埋めたまま残る
+            long now = app.Now();
+            Encounters.Expire(app.Game, now);
+            Encounters.Refill(app.Game, now);
 
             var view = app.Put<NestsView>(body, "NestsScreen");
             if (view == null) return;

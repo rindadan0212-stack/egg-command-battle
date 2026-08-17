@@ -52,11 +52,28 @@ namespace EggCommand.Core
         /// 炎のタマルも水のタマルも生まれる。配合では親のどちらかから受け継ぐ。</summary>
         public readonly Element Element;
 
+        /// <summary>1つだけ持つ特性。⭐ **技の3枠を奪わない**（表は <see cref="Traits"/>）。
+        ///
+        /// ⭐ 特性は技そのものを強くせず「動き」を強くするので、
+        /// 「この個体には低確率の大技を持たせる」という**組み合わせの判断**が生まれる。
+        /// ⚠️ null は「持たない」。移植元にはこの概念が無いので、
+        /// 較正済みの検査が作る個体は null のまま＝従来と1ビットも変わらない。</summary>
+        public readonly string? TraitId;
+
+        /// <summary>枠ごとに注ぎ込んだスキルポイント。⭐ **レベルは導出する**（保存しない）。
+        ///
+        /// ⭐ 卵を孵さずに素材として食わせると溜まる（<see cref="Games.FeedEggToSkill"/>）。
+        /// ⚠️ **配合すると個体ごと消える。**それを承知で強化するかどうかがプレイヤーの選択。
+        /// ⚠️ 個体の中でここと <see cref="Trained"/>・<see cref="Earned"/> だけが書き換わる。</summary>
+        public readonly int[] SkillPoints = new int[3];
+
         public Creature(string id, string speciesId, StatBlock wild, StatBlock trained, int earned,
             int mutationCounter, string? skill2, string? skill3, int paletteIndex,
             string? parentA, string? parentB, int generation,
-            StatKey? strong = null, StatKey? weak = null, Element? element = null)
+            StatKey? strong = null, StatKey? weak = null, Element? element = null,
+            string? traitId = null)
         {
+            TraitId = traitId;
             Strong = strong;
             Weak = weak;
             // ⚠️ 指定が無ければ、その種族が昔持っていた属性にする。
@@ -190,7 +207,28 @@ namespace EggCommand.Core
         public static Creature WithElement(Creature c, Element element) => new Creature(
             c.Id, c.SpeciesId, c.Wild, c.Trained, c.Earned, c.MutationCounter,
             c.Skill2, c.Skill3, c.PaletteIndex, c.ParentA, c.ParentB, c.Generation,
-            c.Strong, c.Weak, element);
+            c.Strong, c.Weak, element, c.TraitId);
+
+        /// <summary>その枠のスキルレベル。⭐ ポイントから**導出**する（第2の出所を作らない）。</summary>
+        public static int SkillLevelOf(Creature creature, int slot) =>
+            slot < 0 || slot >= creature.SkillPoints.Length
+                ? 1
+                : SkillCosts.LevelOf(creature.SkillPoints[slot]);
+
+        /// <summary>その枠の技に、レベルぶんの上乗せを載せたもの。⚠️ Lv1 なら素のまま。</summary>
+        public static SkillBoost SkillBoostOf(Creature creature, int slot)
+        {
+            var list = SkillsOf(creature);
+            var skill = slot >= 0 && slot < list.Length ? list[slot] : null;
+            if (skill == null) return new SkillBoost();
+            return Skills.BoostOf(skill, SkillLevelOf(creature, slot), slot);
+        }
+
+        /// <summary>その個体の特性。⚠️ 持たなければ null（表を引かない）。
+        /// ⚠️ **まだ誰も呼んでいない。**特性を出す画面が無いため
+        /// （課題「特性が画面に一度も出ていない」）。画面ができたらここを引く。</summary>
+        public static Trait? TraitOf(Creature creature) =>
+            creature.TraitId == null ? null : Traits.ById(creature.TraitId);
 
         /// <summary>その個体のパレット。添字が範囲外なら黙って通常色にせず投げる。</summary>
         public static Palette PaletteOf(Creature creature)

@@ -292,20 +292,30 @@ namespace EggCommand.View
                 Games.GrowParty(Games.PartyOf(Game));
                 if (!CurrentIsBoss && nest != null)
                 {
-                    GainEgg(nest, PendingOrigin);
+                    // ⭐ **戦って倒したら親は失われる。**その巣にはもう挑めない。
+                    // ⚠️ 倒しても巣が残ると「迷ったら倒せばいい」で全部片付き、
+                    //    潜入が「やってもやらなくてもいい前座」になる。
+                    GainEgg(nest, PendingOrigin, closeNest: true);
                     return;
                 }
             }
             // ⚠️ 負けた巣も引き直す。同じ相手を叩き続ける形にしない
-            if (!CurrentIsBoss && nest != null) Encounters.Replace(Game, nest);
+            if (!CurrentIsBoss && nest != null) Encounters.Replace(Game, nest, Now());
             Show(Screen.Nests);
         }
 
         /// <summary>卵を1個手に入れる。⭐ 手に入れた瞬間だけは演出を出す。</summary>
-        public void GainEgg(Nest nest, EggOrigin how)
+        /// <param name="closeNest">その巣を閉じるか。
+        /// ⭐ **戦って倒したときだけ true**（親が失われるので、もう挑めない）。
+        /// ⚠️ 盗んだときは **false**。閉じてしまうと同じ巣に二度と行けず、
+        /// 「盗むたびに守りが固くなり4回で封鎖される」という巣の寿命が丸ごと働かない
+        /// （実際そうなっていた）。</param>
+        public void GainEgg(Nest nest, EggOrigin how, bool closeNest)
         {
-            var egg = Games.GainEgg(Game, nest, how);
-            Encounters.Replace(Game, nest);
+            // ⚠️ 遊びの経路は TakeEgg（素質も孵化時間も★だけで決まる）。
+            //    GainEgg は移植元の規則で、較正済みの照合が踏んでいる
+            var egg = Games.TakeEgg(Game, nest, how);
+            if (closeNest) Encounters.Replace(Game, nest, Now());
             Fanfare.EggGot(_root, egg, () => Show(Screen.Nests));
         }
     }

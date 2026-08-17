@@ -28,7 +28,7 @@ namespace EggCommand.Sim
                 .Append($"種族 <b>{SpeciesTable.All.Count}</b>　")
                 .Append($"技 <b>{Skills.All.Count}</b>　")
                 .Append($"効果の種類 <b>{Enum.GetValues(typeof(EffectKind)).Length}</b>　")
-                .Append($"素質 <b>{Traits.All.Count}</b>　")
+                .Append($"特性 <b>{Traits.All.Count}</b>　")
                 .Append($"巣 <b>{Nests.All.Length}</b>")
                 .Append("</p>");
             html.Append("<p class=warn>⚠️ この HTML は書き出したもの。直しても次の書き出しで消える。"
@@ -232,20 +232,23 @@ namespace EggCommand.Sim
             }
         }
 
-        // ── 素質 ────────────────────────────────────────
+        // ── 特性 ────────────────────────────────────────
 
         private static void TraitSection(StringBuilder html)
         {
-            html.Append("<h2>素質</h2>");
-            html.Append("<p class=warn>⚠️ <b>まだ戦闘に繋がっていない</b>（")
+            html.Append("<h2>特性</h2>");
+            html.Append("<p class=note>⭐ <b>")
                 .Append(Traits.Wired).Append(" / ").Append(Traits.All.Count)
-                .Append(" 件）。形を見て決めるための一覧。</p>");
+                .Append("</b> 件が戦闘に繋がっている。個体は必ず1つ持つ。</p>");
+            html.Append("<p class=warn>⚠️ <b>特性だけでは何もしない。</b>"
+                + "効き目は「噛み合うもの」の欄を持っているかで決まる。"
+                + "<code>sim traits</code> が、有ると無いとで勝率が何 pt 動くかを測る。</p>");
             html.Append("<p class=note>⭐ 技の3枠とは<b>別枠</b>。"
-                + "素質は技そのものを強くせず、<b>特定の動き</b>を強くする"
+                + "特性は技そのものを強くせず、<b>特定の動き</b>を強くする"
                 + "（技を直に強くすると「その技を持つのが正解」で終わる）。</p>");
 
             html.Append("<div class=scroll><table><thead><tr>"
-                + "<th>素質</th><th>働く場面</th><th>すること</th><th>噛み合うもの</th>"
+                + "<th>特性</th><th>働く場面</th><th>すること</th><th>噛み合うもの</th>"
                 + "</tr></thead><tbody>");
             foreach (var trait in Traits.All)
             {

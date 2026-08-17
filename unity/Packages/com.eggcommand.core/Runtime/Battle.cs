@@ -207,6 +207,50 @@ namespace EggCommand.Core
         private const int Parity = 40;
         public const double DamageNormalize = (double)(DefSoften + Parity) / (AtkSoften + Parity);
 
+        // ── 特性の効き目 ─────────────────────────────────
+        // ⭐ **特性は技を強くしない。動きを強くする。**
+        // 技を直に強くすると「結局その技を持つのが正解」で終わり、組み合わせの判断が消える。
+        // ⚠️ 値は勘で置かない。`sim traits` で「有ると無いとで勝率が何 pt 動くか」を測って決める。
+
+        /// <summary>狙い澄まし: 弱化が通る率に足す %ポイント。
+        /// ⚠️ <see cref="LandSwing"/>（速度差の振れ幅）より小さくしてある。
+        /// 上回ると「速い個体を弱化役にする」という既にある理屈を特性が押しのけてしまう。
+        /// ⚠️ **30 にすると逆に下がる**（+3.5pt → +1.8pt・2026-08-17 実測 400回×2種）。
+        /// 通る率は <see cref="LandCeil"/> 95% で頭打ちなうえ、弱化が通るほど相手の手も変わるので、
+        /// 効き目はここの値に対して単調ではない。⭐ **上げる前に必ず測る。**</summary>
+        public const int TraitAim = 20;
+
+        /// <summary>意地: 弱化を受ける率から引く %ポイント。
+        /// ⚠️ <see cref="TraitAim"/> と同じ（30 では −5.8〜−0.3pt と符号まで崩れた）。</summary>
+        public const int TraitStubborn = 20;
+
+        /// <summary>返し身: 受けたダメージのうち返す割合（%）。
+        /// ⚠️ 25% では勝率が +33pt 動き、6件のうち独りだけ桁が違った。
+        /// ⭐ **殴られること自体が条件**なので、他の特性と違って技を選ばずに常時働く。
+        /// 常時働くものは、選んで働くものより効き目を小さくしておかないと一択になる。</summary>
+        public const int TraitSpitePercent = 12;
+
+        /// <summary>食らいつき: 与えたダメージのうち吸う割合（%）。
+        /// ⚠️ <see cref="TraitSpitePercent"/> と同じ理由で下げてある（25% で +24pt だった）。</summary>
+        public const int TraitLeechPercent = 15;
+
+        /// <summary>スタンを重ねて増やせる上限。⚠️ スタンだけが**足す**効果なので、
+        /// 上限が無いと強打の重ねがけで手番が延々飛ぶ。</summary>
+        public const int StunStackMax = 2;
+
+        /// <summary>執念: 盾が1枚剥がれるたびに溜まるゲージ。⭐ <see cref="GaugeMax"/> の 1/4。</summary>
+        public const int TraitGritGauge = 250;
+
+        /// <summary>その特性を持っているか。⚠️ 持たない個体では必ず false ＝ 従来どおり。</summary>
+        private static bool HasTrait(Unit unit, string traitId) => unit.Creature.TraitId == traitId;
+
+        /// <summary>割合を取る。⚠️ 0 にしない（「効いたのに何も起きない」を作らない）。</summary>
+        private static int Ratio(int value, int percent)
+        {
+            int taken = (int)Math.Floor((double)(value * percent) / 100);
+            return taken < 1 ? 1 : taken;
+        }
+
         /// <summary>⚠️ JS の Math.round は「0.5 は上へ」。C# の既定は銀行丸めなので使わない。</summary>
         private static int JsRound(double value) => (int)Math.Floor(value + 0.5);
 
@@ -564,11 +608,19 @@ namespace EggCommand.Core
         /// 威力に関係なくその攻撃を完全に無効化する（100 ダメージでも 1 ダメージでも同じ1枚）。
         /// 枚数が尽きたら以降は素通し。
         /// ⭐ だから「大きな一撃」には滅法強く、「手数」には弱い。</summary>
-        private static void DealDamage(BattleState state, Unit target, int amount)
+        /// <param name="source">殴った者。⚠️ null なら誰の一撃でもない（毒など）。
+        /// 特性の「与えた／受けた」はここが居るときにしか働かない。</param>
+        /// <param name="reflectable">返し身がここから更に跳ね返ってよいか。
+        /// ⚠️ 返した一撃では false。返し身どうしが往復し続けるのを止める唯一の止め木。</param>
+        private static void DealDamage(BattleState state, Unit? source, Unit target, int amount,
+            bool reflectable = true)
         {
             if (target.Status.Shield > 0)
             {
                 target.Status.Shield--;
+                // ⭐ 執念: 盾を「守り」から「手数の元」に変える。
+                //    ⚠️ 剥がれた枚数で溜まるので、手数で殴られるほど得になる
+                if (HasTrait(target, Traits.Grit)) target.Gauge += TraitGritGauge;
                 state.Log.Add(new BattleEvent(BattleEventKind.Damage, target.Key,
                     amount: 0, hp: target.Hp, absorbed: amount));
                 return;
@@ -585,9 +637,28 @@ namespace EggCommand.Core
                 state.Log.Add(new BattleEvent(BattleEventKind.GutsSaved, target.Key));
             }
 
+            int dealt = before - target.Hp;
             state.Log.Add(new BattleEvent(BattleEventKind.Damage, target.Key,
-                amount: before - target.Hp, hp: target.Hp, absorbed: 0));
+                amount: dealt, hp: target.Hp, absorbed: 0));
             if (target.Hp == 0) state.Log.Add(new BattleEvent(BattleEventKind.Down, target.Key));
+
+            // ⚠️ ここから下は特性だけ。持たない個体では1つも動かない
+            if (source == null || ReferenceEquals(source, target) || dealt <= 0) return;
+
+            // ⭐ 食らいつき: 与えたぶんを吸う。攻撃役が回復役の枠を1つ空ける
+            if (HasTrait(source, Traits.Leech) && IsAlive(source))
+            {
+                int had = source.Hp;
+                source.Hp = Math.Min(source.MaxHp, source.Hp + Ratio(dealt, TraitLeechPercent));
+                state.Log.Add(new BattleEvent(BattleEventKind.Heal, source.Key,
+                    amount: source.Hp - had, hp: source.Hp));
+            }
+
+            // ⭐ 返し身: 受けたぶんを返す。⚠️ 倒れたら返さない（働く場面は OnHurt であって OnDown ではない）
+            if (reflectable && HasTrait(target, Traits.Spite) && IsAlive(target) && IsAlive(source))
+            {
+                DealDamage(state, target, source, Ratio(dealt, TraitSpitePercent), reflectable: false);
+            }
         }
 
         /// <summary>効果が実際に通る率（%）。
@@ -604,15 +675,24 @@ namespace EggCommand.Core
         /// 速度差だけで 0% や 100% にすると、速さが弱化の全部になってしまう。</summary>
         public static int LandChanceOf(Effect effect, Unit actor, Unit target)
         {
-            if (effect.Chance >= 100) return 100;
-            // 相手が抵抗しないものは、速度差で動かさない
+            // 相手が抵抗しないものは、速度でも特性でも動かさない
             if (!Skills.IsHarmful(effect)) return effect.Chance;
+
+            // ⭐ 特性は「弱化の通しやすさ」だけに触る。狙い澄まし＝通す / 意地＝通させない
+            int shift = 0;
+            if (HasTrait(actor, Traits.Aim)) shift += TraitAim;
+            if (HasTrait(target, Traits.Stubborn)) shift -= TraitStubborn;
+
+            // ⚠️ 率 100 のままなら乱数を引かない（移植した技の試合が1手も変わらないように）。
+            //    ⭐ 意地だけがこれを崩す — 崩さないと「必ず通る弱化」に意地が無力になり、
+            //    「弱化を受ける率が下がる」という説明が画面と食い違う
+            if (effect.Chance >= 100 && shift >= 0) return 100;
 
             int mine = SpeedOf(actor);
             int yours = SpeedOf(target);
             // 速度比を -1〜+1 に畳んでから振れ幅を掛ける
             double ratio = (double)(mine - yours) / (mine + yours);
-            int moved = effect.Chance + JsRound(ratio * LandSwing);
+            int moved = effect.Chance + JsRound(ratio * LandSwing) + shift;
             return moved < LandFloor ? LandFloor : moved > LandCeil ? LandCeil : moved;
         }
 
@@ -623,24 +703,31 @@ namespace EggCommand.Core
         /// <summary>⚠️ どれだけ速くても確実にはしない（免疫と盾の意味を残す）。</summary>
         public const int LandCeil = 95;
 
-        private static void ApplyEffect(BattleState state, Unit actor, Unit target, Effect effect)
+        /// <returns>実際に当てた発数。⭐ 「手数」の特性だけがこれを見る。
+        /// ⚠️ 盾で無効化された発も1発と数える（打ち込んだことに変わりはない）。</returns>
+        private static int ApplyEffect(BattleState state, Unit actor, Unit target, Effect effect,
+            SkillBoost boost)
         {
             // ⭐ 免疫は弱い側の効果だけを弾く
             if (Skills.IsHarmful(effect) && target.Status.Immune > 0)
             {
                 state.Log.Add(new BattleEvent(BattleEventKind.Blocked, target.Key));
-                return;
+                return 0;
             }
 
             // ⭐ 弱化は外れることがある。⚠️ 率が 100 のときは引かない
             //    （移植した技の試合が1手も変わらないようにするため）
-            int land = LandChanceOf(effect, actor, target);
+            // ⭐ スキルレベルぶん通しやすくなる。⚠️ 素で 100 のものは 100 のまま
+            //    （乱数を1度も引かない、という約束を崩さない）
+            int land = LandChanceOf(effect, actor, target) + boost.ChancePoints;
+            if (land > 100) land = 100;
             if (land < 100 && state.Rng.Int(0, 100) >= land)
             {
                 state.Log.Add(new BattleEvent(BattleEventKind.Missed, target.Key));
-                return;
+                return 0;
             }
 
+            int hits = 0;
             switch (effect.Kind)
             {
                 case EffectKind.Damage:
@@ -654,11 +741,18 @@ namespace EggCommand.Core
                     double mult = ElementMultiplier(
                         actor.Creature.Element,
                         target.Creature.Element);
-                    int hit = DamageOf(Skills.DamagePowerOf(effect.Power), attackStat, defenseStat, mult);
+                    // ⭐ 威力の段位は動かさない。レベルは % で乗せるだけ
+                    int hit = DamageOf(Skills.BoostedPower(effect.Power, boost),
+                        attackStat, defenseStat, mult);
                     // ⭐ 多段。⚠️ 途中で倒れたら止める（死体を殴り続けない）
-                    for (int shot = 0; shot < effect.Repeat && IsAlive(target); shot++)
+                    // ⚠️ **殴った側が倒れたときも止める。** 返し身が入るまで
+                    //    「行動者が自分の行動中に死ぬ」経路は存在しなかった。
+                    //    見ていないと、返し身で倒れた死体が2発目・3発目を打つ
+                    int shots = effect.Repeat + boost.ExtraRepeat;
+                    for (int shot = 0; shot < shots && IsAlive(target) && IsAlive(actor); shot++)
                     {
-                        DealDamage(state, target, hit);
+                        DealDamage(state, actor, target, hit);
+                        hits++;
                     }
                     break;
                 }
@@ -669,7 +763,7 @@ namespace EggCommand.Core
                     int percent = Skills.BuffPercent * effect.Sign;
                     ref var mod = ref target.Status.ModOf(effect.Stat);
                     mod.Percent = percent;
-                    mod.Turns = effect.Turns;
+                    mod.Turns = effect.Turns + boost.ExtraTurns;
                     state.Log.Add(new BattleEvent(BattleEventKind.Buff, target.Key,
                         stat: effect.Stat, percent: percent, turns: effect.Turns));
                     break;
@@ -683,7 +777,7 @@ namespace EggCommand.Core
                         Stacks = target.Status.Poison.Turns > 0
                             ? target.Status.Poison.Stacks + effect.Stacks
                             : effect.Stacks,
-                        Turns = effect.Turns,
+                        Turns = effect.Turns + boost.ExtraTurns,
                     };
                     state.Log.Add(new BattleEvent(BattleEventKind.Applied, target.Key,
                         label: $"毒×{target.Status.Poison.Stacks}", turns: effect.Turns));
@@ -697,7 +791,7 @@ namespace EggCommand.Core
                         Stacks = target.Status.Regen.Turns > 0
                             ? target.Status.Regen.Stacks + effect.Stacks
                             : effect.Stacks,
-                        Turns = effect.Turns,
+                        Turns = effect.Turns + boost.ExtraTurns,
                     };
                     state.Log.Add(new BattleEvent(BattleEventKind.Applied, target.Key,
                         label: $"リジェネ×{target.Status.Regen.Stacks}", turns: effect.Turns));
@@ -707,7 +801,8 @@ namespace EggCommand.Core
                 case EffectKind.HealRatio:
                 {
                     // ⚠️ 割合は技ごとに違う（段位を使わない）
-                    int amount = (int)Math.Floor((double)(target.MaxHp * effect.Percent) / 100);
+                    int amount = (int)Math.Floor(
+                        (double)(target.MaxHp * (effect.Percent + boost.ExtraPercent)) / 100);
                     if (amount < 1) amount = 1;
                     int before = target.Hp;
                     target.Hp = Math.Min(target.MaxHp, target.Hp + amount);
@@ -719,14 +814,18 @@ namespace EggCommand.Core
                 case EffectKind.Shield:
                 {
                     // ⚠️ 重ね掛けは上書き。積むと実質無敵になる
-                    target.Status.Shield = effect.Count;
+                    target.Status.Shield = effect.Count + boost.ExtraCount;
                     state.Log.Add(new BattleEvent(BattleEventKind.Shield, target.Key, amount: effect.Count));
                     break;
                 }
 
                 case EffectKind.Stun:
                 {
-                    target.Status.Stun += effect.Turns;
+                    // ⚠️ スタンだけは**足す**（他は上書き）。重ねると手番が延々飛ぶので、
+                    //    ⭐ 1回の技で入る量を上限にして青天井を止める
+                    int stun = target.Status.Stun + effect.Turns + boost.ExtraTurns;
+                    int stunCap = effect.Turns + boost.ExtraTurns + StunStackMax;
+                    target.Status.Stun = stun > stunCap ? stunCap : stun;
                     state.Log.Add(new BattleEvent(BattleEventKind.Stun, target.Key, turns: effect.Turns));
                     break;
                 }
@@ -736,7 +835,8 @@ namespace EggCommand.Core
                     // ⚠️ 枠1は触らない。「必ず打てる札」に CT を乗せると手が無くなる
                     for (int i = 1; i < target.Cooldowns.Length; i++)
                     {
-                        target.Cooldowns[i] = Math.Max(0, target.Cooldowns[i] + effect.Delta);
+                        int delta = effect.Delta + (effect.Delta < 0 ? -boost.ExtraAmount : boost.ExtraAmount);
+                        target.Cooldowns[i] = Math.Max(0, target.Cooldowns[i] + delta);
                     }
                     state.Log.Add(new BattleEvent(BattleEventKind.Ct, target.Key, delta: effect.Delta));
                     break;
@@ -744,25 +844,26 @@ namespace EggCommand.Core
 
                 case EffectKind.Taunt:
                 {
-                    target.Status.Taunt = effect.Hits;
+                    target.Status.Taunt = effect.Hits + boost.ExtraAmount;
                     state.Log.Add(new BattleEvent(BattleEventKind.Taunt, target.Key, hits: effect.Hits));
                     break;
                 }
 
                 case EffectKind.Guts:
                 {
-                    target.Status.Guts = effect.Turns;
+                    target.Status.Guts = effect.Turns + boost.ExtraTurns;
                     state.Log.Add(new BattleEvent(BattleEventKind.Guts, target.Key));
                     break;
                 }
 
                 case EffectKind.Immune:
                 {
-                    target.Status.Immune = effect.Turns;
+                    target.Status.Immune = effect.Turns + boost.ExtraTurns;
                     state.Log.Add(new BattleEvent(BattleEventKind.Immune, target.Key));
                     break;
                 }
             }
+            return hits;
         }
 
         /// <summary>その者に行動させる。ゲージを引き、CT を進める。</summary>
@@ -774,12 +875,27 @@ namespace EggCommand.Core
             var skill = ActionSkill(actor, slot);
             state.Log.Add(new BattleEvent(BattleEventKind.Act, actor.Key, label: skill.Name));
 
+            // ⭐ その枠のスキルレベルぶんの上乗せ。⚠️ Lv1 なら全部 0 ＝ 1ビットも変わらない
+            var boost = Creatures.SkillBoostOf(actor.Creature, slot);
+
+            // ⭐ 「手数」が見るのは**1体に何発当てたか**。
+            // ⚠️ 対象ぶん足し込んではいけない。全体攻撃は3体に当たるので合計が3になり、
+            //    多段でもないのに待ちが縮む。ハネルの枠1（全体攻撃・CT 0）だと
+            //    毎行動 CT が3ずつ減って別のゲームになる
+            int hits = 0;
             foreach (var target in TargetsOf(state, actor, skill, chosen))
             {
+                // ⚠️ 返し身で倒れていたら、残りの対象へは進まない
+                if (!IsAlive(actor)) break;
+                int onTarget = 0;
                 foreach (var effect in skill.Effects)
                 {
-                    ApplyEffect(state, actor, target, effect);
+                    // ⚠️ 返し身で行動者が倒れたら、同じ技の残りの効果も撃たない
+                    //    （打ち崩しの「ダメージ→防御DOWN」の後半を死体が撃っていた）
+                    if (!IsAlive(actor)) break;
+                    onTarget += ApplyEffect(state, actor, target, effect, boost);
                 }
+                if (onTarget > hits) hits = onTarget;
             }
 
             // ⚠️ CT は「本人の行動回数」で減る。何をしたかに関わらず1回ぶん進む
@@ -788,7 +904,19 @@ namespace EggCommand.Core
                 actor.Cooldowns[i] = Math.Max(0, actor.Cooldowns[i] - 1);
             }
             // ⭐ CT は技ではなく枠の性質。枠1は常に 0
-            actor.Cooldowns[slot] = Skills.EffectiveCt(slot, skill);
+            actor.Cooldowns[slot] = Skills.EffectiveCt(slot, skill, boost);
+
+            // ⭐ 手数: 当てた発数だけ待ちが縮む。⚠️ **いま置いた CT の後**に効かせる —
+            //    前だと使った枠がすぐ上書きされて、縮んだぶんが消える。
+            //    ⚠️ 1発（単発の技）では何も起きない。特性と技が噛み合って初めて働く
+            if (hits > 1 && HasTrait(actor, Traits.Flurry))
+            {
+                int cut = hits - 1;
+                for (int i = 0; i < actor.Cooldowns.Length; i++)
+                {
+                    actor.Cooldowns[i] = Math.Max(0, actor.Cooldowns[i] - cut);
+                }
+            }
 
             actor.Gauge -= GaugeMax;
             state.Actions++;

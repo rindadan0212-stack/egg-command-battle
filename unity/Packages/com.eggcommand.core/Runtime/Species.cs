@@ -360,9 +360,19 @@ namespace EggCommand.Core
                 // 攻めの系統
                 new[] { "atk-up", "def-down", "attack-heavy", "ct-short", "poison", "attack-def", "stun" }),
 
-            new Species("haneru", "ハネル", "attack-all", // 攻撃スケール・全体（全体なので威力は小）
+            // ⚠️ 枠1 は "attack-all" だった。⭐ **枠1＝通常攻撃**と定めたので差し替えた（2026-08-17）。
+            //    全体攻撃が CT 0 で毎手番飛ぶのは通常攻撃ではないし、実害も出た
+            //    （「手数」の特性が対象数ぶん効いて、毎行動 CT が3ずつ減っていた）。
+            //    ⭐ 全体攻撃はガチャのプールへ移したので、枠2・3 では今までどおり手に入る。
+            // ⚠️ 枠1 を素の「攻撃」にしたら**総合 16.8%** まで落ちた（実測）。
+            //    全体攻撃を取り上げたぶんの埋め合わせが無く、攻撃18・防御16 の低さだけが残った。
+            // ⭐ 速い種族の通常攻撃として「連撃」に寄せる。多段なので盾にも強く、
+            //    速さと噛み合う。⚠️ 枠1 は他種族と重複してよい（nobiru と同じ技）。
+            new Species("haneru", "ハネル", "attack-twice", // 速さで手数を稼ぐ
                 new StatBlock(20, 18, 16, 26), HaneruSprite, HaneruPalettes,
                 // 撹乱の系統
+                // ⚠️ **ここには足さない。**既にある4種のプールは凍結（乱数で引く対象なので、
+                //    足すと卵の技の列がずれて照合が落ちる）。⭐ 全体攻撃は marumi のプールへ移した
                 new[] { "spd-up", "spd-down", "atk-down", "stun", "regen", "ct-long", "immune" }),
 
             // ── 増やしたぶん（2026-08-17）。⚠️ 絵は仮 ─────────────
@@ -383,13 +393,19 @@ namespace EggCommand.Core
                 new StatBlock(26, 14, 26, 14), HirabeSprite, HirabePalettes,
                 new[] { "harden", "bulwark", "attack-def-twice", "heal-big", "shield-wall", "guts-deep" }),
 
-            new Species("togeru", "トゲル", "venom-fang", // 削って待つ
+            // ⚠️ 枠1 は "venom-fang" だった。⭐ haneru と同じ理由で差し替え。
+            //    ダメージ＋高確率の毒が CT 0 で毎手番入るのは通常攻撃ではない。
+            new Species("togeru", "トゲル", "attack", // 削って待つ（毒は枠2・3 で）
                 new StatBlock(20, 24, 20, 16), TogeruSprite, TogeruPalettes,
-                new[] { "venom-heavy", "crush", "attack-twice", "curse", "stun-heavy", "atk-up" }),
+                new[] { "venom-heavy", "crush", "attack-twice", "curse", "stun-heavy", "atk-up",
+                    "venom-fang" }),
 
+            // ⭐ 全体に効かせる系（鎮めの風・全体攻撃）はここが持つ。
+            //    ⚠️ haneru の枠1 から外した全体攻撃の受け皿（あちらのプールは凍結されている）
             new Species("marumi", "マルミ", "attack", // 素直。支える側
                 new StatBlock(24, 16, 18, 22), MarumiSprite, MarumiPalettes,
-                new[] { "heal-big", "heal-miracle", "slow-all", "immune-long", "dash", "shield" }),
+                new[] { "heal-big", "heal-miracle", "slow-all", "immune-long", "dash", "shield",
+                    "attack-all" }),
 
             // ⚠️ ボス専用。巣は持たないので卵からは出ない
             // ⚠️ 3すくみは 炎 → 木 → 水 → 炎。水に有利を取るのは木（ハネル）。
