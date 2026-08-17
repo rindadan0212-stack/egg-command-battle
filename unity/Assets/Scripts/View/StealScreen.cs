@@ -41,7 +41,9 @@ namespace EggCommand.View
             int raids = Games.RaidsOn(app.Game, nest);
             var rng = Core.Steal.RngFor(nest, raids);
             var side = rng.Chance(0.5) ? FieldSide.Left : FieldSide.Right;
-            app.Field = Core.Steal.MakeValidatedField(nest.Tier, side, raids, rng);
+            var field = Core.Steal.MakeValidatedField(nest.Tier, side, raids, rng);
+            // ⭐ 進み具合は App が持つ。⚠️ 盤は雑魚と戦うたびに畳まれるので持たせない
+            app.Infiltration = new Core.Steal.Infiltration(field, Games.PartyOf(app.Game));
             _result = null;
             app.Show(Screen.Steal);
         }
@@ -58,17 +60,17 @@ namespace EggCommand.View
 
         public static void Build(App app, RectTransform body)
         {
-            var field = app.Field;
-            if (field == null) { app.Show(Screen.Nests); return; }
-
-            var party = Games.PartyOf(app.Game);
+            var infil = app.Infiltration;
+            if (infil == null) { app.Show(Screen.Nests); return; }
 
             // ── 盤（ワールド空間） ──────────────────────
             // ⚠️ まだ飛ばしていないときだけ作る。結果を見せている間は残しておく
-            if (_stage == null && _result == null && party.Count > 0)
+            if (_stage == null && _result == null && infil.Party.Count > 0)
             {
-                // ⭐ 3体そのまま渡す。誰をいつどこから投げるかは盤で選ぶ
-                _stage = StealStage.Create(field, party, app.CurrentNest.SpeciesId,
+                // ⭐ 進み具合ごと渡す。⭐ 雑魚と戦って戻ってきたら、
+                //    着地した個体・壊した壁・倒した雑魚がそのまま描き直される
+                _stage = StealStage.Create(infil, app.CurrentNest,
+                    Games.RaidsOn(app.Game, app.CurrentNest),
                     run =>
                     {
                         _result = run;
@@ -88,6 +90,21 @@ namespace EggCommand.View
             if (_handing) return;
             _handing = true;
 
+            // ⭐ 雑魚に当たった。⚠️ **潜入の決着ではない** ── 勝てば続きへ戻る
+            if (_result.Outcome == StealOutcome.Fought)
+            {
+                int mob = _result.Mob;
+                var here = app.CurrentNest;
+                BannerView.Show(app.Overlay, "雑魚に囲まれた！", () =>
+                {
+                    _result = null;
+                    _handing = false;
+                    Leave();
+                    app.EnterMobBattle(here, mob);
+                });
+                return;
+            }
+
             bool won = _result.Outcome == StealOutcome.Success;
             var nest = app.CurrentNest;
             BannerView.Show(app.Overlay, won ? "GET!" : "親に見つかった！", () =>
@@ -95,6 +112,8 @@ namespace EggCommand.View
                 _result = null;
                 _handing = false;
                 Leave();
+                // ⭐ ここで潜入は終わり。⚠️ 残しておくと次の巣に前の進み具合が付いてくる
+                app.Infiltration = null;
                 if (won)
                 {
                     Games.GrowParty(Games.PartyOf(app.Game));
@@ -107,7 +126,8 @@ namespace EggCommand.View
                 else
                 {
                     // ⭐ 立ちはだかるのも親1体なので、そのまま戦闘へ繋がる
-                    app.EnterBattle(nest, false);
+                    // ⚠️ 潜入で負った傷と CT を持ち込む（雑魚と戦うほどここが苦しくなる）
+                    app.EnterBattle(nest, false, infil);
                 }
             });
         }

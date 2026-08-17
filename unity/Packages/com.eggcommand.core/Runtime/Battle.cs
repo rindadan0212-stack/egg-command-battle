@@ -346,6 +346,54 @@ namespace EggCommand.Core
             return new BattleState(units, rng);
         }
 
+        /// <summary>潜入で負った傷と CT を、この戦闘の味方へ載せる。
+        ///
+        /// ⭐ これが「雑魚を倒して投げる回数を戻す」の対価。
+        /// 戻すたびに削られるので、**戦うほど最後の親戦が苦しくなる**。
+        /// ⚠️ 満タンに戻す作りにしない ── 戻すと雑魚は「無料の回数券」になる。
+        ///
+        /// ⚠️ **HP は 1 未満にしない。**潜入は3体を投げ続ける遊びなので、
+        /// 投げられない個体ができると発射回数のリセットそのものが働かなくなる。
+        /// ⭐ 倒れた個体は気絶から立つが、瀕死のまま次へ行く。</summary>
+        /// <param name="hp">-1 は「満タン（まだ傷を負っていない）」。⚠️ 触らない。</param>
+        public static void CarryIn(BattleState state, IReadOnlyList<int>? hp,
+            IReadOnlyList<int[]>? cooldowns)
+        {
+            foreach (var unit in state.Units)
+            {
+                if (unit.Side != Side.Ally) continue;
+                if (hp != null && unit.Slot < hp.Count && hp[unit.Slot] >= 0)
+                {
+                    int carried = hp[unit.Slot];
+                    if (carried < 1) carried = 1;
+                    unit.Hp = carried > unit.MaxHp ? unit.MaxHp : carried;
+                }
+                if (cooldowns == null || unit.Slot >= cooldowns.Count) continue;
+                var from = cooldowns[unit.Slot];
+                for (int slot = 0; slot < unit.Cooldowns.Length && slot < from.Length; slot++)
+                {
+                    unit.Cooldowns[slot] = from[slot];
+                }
+            }
+        }
+
+        /// <summary>戦闘のあとの味方の傷と CT を書き出す。⭐ <see cref="CarryIn"/> の対。
+        /// ⚠️ 並びは編成の並び（<c>Slot</c>）。潜入の <c>Party</c> と同じ順であること。</summary>
+        public static void CarryOut(BattleState state, List<int> hp, List<int[]> cooldowns)
+        {
+            foreach (var unit in state.Units)
+            {
+                if (unit.Side != Side.Ally) continue;
+                if (unit.Slot < hp.Count) hp[unit.Slot] = unit.Hp;
+                if (unit.Slot >= cooldowns.Count) continue;
+                var into = cooldowns[unit.Slot];
+                for (int slot = 0; slot < into.Length && slot < unit.Cooldowns.Length; slot++)
+                {
+                    into[slot] = unit.Cooldowns[slot];
+                }
+            }
+        }
+
         public static bool IsAlive(Unit unit) => unit.Hp > 0;
 
         public static List<Unit> LivingOf(BattleState state, Side side)

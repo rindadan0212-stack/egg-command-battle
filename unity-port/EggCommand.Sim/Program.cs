@@ -621,6 +621,45 @@ namespace EggCommand.Sim
             }
             Console.WriteLine();
             Console.WriteLine("  列は raids 0 / 1 / 2 / 3。× は解が1つも無い");
+
+            MobReach(shapes[1].Party());
+        }
+
+        /// <summary>雑魚に当たる角度が何度ぶんあるか。
+        ///
+        /// ⭐ 雑魚は「わざと当てに行く」ものなので、**狙って当てられる幅**が要る。
+        /// ⚠️ 幅が 0 だと、盤に居るのに一生届かない飾りになる。
+        /// ⚠️ 逆に広すぎると、卵へ向かうたびに事故で戦闘が始まる。</summary>
+        private static void MobReach(IReadOnlyList<Creature> party)
+        {
+            Console.WriteLine();
+            Console.WriteLine("■ 雑魚に当たる角度（初期位置から1投目・0.2度刻み）");
+            Console.WriteLine("  ⭐ 狙って当てられる幅が要る。⚠️ 0度なら盤に居るだけの飾り");
+
+            for (int tier = 1; tier <= 5; tier++)
+            {
+                var cells = new List<string>();
+                for (int raids = 0; raids <= 3; raids++)
+                {
+                    var nest = new Nest($"sim-mob-t{tier}", "測定", "tamaru", tier);
+                    var field = Steal.MakeValidatedField(tier, FieldSide.Right, raids,
+                        Steal.RngFor(nest, raids));
+                    if (field.Mobs.Count == 0) { cells.Add("  － "); continue; }
+
+                    int hits = 0, steps = 0;
+                    for (double a = -1.2; a <= 1.2; a += 0.2 * Math.PI / 180.0)
+                    {
+                        steps++;
+                        var probe = new Steal.Infiltration(field, party);
+                        if (Steal.Hop(probe, 0, -1, a).Outcome == StealOutcome.Fought) hits++;
+                    }
+                    cells.Add($"{hits * 0.2,4:0.0}°");
+                }
+                Console.WriteLine($"    段{tier}（雑魚 {Steal.MobCountFor(tier)} 体）  "
+                    + string.Join("  ", cells));
+            }
+            Console.WriteLine();
+            Console.WriteLine("  列は raids 0 / 1 / 2 / 3。－ は雑魚が居ない段");
         }
 
         /// <summary>盤を1枚作るのに何ミリ秒かかるか。⚠️ 画面に入るたび走るなら、ここが体感になる。</summary>

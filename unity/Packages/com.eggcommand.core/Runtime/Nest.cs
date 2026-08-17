@@ -193,6 +193,44 @@ namespace EggCommand.Core
             };
         }
 
+        /// <summary>道中の雑魚の素質。⭐ 親の6割。
+        ///
+        /// ⚠️ 親と同じにすると **3体ぶんで親より重くなる**。
+        /// 親は1体なので体数の比ぶん HP と手数が割増されるが、それでも
+        /// 「同じ素質が3つ」には届かない（手数の増分は半分に割り引かれるため）。
+        /// ⭐ 雑魚は「取れば楽になる」もの。⚠️ 親より重い関所にしない。</summary>
+        public const double MobWildShare = 0.6;
+
+        /// <summary>道中の雑魚3体。⭐ **その深さに居る顔ぶれ**から引く。
+        ///
+        /// ⭐ 親と同じ種族に固定しない。同じ顔が3体並ぶと画面でも戦術でも区別が付かず、
+        /// 「巣ごとに違う戦い」にならない（親を1体にしたときと同じ理由）。
+        /// ⚠️ 引く先は <see cref="Encounters.PoolFor"/> ＝ 巣に立ちうる種族。
+        /// 深い巣ほど顔ぶれが増えるので、雑魚もそれに従う。
+        ///
+        /// ⚠️ 乱数は雑魚ごとに分ける（呼び側が <c>mob</c> を渡す）。
+        /// 同じ巣の雑魚1と雑魚2が同じ編成になると、2戦目が1戦目の繰り返しになる。</summary>
+        /// <param name="mob">何番目の雑魚か。⚠️ 種を分けるためだけに使う。</param>
+        public static List<Creature> MakeMobParty(Rng rng, Nest nest, int mob, Element? element = null)
+        {
+            var pool = Encounters.PoolFor(nest.Tier);
+            int total = JsRound(WildTotalForTier(nest.Tier) * MobWildShare);
+            var party = new List<Creature>(3);
+
+            for (int i = 0; i < 3; i++)
+            {
+                string speciesId = rng.Pick(pool);
+                var species = SpeciesTable.ById(speciesId);
+                var wild = SpreadWild(rng, total);
+                string? skill2, skill3;
+                RollSkills23(rng, speciesId, species.Skill1, out skill2, out skill3);
+                party.Add(new Creature($"{nest.Id}-m{mob}-{i}", speciesId, wild,
+                    new StatBlock(0, 0, 0, 0), 0, 0, skill2, skill3, 0, null, null, 1,
+                    null, null, element));
+            }
+            return party;
+        }
+
         /// <summary>親から卵を作る。
         /// ⚠️ 盗んだ卵は素質が落ちる。倒したほうが良い卵、という企画どおりにするため。</summary>
         /// <param name="element">⚠️ ここで引かない。呼び側が別の系統（RngElement）で引いて渡す。

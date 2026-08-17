@@ -52,6 +52,9 @@ namespace EggCommand.View
         private const float CameraCatchUp = 90f;
 
         private StealField _field;
+        private Nest _nest;
+        /// <summary>その巣から盗んだ回数。⚠️ 雑魚の顔ぶれを引くのに要る。</summary>
+        private int _raids;
         private Action<StealRun> _onDone;
 
         /// <summary>潜入そのもの。⭐ **判定も発射台も Core が持つ。**画面は選ばせて描くだけ。</summary>
@@ -67,6 +70,8 @@ namespace EggCommand.View
         private readonly List<Transform> _pads = new List<Transform>();
         /// <summary>関門の絵。⭐ 壁を壊したら消すので持っておく。</summary>
         private readonly List<GameObject> _gates = new List<GameObject>();
+        /// <summary>雑魚の絵。⭐ 倒したら消すので持っておく。</summary>
+        private readonly List<GameObject> _mobs = new List<GameObject>();
         /// <summary>いま届く距離を見せる線。⭐ 選んだ個体で変わるので作り直す。</summary>
         private GameObject _reach;
 
@@ -93,24 +98,31 @@ namespace EggCommand.View
 
         public bool Flying { get { return _run != null; } }
 
-        /// <param name="party">⭐ **3体そのまま**渡す。誰をいつ投げるかは盤で選ぶ。</param>
-        public static StealStage Create(StealField field, IReadOnlyList<Creature> party,
-            string nestSpeciesId, Action<StealRun> onDone)
+        /// <param name="infil">⭐ **進み具合ごと**渡す。誰をいつ投げるかは盤で選ぶ。
+        /// ⚠️ 盤はこれを持たない（<see cref="App.Infiltration"/> が持つ）。
+        /// 雑魚と戦うと盤は一度畳まれるので、持たせると進み具合が消える。
+        /// ⭐ 途中から渡されたら、着地した個体・壊した壁・倒した雑魚をそのまま描き直す。</param>
+        /// <param name="nest">どの巣か。⭐ 親の絵と、雑魚の顔ぶれを引くのに要る。</param>
+        /// <param name="raids">その巣から盗んだ回数。⚠️ 雑魚の種を決める一部。</param>
+        public static StealStage Create(Steal.Infiltration infil, Nest nest, int raids,
+            Action<StealRun> onDone)
         {
             var go = new GameObject("Steal Stage");
             var stage = go.AddComponent<StealStage>();
-            stage.Build(field, party, nestSpeciesId, onDone);
+            stage.Build(infil, nest, raids, onDone);
             return stage;
         }
 
         // ── 盤を組む ────────────────────────────────────
 
-        private void Build(StealField field, IReadOnlyList<Creature> party,
-            string nestSpeciesId, Action<StealRun> onDone)
+        private void Build(Steal.Infiltration infil, Nest nest, int raids, Action<StealRun> onDone)
         {
-            _field = field;
+            _field = infil.Field;
+            var field = _field;
             _onDone = onDone;
-            _infil = new Steal.Infiltration(field, party);
+            _infil = infil;
+            _nest = nest;
+            _raids = raids;
 
             _camera = Camera.main;
             _cameraSizeBefore = _camera.orthographicSize;
@@ -138,7 +150,7 @@ namespace EggCommand.View
             //    塞ぐ幅が 56〜75 まで広がるのに絵は最大 30 しか無く、
             //    盤幅の 1/4 が「見えないのに当たる」状態だった。
             // ⭐ 判定（ParentSpans）の幅そのままに伸ばす。絵と当たりが必ず一致する。
-            var species = SpeciesTable.ById(nestSpeciesId);
+            var species = SpeciesTable.ById(nest.SpeciesId);
             foreach (var span in Steal.ParentSpans(field))
             {
                 float centerX = (float)(span.From + span.To) / 2f;
@@ -150,12 +162,18 @@ namespace EggCommand.View
 
             // ⭐ 関門。⚠️ 以前は1枚も描いていなかった（盤に在るのに見えなかった）
             BuildGates();
+            RefreshGates();
+
+            // ⭐ 道中の雑魚。⚠️ 関門と違って要求は出さない（ステでは越えられない）
+            BuildMobs();
 
             // 卵
             PixelObject("Egg", EggArt.Sprite, EggArt.Shell,
                 ToWorld((float)field.Egg.X, (float)field.Egg.Y),
                 (float)Steal.EggRadius * 2.4f, 2f);
 
+            // ⭐ もう着地している個体は発射台として置き直す（雑魚と戦って戻ってきたとき）
+            BuildPads();
             // ⭐ まだ投げていない3体を出発点に並べる。触れば選べる
             BuildWaiting();
             Select(_infil.Left.Count > 0 ? _infil.Left[0] : -1);
@@ -299,6 +317,83 @@ namespace EggCommand.View
                     && _infil.Broken.Contains(i);
                 if (broken) _gates[i].SetActive(false);
             }
+        }
+
+        /// <summary>道中の雑魚を描く。⭐ **絵は実際に出てくる相手**（先頭の1体）。
+        ///
+        /// ⚠️ 適当な印を置かない。当たると戦闘が始まるので、
+        /// 「何と戦うことになるか」が見えないまま踏ませることになる。
+        /// ⭐ 編成は巣と番号で決まっている（<see cref="Steal.MobPartyOf"/>）ので、
+        /// ここで引いた絵と戦闘に出る相手は必ず一致する。</summary>
+        private void BuildMobs()
+        {
+            for (int i = 0; i < _field.Mobs.Count; i++)
+            {
+                var mob = _field.Mobs[i];
+                var species = SpeciesTable.ById(MobFace(i));
+                var go = PixelObject($"Mob {i}", species.Sprite, species.Palettes[0],
+                    ToWorld((float)mob.At.X, (float)mob.At.Y),
+                    (float)mob.Radius * 2.2f, 2.6f);
+                // ⚠️ 親と見分けが付かないと「触れたら終わり」に見える。
+                //    ⭐ 影を敷いて「3体で居る」ことを示す
+                Skinned($"Mob {i} 影", "pill", new Color32(0x2a, 0x1e, 0x18, 0x66),
+                    ToWorld((float)mob.At.X, (float)mob.At.Y + (float)mob.Radius * 0.85f),
+                    new Vector2((float)mob.Radius * 2.4f, (float)mob.Radius * 0.7f), 2.8f);
+                _mobs.Add(go);
+            }
+            RefreshMobs();
+        }
+
+        /// <summary>その雑魚の顔。⚠️ 決まっている編成の先頭を引く。</summary>
+        private string MobFace(int mob)
+        {
+            var party = Steal.MobPartyOf(_nest, _raids, mob);
+            return party.Count > 0 ? party[0].SpeciesId : _nest.SpeciesId;
+        }
+
+        /// <summary>倒した雑魚を盤から消す。⭐ もう居ないことが目で分かる。</summary>
+        private void RefreshMobs()
+        {
+            for (int i = 0; i < _mobs.Count; i++)
+            {
+                if (_mobs[i] != null && _infil.Cleared.Contains(i)) _mobs[i].SetActive(false);
+            }
+        }
+
+        /// <summary>もう着地している個体を発射台として置き直す。
+        /// ⚠️ 雑魚と戦って戻ってきたとき、ここを通らないと前線が消える。</summary>
+        private void BuildPads()
+        {
+            for (int i = 0; i < _infil.Pads.Count; i++)
+            {
+                int owner = i < _infil.PadOwner.Count ? _infil.PadOwner[i] : -1;
+                if (owner < 0 || owner >= _infil.Party.Count) continue;
+                var creature = _infil.Party[owner];
+                var at = _infil.Pads[i];
+                var go = PixelObject($"発射台 {i}",
+                    Creatures.SpeciesOf(creature).Sprite, Creatures.PaletteOf(creature),
+                    ToWorld((float)at.X, (float)at.Y),
+                    (float)Steal.RunnerRadius * 2.2f, 1.2f);
+                Fade(go.transform, PadAlpha);
+                _pads.Add(go.transform);
+            }
+        }
+
+        /// <summary>発射台の濃さ。⭐ **投げられる個体と見分けるため**に薄くする。
+        ///
+        /// ⚠️ 同じ濃さで描くと、雑魚を倒して回数が戻ったあと
+        /// 「同じ個体が出発点と盤の上の2か所に居る」ようにしか見えない。
+        /// ⭐ 薄いほうは足場（次はここから投げられる）、濃いほうが投げる本体。</summary>
+        private const float PadAlpha = 0.5f;
+
+        /// <summary>絵を薄くする。⚠️ 見つからなければ何もしない。</summary>
+        private static void Fade(Transform mark, float alpha)
+        {
+            if (mark == null) return;
+            var renderer = mark.GetComponent<SpriteRenderer>();
+            if (renderer == null) return;
+            var color = renderer.color;
+            renderer.color = new Color(color.r, color.g, color.b, alpha);
         }
 
         /// <summary>まだ投げていない個体を出発点に並べる。</summary>
@@ -550,14 +645,24 @@ namespace EggCommand.View
             // ⭐ 壊した壁を消す（開通が目で分かる）
             RefreshGates();
 
-            if (finished.Outcome == StealOutcome.Landed)
+            // ⭐ 雑魚に当たった場所も着地点。そこも発射台になる
+            if (finished.Outcome == StealOutcome.Landed || finished.Outcome == StealOutcome.Fought)
             {
                 // ⭐ 着地した個体はその場に残り、次の発射台になる
                 _waiting.Remove(_member);
                 _pads.Add(_runner);
                 _runner.localScale = new Vector3(
                     (float)Steal.RunnerRadius * 2.2f, (float)Steal.RunnerRadius * 2.2f, 1f);
+                Fade(_runner, PadAlpha);
                 _runner = null;
+            }
+
+            // ⭐ 雑魚に当たった。⚠️ **決着ではない** ── 続きは戦闘のあと。
+            //    ⚠️ ここで Select へ進めない。戦闘の結果を待たずに次を投げられてしまう
+            if (finished.Outcome == StealOutcome.Fought)
+            {
+                if (_onDone != null) _onDone(finished);
+                return;
             }
 
             if (_infil.Result != null)

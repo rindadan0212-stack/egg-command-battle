@@ -40,8 +40,17 @@ namespace EggCommand.View
         // 画面をまたいで持ち回るもの
         public Nest CurrentNest;
         public bool CurrentIsBoss;
-        public StealField Field;
         public BattleState Battle;
+
+        /// <summary>いま潜っている巣の進み具合。⭐ **画面ではなくここが持つ。**
+        ///
+        /// ⚠️ 盤（StealStage）に持たせない。雑魚と戦うと戦闘画面へ移り、
+        /// そのとき盤は畳まれる（カメラを戻すため）。盤が持っていると
+        /// **戦って戻った瞬間に、着地した個体も壊した壁も消える**。</summary>
+        public Steal.Infiltration Infiltration;
+
+        /// <summary>いま戦っている雑魚の番号。⚠️ **-1 は親／ボス戦**。</summary>
+        public int CurrentMob = -1;
 
         /// <summary>強奪に成功したか（戦闘を挟まずに卵が手に入ったか）。</summary>
         public EggOrigin PendingOrigin = EggOrigin.Defeated;
@@ -165,7 +174,8 @@ namespace EggCommand.View
                 Debug.LogWarning("Game が失われていた（Play 中の再コンパイル）。作り直して続ける");
                 Game = Games.NewGame(Seed);
                 Battle = null;
-                Field = null;
+                Infiltration = null;
+                CurrentMob = -1;
             }
             if (_frame == null) return;
 
@@ -276,13 +286,38 @@ namespace EggCommand.View
         // ── 進行 ────────────────────────────────────────
 
         /// <summary>巣へ挑む。⚠️ 守り手は挑むたびに作り直す（同じ巣でも顔ぶれが変わる）。</summary>
-        public void EnterBattle(Nest nest, bool boss)
+        /// <param name="carry">潜入から続けて戦うなら、その潜入。
+        /// ⭐ **負った傷と CT を持ち込む**（雑魚と戦うほど親戦が苦しくなる）。</param>
+        public void EnterBattle(Nest nest, bool boss, Steal.Infiltration carry = null)
         {
             CurrentNest = nest;
             CurrentIsBoss = boss;
+            CurrentMob = -1;
             PendingOrigin = EggOrigin.Defeated;
             var enemies = boss ? Nests.MakeBossParty() : Games.DefendersOf(Game, nest);
+            StartBattle(enemies, carry);
+        }
+
+        /// <summary>道中の雑魚と戦う。⭐ **3対3**。
+        ///
+        /// ⭐ 勝てば潜入へ戻り、投げる回数がリセットされる。⚠️ 負けたらそこで終わり。
+        /// ⚠️ 相手は巣と番号だけで決まる（<see cref="Steal.MobPartyOf"/>）。
+        /// その場で引くと、画面を出入りするだけで顔ぶれを選び直せてしまう。</summary>
+        public void EnterMobBattle(Nest nest, int mob)
+        {
+            CurrentNest = nest;
+            CurrentIsBoss = false;
+            CurrentMob = mob;
+            PendingOrigin = EggOrigin.Defeated;
+            StartBattle(Steal.MobPartyOf(nest, Games.RaidsOn(Game, nest), mob), Infiltration);
+        }
+
+        private void StartBattle(System.Collections.Generic.List<Creature> enemies,
+            Steal.Infiltration carry)
+        {
             Battle = Core.Battle.CreateBattle(Games.PartyOf(Game), enemies);
+            // ⭐ 潜入で負った傷と CT をそのまま持ち込む
+            if (carry != null) Core.Battle.CarryIn(Battle, carry.Hp, carry.Cooldowns);
             // ⚠️ 前の戦闘の帯を忘れる。残ると初手から満タンに見える
             UnitStand.ForgetGauges();
             Show(Screen.Battle);
@@ -295,7 +330,11 @@ namespace EggCommand.View
             if (Battle == null || Battle.Result == null) return;
             var won = Battle.Result == Outcome.Ally;
             var nest = CurrentNest;
+            var state = Battle;
             Battle = null;
+
+            // ⭐ 雑魚戦は潜入の途中。⚠️ 卵も巣の差し替えもここでは起きない
+            if (CurrentMob >= 0) { FinishMobBattle(state, nest, won); return; }
 
             if (won)
             {
@@ -312,6 +351,35 @@ namespace EggCommand.View
             // ⚠️ 負けた巣も引き直す。同じ相手を叩き続ける形にしない
             if (!CurrentIsBoss && nest != null) Encounters.Replace(Game, nest, Now());
             Show(Screen.Nests);
+        }
+
+        /// <summary>雑魚戦の決着。⭐ 勝てば**潜入の続き**へ戻る。
+        ///
+        /// ⚠️ 傷と CT を潜入へ書き戻してから <see cref="Steal.Beat"/> を呼ぶ。
+        /// 書き戻しを飛ばすと、次の戦いが毎回満タンから始まり、
+        /// 「戦うほど苦しくなる」という雑魚の対価が丸ごと消える。</summary>
+        private void FinishMobBattle(BattleState state, Nest nest, bool won)
+        {
+            var infil = Infiltration;
+            int mob = CurrentMob;
+            CurrentMob = -1;
+
+            if (infil == null) { Show(Screen.Nests); return; }
+
+            if (!won)
+            {
+                Steal.LostTo(infil);
+                Infiltration = null;
+                // ⚠️ 負けた巣は引き直す（親に見つかって負けたときと同じ）
+                if (nest != null) Encounters.Replace(Game, nest, Now());
+                Show(Screen.Nests);
+                return;
+            }
+
+            Core.Battle.CarryOut(state, infil.Hp, infil.Cooldowns);
+            Steal.Beat(infil, mob);
+            Games.GrowParty(Games.PartyOf(Game), Steal.MobReward);
+            Show(Screen.Steal);
         }
 
         /// <summary>卵を1個手に入れる。⭐ 手に入れた瞬間だけは演出を出す。</summary>

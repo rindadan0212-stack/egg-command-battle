@@ -30,6 +30,29 @@ namespace EggCommand.Core
         /// <summary>飛び切って盤面に降りた。⚠️ **失敗ではない** — 以降の発射台になる。
         /// ⭐ 後ろに足す（既にある3つの値を動かさない）。</summary>
         Landed,
+        /// <summary>道中の雑魚に当たった。⭐ **その場で 3対3 の戦闘**になる。
+        /// ⚠️ 失敗ではない — 勝てば投げる回数が戻り、経験値も入る。
+        /// ⚠️ 親に当たったとき（<see cref="Blocked"/>）と混同しない。あちらは潜入の終わり。</summary>
+        Fought,
+    }
+
+    /// <summary>道中の雑魚。⭐ **関門とは別物**。
+    ///
+    /// ⚠️ 関門は「ステを要求して通す／止める」もの。雑魚は要求を持たず、
+    /// 当たると**戦闘になる**。同じ型に押し込むと <c>Requires</c> が意味を持たない欄になる。
+    ///
+    /// ⭐ 当たるのは損ではない。勝てば**投げる回数が戻り**、経験値も入る
+    /// （親に当たると潜入が終わるのと逆）。だから「わざと当てに行く」が手になる。</summary>
+    public sealed class Mob
+    {
+        public readonly Point At;
+        public readonly double Radius;
+
+        public Mob(Point at, double radius)
+        {
+            At = at;
+            Radius = radius;
+        }
     }
 
     /// <summary>経路上の関門。⭐ **要求するステが種類で決まる**（値は個別に持たない）。
@@ -83,11 +106,14 @@ namespace EggCommand.Core
         public readonly Point Start;
         /// <summary>経路上の関門。⚠️ 空でもよい（移植元の盤には無い）。</summary>
         public readonly IReadOnlyList<Gimmick> Gimmicks;
+        /// <summary>道中の雑魚。⚠️ 空でもよい。⭐ 1つの巣に <see cref="Steal.MobsMax"/> か所まで。</summary>
+        public readonly IReadOnlyList<Mob> Mobs;
 
         public StealField(double height, FieldSide side, double gapFrom, double gapTo,
             double bandTop, double bandBottom, Point egg, Point start,
-            IReadOnlyList<Gimmick>? gimmicks = null)
+            IReadOnlyList<Gimmick>? gimmicks = null, IReadOnlyList<Mob>? mobs = null)
         {
+            Mobs = mobs ?? new Mob[0];
             Height = height;
             Side = side;
             GapFrom = gapFrom;
@@ -112,12 +138,15 @@ namespace EggCommand.Core
         public readonly int StoppedBy;
         /// <summary>この一投で壊した壁の添字。⭐ 以降は誰でも通れる。</summary>
         public readonly IReadOnlyList<int> Broke;
+        /// <summary>当たった雑魚の添字。⚠️ 無ければ -1。</summary>
+        public readonly int Mob;
 
         private static readonly int[] Nothing = new int[0];
 
         public StealRun(StealOutcome outcome, List<Point> path, double traveled,
-            int stoppedBy = -1, IReadOnlyList<int>? broke = null)
+            int stoppedBy = -1, IReadOnlyList<int>? broke = null, int mob = -1)
         {
+            Mob = mob;
             Outcome = outcome;
             Path = path;
             Traveled = traveled;
@@ -276,7 +305,8 @@ namespace EggCommand.Core
                 bandTop + BandThickness,
                 new Point(FieldWidth / 2, 26),
                 start,
-                MakeGimmicks(tier, raids, side, bandTop + BandThickness, start.Y, rng));
+                MakeGimmicks(tier, raids, side, bandTop + BandThickness, start.Y, rng),
+                MakeMobs(tier, bandTop + BandThickness, start.Y, rng));
         }
 
         /// <summary>関門の帯の厚み。
@@ -433,6 +463,106 @@ namespace EggCommand.Core
             return list;
         }
 
+        /// <summary>雑魚の当たりの大きさ。⚠️ 走者より大きくしないと避けようがない。</summary>
+        public const double MobRadius = 11;
+
+        /// <summary>雑魚の数。⭐ 深い巣ほど多い。⚠️ <see cref="MobsMax"/> で頭打ち。</summary>
+        public static int MobCountFor(int tier)
+        {
+            int count = tier / 2;                       // 段1-2:0 / 段3-4:1〜2 / 段5:2
+            if (tier >= 5) count = MobsMax;
+            return count > MobsMax ? MobsMax : count < 0 ? 0 : count;
+        }
+
+        /// <summary>雑魚を置く。⭐ **関門の隙間（縦の間）に置く。**
+        ///
+        /// ⚠️ 関門と同じ高さに重ねない。重ねると「関門で止まったのか雑魚に当たったのか」が
+        /// 読めなくなる。⭐ 当たるかどうかはプレイヤーの狙いで決まるべきなので、
+        /// 横は広く散らす（真ん中に固めると必ず当たる／端に寄せると当たらない）。
+        ///
+        /// ⚠️ **ここは「置いてよさそうな場所」を挙げるだけ。**
+        /// 解ける道を塞がないかは <see cref="PlaceMobs"/> が1体ずつ確かめる。</summary>
+        private static List<Mob> MakeMobs(int tier, double corridorTop, double corridorBottom, Rng? rng)
+        {
+            var list = new List<Mob>();
+            int count = MobCountFor(tier);
+            if (count == 0 || rng == null) return list;
+
+            double span = corridorBottom - corridorTop;
+            for (int i = 0; i < count; i++)
+            {
+                // ⚠️ 関門は (i+1)/(count+1) に置かれる。雑魚はその**中間**へずらす
+                double t = (i + 0.5) / (count + 0.5);
+                double y = corridorBottom - span * t;
+                double x = MobRadius + RunnerRadius
+                    + rng.Float() * (FieldWidth - (MobRadius + RunnerRadius) * 2);
+                list.Add(new Mob(new Point(x, y), MobRadius));
+            }
+            return list;
+        }
+
+        /// <summary>雑魚だけ入れ替えた同じ盤。⚠️ 盤は作り直す（欄は書き換えない）。</summary>
+        private static StealField WithMobs(StealField field, IReadOnlyList<Mob> mobs) =>
+            new StealField(field.Height, field.Side, field.GapFrom, field.GapTo,
+                field.BandTop, field.BandBottom, field.Egg, field.Start, field.Gimmicks, mobs);
+
+        /// <summary>1体ずつ置いて、**解ける道を塞いだら戻す**。
+        ///
+        /// ⭐ 「盤は雑魚に頼らずに解ける」を**作り方で守る**。
+        /// ⚠️ 検査が雑魚を無視するだけでは足りなかった。雑魚は飛行を止めるので、
+        /// 無造作に置くと**通れる道そのものを食う**。実測で 段5・raids0 の
+        /// 通る角度が 12度 → 解なし に落ちた。
+        ///
+        /// ⭐ 形は Brogue と同じ ── 置く → 通れるか確かめる → 駄目なら巻き戻す → 上限で諦める。
+        /// ⚠️ 諦めた場合は**その雑魚を出さない**（置けた数だけになる）。
+        /// 無理に置くと、置けた盤と置けない盤で難しさが黙って変わる。</summary>
+        private static StealField PlaceMobs(StealField bare, IReadOnlyList<Creature> party,
+            IReadOnlyList<Shot> plan, int tier, Rng rng)
+        {
+            int want = MobCountFor(tier);
+            if (want <= 0 || plan == null || plan.Count == 0) return bare;
+
+            var placed = new List<Mob>();
+            var spots = MakeMobs(tier, bare.BandBottom, bare.Start.Y, rng);
+
+            for (int i = 0; i < spots.Count; i++)
+            {
+                for (int attempt = 0; attempt < MobPlaceTries; attempt++)
+                {
+                    // ⚠️ 1回目は素の場所。駄目なら横だけ振り直す（高さは関門との間に保つ）
+                    double x = attempt == 0
+                        ? spots[i].At.X
+                        : MobRadius + RunnerRadius
+                            + rng.Float() * (FieldWidth - (MobRadius + RunnerRadius) * 2);
+                    var candidate = new List<Mob>(placed);
+                    candidate.Add(new Mob(new Point(x, spots[i].At.Y), MobRadius));
+                    if (BlocksPlan(WithMobs(bare, candidate), party, plan)) continue;
+                    placed = candidate;
+                    break;
+                }
+            }
+            return WithMobs(bare, placed);
+        }
+
+        /// <summary>雑魚を1体置くのに何回まで場所を振り直すか。
+        /// ⚠️ 上限が無いと、道が細い盤で総当たりになる。</summary>
+        private const int MobPlaceTries = 24;
+
+        /// <summary>その手順が、この盤でもそのまま通るか。
+        /// ⚠️ 雑魚に当たったら**その時点で駄目**（手順が途切れる）。</summary>
+        private static bool BlocksPlan(StealField field, IReadOnlyList<Creature> party,
+            IReadOnlyList<Shot> plan)
+        {
+            var run = new Infiltration(field, party);
+            foreach (var shot in plan)
+            {
+                if (run.Result != null) break;
+                if (Hop(run, shot.Member, shot.Pad, shot.Angle).Outcome == StealOutcome.Fought)
+                    return true;
+            }
+            return run.Result != StealOutcome.Success;
+        }
+
         // ── 生成の検査 ────────────────────────────────────
 
         /// <summary>通る角度の幅がこれ未満の盤は出荷しない。
@@ -515,18 +645,22 @@ namespace EggCommand.Core
             for (int attempt = 0; attempt < tries; attempt++)
             {
                 var field = attempt == 0 ? best : MakeField(tier, side, raids, rng);
+                // ⭐ **雑魚を外してから測る。**雑魚は飛行を止めるので、
+                //    付けたまま測ると「雑魚に当たらずに通れる道」を数え損ねる
+                var bare = WithMobs(field, new Mob[0]);
                 List<Shot> plan;
                 int found;
-                FindRoomySolution(field, party, samples, MinWindowDegrees, 12, out plan, out found);
+                FindRoomySolution(bare, party, samples, MinWindowDegrees, 12, out plan, out found);
                 if (found >= MinWindowDegrees)
                 {
                     window = found;
-                    return field;
+                    // ⭐ 通った道を塞がない場所にだけ雑魚を置く
+                    return PlaceMobs(bare, party, plan, tier, rng);
                 }
                 if (found > bestWindow)
                 {
                     bestWindow = found;
-                    best = field;
+                    best = PlaceMobs(bare, party, plan, tier, rng);
                 }
             }
             // ⚠️ 諦めた出目をそのまま返さない。測った中で一番マシなものを返す
@@ -567,6 +701,21 @@ namespace EggCommand.Core
             return false;
         }
 
+        /// <summary>まだ倒していない雑魚に触れたか。⚠️ 倒したものは通り抜ける。</summary>
+        private static int HitsMob(StealField field, Point p, HashSet<int>? cleared)
+        {
+            for (int i = 0; i < field.Mobs.Count; i++)
+            {
+                if (cleared != null && cleared.Contains(i)) continue;
+                var mob = field.Mobs[i];
+                double dx = p.X - mob.At.X;
+                double dy = p.Y - mob.At.Y;
+                double reach = mob.Radius + RunnerRadius;
+                if (dx * dx + dy * dy <= reach * reach) return i;
+            }
+            return -1;
+        }
+
         private static bool HitsEgg(StealField field, Point p)
         {
             double dx = p.X - field.Egg.X;
@@ -587,7 +736,7 @@ namespace EggCommand.Core
         /// ⚠️ <paramref name="runner"/> が null なら関門を一切見ない ＝ 移植元と1ビットも変わらない。</summary>
         /// <param name="broken">既に壊れている壁の添字。⭐ 開通は盤に残るので、投げるたびに渡す。</param>
         private static StealRun Fly(StealField field, Point from, double angle, double budget,
-            Creature? runner, HashSet<int>? broken)
+            Creature? runner, HashSet<int>? broken, HashSet<int>? cleared = null)
         {
             var path = new List<Point> { from };
             double x = from.X;
@@ -642,6 +791,12 @@ namespace EggCommand.Core
                     return new StealRun(StealOutcome.Blocked, path, traveled, -1, broke);
 
                 if (runner == null) continue;
+
+                // ⭐ 雑魚に当たったら、**その場**が着地点になって戦闘へ。
+                // ⚠️ 倒した雑魚はもう居ない（同じ場所で何度も稼げないように）
+                int mob = HitsMob(field, here, cleared);
+                if (mob >= 0)
+                    return new StealRun(StealOutcome.Fought, path, traveled, -1, broke, mob);
 
                 // ⭐ 関門は**通過したときに**判定する（着地点だけでは、飛び越えれば無効になる）
                 int blockedBy = StepThrough(field, here, runnerStats, broken, ref broke);
@@ -731,6 +886,18 @@ namespace EggCommand.Core
             public readonly List<int> PadOwner = new List<int>();
             /// <summary>壊れた壁。⭐ 開通は盤に残るので、次の個体も通れる。</summary>
             public readonly HashSet<int> Broken = new HashSet<int>();
+            /// <summary>倒した雑魚。⭐ もう居ないので通り抜けられる。</summary>
+            public readonly HashSet<int> Cleared = new HashSet<int>();
+
+            /// <summary>いまの残り HP（<see cref="Party"/> と同じ並び）。
+            /// ⭐ **戦闘で負った傷は潜入のあいだ残る。**⚠️ 負ける -1 は「満タン」。</summary>
+            public readonly List<int> Hp = new List<int>();
+            /// <summary>いまの CT（個体 × 枠3）。⭐ 傷と同じく引き継がれる。</summary>
+            public readonly List<int[]> Cooldowns = new List<int[]>();
+
+            /// <summary>この潜入で溜めた経験値。⭐ 雑魚を倒すたびに増える。</summary>
+            public int Earned;
+
             /// <summary>決着。⚠️ null なら続行中。</summary>
             public StealOutcome? Result;
 
@@ -738,7 +905,12 @@ namespace EggCommand.Core
             {
                 Field = field;
                 Party = party;
-                for (int i = 0; i < party.Count; i++) Left.Add(i);
+                for (int i = 0; i < party.Count; i++)
+                {
+                    Left.Add(i);
+                    Hp.Add(-1);                      // -1 ＝ 満タン（まだ傷を負っていない）
+                    Cooldowns.Add(new int[3]);
+                }
             }
         }
 
@@ -760,11 +932,13 @@ namespace EggCommand.Core
 
             var from = pad < 0 ? run.Field.Start : run.Pads[pad];
             var runner = run.Party[member];
-            var flight = Fly(run.Field, from, angle, DistanceFor(runner), runner, run.Broken);
+            var flight = Fly(run.Field, from, angle, DistanceFor(runner), runner,
+                run.Broken, run.Cleared);
 
             run.Left.Remove(member);
 
-            if (flight.Outcome == StealOutcome.Landed)
+            // ⭐ 雑魚に当たった場所も着地点。次の発射台になる
+            if (flight.Outcome == StealOutcome.Landed || flight.Outcome == StealOutcome.Fought)
             {
                 run.Pads.Add(flight.Landing);
                 run.PadOwner.Add(member);
@@ -773,11 +947,77 @@ namespace EggCommand.Core
             // ⚠️ 親に触れた時点で戦闘。残りの個体は投げられない
             if (flight.Outcome == StealOutcome.Blocked) run.Result = StealOutcome.Blocked;
             else if (flight.Outcome == StealOutcome.Success) run.Result = StealOutcome.Success;
+            // ⚠️ 雑魚に当たったら決着させない。⭐ 勝てば続く（呼び側が Beat を呼ぶ）
+            else if (flight.Outcome == StealOutcome.Fought) { }
             // ⭐ 3体使い切って届かなければ、そこで戦闘へ
             else if (run.Left.Count == 0) run.Result = StealOutcome.Stalled;
 
             return flight;
         }
+
+        /// <summary>1つの巣に置ける雑魚の数。⚠️ 増やすと潜入が戦闘の連続になる。</summary>
+        public const int MobsMax = 3;
+
+        /// <summary>雑魚を倒すともらえる経験値。⭐ 育成ポイントと同じ単位。</summary>
+        public const int MobReward = 1;
+
+        /// <summary>雑魚を倒した。⭐ **投げる回数が戻り**、経験値が入る。
+        ///
+        /// ⭐ これが「わざと当てに行く」を成立させている。
+        /// 親に当たると潜入が終わるのに対し、雑魚は**続ける手段**になる。
+        /// ⚠️ 倒した雑魚はもう居ない。同じ場所で何度も稼げない。
+        ///
+        /// ⚠️ 傷と CT は呼び側が渡す（Core は戦闘の結果を知らない）。
+        /// **満タンに戻さない** — 引き継ぐからこそ「何度も戦えば削られる」が効く。</summary>
+        /// <param name="hp">戦闘後の残り HP（<see cref="Infiltration.Party"/> と同じ並び）。
+        /// ⚠️ null なら傷を更新しない。</param>
+        /// <param name="cooldowns">戦闘後の CT。⚠️ null なら更新しない。</param>
+        public static void Beat(Infiltration run, int mob, IReadOnlyList<int>? hp = null,
+            IReadOnlyList<int[]>? cooldowns = null)
+        {
+            if (run.Result != null)
+                throw new InvalidOperationException("この潜入はもう決着している");
+            if (mob < 0 || mob >= run.Field.Mobs.Count)
+                throw new ArgumentException($"雑魚 {mob} は盤に居ない");
+            if (!run.Cleared.Add(mob)) return;   // ⚠️ 二重に数えない
+
+            // ⭐ 発射回数のリセット。⚠️ 着地した個体は盤に残ったまま（台は消えない）
+            run.Left.Clear();
+            for (int i = 0; i < run.Party.Count; i++) run.Left.Add(i);
+
+            run.Earned += MobReward;
+
+            if (hp != null)
+            {
+                for (int i = 0; i < run.Hp.Count && i < hp.Count; i++) run.Hp[i] = hp[i];
+            }
+            if (cooldowns != null)
+            {
+                for (int i = 0; i < run.Cooldowns.Count && i < cooldowns.Count; i++)
+                {
+                    var from = cooldowns[i];
+                    for (int slot = 0; slot < run.Cooldowns[i].Length && slot < from.Length; slot++)
+                    {
+                        run.Cooldowns[i][slot] = from[slot];
+                    }
+                }
+            }
+        }
+
+        /// <summary>その巣のその雑魚の編成。⭐ **巣・盗んだ回数・番号だけで決まる。**
+        ///
+        /// ⚠️ その場で引かない。引くと画面を出入りするだけで顔ぶれを選び直せてしまう
+        /// （盤そのものを <see cref="RngFor"/> で固定しているのと同じ理由）。
+        /// ⭐ 決まっているので、**盤に出す絵と戦闘に出る相手が必ず一致する**。</summary>
+        public static List<Creature> MobPartyOf(Nest nest, int raids, int mob)
+        {
+            var rng = RngFor(nest, raids).Stream($"mob:{mob}");
+            return Nests.MakeMobParty(rng, nest, mob, SpeciesTable.Roll(rng));
+        }
+
+        /// <summary>雑魚戦に負けた。⚠️ 潜入はそこで終わり。
+        /// ⭐ 「戦って負けた巣は引き直す」という既にある規則に揃える。</summary>
+        public static void LostTo(Infiltration run) => run.Result = StealOutcome.Blocked;
 
         /// <summary>その飛距離で成功する角度が1つでもあるか（と、その角度）。
         ///
@@ -819,15 +1059,28 @@ namespace EggCommand.Core
         /// ⭐ 画面には出さない。設計が解けるものになっているかを機械で確かめるために使う。
         /// ⚠️ 「解けない巣」を出荷したら、プレイヤーは運が悪いのだと思ってしまう。
         /// ⚠️ リレーが入ったぶん、一投ぶんの走査では足りない。**順番と発射台まで含めて**探す。</summary>
+        /// <param name="budget">投げてよい回数。⚠️ **上限が要る。**
+        /// 上限が無いと探索の深さが伸び続ける。</param>
+        ///
+        /// <remarks>⭐ **雑魚を経由する手順は数えない。**
+        ///
+        /// ⭐ 盤は**雑魚に頼らずに解ける**こと。雑魚は「取れば楽になる」ものであって、
+        /// 「取らないと解けない」ものにしない。
+        ///
+        /// ⚠️ 数えたときは、どの盤も**通る角度が1度**になった。
+        /// 雑魚に当てるのは半径18の的を狙う精密な行為なので、そこを通る手順は必ず狭くなる。
+        /// 狭い手順を「解けます」と数えると、検査が守りたかったものが崩れる。</remarks>
         public static bool FindRelaySolution(StealField field, IReadOnlyList<Creature> party,
-            int samples, out List<Shot> plan)
+            int samples, out List<Shot> plan, int budget = SearchBudget)
         {
             plan = new List<Shot>();
             var run = new Infiltration(field, party);
-            return Solve(run, samples, plan);
+            int flights = 0;
+            return Solve(run, samples, plan, ref flights, budget);
         }
 
-        private static bool Solve(Infiltration run, int samples, List<Shot> plan)
+        private static bool Solve(Infiltration run, int samples, List<Shot> plan,
+            ref int flights, int budget)
         {
             // ⚠️ 手を1つ試すたびに状態が変わるので、枝ごとに写して戻す
             var left = new List<int>(run.Left);
@@ -835,17 +1088,23 @@ namespace EggCommand.Core
             {
                 for (int pad = -1; pad < run.Pads.Count; pad++)
                 {
+                    // ⭐ 卵の方角から試す（上限つきの探索では順序が「見つかるか」を決める）
+                    var order = AnglesToward(pad < 0 ? run.Field.Start : run.Pads[pad],
+                        run.Field, samples);
                     for (int i = 0; i < samples; i++)
                     {
-                        double angle = (-80 + 160.0 * i / (samples - 1)) * (Math.PI / 180.0);
+                        if (flights >= budget) return false;
+
+                        double angle = order[i];
                         var snapshot = Copy(run);
                         var flight = Hop(run, member, pad, angle);
+                        flights++;
                         plan.Add(new Shot { Member = member, Pad = pad, Angle = angle });
 
                         if (flight.Outcome == StealOutcome.Success) return true;
                         // ⭐ 親に触れた枝は死に枝。⚠️ 失速（着地）はまだ続く
                         if (flight.Outcome == StealOutcome.Landed && run.Result == null
-                            && Solve(run, samples, plan)) return true;
+                            && Solve(run, samples, plan, ref flights, budget)) return true;
 
                         plan.RemoveAt(plan.Count - 1);
                         Restore(run, snapshot);
@@ -1030,6 +1289,9 @@ namespace EggCommand.Core
             public List<Point> Pads = new List<Point>();
             public List<int> PadOwner = new List<int>();
             public HashSet<int> Broken = new HashSet<int>();
+            /// <summary>⚠️ 倒した雑魚も巻き戻す。忘れると枝をまたいで「もう倒した」ことになる。</summary>
+            public HashSet<int> Cleared = new HashSet<int>();
+            public int Earned;
             public StealOutcome? Result;
         }
 
@@ -1039,6 +1301,8 @@ namespace EggCommand.Core
             Pads = new List<Point>(run.Pads),
             PadOwner = new List<int>(run.PadOwner),
             Broken = new HashSet<int>(run.Broken),
+            Cleared = new HashSet<int>(run.Cleared),
+            Earned = run.Earned,
             Result = run.Result,
         };
 
@@ -1052,6 +1316,9 @@ namespace EggCommand.Core
             run.PadOwner.AddRange(from.PadOwner);
             run.Broken.Clear();
             foreach (int i in from.Broken) run.Broken.Add(i);
+            run.Cleared.Clear();
+            foreach (int i in from.Cleared) run.Cleared.Add(i);
+            run.Earned = from.Earned;
             run.Result = from.Result;
         }
     }

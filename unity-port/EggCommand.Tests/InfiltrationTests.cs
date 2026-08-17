@@ -656,4 +656,288 @@ public class InfiltrationTests
                 Assert.Equal(old.Outcome, hop.Outcome);
         }
     }
+
+    // ── 道中の雑魚 ──────────────────────────────────
+
+    /// <summary>盤の真ん中に雑魚を1体だけ置いた盤。⚠️ 検査専用。</summary>
+    private static StealField OneMob(out Point at)
+    {
+        var plain = Plain(5);
+        at = new Point(Steal.FieldWidth / 2, plain.Start.Y - 60);
+        return new StealField(plain.Height, plain.Side, plain.GapFrom, plain.GapTo,
+            plain.BandTop, plain.BandBottom, plain.Egg, plain.Start,
+            null, new[] { new Mob(at, Steal.MobRadius) });
+    }
+
+    private static List<Creature> Three() => new List<Creature>
+    {
+        Make("a", 30, 30, 30, 30), Make("b", 30, 30, 30, 30), Make("c", 30, 30, 30, 30),
+    };
+
+    /// <summary>⭐ 雑魚に当たると**その場が着地点**になって戦闘へ。
+    /// ⚠️ 親に当たったとき（潜入の終わり）とは違い、決着させない。</summary>
+    [Fact]
+    public void 雑魚に当たるとその場で戦闘になる()
+    {
+        Point at;
+        var run = new Steal.Infiltration(OneMob(out at), Three());
+
+        var flight = Steal.Hop(run, 0, -1, 0);
+
+        Assert.Equal(StealOutcome.Fought, flight.Outcome);
+        Assert.Equal(0, flight.Mob);
+        Assert.Null(run.Result);                       // ⭐ まだ終わっていない
+        Assert.Single(run.Pads);                       // ⭐ そこが発射台になる
+        Assert.True(flight.Landing.Y > at.Y, "雑魚より奥で止まっている");
+    }
+
+    /// <summary>⭐ 倒すと**投げる回数が戻り**、経験値が入る。</summary>
+    [Fact]
+    public void 雑魚を倒すと投げる回数が戻る()
+    {
+        Point at;
+        var run = new Steal.Infiltration(OneMob(out at), Three());
+
+        var flight = Steal.Hop(run, 0, -1, 0);
+        Assert.Equal(2, run.Left.Count);               // 1体使った
+
+        Steal.Beat(run, flight.Mob);
+
+        Assert.Equal(3, run.Left.Count);               // ⭐ 全部戻る
+        Assert.Equal(Steal.MobReward, run.Earned);
+        Assert.Single(run.Pads);                       // ⚠️ 台は消えない
+    }
+
+    /// <summary>⚠️ 倒した雑魚はもう居ない。⭐ 同じ場所で何度も稼げない。</summary>
+    [Fact]
+    public void 倒した雑魚は通り抜けられる()
+    {
+        Point at;
+        var run = new Steal.Infiltration(OneMob(out at), Three());
+
+        var first = Steal.Hop(run, 0, -1, 0);
+        Steal.Beat(run, first.Mob);
+
+        var second = Steal.Hop(run, 1, -1, 0);
+        Assert.NotEqual(StealOutcome.Fought, second.Outcome);
+        Assert.Equal(-1, second.Mob);
+    }
+
+    /// <summary>⭐ **戦闘で負った傷と CT は潜入のあいだ残る。**</summary>
+    [Fact]
+    public void 傷とCTは次の戦闘へ引き継がれる()
+    {
+        Point at;
+        var run = new Steal.Infiltration(OneMob(out at), Three());
+        foreach (int hp in run.Hp) Assert.Equal(-1, hp);   // -1 ＝ 満タン
+
+        var flight = Steal.Hop(run, 0, -1, 0);
+        Steal.Beat(run, flight.Mob,
+            new[] { 12, 34, 56 },
+            new[] { new[] { 0, 2, 0 }, new[] { 0, 0, 3 }, new[] { 0, 0, 0 } });
+
+        Assert.Equal(12, run.Hp[0]);
+        Assert.Equal(34, run.Hp[1]);
+        Assert.Equal(2, run.Cooldowns[0][1]);
+        Assert.Equal(3, run.Cooldowns[1][2]);
+    }
+
+    [Fact]
+    public void 雑魚戦に負けたら潜入は終わる()
+    {
+        Point at;
+        var run = new Steal.Infiltration(OneMob(out at), Three());
+        Steal.Hop(run, 0, -1, 0);
+
+        Steal.LostTo(run);
+
+        Assert.NotNull(run.Result);
+        Assert.Throws<System.InvalidOperationException>(() => Steal.Hop(run, 1, -1, 0));
+    }
+
+    /// <summary>⚠️ 1つの巣に置ける数の上限を守ること。</summary>
+    [Fact]
+    public void 雑魚は三か所まで()
+    {
+        for (int tier = 1; tier <= 5; tier++)
+        {
+            Assert.True(Steal.MobCountFor(tier) <= Steal.MobsMax);
+            for (int seed = 0; seed < 20; seed++)
+            {
+                var nest = new Nest($"mob-{seed}", "検査", "tamaru", tier);
+                var field = Steal.MakeField(tier, FieldSide.Right, 0, Steal.RngFor(nest, 0));
+                Assert.True(field.Mobs.Count <= Steal.MobsMax,
+                    $"段{tier} seed{seed}: 雑魚が {field.Mobs.Count} 体");
+            }
+        }
+    }
+
+    /// <summary>⭐ **出荷する盤は、雑魚を1体も倒さずに解ける。**
+    ///
+    /// ⚠️ 検査が雑魚を無視するだけでは足りない。雑魚は飛行を止めるので、
+    /// 無造作に置くと**通れる道そのものを食う**（実測: 段5 raids0 で 12度 → 解なし）。
+    /// ⭐ だから置き方のほうで守る ── 素の盤で解いてから、
+    /// **その道を塞がない場所にだけ**雑魚を置く。</summary>
+    [Fact]
+    public void 出荷する盤は雑魚を避けて解ける()
+    {
+        for (int tier = 3; tier <= 5; tier++)
+        {
+            for (int seed = 0; seed < 12; seed++)
+            {
+                var nest = new Nest($"clear-{tier}-{seed}", "検査", "tamaru", tier);
+                for (int raids = 0; raids < Steal.RaidsToSeal; raids++)
+                {
+                    var field = Steal.MakeValidatedField(tier, FieldSide.Right, raids,
+                        Steal.RngFor(nest, raids));
+                    var party = Steal.ReferenceParty(tier);
+
+                    // ⚠️ 走査の細かさは**出荷時と同じ 13**にすること。
+                    //    細かくすると枝が増えて、探索の上限に先に当たって解を見失う
+                    //    （33 にしたら 段3 seed3 raids3 が「解なし」になった）。
+                    List<Steal.Shot> plan;
+                    Assert.True(Steal.FindRelaySolution(field, party, 13, out plan),
+                        $"段{tier} seed{seed} raids{raids}: 解が無い");
+
+                    var run = new Steal.Infiltration(field, party);
+                    foreach (var shot in plan)
+                    {
+                        if (run.Result != null) break;
+                        var flight = Steal.Hop(run, shot.Member, shot.Pad, shot.Angle);
+                        Assert.NotEqual(StealOutcome.Fought, flight.Outcome);
+                    }
+                    Assert.Equal(StealOutcome.Success, run.Result);
+                }
+            }
+        }
+    }
+
+    /// <summary>⭐ **盤は雑魚に頼らずに解けること。**
+    ///
+    /// ⚠️ 雑魚は「取れば楽になる」ものであって「取らないと解けない」ものにしない。
+    /// 雑魚に当てるのは半径18の的を狙う精密な行為なので、
+    /// そこを通る手順を数えると**どの盤も通る角度が1度**になった（実測）。</summary>
+    [Fact]
+    public void 検査は雑魚を経由する手順を数えない()
+    {
+        Point at;
+        var field = OneMob(out at);
+        var party = Three();
+
+        List<Steal.Shot> plan;
+        Steal.FindRelaySolution(field, party, 33, out plan);
+
+        // 見つけた手順のどの一投も、雑魚には当たらないこと
+        var run = new Steal.Infiltration(field, party);
+        foreach (var shot in plan)
+        {
+            if (run.Result != null) break;
+            var flight = Steal.Hop(run, shot.Member, shot.Pad, shot.Angle);
+            Assert.NotEqual(StealOutcome.Fought, flight.Outcome);
+        }
+    }
+
+    // ── 雑魚の編成と、傷の持ち回り ────────────────────
+
+    /// <summary>⭐ **巣と番号だけで決まる。**画面を出入りしても顔ぶれが変わらない。</summary>
+    [Fact]
+    public void 雑魚の編成は引き直せない()
+    {
+        var nest = new Nest("mob-fix", "検査", "tamaru", 3);
+
+        var once = Steal.MobPartyOf(nest, 1, 0);
+        var again = Steal.MobPartyOf(nest, 1, 0);
+
+        Assert.Equal(3, once.Count);
+        for (int i = 0; i < once.Count; i++)
+        {
+            Assert.Equal(once[i].SpeciesId, again[i].SpeciesId);
+            Assert.Equal(Stats.TotalOf(once[i].Wild), Stats.TotalOf(again[i].Wild));
+        }
+    }
+
+    /// <summary>⚠️ 雑魚1と雑魚2が同じ編成だと、2戦目が1戦目の繰り返しになる。</summary>
+    [Fact]
+    public void 雑魚ごとに顔ぶれが違う()
+    {
+        var nest = new Nest("mob-var", "検査", "tamaru", 5);
+        var first = Steal.MobPartyOf(nest, 0, 0);
+        var second = Steal.MobPartyOf(nest, 0, 1);
+
+        bool same = true;
+        for (int i = 0; i < first.Count; i++)
+        {
+            if (first[i].SpeciesId != second[i].SpeciesId
+                || Stats.TotalOf(first[i].Wild) != Stats.TotalOf(second[i].Wild)) same = false;
+        }
+        Assert.False(same, "雑魚0と雑魚1が同じ編成");
+    }
+
+    /// <summary>⚠️ 雑魚は親より重い関所にしない（⭐「取れば楽になる」もの）。</summary>
+    [Fact]
+    public void 雑魚は親より弱い()
+    {
+        for (int tier = 1; tier <= 5; tier++)
+        {
+            var nest = new Nest($"mob-w{tier}", "検査", "tamaru", tier);
+            var parent = Nests.MakeDefenders(new Rng(7), nest);
+            var mobs = Steal.MobPartyOf(nest, 0, 0);
+
+            int one = Stats.TotalOf(mobs[0].Wild);
+            Assert.True(one < Stats.TotalOf(parent[0].Wild),
+                $"段{tier}: 雑魚1体 {one} が親 {Stats.TotalOf(parent[0].Wild)} 以上");
+        }
+    }
+
+    /// <summary>⭐ **潜入で負った傷と CT が、そのまま次の戦闘の味方に載る。**</summary>
+    [Fact]
+    public void 傷とCTは戦闘へ持ち込まれる()
+    {
+        var party = Three();
+        var enemies = new List<Creature> { Make("e", 30, 30, 30, 30) };
+        var state = Battle.CreateBattle(party, enemies);
+
+        int full = state.Units[0].MaxHp;
+        Battle.CarryIn(state,
+            new[] { -1, 5, 0 },                       // -1 ＝ 満タン / 0 ＝ 倒れていた
+            new[] { new[] { 0, 0, 0 }, new[] { 0, 4, 0 }, new[] { 0, 0, 0 } });
+
+        Assert.Equal(full, state.Units[0].Hp);        // ⚠️ -1 は触らない
+        Assert.Equal(5, state.Units[1].Hp);
+        Assert.Equal(4, state.Units[1].Cooldowns[1]);
+        // ⭐ 倒れた個体も 1 で立つ（投げられない個体を作らない）
+        Assert.Equal(1, state.Units[2].Hp);
+    }
+
+    /// <summary>⚠️ 敵に持ち込まない（味方の傷なので）。</summary>
+    [Fact]
+    public void 持ち込む傷は味方だけ()
+    {
+        var enemies = new List<Creature> { Make("e", 30, 30, 30, 30) };
+        var state = Battle.CreateBattle(Three(), enemies);
+        var enemy = state.Units.First(u => u.Side == Side.Enemy);
+        int before = enemy.Hp;
+
+        Battle.CarryIn(state, new[] { 1, 1, 1 }, null);
+
+        Assert.Equal(before, enemy.Hp);
+    }
+
+    /// <summary>⭐ 戦闘のあとの傷を潜入へ書き戻す。⚠️ 満タンに戻さない。</summary>
+    [Fact]
+    public void 戦闘のあとの傷を潜入へ書き戻す()
+    {
+        var party = Three();
+        var enemies = new List<Creature> { Make("e", 30, 30, 30, 30) };
+        var state = Battle.CreateBattle(party, enemies);
+        state.Units[0].Hp = 9;
+        state.Units[0].Cooldowns[2] = 3;
+
+        Point at;
+        var run = new Steal.Infiltration(OneMob(out at), party);
+        Battle.CarryOut(state, run.Hp, run.Cooldowns);
+
+        Assert.Equal(9, run.Hp[0]);
+        Assert.Equal(3, run.Cooldowns[0][2]);
+    }
 }
