@@ -35,7 +35,7 @@ export function depthForTier(tier: number): number {
 }
 
 /** スピード合計1につき飛べる距離。
- *  ⚠️ 値は `npm run sim -- --steal` の走査で決めた（履歴.md に測定値）。 */
+ *  ⚠️ 値は `npm run sim -- --steal` の走査で決めた（wiki/開発/開発履歴.md に測定値）。 */
 export const SPEED_TO_DISTANCE = 3
 
 /** 進みの刻み。⚠️ 整数で刻んで決定論を保つ。 */
