@@ -14,6 +14,8 @@ namespace EggCommand.Core
         /// <summary>残 HP 割合が最も低い味方（自分を含む）</summary>
         AllyLowest,
         Self,
+        /// <summary>倒れている味方。⚠️ 蘇生のためだけの狙い先。居なければ何も起きない。</summary>
+        AllyDown,
     }
 
     /// <summary>効き目の段位。
@@ -52,6 +54,20 @@ namespace EggCommand.Core
         Taunt,
         Guts,
         Immune,
+        /// <summary>ゲージを増やす／減らす。⭐ <see cref="Effect.Percent"/> が符号付きの割合。</summary>
+        Gauge,
+        /// <summary>睡眠。⚠️ **攻撃を受けると即座に解ける。**
+        /// ⭐ スタンとの違いはここだけ ── 眠らせた相手を殴ると自分で起こしてしまう。</summary>
+        Sleep,
+        /// <summary>ブロック。⭐ **外から受け取る回復と強化を無効化する。**
+        /// ⚠️ 自然に溜まるゲージと自然に減る CT は止めない（止まるのは「買った分」だけ）。</summary>
+        Block,
+        /// <summary>強化解除。⭐ 相手に乗っている強化を <see cref="Effect.Count"/> 個消す。</summary>
+        Dispel,
+        /// <summary>強化強奪。⭐ 消すのではなく**自分へ移す**。</summary>
+        Steal,
+        /// <summary>蘇生。⚠️ 倒れた味方を <see cref="Effect.Percent"/>% の HP で戻す。</summary>
+        Revive,
     }
 
     /// <summary>効果のプリミティブ。
@@ -97,6 +113,12 @@ namespace EggCommand.Core
         /// ⚠️ ダメージそのものに外れは無い（<see cref="Chance"/> が付かない唯一の効果）。</summary>
         public readonly int Repeat;
 
+        /// <summary>damage。⭐ **防御を無視して当てる。**
+        /// ⚠️ 効果の種類を増やさず、ダメージの性質として持つ
+        /// （「防御無視の攻撃」であって「防御無視」という別の効果ではない）。
+        /// ⚠️ 盾は無視しない ── 盾を抜くのは手数の仕事。</summary>
+        public readonly bool Pierce;
+
         /// <summary>効果が通る率（%）。⭐ 100 なら必ず通る（乱数を1度も引かない）。
         ///
         /// ⭐ **効果量と確率をトレードオフにする欄。**
@@ -116,8 +138,9 @@ namespace EggCommand.Core
 
         private Effect(EffectKind kind, PowerTier power, DamageScale scale, StatKey stat, int sign,
             int turns, int stacks, int percent, int count, int delta, int hits, int repeat = 1,
-            int chance = 100)
+            int chance = 100, bool pierce = false)
         {
+            Pierce = pierce;
             Repeat = repeat < 1 ? 1 : repeat;
             Chance = chance < MinChance ? MinChance : chance > 100 ? 100 : chance;
             Kind = kind;
@@ -134,8 +157,10 @@ namespace EggCommand.Core
         }
 
         /// <summary>scale が Def のものは「防御が高いほど強い一撃」になる。</summary>
-        public static Effect Damage(PowerTier power, DamageScale scale, int repeat = 1) =>
-            new Effect(EffectKind.Damage, power, scale, default, 0, 0, 0, 0, 0, 0, 0, repeat);
+        public static Effect Damage(PowerTier power, DamageScale scale, int repeat = 1,
+            bool pierce = false) =>
+            new Effect(EffectKind.Damage, power, scale, default, 0, 0, 0, 0, 0, 0, 0, repeat,
+                100, pierce);
 
         /// <summary>攻撃力/防御力/スピードの UP・DOWN。⚠️ 効き目は一律 <see cref="Skills.BuffPercent"/>。段位は使わない。</summary>
         public static Effect Buff(StatKey stat, int sign, int turns, int chance = 100)
@@ -190,9 +215,40 @@ namespace EggCommand.Core
             new Effect(EffectKind.Guts, default, default, default, 0, turns, 0, 0, 0, 0, 0,
                 1, chance);
 
-        /// <summary>免疫。DOWN・毒・スタンを受けない。</summary>
+        /// <summary>免疫。弱化を受けない。</summary>
         public static Effect Immune(int turns, int chance = 100) =>
             new Effect(EffectKind.Immune, default, default, default, 0, turns, 0, 0, 0, 0, 0,
+                1, chance);
+
+        /// <summary>ゲージを動かす。⚠️ <paramref name="percent"/> は符号付き
+        /// （+ で上昇・− で減少）。満タンに対する割合。</summary>
+        public static Effect Gauge(int percent, int chance = 100) =>
+            new Effect(EffectKind.Gauge, default, default, default, 0, 0, 0, percent, 0, 0, 0,
+                1, chance);
+
+        /// <summary>睡眠。⚠️ 攻撃を受けると即座に解ける。</summary>
+        public static Effect Sleep(int turns, int chance = 100) =>
+            new Effect(EffectKind.Sleep, default, default, default, 0, turns, 0, 0, 0, 0, 0,
+                1, chance);
+
+        /// <summary>ブロック。外から受け取る回復と強化を無効化する。</summary>
+        public static Effect Block(int turns, int chance = 100) =>
+            new Effect(EffectKind.Block, default, default, default, 0, turns, 0, 0, 0, 0, 0,
+                1, chance);
+
+        /// <summary>強化解除。相手の強化を <paramref name="count"/> 個消す。</summary>
+        public static Effect Dispel(int count, int chance = 100) =>
+            new Effect(EffectKind.Dispel, default, default, default, 0, 0, 0, 0, count, 0, 0,
+                1, chance);
+
+        /// <summary>強化強奪。相手の強化を <paramref name="count"/> 個、自分へ移す。</summary>
+        public static Effect Steal(int count, int chance = 100) =>
+            new Effect(EffectKind.Steal, default, default, default, 0, 0, 0, 0, count, 0, 0,
+                1, chance);
+
+        /// <summary>蘇生。倒れた味方を最大HP の <paramref name="percent"/>% で戻す。</summary>
+        public static Effect Revive(int percent, int chance = 100) =>
+            new Effect(EffectKind.Revive, default, default, default, 0, 0, 0, percent, 0, 0, 0,
                 1, chance);
     }
 
@@ -653,7 +709,32 @@ namespace EggCommand.Core
         {
             if (effect.Kind == EffectKind.Buff) return effect.Sign < 0;
             if (effect.Kind == EffectKind.Ct) return effect.Delta > 0;
-            return effect.Kind == EffectKind.Poison || effect.Kind == EffectKind.Stun;
+            // ⚠️ ゲージは符号で向きが変わる。減らす側だけが弱化
+            if (effect.Kind == EffectKind.Gauge) return effect.Percent < 0;
+            return effect.Kind == EffectKind.Poison || effect.Kind == EffectKind.Stun
+                || effect.Kind == EffectKind.Sleep || effect.Kind == EffectKind.Block
+                || effect.Kind == EffectKind.Dispel || effect.Kind == EffectKind.Steal
+                || effect.Kind == EffectKind.Taunt;
+        }
+
+        /// <summary>相手が受け取る「強化」か。⭐ ブロックが止める側。
+        /// ⚠️ 自然に溜まるゲージ・自然に減る CT は含まない（あれは買った分ではない）。</summary>
+        public static bool IsBoon(Effect effect)
+        {
+            switch (effect.Kind)
+            {
+                case EffectKind.Buff: return effect.Sign > 0;
+                case EffectKind.Ct: return effect.Delta < 0;
+                case EffectKind.Gauge: return effect.Percent > 0;
+                case EffectKind.HealRatio:
+                case EffectKind.Regen:
+                case EffectKind.Shield:
+                case EffectKind.Guts:
+                case EffectKind.Immune:
+                case EffectKind.Revive:
+                    return true;
+                default: return false;
+            }
         }
 
         /// <summary>技表とガチャプールの整合を数える。

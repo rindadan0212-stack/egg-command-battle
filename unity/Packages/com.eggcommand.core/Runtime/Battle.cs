@@ -48,8 +48,15 @@ namespace EggCommand.Core
         public int Stun;
         /// <summary>味方への単体攻撃を引き受ける残り回数。</summary>
         public int Taunt;
+        /// <summary>挑発を掛けてきた相手の <see cref="Unit.Key"/>。
+        /// ⭐ 挑発は**相手に付ける弱化**なので、単体攻撃の狙い先がここに固定される。</summary>
+        public string? TauntBy;
         public int Guts;
         public int Immune;
+        /// <summary>睡眠の残り。⚠️ 攻撃を受けた時点で 0 になる。</summary>
+        public int Sleep;
+        /// <summary>ブロックの残り。⭐ 外から受け取る回復と強化を弾く。</summary>
+        public int Block;
 
         public ref Modifier ModOf(StatKey key)
         {
@@ -100,6 +107,20 @@ namespace EggCommand.Core
     {
         Act, Damage, Heal, Buff, Poison, Regen, Applied, Shield, Stun, Skipped,
         Ct, Taunt, Guts, GutsSaved, Immune, Blocked, Down,
+        /// <summary>ゲージが動いた。</summary>
+        Gauge,
+        /// <summary>眠った。</summary>
+        Sleep,
+        /// <summary>目を覚ました（殴られて解けた）。</summary>
+        Woke,
+        /// <summary>ブロックが付いた。</summary>
+        Block,
+        /// <summary>ブロックで弾かれた。</summary>
+        Blunted,
+        /// <summary>強化を消した／奪った。</summary>
+        Dispelled,
+        /// <summary>蘇った。</summary>
+        Revived,
         /// <summary>弱化が外れた。⭐ 免疫で弾いた（Blocked）とは分ける。</summary>
         Missed,
     }
@@ -394,6 +415,57 @@ namespace EggCommand.Core
             }
         }
 
+        /// <summary>強化を <paramref name="count"/> 個 剥がす。
+        /// <paramref name="into"/> を渡すと**消さずにそこへ移す**（強化強奪）。
+        ///
+        /// ⚠️ 剥がす順は固定にする（攻→防→速→盾→ガッツ→免疫→リジェネ）。
+        /// 乱数で選ぶと「同じ編成なら同じ結果」という約束が崩れる。
+        /// ⭐ 数えるのは**乗っている強化の個数**であって効果量ではない。</summary>
+        /// <returns>実際に剥がした個数。</returns>
+        public static int StripBoons(Unit target, int count, Unit? into)
+        {
+            if (count <= 0) return 0;
+            int gone = 0;
+            var s = target.Status;
+
+            foreach (var key in Stats.Keys)
+            {
+                if (gone >= count) break;
+                if (key == StatKey.Hp) continue;
+                ref var mod = ref s.ModOf(key);
+                if (mod.Turns <= 0 || mod.Percent <= 0) continue;
+                if (into != null)
+                {
+                    ref var to = ref into.Status.ModOf(key);
+                    to.Percent = mod.Percent;
+                    to.Turns = mod.Turns;
+                }
+                mod.Percent = 0; mod.Turns = 0;
+                gone++;
+            }
+            if (gone < count && s.Shield > 0)
+            {
+                if (into != null) into.Status.Shield = s.Shield;
+                s.Shield = 0; gone++;
+            }
+            if (gone < count && s.Guts > 0)
+            {
+                if (into != null) into.Status.Guts = s.Guts;
+                s.Guts = 0; gone++;
+            }
+            if (gone < count && s.Immune > 0)
+            {
+                if (into != null) into.Status.Immune = s.Immune;
+                s.Immune = 0; gone++;
+            }
+            if (gone < count && s.Regen.Turns > 0)
+            {
+                if (into != null) into.Status.Regen = s.Regen;
+                s.Regen = new Stacking(); gone++;
+            }
+            return gone;
+        }
+
         public static bool IsAlive(Unit unit) => unit.Hp > 0;
 
         public static List<Unit> LivingOf(BattleState state, Side side)
@@ -483,6 +555,10 @@ namespace EggCommand.Core
             }
             if (s.Guts > 0) s.Guts--;
             if (s.Immune > 0) s.Immune--;
+            if (s.Sleep > 0) s.Sleep--;
+            if (s.Block > 0) s.Block--;
+            // ⚠️ 挑発の掛け手が居なくなったら固定を解く（居ない相手を狙い続けない）
+            if (s.Taunt <= 0) s.TauntBy = null;
         }
 
         /// <summary>手番を1つ消費する（行動せずに）。</summary>
@@ -580,17 +656,37 @@ namespace EggCommand.Core
                     ConsumeTurn(state, best);
                     continue;
                 }
+                // ⭐ 睡眠もスタンと同じく手番を飛ばす。⚠️ 違いは殴られると解けること
+                if (best.Status.Sleep > 0)
+                {
+                    state.Log.Add(new BattleEvent(BattleEventKind.Skipped, best.Key));
+                    ConsumeTurn(state, best);
+                    continue;
+                }
                 return best;
             }
             return null;
         }
 
+        /// <summary>効果を1つだけ打ち込む。⭐ **技を作らずに効果そのものを試すための入口。**
+        /// ⚠️ 遊びからは使わない（技を通さない行動は存在しない）。検査と測定のためだけ。</summary>
+        public static void ApplyOne(BattleState state, Unit actor, Unit target, Effect effect) =>
+            ApplyEffect(state, actor, target, effect, new SkillBoost());
+
+        /// <summary>狙い先を引く。⭐ 検査から狙いの規則（挑発など）を直に確かめるための入口。</summary>
+        public static List<Unit> TargetsFor(BattleState state, Unit actor, Target target,
+            Unit? chosen) => TargetsOf(state, actor, target, chosen);
+
         private static List<Unit> TargetsOf(BattleState state, Unit actor, Skill skill, Unit? chosen)
+            => TargetsOf(state, actor, skill.Target, chosen);
+
+        private static List<Unit> TargetsOf(BattleState state, Unit actor, Target skillTarget,
+            Unit? chosen)
         {
             var foes = LivingOf(state, actor.Side == Side.Ally ? Side.Enemy : Side.Ally);
             var friends = LivingOf(state, actor.Side);
 
-            switch (skill.Target)
+            switch (skillTarget)
             {
                 case Target.Self:
                     return new List<Unit> { actor };
@@ -614,22 +710,32 @@ namespace EggCommand.Core
                     }
                     if (picked == null) return new List<Unit>();
 
-                    // ⭐ 挑発している者がいれば、そちらへ逸らす（「壁」の実体）。
-                    // ⚠️ 全体攻撃は逸らさない（全員に当たるので引き受ける意味が無い）
-                    var guards = new List<Unit>();
-                    foreach (var unit in foes)
+                    // ⭐ **挑発を受けているのは行動する側。**掛けてきた相手しか狙えない。
+                    // ⚠️ 全体攻撃は縛らない（全員に当たるので狙い先の意味が無い）。
+                    // ⚠️ 掛け手が倒れていれば縛りは解ける（居ない相手を狙い続けない）。
+                    if (actor.Status.Taunt > 0 && actor.Status.TauntBy != null)
                     {
-                        if (unit.Status.Taunt > 0 && !ReferenceEquals(unit, picked)) guards.Add(unit);
-                    }
-                    guards.Sort((a, b) => a.Status.Taunt != b.Status.Taunt
-                        ? b.Status.Taunt - a.Status.Taunt
-                        : a.Slot - b.Slot);
-                    if (guards.Count > 0)
-                    {
-                        guards[0].Status.Taunt--;
-                        return new List<Unit> { guards[0] };
+                        foreach (var unit in foes)
+                        {
+                            if (unit.Key != actor.Status.TauntBy) continue;
+                            actor.Status.Taunt--;
+                            if (actor.Status.Taunt <= 0) actor.Status.TauntBy = null;
+                            return new List<Unit> { unit };
+                        }
                     }
                     return new List<Unit> { picked };
+                }
+
+                case Target.AllyDown:
+                {
+                    // ⚠️ 生きている側からは選べないので、全員から探す
+                    Unit? down = null;
+                    foreach (var unit in state.Units)
+                    {
+                        if (unit.Side != actor.Side || IsAlive(unit)) continue;
+                        if (down == null || unit.Slot < down.Slot) down = unit;
+                    }
+                    return down == null ? new List<Unit>() : new List<Unit> { down };
                 }
 
                 case Target.AllyLowest:
@@ -646,7 +752,7 @@ namespace EggCommand.Core
                 }
 
                 default:
-                    throw new ArgumentOutOfRangeException(nameof(skill));
+                    throw new ArgumentOutOfRangeException(nameof(skillTarget));
             }
         }
 
@@ -672,6 +778,13 @@ namespace EggCommand.Core
                 state.Log.Add(new BattleEvent(BattleEventKind.Damage, target.Key,
                     amount: 0, hp: target.Hp, absorbed: amount));
                 return;
+            }
+
+            // ⭐ 殴られると目を覚ます。⚠️ 眠らせた相手を殴ると自分で起こしてしまう
+            if (target.Status.Sleep > 0)
+            {
+                target.Status.Sleep = 0;
+                state.Log.Add(new BattleEvent(BattleEventKind.Woke, target.Key));
             }
 
             int before = target.Hp;
@@ -763,6 +876,14 @@ namespace EggCommand.Core
                 return 0;
             }
 
+            // ⭐ ブロックは**外から受け取る回復と強化**を弾く。
+            // ⚠️ 自然に溜まるゲージと自然に減る CT は止めない（止まるのは「買った分」だけ）。
+            if (Skills.IsBoon(effect) && target.Status.Block > 0)
+            {
+                state.Log.Add(new BattleEvent(BattleEventKind.Blunted, target.Key));
+                return 0;
+            }
+
             // ⭐ 弱化は外れることがある。⚠️ 率が 100 のときは引かない
             //    （移植した技の試合が1手も変わらないようにするため）
             // ⭐ スキルレベルぶん通しやすくなる。⚠️ 素で 100 のものは 100 のまま
@@ -785,7 +906,9 @@ namespace EggCommand.Core
                     int attackStat = effect.Scale == DamageScale.Atk
                         ? EffectiveStat(actorStats.Atk, actor.Status.Atk)
                         : EffectiveStat(actorStats.Def, actor.Status.Def);
-                    int defenseStat = EffectiveStat(targetStats.Def, target.Status.Def);
+                    // ⭐ 防御無視。⚠️ 0 にせず「無いもの」として扱う（式の分母は定数が残る）
+                    int defenseStat = effect.Pierce
+                        ? 0 : EffectiveStat(targetStats.Def, target.Status.Def);
                     double mult = ElementMultiplier(
                         actor.Creature.Element,
                         target.Creature.Element);
@@ -892,7 +1015,11 @@ namespace EggCommand.Core
 
                 case EffectKind.Taunt:
                 {
+                    // ⭐ **相手に付ける弱化。**掛けた本人しか狙えなくする。
+                    // ⚠️ 以前は味方に付けて「単体攻撃を引き受ける」形だった。
+                    //    引き受け役は残しても意味が重なるので、狙い先の固定に一本化した。
                     target.Status.Taunt = effect.Hits + boost.ExtraAmount;
+                    target.Status.TauntBy = actor.Key;
                     state.Log.Add(new BattleEvent(BattleEventKind.Taunt, target.Key, hits: effect.Hits));
                     break;
                 }
@@ -901,6 +1028,65 @@ namespace EggCommand.Core
                 {
                     target.Status.Guts = effect.Turns + boost.ExtraTurns;
                     state.Log.Add(new BattleEvent(BattleEventKind.Guts, target.Key));
+                    break;
+                }
+
+                case EffectKind.Gauge:
+                {
+                    // ⭐ 満タンに対する割合で動かす。⚠️ 減らす側は超過分ごと削る
+                    int move = GaugeMax * (effect.Percent
+                        + (effect.Percent < 0 ? -boost.ExtraAmount : boost.ExtraAmount)) / 100;
+                    int before = target.Gauge;
+                    target.Gauge = Math.Max(0, target.Gauge + move);
+                    state.Log.Add(new BattleEvent(BattleEventKind.Gauge, target.Key,
+                        amount: target.Gauge - before, percent: effect.Percent));
+                    break;
+                }
+
+                case EffectKind.Sleep:
+                {
+                    // ⚠️ スタンと同じく足す（上限つき）。⭐ 違いは「殴ると起きる」ことだけ
+                    int sleep = target.Status.Sleep + effect.Turns + boost.ExtraTurns;
+                    int sleepCap = effect.Turns + boost.ExtraTurns + StunStackMax;
+                    target.Status.Sleep = sleep > sleepCap ? sleepCap : sleep;
+                    state.Log.Add(new BattleEvent(BattleEventKind.Sleep, target.Key, turns: effect.Turns));
+                    break;
+                }
+
+                case EffectKind.Block:
+                {
+                    target.Status.Block = effect.Turns + boost.ExtraTurns;
+                    state.Log.Add(new BattleEvent(BattleEventKind.Block, target.Key, turns: effect.Turns));
+                    break;
+                }
+
+                case EffectKind.Dispel:
+                {
+                    int gone = StripBoons(target, effect.Count + boost.ExtraCount, null);
+                    state.Log.Add(new BattleEvent(BattleEventKind.Dispelled, target.Key, amount: gone));
+                    break;
+                }
+
+                case EffectKind.Steal:
+                {
+                    // ⭐ 消すのではなく自分へ移す。⚠️ 移せないもの（毒などの弱化）は触らない
+                    int moved = StripBoons(target, effect.Count + boost.ExtraCount, actor);
+                    state.Log.Add(new BattleEvent(BattleEventKind.Dispelled, target.Key,
+                        amount: moved, label: "奪"));
+                    break;
+                }
+
+                case EffectKind.Revive:
+                {
+                    // ⚠️ 倒れていない相手には何も起きない
+                    if (IsAlive(target)) break;
+                    int back = Math.Max(1, target.MaxHp * (effect.Percent + boost.ExtraAmount) / 100);
+                    target.Hp = Math.Min(target.MaxHp, back);
+                    // ⭐ 立ち上がるときは強化も弱化も無い状態から
+                    target.Status = new UnitStatus();
+                    target.Gauge = 0;
+                    state.Log.Add(new BattleEvent(BattleEventKind.Revived, target.Key,
+                        amount: target.Hp, hp: target.Hp));
                     break;
                 }
 
@@ -990,6 +1176,8 @@ namespace EggCommand.Core
             if (s.Taunt > 0) output.Add($"挑発{s.Taunt}");
             if (s.Guts > 0) output.Add($"ガッツ{s.Guts}");
             if (s.Immune > 0) output.Add($"免疫{s.Immune}");
+            if (s.Sleep > 0) output.Add($"睡眠{s.Sleep}");
+            if (s.Block > 0) output.Add($"ブロック{s.Block}");
             return output;
         }
 

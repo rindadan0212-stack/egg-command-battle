@@ -5,6 +5,27 @@ namespace EggCommand.Tests;
 
 public class BattleGoldenTests
 {
+    /// <summary>⚠️ **挑発を作り替えたので経過が変わる対戦**（2026-08-18）。
+    ///
+    /// 移植元の挑発は「味方に付けて、味方への単体攻撃を引き受ける」＝強化だった。
+    /// ⭐ 相手に付けて「掛けた本人しか狙えなくする」＝弱化に変えたので、
+    /// 挑発を持つ個体が出る対戦は狙い先が変わり、手数も変わる。
+    ///
+    /// ⚠️ **ここに書いたものだけが許される。**書いていない対戦が変わったら落ちる。
+    /// ⚠️ ゴールデンは作り直さない ── 作り直すと「移植元と一致している」証明が消える。
+    /// ⭐ 開幕の並び（最大HP・手数倍率・速度）は挑発と無関係なので**全件で見続ける**。</summary>
+    /// ⚠️ 実測で洗い出した6件。⭐ **挑発を持つ個体が出る対戦だけ**が変わっている
+    /// （鱗の巣とヌシ。牙・羽の巣は1手も変わらない）。
+    private static readonly HashSet<string> TauntChanged = new HashSet<string>
+    {
+        "seed=1 vs shallow-scale",
+        "seed=1 vs deep-scale",
+        "seed=1 vs boss",
+        "seed=20260816 vs shallow-scale",
+        "seed=20260816 vs deep-scale",
+        "seed=20260816 vs boss",
+    };
+
     [Fact]
     public void 較正済みの定数が一致する()
     {
@@ -140,6 +161,8 @@ public class BattleGoldenTests
                 if (foe.Element != allyElement) crossElement = true;
             }
             if (crossElement) continue;
+            // ⚠️ 挑発の作り替えで経過が変わる対戦。開幕の並びまでは上で照合済み
+            if (TauntChanged.Contains(where)) continue;
 
             int guard = 0;
             while (state.Result == null && guard++ < Battle.MaxActions * 3)

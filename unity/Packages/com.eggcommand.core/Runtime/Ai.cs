@@ -20,10 +20,26 @@ namespace EggCommand.Core
         private const double StunValue = 26;
         /// <summary>CT を1つ動かすことの価値。</summary>
         private const double CtValue = 6;
-        /// <summary>肩代わり1回ぶんの価値。</summary>
+        /// <summary>狙い先を縛る1回ぶんの価値。</summary>
         private const double TauntValue = 7;
+        /// <summary>ゲージを1%動かすことの価値。⭐ 手番の奪い合いなので高め。</summary>
+        private const double GaugeValue = 0.35;
+        /// <summary>強化を1個 剥がすことの価値。⭐ 奪うほうは自分にも乗るので倍。</summary>
+        private const double DispelValue = 9;
+        /// <summary>倒れた味方を1体戻すことの価値。</summary>
+        private const double ReviveValue = 40;
         /// <summary>ガッツ・免疫の価値（状況が読みにくいので控えめの固定値）。</summary>
         private const double GuardianValue = 10;
+
+        /// <summary>味方に倒れている者が居るか。⚠️ 蘇生の採点だけに使う。</summary>
+        private static bool IsAnyDown(BattleState state, Unit actor)
+        {
+            foreach (var unit in state.Units)
+            {
+                if (unit.Side == actor.Side && !Battle.IsAlive(unit)) return true;
+            }
+            return false;
+        }
 
         private static int EstimateDamage(Unit actor, Unit target, PowerTier tier, DamageScale scale)
         {
@@ -166,17 +182,54 @@ namespace EggCommand.Core
                     }
 
                     case EffectKind.Taunt:
+                        // ⭐ 相手に付ける弱化になった。まだ縛られていない相手にだけ価値がある
+                        score += subject.Status.Taunt == 0 ? effect.Hits * TauntValue : 0;
+                        break;
+
+                    case EffectKind.Gauge:
                     {
-                        // 自分より脆い味方がいるときだけ意味がある
-                        double mine = (double)actor.Hp / Math.Max(1, actor.MaxHp);
-                        int fragile = 0;
-                        foreach (var friend in friends)
-                        {
-                            if (!ReferenceEquals(friend, actor) && (double)friend.Hp / friend.MaxHp < mine) fragile++;
-                        }
-                        score += fragile > 0 && actor.Status.Taunt == 0 ? effect.Hits * TauntValue : 0;
+                        // ⚠️ 減らす側は「相手が溜めている分」までしか削れない
+                        double moved = effect.Percent < 0
+                            ? Math.Min(-effect.Percent, subject.Gauge * 100.0 / Battle.GaugeMax)
+                            : effect.Percent;
+                        score += moved * GaugeValue;
                         break;
                     }
+
+                    case EffectKind.Sleep:
+                        // ⚠️ 殴ると解けるのでスタンより安く見る
+                        score += subject.Status.Sleep == 0 ? effect.Turns * StunValue * 0.6 : 0;
+                        break;
+
+                    case EffectKind.Block:
+                        // ⭐ 相手が回復や強化で立て直す前に置く
+                        score += subject.Status.Block == 0 ? effect.Turns * GuardianValue * 0.8 : 0;
+                        break;
+
+                    case EffectKind.Dispel:
+                    case EffectKind.Steal:
+                    {
+                        // ⭐ 乗っている強化の個数だけ価値がある。何も乗っていなければ 0
+                        int boons = 0;
+                        foreach (var key in Stats.Keys)
+                        {
+                            if (key == StatKey.Hp) continue;
+                            ref var mod = ref subject.Status.ModOf(key);
+                            if (mod.Turns > 0 && mod.Percent > 0) boons++;
+                        }
+                        if (subject.Status.Shield > 0) boons++;
+                        if (subject.Status.Guts > 0) boons++;
+                        if (subject.Status.Immune > 0) boons++;
+                        if (subject.Status.Regen.Turns > 0) boons++;
+                        int take = Math.Min(boons, effect.Count);
+                        score += take * DispelValue * (effect.Kind == EffectKind.Steal ? 2 : 1);
+                        break;
+                    }
+
+                    case EffectKind.Revive:
+                        // ⚠️ 倒れた味方が居るときだけ
+                        score += IsAnyDown(state, actor) ? ReviveValue : 0;
+                        break;
 
                     case EffectKind.Guts:
                     {
@@ -222,6 +275,12 @@ namespace EggCommand.Core
                 case EffectKind.Taunt:
                 case EffectKind.Guts:
                 case EffectKind.Immune:
+                case EffectKind.Gauge:
+                case EffectKind.Sleep:
+                case EffectKind.Block:
+                case EffectKind.Dispel:
+                case EffectKind.Steal:
+                case EffectKind.Revive:
                     return true;
                 default:
                     return false;

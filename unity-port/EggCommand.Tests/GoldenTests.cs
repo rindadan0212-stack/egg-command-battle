@@ -146,8 +146,13 @@ public class SkillsGoldenTests
     ///
     /// ⚠️ 移植元では CT を動かす効果が弱化に数えられておらず、
     /// 免疫で防げず・速度差でも動かず・狙い澄ましも効かない**唯一の弱化**になっていた。
-    /// 「免疫はすべての弱化を防ぐ」と決めたので、CT延長を弱化に加えた（2026-08-17）。</summary>
-    private static readonly HashSet<string> Reclassified = new HashSet<string> { "ct-long" };
+    /// 「免疫はすべての弱化を防ぐ」と決めたので、CT延長を弱化に加えた（2026-08-17）。
+    ///
+    /// ⚠️ **挑発（taunt）を作り替えた（2026-08-18）。**
+    /// 移植元では「味方に付けて、味方への単体攻撃を引き受ける」＝強化だった。
+    /// ⭐ 相手に付けて「掛けた本人しか狙えなくする」＝**弱化**に変えた。
+    /// 引き受け役は盾・かばうと役割が重なっていて、狙い先を縛るほうが手として太い。</summary>
+    private static readonly HashSet<string> Reclassified = new HashSet<string> { "ct-long", "taunt" };
 
 
     [Fact]
