@@ -31,6 +31,8 @@ namespace EggCommand.Core
         /// ⚠️ **種族を足したらここにも足す。** 足し忘れると、表にはいるのに
         /// **一生手に入らない種族**になる。コンパイルも検査も通ってしまうので、
         /// <see cref="Audit"/> が数えている。</summary>
+        public static IReadOnlyList<string> NestSpecies => Pool;
+
         private static readonly string[] Pool =
         {
             "tamaru", "tsunoga", "haneru",

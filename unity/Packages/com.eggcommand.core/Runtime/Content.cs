@@ -25,6 +25,7 @@ namespace EggCommand.Core
             Skills.Audit();
             Nests.Audit();
             Encounters.Audit();
+            Traits.Audit();
         }
     }
 }

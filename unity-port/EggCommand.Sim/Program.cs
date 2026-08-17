@@ -22,6 +22,7 @@ namespace EggCommand.Sim
     ///   dotnet run --project EggCommand.Sim -- elements  3すくみが効いているか
     ///   dotnet run --project EggCommand.Sim -- roles     役割を1つ抜いたらどれだけ困るか
     ///   dotnet run --project EggCommand.Sim -- pace      決着までの行動数
+    ///   dotnet run --project EggCommand.Sim -- book      図鑑を書き出す（種族・技・素質）
     /// </summary>
     public static class Program
     {
@@ -48,6 +49,13 @@ namespace EggCommand.Sim
                 case "elements": Elements(seed); break;
                 case "roles": Roles(seed); break;
                 case "pace": Pace(seed); break;
+                case "book":
+                {
+                    // ⚠️ 置き場所は決め打ち。毎回同じ場所に上書きする（版が散らからないように）
+                    string where = Book.Write("../図鑑.html");
+                    Console.WriteLine($"図鑑を書き出した: {where}");
+                    break;
+                }
                 case "all":
                     Species(seed); SkillCensus(seed); Elements(seed); Roles(seed); Pace(seed);
                     break;
