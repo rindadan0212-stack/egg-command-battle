@@ -25,7 +25,13 @@ namespace EggCommand.View
     public sealed class BattleView : MonoBehaviour
     {
         [SerializeField] private UnitStand[] _allies;
+        /// <summary>相手が**1体だけ**のときの器。⭐ 大きく1体だけ立つ（親・ボス）。</summary>
         [SerializeField] private UnitStand _foe;
+        /// <summary>相手が**複数**のときの器。⭐ 味方と同じ形で並べる（雑魚の3対3）。
+        ///
+        /// ⚠️ 以前は <see cref="_foe"/> しか無かったので、**3体居ても1体しか見えなかった**。
+        /// 残り2体は盤の上に存在するのに、狙うことも生死を読むこともできなかった。</summary>
+        [SerializeField] private UnitStand[] _foes;
         [SerializeField] private SkillSlot[] _skills;
         [SerializeField] private Button _finish;
         [SerializeField] private Button _pick;
@@ -86,18 +92,33 @@ namespace EggCommand.View
             }
 
             // ── 相手 ────────────────────────────────────
-            Unit foe = null;
+            // ⭐ 1体なら大きく1体、2体以上なら味方と同じ形で並べる
+            var foes = new System.Collections.Generic.List<Unit>();
             foreach (var unit in state.Units)
             {
-                if (unit.Side == Side.Enemy) { foe = unit; break; }
+                if (unit.Side == Side.Enemy) foes.Add(unit);
             }
+            bool lone = foes.Count <= 1;
+
             if (_foe != null)
             {
-                _foe.gameObject.SetActive(foe != null);
-                if (foe != null)
+                _foe.gameObject.SetActive(lone && foes.Count == 1);
+                if (lone && foes.Count == 1)
                 {
-                    _foe.Bind(foe, actor != null && ReferenceEquals(actor, foe), true);
-                    _byKey[foe.Key] = _foe;
+                    _foe.Bind(foes[0], actor != null && ReferenceEquals(actor, foes[0]), true);
+                    _byKey[foes[0].Key] = _foe;
+                }
+            }
+            if (_foes != null)
+            {
+                for (int k = 0; k < _foes.Length; k++)
+                {
+                    if (_foes[k] == null) continue;
+                    bool show = !lone && k < foes.Count;
+                    _foes[k].gameObject.SetActive(show);
+                    if (!show) continue;
+                    _foes[k].Bind(foes[k], actor != null && ReferenceEquals(actor, foes[k]), true);
+                    _byKey[foes[k].Key] = _foes[k];
                 }
             }
 

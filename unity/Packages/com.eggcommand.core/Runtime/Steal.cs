@@ -306,7 +306,8 @@ namespace EggCommand.Core
                 new Point(FieldWidth / 2, 26),
                 start,
                 MakeGimmicks(tier, raids, side, bandTop + BandThickness, start.Y, rng),
-                MakeMobs(tier, bandTop + BandThickness, start.Y, rng));
+                MakeMobs(tier, MakeGimmicks(tier, raids, side, bandTop + BandThickness, start.Y, null),
+                    bandTop + BandThickness, start.Y, rng));
         }
 
         /// <summary>関門の帯の厚み。
@@ -482,23 +483,51 @@ namespace EggCommand.Core
         ///
         /// ⚠️ **ここは「置いてよさそうな場所」を挙げるだけ。**
         /// 解ける道を塞がないかは <see cref="PlaceMobs"/> が1体ずつ確かめる。</summary>
-        private static List<Mob> MakeMobs(int tier, double corridorTop, double corridorBottom, Rng? rng)
+        private static List<Mob> MakeMobs(int tier, IReadOnlyList<Gimmick> gimmicks,
+            double corridorTop, double corridorBottom, Rng? rng)
         {
             var list = new List<Mob>();
             int count = MobCountFor(tier);
             if (count == 0 || rng == null) return list;
 
-            double span = corridorBottom - corridorTop;
-            for (int i = 0; i < count; i++)
+            // ⭐ **関門の間に空いている縦の区間を測ってから置く。**
+            // ⚠️ 以前は「関門の数で割った位置」に置いていたが、浅い巣は通路が短く、
+            //    分数で離したつもりでも重なった（実測: 段2 raids2 で雑魚 y212 と関門 200〜212）。
+            //    ⭐ 重なると関門の要求の字が絵の下に隠れて読めない。
+            var gaps = FreeBands(gimmicks, corridorTop, corridorBottom);
+            if (gaps.Count == 0) return list;
+
+            // 広い区間から順に使う。⚠️ 足りなければ**置ける数だけ**にする
+            gaps.Sort((a, b) => (b.To - b.From).CompareTo(a.To - a.From));
+            for (int i = 0; i < count && i < gaps.Count; i++)
             {
-                // ⚠️ 関門は (i+1)/(count+1) に置かれる。雑魚はその**中間**へずらす
-                double t = (i + 0.5) / (count + 0.5);
-                double y = corridorBottom - span * t;
+                double y = (gaps[i].From + gaps[i].To) / 2;
                 double x = MobRadius + RunnerRadius
                     + rng.Float() * (FieldWidth - (MobRadius + RunnerRadius) * 2);
                 list.Add(new Mob(new Point(x, y), MobRadius));
             }
             return list;
+        }
+
+        /// <summary>関門にも親の帯にも掛からない、雑魚を置ける縦の区間。
+        /// ⚠️ 雑魚の半径ぶんの余白を両側に取る（触れてもいけない）。</summary>
+        private static List<Span> FreeBands(IReadOnlyList<Gimmick> gimmicks,
+            double corridorTop, double corridorBottom)
+        {
+            var edges = new List<double> { corridorTop };
+            var sorted = new List<Gimmick>(gimmicks);
+            sorted.Sort((a, b) => a.Top.CompareTo(b.Top));
+            foreach (var gate in sorted) { edges.Add(gate.Top); edges.Add(gate.Bottom); }
+            edges.Add(corridorBottom);
+
+            var bands = new List<Span>();
+            for (int i = 0; i < edges.Count; i += 2)
+            {
+                double from = edges[i] + MobRadius;
+                double to = edges[i + 1] - MobRadius;
+                if (to - from >= MobRadius) bands.Add(new Span { From = from, To = to });
+            }
+            return bands;
         }
 
         /// <summary>雑魚だけ入れ替えた同じ盤。⚠️ 盤は作り直す（欄は書き換えない）。</summary>
@@ -523,7 +552,7 @@ namespace EggCommand.Core
             if (want <= 0 || plan == null || plan.Count == 0) return bare;
 
             var placed = new List<Mob>();
-            var spots = MakeMobs(tier, bare.BandBottom, bare.Start.Y, rng);
+            var spots = MakeMobs(tier, bare.Gimmicks, bare.BandBottom, bare.Start.Y, rng);
 
             for (int i = 0; i < spots.Count; i++)
             {

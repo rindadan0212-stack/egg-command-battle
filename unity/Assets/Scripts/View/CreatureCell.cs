@@ -61,6 +61,11 @@ namespace EggCommand.View
         public Text[] Stats;
         /// <summary>技3枠を1つの字にまとめたもの。⭐ 配合で狙うのは主にここ。</summary>
         public Text Skills;
+        /// <summary>得意・不得意。⭐ **遺伝する**ので配合の判断材料になる。</summary>
+        public Text Slant;
+        /// <summary>特性。⭐ **★の下限を無視して遺伝する**ので、配合で一番狙う対象になりうる。
+        /// ⚠️ 出していなかったので、親が持っているかどうかが配合の画面から読めなかった。</summary>
+        public Text Trait;
     }
 
     /// <summary>格子に札を敷き直す共通処理。

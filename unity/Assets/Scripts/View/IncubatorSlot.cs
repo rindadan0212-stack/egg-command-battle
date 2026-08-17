@@ -63,8 +63,11 @@ namespace EggCommand.View
             }
             if (_clock != null)
             {
-                _clock.text = ready ? "" : Rarities.Clock(Hatchery.LeftOf(_slot, nowUnix));
-                _clock.gameObject.SetActive(!ready);
+                // ⭐ 孵ったら「孵った」と出す。⚠️ 帯の色（橙→緑）だけでは、
+                //    取り出せるようになったことに気づけなかった
+                _clock.text = ready ? "孵った" : Rarities.Clock(Hatchery.LeftOf(_slot, nowUnix));
+                _clock.color = ready ? Ui.Good : Ui.Ink;
+                _clock.gameObject.SetActive(true);
             }
             if (_ready != null) _ready.SetActive(ready);
         }

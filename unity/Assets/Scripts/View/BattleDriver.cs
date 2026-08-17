@@ -276,8 +276,9 @@ namespace EggCommand.View
                     //    弱化を持つ技が「何も起きない技」に見える。
 
                     case BattleEventKind.Missed:
-                        // ⭐ 弱化が外れた。⚠️ 免疫で弾いた（Blocked ＝ ◇）とは別物なので字を変える
-                        fx.Number(fx.PointOf(rect, head), "スカ", Ui.InkDim, 40f);
+                        // ⭐ 弱化が外れた。⚠️ 免疫で弾いた（Blocked ＝ ◇）とは別物なので字を変える。
+                        //    ⚠️ 語は Wiki（効果の種類）の「外れる」に合わせる。造語を作らない
+                        fx.Number(fx.PointOf(rect, head), "外れ", Ui.InkDim, 40f);
                         break;
                     case BattleEventKind.Applied:
                         // ⭐ 毒・リジェネが乗った。何が何個乗ったかは Core が札にしている
@@ -294,7 +295,7 @@ namespace EggCommand.View
                             e.Hits > 0 ? $"挑発×{e.Hits}" : "挑発", Ui.Accent, 34f);
                         break;
                     case BattleEventKind.Guts:
-                        fx.Number(fx.PointOf(rect, head), "根性", Ui.Accent, 34f);
+                        fx.Number(fx.PointOf(rect, head), "ガッツ", Ui.Accent, 34f);
                         break;
                     case BattleEventKind.Immune:
                         fx.Number(fx.PointOf(rect, head), "免疫", Ui.Good, 34f);

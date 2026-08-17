@@ -755,6 +755,38 @@ public class InfiltrationTests
         Assert.Throws<System.InvalidOperationException>(() => Steal.Hop(run, 1, -1, 0));
     }
 
+    /// <summary>⭐ **雑魚は関門と同じ高さに置かない。**
+    ///
+    /// ⚠️ 重なると、関門の要求（「HP 85」など）が雑魚の絵の下に隠れて読めなくなる。
+    /// ⚠️ 「止められたのは関門か雑魚か」も読めなくなる（片方は越えられ、片方は戦闘）。</summary>
+    [Fact]
+    public void 雑魚は関門と重ならない()
+    {
+        for (int tier = 2; tier <= 5; tier++)
+        {
+            for (int seed = 0; seed < 12; seed++)
+            {
+                var nest = new Nest($"gap-{tier}-{seed}", "検査", "tamaru", tier);
+                for (int raids = 0; raids < Steal.RaidsToSeal; raids++)
+                {
+                    var field = Steal.MakeValidatedField(tier, FieldSide.Right, raids,
+                        Steal.RngFor(nest, raids));
+                    foreach (var mob in field.Mobs)
+                    {
+                        foreach (var gate in field.Gimmicks)
+                        {
+                            bool apart = mob.At.Y - mob.Radius > gate.Bottom
+                                || mob.At.Y + mob.Radius < gate.Top;
+                            Assert.True(apart,
+                                $"段{tier} seed{seed} raids{raids}: 雑魚(y {mob.At.Y:0}±{mob.Radius}) が "
+                                + $"関門(y {gate.Top:0}〜{gate.Bottom:0}) と重なっている");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// <summary>⚠️ 1つの巣に置ける数の上限を守ること。</summary>
     [Fact]
     public void 雑魚は三か所まで()

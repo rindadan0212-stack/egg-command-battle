@@ -25,7 +25,8 @@ namespace EggCommand.View
                 if (!has) continue;
                 var encounter = game.Encounters[i];
                 // ⭐ 居座る時間が切れたら組み直す（Expire → Refill で次の巣が出る）
-                _cards[i].Bind(encounter, () => onGo(encounter), app.Now, () => app.Refresh());
+                _cards[i].Bind(encounter, () => onGo(encounter), app.Now, () => app.Refresh(),
+                    Games.RaidsOn(game, encounter.Nest));
             }
 
             if (_bossArt != null)

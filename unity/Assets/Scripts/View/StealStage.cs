@@ -155,9 +155,17 @@ namespace EggCommand.View
             {
                 float centerX = (float)(span.From + span.To) / 2f;
                 float width = (float)(span.To - span.From);
-                var parent = PixelObject("Parent", species.Sprite, species.Palettes[0],
-                    ToWorld(centerX, bandMid), 1f, 3f);
-                parent.transform.localScale = new Vector3(width, bandHeight, 1f);
+
+                // ⭐ **塞いでいる幅は「面」で示す。**判定（ParentSpans）とぴったり同じ寸法。
+                // ⚠️ 以前はここで絵そのものを幅いっぱいに引き伸ばしていた。
+                //    判定とは一致したが、親が**横に潰れて別の生き物に見えた**。
+                Skinned("Parent Band", "pill", new Color32(0x3a, 0x2c, 0x22, 0x88),
+                    ToWorld(centerX, bandMid), new Vector2(width, bandHeight), 3.2f);
+
+                // ⭐ 絵は**縦横比を保ったまま**、帯の高さに収まる大きさで中央に置く。
+                // ⚠️ ドット絵を非等方に伸ばさない（画面の作法）。
+                PixelObject("Parent", species.Sprite, species.Palettes[0],
+                    ToWorld(centerX, bandMid), Mathf.Min(width, bandHeight), 3f);
             }
 
             // ⭐ 関門。⚠️ 以前は1枚も描いていなかった（盤に在るのに見えなかった）
@@ -334,11 +342,36 @@ namespace EggCommand.View
                 var go = PixelObject($"Mob {i}", species.Sprite, species.Palettes[0],
                     ToWorld((float)mob.At.X, (float)mob.At.Y),
                     (float)mob.Radius * 2.2f, 2.6f);
-                // ⚠️ 親と見分けが付かないと「触れたら終わり」に見える。
-                //    ⭐ 影を敷いて「3体で居る」ことを示す
-                Skinned($"Mob {i} 影", "pill", new Color32(0x2a, 0x1e, 0x18, 0x66),
-                    ToWorld((float)mob.At.X, (float)mob.At.Y + (float)mob.Radius * 0.85f),
-                    new Vector2((float)mob.Radius * 2.4f, (float)mob.Radius * 0.7f), 2.8f);
+
+                // ⭐ 足元の影。⚠️ pill を薄く敷いていたが、この寸法では**四角い箱**に見えた。
+                //    円の絵を潰して楕円にする（縁が丸いので影として読める）
+                Ellipse($"Mob {i} 影", new Color32(0x2a, 0x1e, 0x18, 0x55),
+                    ToWorld((float)mob.At.X, (float)mob.At.Y + (float)mob.Radius * 0.9f),
+                    new Vector2((float)mob.Radius * 2.0f, (float)mob.Radius * 0.6f), 2.8f);
+
+                // ⭐ **親と見分けるための印。**⚠️ 巣の種族と同じ絵が出ることがあるので、
+                //    絵だけでは「当たったら終わり（親）」か「当たると3対3（雑魚）」か読めない。
+                //    ⚠️ 離して置くと何の数字か分からない。**体の右肩に貼る**
+                float badgeX = (float)mob.At.X + (float)mob.Radius * 0.95f;
+                float badgeY = (float)mob.At.Y - (float)mob.Radius * 0.85f;
+                var disc = Ellipse($"Mob {i} 印地", new Color32(0x2b, 0x33, 0x50, 0xee),
+                    ToWorld(badgeX, badgeY),
+                    new Vector2((float)mob.Radius * 1.0f, (float)mob.Radius * 1.0f), 2.45f);
+                var badge = new GameObject($"Mob {i} 印");
+                badge.transform.SetParent(transform, false);
+                var at = ToWorld(badgeX, badgeY);
+                badge.transform.position = new Vector3(at.x, at.y, 2.4f);
+                var mark = badge.AddComponent<TextMesh>();
+                mark.text = "3";
+                mark.font = Ui.TheFont;
+                mark.fontSize = 64;
+                mark.characterSize = 0.28f;
+                mark.anchor = TextAnchor.MiddleCenter;
+                mark.color = Color.white;
+                badge.GetComponent<MeshRenderer>().sharedMaterial = Ui.TheFont.material;
+                badge.transform.SetParent(go.transform, true);
+                disc.transform.SetParent(go.transform, true);
+
                 _mobs.Add(go);
             }
             RefreshMobs();
@@ -702,6 +735,26 @@ namespace EggCommand.View
             renderer.sprite = White();
             renderer.color = color;
             renderer.sortingOrder = Mathf.RoundToInt(-depth * 10f);
+            return go;
+        }
+
+        /// <summary>楕円。⭐ 影に使う。⚠️ 円の絵を潰すだけなので縁が丸いまま。
+        /// ⚠️ ドット絵ではないので潰してよい（作法が禁じているのは**キャラクターの絵**）。
+        ///
+        /// ⚠️ <see cref="Solid"/> は「1単位＝1マス」の白い絵を前提に localScale へ寸法を渡す。
+        /// 意匠の絵は pixelsPerUnit が違うので、**そのまま渡すと何倍にもなる**
+        /// （実測で頼んだ 22 が 57 になった）。絵の実寸で割ってから渡す。</summary>
+        private GameObject Ellipse(string name, Color color, Vector2 center, Vector2 size, float depth)
+        {
+            var go = Solid(name, color, center, size, depth);
+            var sprite = Ui.SkinSprite("circle");
+            if (sprite == null) return go;
+            var renderer = go.GetComponent<SpriteRenderer>();
+            renderer.sprite = sprite;
+            var native = sprite.bounds.size;
+            go.transform.localScale = new Vector3(
+                size.x / Mathf.Max(0.0001f, native.x),
+                size.y / Mathf.Max(0.0001f, native.y), 1f);
             return go;
         }
 

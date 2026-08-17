@@ -65,6 +65,20 @@ namespace EggCommand.View
                     }
                     slot.Skills.text = string.Join("・", names);
                 }
+
+                // ⭐ 得意・不得意は遺伝する。BOX と同じ読み方（▲▼）で出す
+                if (slot.Slant != null)
+                {
+                    slot.Slant.text = creature.Strong == null || creature.Weak == null
+                        ? ""
+                        : $"▲{Stats.LabelOf(creature.Strong.Value)}  ▼{Stats.LabelOf(creature.Weak.Value)}";
+                }
+                // ⭐ 特性は★の下限を無視して遺伝するので、配合で一番狙う対象になりうる
+                if (slot.Trait != null)
+                {
+                    var trait = Creatures.TraitOf(creature);
+                    slot.Trait.text = trait == null ? "" : trait.Name;
+                }
             }
 
             bool ready = a != null && b != null && Fusion.CanFuse(a, b);
@@ -96,6 +110,12 @@ namespace EggCommand.View
             if (_breed != null)
             {
                 _breed.interactable = ready;
+                // ⚠️ **押せないのに主導線の色（黄）のままだった。**
+                //    2体そろっていないのに「配合する」が押せるように見えていた
+                var plate = _breed.GetComponent<Image>();
+                if (plate != null) plate.sprite = Ui.SkinSprite(ready ? "button-lead" : "button-off");
+                var ink = _breed.GetComponentInChildren<Text>();
+                if (ink != null) ink.color = ready ? Ui.OnLead : Ui.InkFaint;
                 _breed.onClick.RemoveAllListeners();
                 if (ready) _breed.onClick.AddListener(() => onBreed());
             }

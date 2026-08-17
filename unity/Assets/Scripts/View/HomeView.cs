@@ -51,13 +51,10 @@ namespace EggCommand.View
                         : ready ? () => onCollect(captured) : (Action)null);
             }
 
+            // ⚠️ Body の中の在庫は使わない（上段と下段を覆えないため）。
+            //    ⭐ 覆いは Overlay に出す（EggPickerPanel）。型だけ借りる
             if (_picker != null) _picker.SetActive(false);
-            if (_pickerClose != null)
-            {
-                _pickerClose.onClick.RemoveAllListeners();
-                _pickerClose.onClick.AddListener(ClosePicker);
-            }
-            FillShelf(game, onBegin);
+            _onBegin = onBegin;
         }
 
         /// <summary>素材の数だけ描き直す。⚠️ 画面は組み直さない（毎秒作り直すと触れない）。</summary>
@@ -67,37 +64,17 @@ namespace EggCommand.View
             _materials.text = _app.Game.Idle.Materials.ToString();
         }
 
+        private Action<int, Egg> _onBegin;
+
         private void OpenPicker(int slot)
         {
             _openedSlot = slot;
-            if (_picker != null) _picker.SetActive(true);
+            EggPickerPanel.Show(_app, _eggCard, egg => _onBegin(_openedSlot, egg));
         }
 
-        private void ClosePicker()
-        {
-            if (_picker != null) _picker.SetActive(false);
-        }
+        /// <summary>画面を離れるときに覆いを畳む。
+        /// ⚠️ Overlay に出しているので、この器が消えても覆いは残ってしまう。</summary>
+        private void OnDisable() => EggPickerPanel.Close();
 
-        private void FillShelf(Game game, Action<int, Egg> onBegin)
-        {
-            if (_shelf == null || _eggCard == null) return;
-            // ⚠️ Destroy はフレームの終わりまで効かない。親から外して無効にし、その場で居なくする
-            for (int i = _shelf.childCount - 1; i >= 0; i--)
-            {
-                var child = _shelf.GetChild(i).gameObject;
-                child.SetActive(false);
-                child.transform.SetParent(null, false);
-                Destroy(child);
-            }
-
-            bool room = Hatchery.HasRoom(game);
-            foreach (var egg in game.Eggs)
-            {
-                var captured = egg;
-                var card = Instantiate(_eggCard, _shelf);
-                card.gameObject.SetActive(true);
-                card.Bind(egg, room, _app.HatchSpeed, () => onBegin(_openedSlot, captured));
-            }
-        }
     }
 }

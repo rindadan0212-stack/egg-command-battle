@@ -82,7 +82,14 @@ namespace EggCommand.View
                     ? ""
                     : $"▲{Stats.LabelOf(creature.Strong.Value)}  ▼{Stats.LabelOf(creature.Weak.Value)}";
             }
-            if (_point != null) _point.gameObject.SetActive(false);
+            // ⭐ 世代と変異。⚠️ 並べ替えの札には在るのに、詳細のどこにも数が無かった。
+            //    ⭐ 変異は「これ以上増えない」ことが判断に効くので上限も併記する
+            if (_point != null)
+            {
+                _point.gameObject.SetActive(true);
+                _point.text = $"{creature.Generation}代  変異{creature.MutationCounter}";
+                _point.color = creature.MutationCounter > 0 ? Ui.Accent : Ui.InkDim;
+            }
 
             if (_trait != null)
             {
@@ -131,7 +138,13 @@ namespace EggCommand.View
                     row.Value.color = key == creature.Strong ? Ui.Good
                         : key == creature.Weak ? Ui.Danger : Ui.Ink;
                 }
-                if (row.Bar != null) row.Bar.fillAmount = Mathf.Clamp01(creature.Wild[key] / 60f);
+                // ⚠️ 60 で割っていたので、上限(40)まで育てても 67% までしか伸びなかった。
+                //    ⭐ 目盛りは**その個体の上限**（変異で伸びる）。満タンが満タンに見えること
+                if (row.Bar != null)
+                {
+                    float cap = Stats.WildStatMaxFor(creature.MutationCounter);
+                    row.Bar.fillAmount = Mathf.Clamp01(creature.Wild[key] / Mathf.Max(1f, cap));
+                }
             }
 
             var skills = Creatures.SkillsOf(creature);
@@ -191,17 +204,26 @@ namespace EggCommand.View
         /// <summary>ステ振りだった枠を別の押しどころに使い回す。
         /// ⚠️ ステ振りは外した — 上限も対価も無い ＋1 は選択になっていなかった。
         /// 育てた分は得意の方向へ自動で乗る（<see cref="Creatures.Grow"/>）。</summary>
-        private void Repurpose(int index, string label, bool usable, bool lead, Action onTap)
+        private void Repurpose(int index, string labelText, bool usable, bool lead, Action onTap)
         {
             if (index >= _spend.Length || _spend[index] == null) return;
             var button = _spend[index];
             button.gameObject.SetActive(true);
             var text = button.GetComponentInChildren<Text>();
-            if (text != null) text.text = label;
+            if (text != null) text.text = labelText;
             var plate = button.GetComponent<Image>();
             // ⚠️ 色を掛けず絵を差し替える（掛けると押せない札と見分けが付かない）
-            if (plate != null) plate.sprite = Ui.SkinSprite(lead ? "button-lead" : "button");
+            // ⚠️ **押せない札は灰（button-off）。**ここで button のままにしていたので、
+            //    餌を選んでいないのに「合成」が押せるように見えていた（Ui.Tappable と食い違い）
+            if (plate != null)
+                plate.sprite = Ui.SkinSprite(!usable ? "button-off" : lead ? "button-lead" : "button");
             button.interactable = usable;
+            var label = button.transform.Find("Label");
+            if (label != null)
+            {
+                var ink = label.GetComponent<Text>();
+                if (ink != null) ink.color = usable ? Ui.Ink : Ui.InkFaint;
+            }
             button.onClick.RemoveAllListeners();
             if (usable && onTap != null) button.onClick.AddListener(() => onTap());
         }

@@ -22,6 +22,9 @@ namespace EggCommand.View
         [SerializeField] private Text _left;
         /// <summary>減っていく帯。⭐ 字を読まなくても「もう少し」が分かる。</summary>
         [SerializeField] private Image _drain;
+        /// <summary>盗んだ回数。⭐ **守りがどれだけ固まったか**。
+        /// ⚠️ 出していなかったので、あと何回盗めるか・もう塞がっているかが札から読めなかった。</summary>
+        [SerializeField] private Text _raids;
 
         /// <summary>残りがこの割合を切ったら赤くする。⭐ 数字を読ませずに急かす。</summary>
         private const float Hurry = 0.25f;
@@ -34,7 +37,9 @@ namespace EggCommand.View
 
         /// <param name="now">いまの Unix 秒。⚠️ Core は時計を持たないので呼ぶ側が渡す。</param>
         /// <param name="onGone">居座る時間が切れた。⭐ 画面を組み直させる。</param>
-        public void Bind(Encounter encounter, Action onTap, Func<long> now = null, Action onGone = null)
+        /// <param name="raids">その巣から盗んだ回数。⭐ 札に「守りの固さ」として出す。</param>
+        public void Bind(Encounter encounter, Action onTap, Func<long> now = null,
+            Action onGone = null, int raids = 0)
         {
             _encounter = encounter;
             _now = now;
@@ -48,6 +53,13 @@ namespace EggCommand.View
                 _art.preserveAspect = true;
             }
             if (_level != null) _level.text = encounter.Level.ToString();
+            if (_raids != null)
+            {
+                // ⭐ 4回盗むと親が道を塞ぐ ＝ 入れば必ず戦闘（巣の寿命）
+                bool sealed_ = Steal.IsSealed(raids);
+                _raids.text = sealed_ ? "戦闘" : raids <= 0 ? "" : new string('●', raids);
+                _raids.color = sealed_ ? Ui.Danger : Ui.Accent;
+            }
             if (_button != null)
             {
                 _button.onClick.RemoveAllListeners();
