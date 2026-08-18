@@ -65,6 +65,7 @@ namespace EggCommand.Sim
                     break;
                 }
                 case "pace": Pace(seed); break;
+                case "landprobe": LandProbe(); break;
                 case "book":
                 {
                     // ⚠️ 置き場所は決め打ち。毎回同じ場所に上書きする（版が散らからないように）
@@ -660,6 +661,53 @@ namespace EggCommand.Sim
             }
             Console.WriteLine();
             Console.WriteLine("  列は raids 0 / 1 / 2 / 3。－ は雑魚が居ない段");
+        }
+
+        /// <summary>弱化の通る率が、現実の速度でどれだけ動くか。
+        /// ⚠️ ±30 は「速度比が ±1」のときの値。実際の個体でいくつ動くのかを測る。</summary>
+        private static void LandProbe()
+        {
+            Console.WriteLine();
+            Console.WriteLine("■ 速度で通る率が実際にどれだけ動くか");
+
+            // ⭐ 段階5の想定編成から、速度の実値の幅を取る
+            var speeds = new List<int>();
+            for (int tier = 1; tier <= 5; tier++)
+                foreach (var c in Steal.ReferenceParty(tier))
+                    speeds.Add(Creatures.StatsOf(c).Spd);
+            speeds.Sort();
+            Console.WriteLine($"  想定編成の速度: 最小 {speeds[0]} / 中央 {speeds[speeds.Count/2]} / 最大 {speeds[speeds.Count-1]}");
+
+            // 種族の基礎速度も見る
+            int lo = int.MaxValue, hi = 0;
+            foreach (var sp in SpeciesTable.All) { lo = Math.Min(lo, sp.Base.Spd); hi = Math.Max(hi, sp.Base.Spd); }
+            Console.WriteLine($"  種族の基礎速度: {lo} 〜 {hi}");
+
+            Console.WriteLine();
+            Console.WriteLine("  自分 / 相手     15    25    35    45");
+            foreach (int mine in new[] { 15, 25, 35, 45 })
+            {
+                var row = new List<string>();
+                foreach (int yours in new[] { 15, 25, 35, 45 })
+                {
+                    double ratio = (double)(mine - yours) / (mine + yours);
+                    int moved = (int)Math.Floor(ratio * Battle.LandSwing + 0.5);
+                    row.Add($"{moved,+4}");
+                }
+                Console.WriteLine($"  {mine,6}     " + string.Join("  ", row));
+            }
+            Console.WriteLine("  ⭐ 表の数字が『素の率に足される %ポイント』");
+
+            Console.WriteLine();
+            Console.WriteLine("■ 強化が実時間でどれだけ保つか（3行動ぶんの強化）");
+            Console.WriteLine("  ⚠️ 持続は『その個体の行動回数』なので、速い個体ほど早く切れる");
+            foreach (int spd in new[] { 15, 25, 35, 45 })
+            {
+                int rate = Battle.GaugeRate(spd);
+                double perAction = (double)Battle.GaugeMax / rate;   // 1行動に要する刻み
+                Console.WriteLine($"  速度 {spd,2}: 1行動 {perAction,5:0.0} 刻み → 3行動 {perAction*3,5:0.0} 刻み");
+            }
+            Console.WriteLine("  ⭐ 速い個体は同じ『3行動』でも実時間が短い＝強化の覆う時間が短い");
         }
 
         /// <summary>盤を1枚作るのに何ミリ秒かかるか。⚠️ 画面に入るたび走るなら、ここが体感になる。</summary>
