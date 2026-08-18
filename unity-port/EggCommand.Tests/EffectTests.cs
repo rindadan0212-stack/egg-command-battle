@@ -324,4 +324,69 @@ public class EffectTests
             Assert.True(Ai.Knows(kind), $"{kind} を AI が採点できない");
         }
     }
+
+    // ── 属性が弱化の通る率にも効く ────────────────
+
+    private static Creature WithElement(Creature c, Element e) => Creatures.WithElement(c, e);
+
+    /// <summary>⭐ 属性の有利・不利が通る率を動かす。⚠️ ダメージ倍率とは別枠。</summary>
+    [Fact]
+    public void 属性の有利は弱化を通しやすくする()
+    {
+        // ⚠️ 速度は揃える（速度差の効果と分けて測る）
+        var attacker = Make("atk", 30, 30, 30, 30);
+        var same = Make("same", 30, 30, 30, 30);
+
+        var fire = WithElement(attacker, Element.Fire);
+        var wood = WithElement(same, Element.Wood);   // 炎が有利
+        var water = WithElement(same, Element.Water); // 炎が不利
+        var fire2 = WithElement(same, Element.Fire);  // 互角
+
+        var s = Battle.CreateBattle(
+            new List<Creature> { fire },
+            new List<Creature> { wood, water, fire2 });
+        var me = s.Units.Find(u => u.Side == Side.Ally)!;
+        var foes = s.Units.FindAll(u => u.Side == Side.Enemy);
+
+        var weak = Effect.Buff(StatKey.Atk, -1, 3, chance: 60);
+        int vsAdv = Battle.LandChanceOf(weak, me, foes[0]);
+        int vsDis = Battle.LandChanceOf(weak, me, foes[1]);
+        int vsEven = Battle.LandChanceOf(weak, me, foes[2]);
+
+        Assert.Equal(60 + Battle.LandElementSwing, vsAdv);
+        Assert.Equal(60 - Battle.LandElementSwing, vsDis);
+        Assert.Equal(60, vsEven);
+    }
+
+    /// <summary>⚠️ 属性は**弱化にだけ**効く。回復や盾を属性で外させない。</summary>
+    [Fact]
+    public void 属性は自分に掛けるものには効かない()
+    {
+        var a = WithElement(Make("a", 30, 30, 30, 30), Element.Fire);
+        var b = WithElement(Make("b", 30, 30, 30, 30), Element.Wood);
+        var s = Battle.CreateBattle(new List<Creature> { a }, new List<Creature> { b });
+        var me = s.Units.Find(u => u.Side == Side.Ally)!;
+        var foe = s.Units.Find(u => u.Side == Side.Enemy)!;
+
+        var boon = Effect.Shield(2, chance: 70);
+        Assert.Equal(70, Battle.LandChanceOf(boon, me, foe));
+    }
+
+    /// <summary>⚠️ 速度差と足し算で重なる。⭐ 床と天井を越えないこと。</summary>
+    [Fact]
+    public void 属性と速度が重なっても床と天井を越えない()
+    {
+        var fast = WithElement(Make("f", 10, 10, 10, 40), Element.Fire);
+        var slow = WithElement(Make("s", 10, 10, 10, 0), Element.Wood);
+        var s = Battle.CreateBattle(new List<Creature> { fast }, new List<Creature> { slow });
+        var me = s.Units.Find(u => u.Side == Side.Ally)!;
+        var foe = s.Units.Find(u => u.Side == Side.Enemy)!;
+
+        var weak = Effect.Buff(StatKey.Spd, -1, 3, chance: 90);
+        int up = Battle.LandChanceOf(weak, me, foe);
+        int down = Battle.LandChanceOf(weak, foe, me);
+
+        Assert.True(up <= Battle.LandCeil, $"天井を越えた: {up}");
+        Assert.True(down >= Battle.LandFloor, $"床を割った: {down}");
+    }
 }

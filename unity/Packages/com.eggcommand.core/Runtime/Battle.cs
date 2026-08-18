@@ -853,12 +853,27 @@ namespace EggCommand.Core
             int yours = SpeedOf(target);
             // 速度比を -1〜+1 に畳んでから振れ幅を掛ける
             double ratio = (double)(mine - yours) / (mine + yours);
-            int moved = effect.Chance + JsRound(ratio * LandSwing) + shift;
+
+            // ⭐ **属性の有利・不利も通る率を動かす。**
+            // ⚠️ ダメージ倍率とは別枠。属性が「火力の話」だけだったのを、
+            //    弱化にも接続した（属性という1つのラベルの用途を増やす）。
+            double mult = ElementMultiplier(actor.Creature.Element, target.Creature.Element);
+            int element = mult > 1.0 ? LandElementSwing : mult < 1.0 ? -LandElementSwing : 0;
+
+            int moved = effect.Chance + JsRound(ratio * LandSwing) + element + shift;
             return moved < LandFloor ? LandFloor : moved > LandCeil ? LandCeil : moved;
         }
 
         /// <summary>速度差で動かせる幅（%ポイント）。</summary>
         public const int LandSwing = 30;
+
+        /// <summary>属性の有利・不利で動かす幅（%ポイント）。
+        ///
+        /// ⚠️ **速度差（<see cref="LandSwing"/>）と足し算で重なる。**
+        /// 同じ大きさにすると、有利かつ速い側が常に天井・逆が常に床になり、
+        /// 通る率が「属性と速度の一致だけ」で決まってしまう。
+        /// ⭐ 速度を主軸のまま残したいので、その半分から始めて `sim` で測る。</summary>
+        public const int LandElementSwing = 15;
         /// <summary>⚠️ どれだけ速度で劣っても、ここまでは通る（弱化役が完全に死なないように）。</summary>
         public const int LandFloor = 25;
         /// <summary>⚠️ どれだけ速くても確実にはしない（免疫と盾の意味を残す）。</summary>
