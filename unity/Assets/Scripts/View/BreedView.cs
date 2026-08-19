@@ -20,7 +20,9 @@ namespace EggCommand.View
         [SerializeField] private CreatureCell _cell;
 
         public void Bind(IReadOnlyList<Creature> all, Creature a, Creature b,
-            Action onBreed, Action<string> onPick)
+            Action onBreed, Action<string> onPick,
+            FilterKey filter, SortKey sort, Action<FilterKey> onFilter, Action<SortKey> onSort,
+            Action repaint)
         {
             var chosen = new[] { a, b };
             for (int i = 0; i < _parents.Length && i < chosen.Length; i++)
@@ -31,81 +33,16 @@ namespace EggCommand.View
                 if (slot.Filled != null) slot.Filled.SetActive(creature != null);
                 if (slot.Empty != null) slot.Empty.SetActive(creature == null);
                 if (creature == null) continue;
-
-                var species = Creatures.SpeciesOf(creature);
-                if (slot.Art != null)
-                {
-                    slot.Art.sprite = PixelSpriteTexture.ToSprite(species.Sprite, Creatures.PaletteOf(creature));
-                    slot.Art.preserveAspect = true;
-                }
-                if (slot.Element != null) slot.Element.color = ElementMark.ColorOf(creature.Element);
-                if (slot.Name != null) slot.Name.text = species.Name;
-                if (slot.Wild != null)
-                {
-                    slot.Wild.text = $"Lv {Levels.Of(creature)} / {Levels.MaxOf(creature)}";
-                }
-
-                // ⭐ 実値4本。得意は緑、不得意は赤（BOX と同じ読み方にする）
-                var stats = Creatures.StatsOf(creature);
-                for (int k = 0; slot.Stats != null && k < slot.Stats.Length && k < Stats.Keys.Length; k++)
-                {
-                    var key = Stats.Keys[k];
-                    if (slot.Stats[k] == null) continue;
-                    slot.Stats[k].text = $"{Stats.LabelOf(key)} {stats[key]}";
-                    slot.Stats[k].color = key == creature.Strong ? Ui.Good
-                        : key == creature.Weak ? Ui.Danger : Ui.Ink;
-                }
-
-                if (slot.Skills != null)
-                {
-                    var names = new List<string>();
-                    foreach (var skill in Creatures.SkillsOf(creature))
-                    {
-                        if (skill != null) names.Add(skill.Name);
-                    }
-                    slot.Skills.text = string.Join("・", names);
-                }
-
-                // ⭐ 得意・不得意は遺伝する。BOX と同じ読み方（▲▼）で出す
-                if (slot.Slant != null)
-                {
-                    slot.Slant.text = creature.Strong == null || creature.Weak == null
-                        ? ""
-                        : $"▲{Stats.LabelOf(creature.Strong.Value)}  ▼{Stats.LabelOf(creature.Weak.Value)}";
-                }
-                // ⭐ 特性は★の下限を無視して遺伝するので、配合で一番狙う対象になりうる
-                if (slot.Trait != null)
-                {
-                    var trait = Creatures.TraitOf(creature);
-                    slot.Trait.text = trait == null ? "" : trait.Name;
-                }
+                // ⭐ BOX の詳細とまったく同じ札。⚠️ ここで欄を選び直さない
+                //    （選び直した結果、特性の働きが配合だけ出ていなかった）
+                if (slot.Panel != null) slot.Panel.Bind(creature);
             }
 
             bool ready = a != null && b != null && Fusion.CanFuse(a, b);
-            if (_result != null) _result.SetActive(ready);
-            if (ready)
-            {
-                if (_resultEgg != null)
-                {
-                    _resultEgg.sprite = PixelSpriteTexture.ToSprite(EggArt.Sprite, EggArt.Shell);
-                    _resultEgg.preserveAspect = true;
-                }
-                // ⭐ 卵に出すのは**推定レベルと希少さだけ**。
-                // ⚠️ 種族も技の候補も出さない。まだ決まっていないものを見せると、
-                //    出た結果が「約束と違う」に見える。孵してからのお楽しみにする。
-                // ⚠️ 「先に育ててください」と字で書かない。数が言えば足りる
-                if (_resultSpecies != null)
-                {
-                    _resultSpecies.text = $"Lv {Fusion.PreviewBirthLevel(a, b)}";
-                }
-                if (_resultSkills != null)
-                {
-                    _resultSkills.text = Rarities.StarsOf(Fusion.PreviewRarity(a, b));
-                    _resultSkills.color = Ui.Accent;
-                }
-                // ⚠️ 変異の印は外した（希少さの★と役割がぶつかる）
-                if (_resultMutable != null) _resultMutable.SetActive(false);
-            }
+            // ⚠️ **卵の予告は出さない**（2026-08-18・作者判断）。
+            //    ⭐ 親2枚を見比べる画面なのに、真ん中に3枚目の札が入って主役が割れていた。
+            //    推定レベルも★も、押したあとに卵として手に入るので先に言う必要がない。
+            if (_result != null) _result.SetActive(false);
 
             if (_breed != null)
             {
@@ -118,6 +55,30 @@ namespace EggCommand.View
                 if (ink != null) ink.color = ready ? Ui.OnLead : Ui.InkFaint;
                 _breed.onClick.RemoveAllListeners();
                 if (ready) _breed.onClick.AddListener(() => onBreed());
+            }
+
+            // ⭐ **BOX と同じ部品を使う。**同じ一覧に別の操作を生やさない。
+            //
+            // ⚠️ **器（Stack）は VerticalLayoutGroup で自動整列している。**
+            //    直接ぶら下げると、SortBar が自分で置いた札の位置まで
+            //    レイアウトに上書きされ、格子が崩れる（実測で
+            //    並べ替えの札が画面外 2168 へ落ちた）。
+            //    ⭐ **入れ物を1つ挟む** ── 入れ物はレイアウトが並べ、
+            //    その中は SortBar が自由に置ける。
+            var box = _grid == null ? null : _grid.parent as RectTransform;
+            if (box != null && box.parent != null)
+            {
+                var stack = (RectTransform)box.parent;
+                var host = Ui.Rect("Sort Host", stack);
+                // ⚠️ 一覧の**すぐ上**へ。作っただけだと末尾に並ぶ
+                host.SetSiblingIndex(box.GetSiblingIndex());
+                float used = SortBar.Build(host, 0f, 0f, Ui.W - Ui.Margin * 2f,
+                    filter, sort, onFilter, onSort, repaint);
+                // ⭐ **入れ物の高さを直に設定する。**
+                // ⚠️ LayoutElement では効かない ── この Stack は childControlHeight が
+                //    false なので、レイアウトは LayoutElement を見ず、
+                //    部品自身の高さ（sizeDelta）を使う（実測で高さ100のままだった）。
+                host.sizeDelta = new Vector2(Ui.W - Ui.Margin * 2f, used);
             }
 
             CellGrid.Fill(_grid, _cell, all,

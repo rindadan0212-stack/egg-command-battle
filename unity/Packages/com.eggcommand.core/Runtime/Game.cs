@@ -22,7 +22,20 @@ namespace EggCommand.Core
         /// <summary>ホームで進み続けている放置。⭐ 素材の唯一の出所。</summary>
         public readonly IdleRun Idle = new IdleRun();
         /// <summary>出撃させる3体の id。⚠️ 空なら素質の高い順に自動で選ぶ。</summary>
+        /// <summary>放置に出している3体。⚠️ **巣へ潜る編成とは別**。
+        /// ⭐ 放置は「置いておく」ものなので、潜るたびに組み替えたくない。
+        /// 同じにすると、巣に合わせて入れ替えた瞬間に放置が止まる。</summary>
         public readonly List<string> Party = new List<string>();
+
+        /// <summary>巣へ潜る編成。⭐ **3つ登録できる**。
+        /// ⚠️ 長さは常に <see cref="NestPartySlots"/>。読み込みでもここを崩さない。</summary>
+        public readonly List<List<string>> NestParties = new List<List<string>>
+        {
+            new List<string>(), new List<string>(), new List<string>(),
+        };
+
+        /// <summary>いま使う巣の編成の番号（0..2）。</summary>
+        public int NestParty;
         /// <summary>巣ごとに何回盗んだか。⭐ **盤の難易度と巣の寿命の唯一の出所。**
         ///
         /// ⚠️ 盗んだ回数で関門が増え、隙間が狭まり、いずれ親が塞ぎ切る。
@@ -176,7 +189,14 @@ namespace EggCommand.Core
         public static void ReleaseCreature(Game game, string id)
         {
             game.Storage = Storages.Release(game.Storage, id);
+            // ⚠️ **すべての編成から外す。**1本だけ外していた頃の形を残すと、
+            //    消えた個体の id が別の編成に残り、その枠が永久に空になる。
             game.Party.Remove(id);
+            foreach (var roster in game.NestParties) roster.Remove(id);
+            // ⚠️ **放置の「倒れている」帳からも外す。**外していなかった頃は、
+            //    逃がした・配合した個体の id が残り続けて保存が膚らんだ。
+            //    ⭐ Raids に対して ForgetRaids が同じ理由で用意されている（片方だけ抜けていた）
+            game.Idle.DownUntil.Remove(id);
         }
 
         public static Creature CreatureById(Game game, string id)
@@ -261,20 +281,37 @@ namespace EggCommand.Core
             return points;
         }
 
-        /// <summary>合成＝個体を食わせて育てる。⭐ **食わせた側は失われる**。</summary>
-        /// <returns>実際に伸びた点数。0 なら上限に達していた（＝食わせない）。</returns>
-        public static int FeedCreature(Game game, string eaterId, string foodId)
+        /// <summary>分解＝個体を EXP に還す。⭐ **選んだぶんをまとめて。**
+        ///
+        /// ⚠️ 2026-08-19 に「合成」（1体に食わせて直接 Lv を上げる）から置き換えた
+        /// （作者の指示）。⭐ EXP を**溜める側**に一本化したので、
+        /// 「誰に食わせるか」を先に決めなくてよくなり、どの個体にも後から使える。
+        ///
+        /// ⚠️ 戻せない。⭐ 「逃がす」の代わりでもある ── 捨てるのではなく必ず EXP になる。</summary>
+        /// <returns>入った EXP の合計。</returns>
+        public static int Dissolve(Game game, IReadOnlyList<string> ids)
         {
-            if (eaterId == foodId) throw new InvalidOperationException("自分自身は食わせられない");
-            var eater = CreatureById(game, eaterId);
-            var food = CreatureById(game, foodId);
+            int total = 0;
+            foreach (string id in ids)
+            {
+                var creature = FindCreature(game, id);
+                // ⚠️ 見つからないものは黙って飛ばす（同じ id が二度来ても壊れない）
+                if (creature == null) continue;
+                total += Levels.DissolveExpOf(creature);
+                ReleaseCreature(game, id);
+            }
+            game.Idle.Exp += total;
+            return total;
+        }
 
-            // ⚠️ 満杯なら食わせない。黙って消すと「押したのに何も起きず1体減った」になる
-            if (Levels.IsMaxed(eater)) return 0;
-
-            int gained = Creatures.Grow(eater, Levels.FeedValueOf(food));
-            if (gained > 0) ReleaseCreature(game, foodId);
-            return gained;
+        /// <summary>居なければ null。⚠️ <see cref="CreatureById"/> は投げる。</summary>
+        private static Creature? FindCreature(Game game, string id)
+        {
+            foreach (var c in game.Storage.Creatures)
+            {
+                if (c.Id == id) return c;
+            }
+            return null;
         }
 
         /// <summary>戦闘の報酬。⭐ 出撃していた個体だけがもらう（連れ出すことが育成に直結する）。
@@ -290,11 +327,26 @@ namespace EggCommand.Core
             foreach (var creature in party) Creatures.Grow(creature, amount);
         }
 
+        /// <summary>巣の編成を何つ登録できるか。</summary>
+        public const int NestPartySlots = 3;
+
+        /// <summary>その用途の編成の中身。⭐ **ここが唯一の出口**。
+        /// ⚠️ 各所で game.Party を直に見ない（見ると放置と巣の区別が崩れる）。</summary>
+        public static List<string> RosterOf(Game game, PartyKind kind) =>
+            kind == PartyKind.Idle ? game.Party : game.NestParties[Slot(game)];
+
+        /// <summary>⚠️ 番号が範囲外なら 0 に丸める（古い保存・壊れた値除け）。</summary>
+        public static int Slot(Game game) =>
+            game.NestParty < 0 || game.NestParty >= NestPartySlots ? 0 : game.NestParty;
+
         /// <summary>出撃する3体。⚠️ 選んでいなければ素質の高い順に埋める（遊び始めで詰まらないように）。</summary>
-        public static List<Creature> PartyOf(Game game)
+        public static List<Creature> PartyOf(Game game) => PartyOf(game, PartyKind.Nest);
+
+        public static List<Creature> PartyOf(Game game, PartyKind kind)
         {
+            var roster = RosterOf(game, kind);
             var chosen = new List<Creature>();
-            foreach (var id in game.Party)
+            foreach (var id in roster)
             {
                 foreach (var creature in game.Storage.Creatures)
                 {
@@ -320,14 +372,22 @@ namespace EggCommand.Core
         }
 
         /// <summary>出撃の入り切りを切り替える。⚠️ 上限を超えたら古いものから外す。</summary>
-        public static void TogglePartyMember(Game game, string id)
+        public static void TogglePartyMember(Game game, string id) =>
+            TogglePartyMember(game, id, PartyKind.Nest);
+
+        public static void TogglePartyMember(Game game, string id, PartyKind kind)
         {
-            if (game.Party.Remove(id)) return;
-            game.Party.Add(id);
-            while (game.Party.Count > PartySize) game.Party.RemoveAt(0);
+            var roster = RosterOf(game, kind);
+            if (roster.Remove(id)) return;
+            roster.Add(id);
+            while (roster.Count > PartySize) roster.RemoveAt(0);
         }
 
-        public static bool IsInParty(Game game, string id) => game.Party.Contains(id);
+        public static bool IsInParty(Game game, string id) =>
+            IsInParty(game, id, PartyKind.Nest) || IsInParty(game, id, PartyKind.Idle);
+
+        public static bool IsInParty(Game game, string id, PartyKind kind) =>
+            RosterOf(game, kind).Contains(id);
 
         /// <summary>いまの編成をそのまま書き留める。⭐ **勝手に入れ替わらなくする**。
         ///
@@ -337,11 +397,26 @@ namespace EggCommand.Core
         /// ⚠️ 既に選んである枠は触らない（プレイヤーの選択を上書きしない）。</summary>
         public static void LockParty(Game game)
         {
-            if (game.Party.Count >= PartySize) return;
-            foreach (var creature in PartyOf(game))
+            Lock(game, PartyKind.Idle);
+            // ⚠️ 巣の編成は**3つとも**固める。使っていない番号を放置すると、
+            //    切り替えた瞬間に「素質の高い順」で埋まって選んだはずの編成が消える。
+            int keep = game.NestParty;
+            for (int i = 0; i < NestPartySlots; i++)
             {
-                if (game.Party.Count >= PartySize) break;
-                if (!game.Party.Contains(creature.Id)) game.Party.Add(creature.Id);
+                game.NestParty = i;
+                Lock(game, PartyKind.Nest);
+            }
+            game.NestParty = keep;
+        }
+
+        private static void Lock(Game game, PartyKind kind)
+        {
+            var roster = RosterOf(game, kind);
+            if (roster.Count >= PartySize) return;
+            foreach (var creature in PartyOf(game, kind))
+            {
+                if (roster.Count >= PartySize) break;
+                if (!roster.Contains(creature.Id)) roster.Add(creature.Id);
             }
         }
     }

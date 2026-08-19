@@ -25,3 +25,11 @@ pixelizer/
 # 何を外すかは unity/.gitignore（Library/ Temp/ Logs/ obj/ *.csproj など）が持つ。
 
 図鑑.html
+
+# 帳面の編集画面。sim sheet html が作り直すので版管理に入れない（図鑑.html と同じ扱い）。
+# ⚠️ sheets/*.txt のほうは手で書いた書きかけとメモが入るので**入れる**。
+sheets/エディタ.html
+
+# 改装前の UI 画像の控え。⚠️ 現行と中身が違うので消していないが、版管理には入れない。
+*.png.bak
+*.png.bak.meta

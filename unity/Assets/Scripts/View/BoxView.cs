@@ -10,23 +10,12 @@ namespace EggCommand.View
     public sealed class BoxView : MonoBehaviour
     {
         [SerializeField] private GameObject _detail;
-        [SerializeField] private Image _art;
-        [SerializeField] private Image _element;
-        [SerializeField] private Text _name;
-        [SerializeField] private Text _id;
-        [SerializeField] private Text _point;
-        [SerializeField] private Text _level;
-        [SerializeField] private Text _slant;
-        /// <summary>特性。⭐ **名前だけでは何も伝わらない**ので働きも並べる。
-        /// ⚠️ 無ければ空にする（「特性なし」と書かない ── 無いことは書かなくても分かる）。</summary>
-        [SerializeField] private Text _trait;
-        [SerializeField] private StatRow[] _stats;      // 4本。HP/ATK/DEF/SPD の順
-        [SerializeField] private Text[] _skills;        // 3枠
-        [SerializeField] private Text[] _skillCts;
+        /// <summary>1体を見せる札。⭐ 配合の親札と**同じ部品**（並びも同じ）。</summary>
+        [SerializeField] private CreaturePanel _panel;
         [SerializeField] private Button _party;
         [SerializeField] private Text _partyLabel;
         [SerializeField] private Button _release;
-        [SerializeField] private Button[] _spend;       // 4本。ステと同じ順
+        [SerializeField] private Button[] _spend;       // 4枚。⚠️ ステとは無関係（Repurpose が札にする）
         [SerializeField] private Button[] _sortTabs;    // 7枚
         [SerializeField] private RectTransform _grid;
         [SerializeField] private CreatureCell _cell;
@@ -35,159 +24,149 @@ namespace EggCommand.View
         /// ⭐ 一覧を押すのは「見る」だけ。餌にするかどうかは詳細の札で決める
         /// （押すたびに意味が変わると、何が起きるか分からない画面になる）。</summary>
         /// <param name="onTrain">技を鍛える札を押した。⭐ 卵を素材にする画面を開く。</param>
+        /// <summary>一覧の元の位置と高さ。
+        /// ⚠️ **覚えておかないと累積する** ── 開閉のたびに引き算して
+        /// いくと、何度か開いただけで一覧が画面外へ落ちる。</summary>
+        private float _gridTop;
+        private float _gridHeight;
+        private bool _gridSaved;
+
+        /// <summary>出ている押しどころを、器の幅いっぱいに並べ直す。
+        ///
+        /// ⚠️ 位置を書くのは本来 Prefab の仕事だが、**何枚出るかは中身しだい**なので
+        /// ここでしか決められない（出撃はパーティ編成へ、逃がすは合成へ移して2枚になった）。
+        /// ⭐ 器の左右の余白と隙間は Prefab の1枚目・最後の1枚から読む（数を書かない）。</summary>
+        private void Spread()
+        {
+            var shown = new List<RectTransform>();
+            foreach (var button in Buttons())
+            {
+                if (button != null && button.gameObject.activeSelf)
+                {
+                    shown.Add((RectTransform)button.transform);
+                }
+            }
+            if (shown.Count == 0) return;
+            var box = shown[0].parent as RectTransform;
+            if (box == null) return;
+
+            // ⚠️ 余白は**1枚目の左**から読む。Prefab で動かしたらそれに従う
+            float pad = shown[0].anchoredPosition.x;
+            float gap = 12f;
+            float room = box.rect.width - pad * 2f;
+            float width = (room - gap * (shown.Count - 1)) / shown.Count;
+            for (int i = 0; i < shown.Count; i++)
+            {
+                var rect = shown[i];
+                rect.anchoredPosition = new Vector2(pad + (width + gap) * i, rect.anchoredPosition.y);
+                rect.sizeDelta = new Vector2(width, rect.sizeDelta.y);
+                // ⚠️ 中の字も一緒に伸ばす（伸ばさないと中央揃えが崩れる）
+                foreach (RectTransform child in rect)
+                {
+                    child.sizeDelta = new Vector2(width, child.sizeDelta.y);
+                    child.anchoredPosition = new Vector2(0f, child.anchoredPosition.y);
+                }
+            }
+        }
+
+        /// <summary>並び順そのままの押しどころ。⚠️ Prefab の並びと同じ順で返す。</summary>
+        private IEnumerable<Button> Buttons()
+        {
+            yield return _party;
+            if (_spend != null)
+            {
+                foreach (var button in _spend) yield return button;
+            }
+            yield return _release;
+        }
+
         public void Bind(Game game, Creature creature, SortKey sort, IReadOnlyList<Creature> sorted,
-            Action<SortKey> onSort, Action<string> onPick, Action onParty, Action onRelease,
-            Creature food, Action onMarkFood, Action onFeed, Action onGrow, Action onTrain)
+            Action<SortKey> onSort, Action<string> onPick, Action onFuse, Action onGrow,
+            SortBasis basis, Action<SortBasis> onBasis,
+            Action<FilterKey> onFilter, FilterKey filter, Action repaint)
         {
             bool has = creature != null;
             if (_detail != null) _detail.SetActive(has);
 
-            for (int i = 0; i < _sortTabs.Length && i < Storages.SortKeys.Length; i++)
+            // ⚠️ **動かすのは器のほう。**_grid は中身（Content）で、
+            //    こちらを動かしてもスクロール枠は動かない（実測で気づいた）。
+            var box = _grid == null ? null : _grid.parent as RectTransform;
+            if (!_gridSaved && box != null)
             {
-                var key = Storages.SortKeys[i];
-                var tab = _sortTabs[i];
-                if (tab == null) continue;
-                var label = tab.GetComponentInChildren<Text>();
-                if (label != null) label.text = Storages.LabelOf(key);
-                // ⚠️ 色を掛けず絵を差し替える（掛けると押せない札と見分けが付かない）
-                var plate = tab.GetComponent<Image>();
-                if (plate != null) plate.sprite = Ui.SkinSprite(sort == key ? "button-lead" : "button");
-                tab.onClick.RemoveAllListeners();
-                tab.onClick.AddListener(() => onSort(key));
+                _gridTop = box.anchoredPosition.y;
+                _gridHeight = box.sizeDelta.y;
+                _gridSaved = true;
+            }
+            // ⚠️ **並べ替えの札7枚は隠す。**横に並べるだけで1行を使い切り、
+            //    しかも**絞る手段が無かった**。⭐ 代わりに▼で開く1行を置く。
+            //    ⚠️ 部品は消さずに隠す（Prefab を作り直さずに戻せる）。
+            foreach (var tab in _sortTabs)
+            {
+                if (tab != null) tab.gameObject.SetActive(false);
+            }
+            if (_sortTabs.Length > 0 && _sortTabs[0] != null)
+            {
+                var at = (RectTransform)_sortTabs[0].transform;
+                float used = SortBar.Build((RectTransform)at.parent, at.anchoredPosition.x,
+                    -at.anchoredPosition.y, Ui.W - Ui.Margin * 2f,
+                    filter, sort, onFilter, onSort, repaint, basis, onBasis);
+                // ⚠️ **開いたぶんだけ一覧を下げる。**下げないと、
+                //    開いた札の下に升が潜り込んで押せなくなる。
+                if (box != null)
+                {
+                    float extra = used - SortBar.ClosedHeight;
+                    box.anchoredPosition = new Vector2(box.anchoredPosition.x, _gridTop - extra);
+                    box.sizeDelta = new Vector2(box.sizeDelta.x, _gridHeight - extra);
+                }
             }
 
-            // ⭐ 選んでいる個体と、食わせる相手の両方に印を付ける
+            // ⭐ 印を付けるのは「いま見ている個体」だけ。
+            //    ⚠️ 餌の印はここから消えた（餌は合成の画面の中で選ぶようになったため）。
             CellGrid.Fill(_grid, _cell, sorted,
-                id => (creature != null && id == creature.Id) || (food != null && id == food.Id),
+                id => creature != null && id == creature.Id,
                 onPick);
 
             if (!has) return;
 
-            var species = Creatures.SpeciesOf(creature);
-            if (_art != null)
-            {
-                _art.sprite = PixelSpriteTexture.ToSprite(species.Sprite, Creatures.PaletteOf(creature));
-                _art.preserveAspect = true;
-            }
-            if (_element != null) _element.color = ElementMark.ColorOf(creature.Element);
-            if (_name != null) _name.text = species.Name;
-            if (_id != null) _id.text = creature.Id;
+            // ⭐ 絵・見出し・ステ表・特性・技はすべて札が持つ。ここは押しどころだけ見る
+            if (_panel != null) _panel.Bind(creature);
 
-            // ⚠️ Lv を主役にしない。ARK と同じで、同じ Lv でも中身はまるで別物。
-            //    見るべきは下の4本。ここは添え物として小さく置く
-            if (_level != null) _level.text = $"Lv {Levels.Of(creature)} / {Levels.MaxOf(creature)}";
-            if (_slant != null)
-            {
-                _slant.text = creature.Strong == null || creature.Weak == null
-                    ? ""
-                    : $"▲{Stats.LabelOf(creature.Strong.Value)}  ▼{Stats.LabelOf(creature.Weak.Value)}";
-            }
-            // ⭐ 世代と変異。⚠️ 並べ替えの札には在るのに、詳細のどこにも数が無かった。
-            //    ⭐ 変異は「これ以上増えない」ことが判断に効くので上限も併記する
-            if (_point != null)
-            {
-                _point.gameObject.SetActive(true);
-                _point.text = $"{creature.Generation}代  変異{creature.MutationCounter}";
-                _point.color = creature.MutationCounter > 0 ? Ui.Accent : Ui.InkDim;
-            }
+            // ⭐ **押しどころは2つだけ。**（2026-08-18・作者判断）
+            //    ⚠️ 以前は 出撃／餌にする／合成／そだてる／技を鍛える／逃がす の6つが並び、
+            //    どれを押せば何が起きるのか読めなかった。
+            //    ⭐ 「分解」（個体を EXP に還す・たまごで技を鍛える）と、
+            //    EXP で1レベル上げる「レベルアップ」の2つ。
+            //    ⚠️ 出撃はパーティ編成へ、逃がすは分解へ移した。
+            // ⚠️ **主役は1つ。**両方を塗っていた頃は、どちらを押せばいいのか読めなかった。
+            //    分解は白い札（枠だけ）、レベルアップだけ塗る。
+            // ⚠️ **分解はいつでも押せる。**⭐ 上限に達した個体でも EXP には還せる
+            //    （2026-08-19 に合成から置き換えたので、上限は入口の条件でなくなった）。
+            Repurpose(0, "分解", true, false, onFuse);
 
-            if (_trait != null)
-            {
-                var trait = Creatures.TraitOf(creature);
-                _trait.text = trait == null ? "" : $"{trait.Name} — {trait.Gist}";
-            }
+            // ⭐ 放置で溜めた EXP で育てる。1回で1レベル
+            // ⚠️ **値段はその個体のいまの Lv で変わる**（作者の指示 2026-08-19）。
+            //    一律の定数を出していた頃は、上げるほど重くなることが画面から読めなかった。
+            int cost = Levels.ExpToNext(creature);
+            bool canGrow = !Levels.IsMaxed(creature) && game.Idle.Exp >= cost;
+            // ⚠️ 「EXP が足りません」と書かない。⭐ 要る数を出せば足りる
+            // ⭐ **何レベル上がるかを出す**（作者の指示 2026-08-19）。
+            Repurpose(1, $"レベルアップ ＋1  EXP {Ui.Digits(cost)}", canGrow, canGrow, onGrow);
 
-            // ⭐ ステ振りの4枠を「餌にする」「合成」の2枠に置き換える。
-            //    Prefab の位置はそのまま使えるので、器を作り直さない
-            bool isFood = food != null && food.Id == creature.Id;
-            bool canFeed = food != null && !isFood && !Levels.IsMaxed(creature);
-            Repurpose(0, isFood ? "餌を外す" : "餌にする", true, isFood, onMarkFood);
-            // ⚠️ 「個体を選んでください」と書かない。⭐ 伸びる数だけ出す
-            Repurpose(1, canFeed ? $"合成 ＋{Levels.FeedValueOf(food)}" : "合成", canFeed, false, onFeed);
-
-            // ⭐ 放置で溜めた素材で育てる。1回で1レベル
-            bool canGrow = !Levels.IsMaxed(creature)
-                && game.Idle.Materials >= Core.Idle.MaterialPerLevel;
-            // ⚠️ 「素材が足りません」と書かない。⭐ 要る数を出せば足りる
-            Repurpose(2, $"そだてる ●{Core.Idle.MaterialPerLevel}", canGrow, canGrow, onGrow);
-
-            // ⭐ 卵の「孵さない使い道」への入口。⚠️ 棚に卵が1個も無いなら押させない
-            //    （押しても何も選べない画面が開くだけになる）
-            bool canTrain = game.Eggs.Count > 0 && HasRoom(creature);
-            Repurpose(3, "技を鍛える", canTrain, false, onTrain);
-
-            for (int i = 4; i < _spend.Length; i++)
+            for (int i = 2; i < _spend.Length; i++)
             {
                 if (_spend[i] != null) _spend[i].gameObject.SetActive(false);
             }
 
-            var stats = Creatures.StatsOf(creature);
-            for (int i = 0; i < _stats.Length && i < Stats.Keys.Length; i++)
-            {
-                var key = Stats.Keys[i];
-                var row = _stats[i];
-                if (row == null) continue;
-                if (row.Label != null) row.Label.text = Stats.LabelOf(key);
-                if (row.Value != null)
-                {
-                    // ⭐ この画面の主役。素質＋育てた分の内訳を出す
-                    int trained = creature.Trained[key];
-                    row.Value.text = trained > 0
-                        ? $"{stats[key]}  ({creature.Wild[key]}+{trained})"
-                        : $"{stats[key]}  ({creature.Wild[key]})";
-                    row.Value.color = key == creature.Strong ? Ui.Good
-                        : key == creature.Weak ? Ui.Danger : Ui.Ink;
-                }
-                // ⚠️ 60 で割っていたので、上限(40)まで育てても 67% までしか伸びなかった。
-                //    ⭐ 目盛りは**その個体の上限**（変異で伸びる）。満タンが満タンに見えること
-                if (row.Bar != null)
-                {
-                    float cap = Stats.WildStatMaxFor(creature.MutationCounter);
-                    row.Bar.fillAmount = Mathf.Clamp01(creature.Wild[key] / Mathf.Max(1f, cap));
-                }
-            }
+            // ⚠️ 出撃は「パーティ編成」へ、逃がすは合成へ移したので、この画面には出さない。
+            //    ⭐ 部品は消さずに隠す（Prefab を作り直さずに戻せる）。
+            if (_party != null) _party.gameObject.SetActive(false);
+            if (_release != null) _release.gameObject.SetActive(false);
 
-            var skills = Creatures.SkillsOf(creature);
-            for (int i = 0; i < _skills.Length; i++)
-            {
-                var skill = i < skills.Length ? skills[i] : null;
-                if (_skills[i] != null)
-                {
-                    _skills[i].text = skill == null ? "—" : skill.Name;
-                    _skills[i].color = skill == null ? Ui.InkFaint : Ui.Ink;
-                }
-                if (i < _skillCts.Length && _skillCts[i] != null)
-                {
-                    // ⭐ **レベルは常に出す。**出さないと「鍛えられる」ことに気づけない。
-                    // ⚠️ CT は枠1 だけ 0 固定なので出さない（そこは通常攻撃）
-                    if (skill == null) _skillCts[i].text = "";
-                    else
-                    {
-                        var boost = Creatures.SkillBoostOf(creature, i);
-                        int ct = Skills.EffectiveCt(i, skill, boost);
-                        int level = Creatures.SkillLevelOf(creature, i);
-                        _skillCts[i].text = i == 0 ? $"Lv{level}" : $"Lv{level} CT{ct}";
-                    }
-                    _skillCts[i].color = skill != null && Creatures.SkillLevelOf(creature, i) > 1
-                        ? Ui.Accent : Ui.InkDim;
-                }
-            }
-
-            bool inParty = Games.IsInParty(game, creature.Id);
-            if (_partyLabel != null) _partyLabel.text = inParty ? "出撃中" : "出撃";
-            if (_party != null)
-            {
-                var plate = _party.GetComponent<Image>();
-                if (plate != null) plate.sprite = Ui.SkinSprite(inParty ? "button-lead" : "button");
-                _party.onClick.RemoveAllListeners();
-                _party.onClick.AddListener(() => onParty());
-            }
-            if (_release != null)
-            {
-                _release.onClick.RemoveAllListeners();
-                _release.onClick.AddListener(() => onRelease());
-            }
-
+            // ⭐ **出ている押しどころだけで、幅いっぱいに並べ直す。**
+            // ⚠️ **どれを出すか決めたあとで呼ぶ。**先に呼ぶと、隠す前の6枚で割ってしまう。
+            // ⚠️ 器（Prefab）は6枚ぶんの幅で割ってあるので、2枚に減らした日から
+            //    右半分が丸ごと空いていた（実測: 486〜958 が空白）。
+            Spread();
         }
 
         /// <summary>まだ鍛えられる枠が1つでもあるか。⚠️ 全部上限なら入口を閉じる。</summary>
@@ -216,7 +195,7 @@ namespace EggCommand.View
             // ⚠️ **押せない札は灰（button-off）。**ここで button のままにしていたので、
             //    餌を選んでいないのに「合成」が押せるように見えていた（Ui.Tappable と食い違い）
             if (plate != null)
-                plate.sprite = Ui.SkinSprite(!usable ? "button-off" : lead ? "button-lead" : "button");
+                plate.sprite = Ui.SkinSprite(!usable ? "button-off" : lead ? "button-lead" : "panel");
             button.interactable = usable;
             var label = button.transform.Find("Label");
             if (label != null)

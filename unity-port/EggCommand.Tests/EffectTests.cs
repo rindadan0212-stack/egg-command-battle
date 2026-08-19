@@ -36,6 +36,61 @@ public class EffectTests
     private static void Hit(BattleState s, Unit from, Unit to, Effect e) =>
         Battle.ApplyOne(s, from, to, e);
 
+    /// <summary>特性を持たせた盤。⚠️ 個体は作り直す（欄は書き換えない）。</summary>
+    private static BattleState FieldWithTrait(string traitId)
+    {
+        var s = Field();
+        var foe = Foe(s, 0);
+        var made = new Creature(foe.Creature.Id, foe.Creature.SpeciesId, foe.Creature.Wild,
+            foe.Creature.Trained, foe.Creature.Earned, foe.Creature.MutationCounter,
+            foe.Creature.Skill2, foe.Creature.Skill3, foe.Creature.PaletteIndex,
+            foe.Creature.ParentA, foe.Creature.ParentB, foe.Creature.Generation,
+            foe.Creature.Strong, foe.Creature.Weak, foe.Creature.Element, traitId);
+        var allies = new List<Creature>();
+        var foes = new List<Creature>();
+        foreach (var u in s.Units)
+        {
+            if (u.Side == Side.Ally) allies.Add(u.Creature);
+            else foes.Add(u.Key == foe.Key ? made : u.Creature);
+        }
+        return Battle.CreateBattle(allies, foes);
+    }
+
+    // ── 眠りは特性を止める ──────────────────────
+
+    /// <summary>⭐ **眠っている間は特性が働かない。**
+    /// ⚠️ これが無いと眠りは「手番を飛ばす」だけで、スタンと役割が丸かぶりになる。</summary>
+    [Fact]
+    public void 眠っている間は意地が働かない()
+    {
+        // 意地 = 弱化を受ける率が下がる特性
+        var awake = FieldWithTrait(Traits.Stubborn);
+        var actor = Ally(awake, 0);
+        int guarded = Battle.LandChanceOf(Effect.Buff(StatKey.Atk, -1, 3, chance: 80),
+            actor, Foe(awake, 0));
+
+        var asleep = FieldWithTrait(Traits.Stubborn);
+        Hit(asleep, Ally(asleep, 0), Foe(asleep, 0), Effect.Sleep(2));
+        int open = Battle.LandChanceOf(Effect.Buff(StatKey.Atk, -1, 3, chance: 80),
+            Ally(asleep, 0), Foe(asleep, 0));
+
+        Assert.True(open > guarded,
+            $"眠っても意地が効いたまま（起きている {guarded}% / 眠っている {open}%）");
+    }
+
+    /// <summary>⚠️ 弱化では起きない。⭐ だから「眠らせてから弱化を積む」が成立する。</summary>
+    [Fact]
+    public void 弱化を掛けても目を覚まさない()
+    {
+        var s = Field();
+        var foe = Foe(s, 0);
+        Hit(s, Ally(s, 0), foe, Effect.Sleep(2));
+        Assert.True(foe.Status.Sleep > 0);
+
+        Hit(s, Ally(s, 0), foe, Effect.Buff(StatKey.Def, -1, 3));
+        Assert.True(foe.Status.Sleep > 0, "弱化で目を覚ましてしまった");
+    }
+
     // ── ゲージ ──────────────────────────────────
 
     [Fact]
@@ -353,9 +408,12 @@ public class EffectTests
         int vsDis = Battle.LandChanceOf(weak, me, foes[1]);
         int vsEven = Battle.LandChanceOf(weak, me, foes[2]);
 
-        Assert.Equal(60 + Battle.LandElementSwing, vsAdv);
-        Assert.Equal(60 - Battle.LandElementSwing, vsDis);
-        Assert.Equal(60, vsEven);
+        // ⭐ 属性のぶんだけ動く。⚠️ 同じ種族なので命中と耐性の差はどれも同じ
+        //    （種族の基礎に配ったので 0 とは限らない・2026-08-19）
+        int gap = StatAccuracyTests.GapOf(me, foes[2]);
+        Assert.Equal(60 + gap + Battle.LandElementSwing, vsAdv);
+        Assert.Equal(60 + gap - Battle.LandElementSwing, vsDis);
+        Assert.Equal(60 + gap, vsEven);
     }
 
     /// <summary>⚠️ 属性は**弱化にだけ**効く。回復や盾を属性で外させない。</summary>

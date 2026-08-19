@@ -369,6 +369,83 @@ public class InfiltrationTests
         }
     }
 
+    /// <summary>⭐ **出てすぐに判定を始めない。**
+    /// ⚠️ 通路を等分するだけだった頃は、段3 raids0 で 47.3、揺らぎ込みで 33 まで寄った。</summary>
+    [Fact]
+    public void 最初の関門は出発点から離れている()
+    {
+        for (int seed = 0; seed < 30; seed++)
+        {
+            for (int tier = 1; tier <= 5; tier++)
+            {
+                for (int raids = 0; raids < Steal.RaidsToSeal; raids++)
+                {
+                    var nest = new Nest($"clr-{seed}", "検査", "tamaru", tier);
+                    var field = Steal.MakeField(tier, FieldSide.Right, raids,
+                        Steal.RngFor(nest, raids));
+                    foreach (var gate in field.Gimmicks)
+                    {
+                        double away = field.Start.Y - gate.Bottom;
+                        Assert.True(away >= Steal.FirstGimmickClearance - 0.001,
+                            $"seed{seed} 段{tier} raids{raids}: 関門が出発点から {away}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>⭐ 雑魚も関門と同じ間合いだけ離す。
+    /// ⚠️ 当たると戦闘が始まるので、遊ぶ側から見れば関門より重い障害物。</summary>
+    [Fact]
+    public void 雑魚も出発点から離れている()
+    {
+        for (int seed = 0; seed < 20; seed++)
+        {
+            for (int tier = 1; tier <= 5; tier++)
+            {
+                for (int raids = 0; raids < Steal.RaidsToSeal; raids++)
+                {
+                    var nest = new Nest($"mob-{seed}", "検査", "tamaru", tier);
+                    var field = Steal.MakeValidatedField(tier, FieldSide.Right, raids,
+                        Steal.RngFor(nest, raids));
+                    foreach (var mob in field.Mobs)
+                    {
+                        double away = field.Start.Y - (mob.At.Y + mob.Radius);
+                        Assert.True(away >= Steal.FirstGimmickClearance - 0.001,
+                            $"seed{seed} 段{tier} raids{raids}: 雑魚が出発点から {away}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>⚠️ 重なると、下になったほうの要求の字が読めない。
+    /// ⭐ 揺らぎ幅を間隔から出しているので、どう振っても帯1枚ぶんは空く。</summary>
+    [Fact]
+    public void 関門どうしが重ならない()
+    {
+        for (int seed = 0; seed < 30; seed++)
+        {
+            for (int tier = 1; tier <= 5; tier++)
+            {
+                for (int raids = 0; raids < Steal.RaidsToSeal; raids++)
+                {
+                    var nest = new Nest($"lap-{seed}", "検査", "tamaru", tier);
+                    var field = Steal.MakeField(tier, FieldSide.Right, raids,
+                        Steal.RngFor(nest, raids));
+                    var gates = new List<Gimmick>(field.Gimmicks);
+                    gates.Sort((a, b) => a.Top.CompareTo(b.Top));
+                    for (int i = 1; i < gates.Count; i++)
+                    {
+                        Assert.True(gates[i].Top >= gates[i - 1].Bottom,
+                            $"seed{seed} 段{tier} raids{raids}: "
+                            + $"{gates[i - 1].Bottom} と {gates[i].Top} が重なっている");
+                    }
+                }
+            }
+        }
+    }
+
     /// <summary>⭐ 盗んだ回数は保存に残る。⚠️ 消えると巣が若返り、寿命が無くなる。</summary>
     [Fact]
     public void 盗んだ回数は保存して読み直しても残る()
@@ -511,7 +588,7 @@ public class InfiltrationTests
 
     /// <summary>要求を満たさない個体は、その関門で止まる。⭐ **使用済みになるだけ**（台にはなる）。</summary>
     [Fact]
-    public void 要求を満たさない個体は関門で止まる()
+    public void 要求を満たさない個体は関門で弾かれる()
     {
         var field = OneGate(GimmickKind.Wall, requires: 200);
         var weak = Make("weak", 30, 0, 30, 30);
@@ -520,12 +597,15 @@ public class InfiltrationTests
         var flight = Steal.Hop(run, 0, -1, 0);
 
         Assert.Equal(StealOutcome.Landed, flight.Outcome);
-        Assert.Equal(0, flight.StoppedBy);
+        // ⭐ **止まらず弾かれる**（作者の指示 2026-08-19）。
+        // ⚠️ 前は関門の手前で**その場で止まって**いた。「力尽きた」のか「弾かれた」のかが
+        //    見た目で区別できなかった。
+        Assert.True(flight.Bounced, "関門に弾かれた印が立っていない");
+        Assert.Equal(-1, flight.StoppedBy);   // ⚠️ もう「そこで止まった」わけではない
         Assert.Single(run.Pads);              // ⭐ 台にはなる
-        Assert.Empty(flight.Broke);
+        Assert.Empty(flight.Broke);           // ⚠️ 通れていないので壁は壊れない
 
-        // ⚠️ **関門の手前**で止まっている。中で止まると、この台から投げた次の個体が
-        //    一歩目で同じ関門に捕まり、台が必ず詰む
+        // ⚠️ 着地点が関門の中だと、この台から投げた次の個体が一歩目で同じ関門に捕まる
         Assert.False(Steal.Inside(field.Gimmicks[0], flight.Landing),
             $"関門の中 ({flight.Landing.X:0}, {flight.Landing.Y:0}) に着地している");
     }
@@ -545,7 +625,7 @@ public class InfiltrationTests
         });
 
         var first = Steal.Hop(run, 0, -1, 0);
-        Assert.Equal(0, first.StoppedBy);
+        Assert.True(first.Bounced);                  // ⭐ 弾かれた（止まってはいない）
         Assert.Null(run.Result);                     // ⭐ まだ終わっていない
 
         // ⭐ 初期位置から関門の横を抜けられる角度が**ある**こと。
@@ -601,9 +681,9 @@ public class InfiltrationTests
         var frail = Make("frail", 0, 30, 30, 30);
         var run = new Steal.Infiltration(field, new List<Creature> { tough, frail });
 
-        Steal.Hop(run, 0, -1, 0);           // 通れずに止まる（要求200 は誰も満たさない）
+        Steal.Hop(run, 0, -1, 0);           // 弾かれる（要求200 は誰も満たさない）
         var second = Steal.Hop(run, 1, -1, 0);
-        Assert.Equal(0, second.StoppedBy);  // ⭐ 開通していない
+        Assert.True(second.Bounced);        // ⭐ 開通していないので2人目も弾かれる
         Assert.Empty(run.Broken);
     }
 

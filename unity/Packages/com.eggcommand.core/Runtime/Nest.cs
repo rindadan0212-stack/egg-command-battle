@@ -106,10 +106,15 @@ namespace EggCommand.Core
     public static class Nests
     {
         /// <summary>段階ごとの、親が持つ野生レベルの合計。
-        /// ⚠️ 上限 80 に届くのは最上位だけ。そこまで行くと配合でしか伸ばせなくなる。</summary>
+        /// ⚠️ 上限（<see cref="Creatures.WildMax"/> × 3ステ）に届くのは最上位だけ。
+        /// ⭐ 生の数を書かない ── 「上限 80」と書いたまま 120 になっていた（2026-08-19 の監査）。</summary>
         public static int WildTotalForTier(int tier)
         {
-            var table = new[] { 24, 38, 52, 66, Stats.WildTotalMax };
+            // ⭐ 上限からの割合で書く。⚠️ 生の数を並べると、上限を動かした日に
+            //    最終段だけが跳ね上がる（80→120 の日に実際そうなった）。
+            var ratio = new[] { 0.30, 0.475, 0.65, 0.825, 1.0 };
+            var table = new int[ratio.Length];
+            for (int i = 0; i < ratio.Length; i++) table[i] = JsRound(Stats.WildTotalMax * ratio[i]);
             int index = tier - 1;
             if (index < 0) index = 0;
             if (index > table.Length - 1) index = table.Length - 1;
@@ -138,14 +143,15 @@ namespace EggCommand.Core
         /// C# の <c>Math.Round</c> は既定が銀行丸めなので、そのまま使うと系列がずれる。</summary>
         private static int JsRound(double value) => (int)Math.Floor(value + 0.5);
 
-        /// <summary>合計 total を4ステへ配る。偏らせたいので1〜2箇所に寄せる。</summary>
+        /// <summary>合計 total を6ステへ配る。偏らせたいので上位3箇所に寄せる。</summary>
         private static StatBlock SpreadWild(Rng rng, int total)
         {
             var keys = new List<StatKey>(Stats.Keys);
             rng.Shuffle(keys);
 
-            // 上位2つに多く配り、残りを下位へ。⭐ 野生も「得意2つ」の形にする
-            var shares = new[] { 0.42, 0.32, 0.16, 0.1 };
+            // 上位3つに多く配り、残りを下位へ。⭐ 野生も「得意3つ」の形にする
+            // ⚠️ 長さは Stats.Keys と揃える。短いと配りの途中で落ちる
+            var shares = new[] { 0.34, 0.26, 0.19, 0.11, 0.06, 0.04 };
             var raw = new StatBlock(0, 0, 0, 0);
             int left = total;
             for (int i = 0; i < keys.Count; i++)
@@ -161,14 +167,24 @@ namespace EggCommand.Core
             return Stats.ApplyTotalCap(raw);
         }
 
+        /// <summary>枠2・枠3 を引く。⭐ **枠ごとに別の型のプールから1つずつ。**
+        ///
+        /// ⚠️ 同じプールから2つ取っていた頃は、狙った組み合わせが 2.8〜4.8% でしか出ず、
+        /// 「この巣からは何が来るか」も読めなかった。
+        /// ⭐ 型を分けると、巣を選ぶ理由が「どの型が欲しいか」になる。</summary>
         private static void RollSkills23(Rng rng, string speciesId, string skill1,
             out string? skill2, out string? skill3)
         {
-            var pool = Skills.GachaPoolOf(speciesId, skill1);
-            int take = pool.Count < 2 ? pool.Count : 2;
-            var picked = rng.Sample(pool, take);
-            skill2 = picked.Count > 0 ? picked[0] : null;
-            skill3 = picked.Count > 1 ? picked[1] : null;
+            var pool2 = Skills.SlotPoolOf(speciesId, 1, skill1);
+            skill2 = pool2.Count > 0 ? rng.Pick(pool2) : null;
+
+            // ⚠️ 型が違えば重ならないが、同じ技が2枠を占めないことはここで担保する
+            var pool3 = new List<string>();
+            foreach (var id in Skills.SlotPoolOf(speciesId, 2, skill1))
+            {
+                if (id != skill2) pool3.Add(id);
+            }
+            skill3 = pool3.Count > 0 ? rng.Pick(pool3) : null;
         }
 
         /// <summary>巣を守るのは親1体だけ。
@@ -181,10 +197,11 @@ namespace EggCommand.Core
         /// 遊びの中では呼び側（<see cref="Games.DefendersOf"/>）が個体ごとに引いて渡す。</param>
         public static List<Creature> MakeDefenders(Rng rng, Nest nest, Element? element = null)
         {
-            var species = SpeciesTable.ById(nest.SpeciesId);
             var wild = SpreadWild(rng, WildTotalForTier(nest.Tier));
+            // ⭐ **親と卵は同じ技を持つ。**「その親の卵」なのに技が無関係、という状態を直した
+            //    （2026-08-19）。⚠️ 巣ごとに固定なので、挑み直しても顔ぶれが変わらない。
             string? skill2, skill3;
-            RollSkills23(rng, nest.SpeciesId, species.Skill1, out skill2, out skill3);
+            SkillsOfNest(nest, out skill2, out skill3);
 
             return new List<Creature>
             {
@@ -280,13 +297,39 @@ namespace EggCommand.Core
             if (total < 4) total = 4;
             if (total > Stats.WildTotalMax) total = Stats.WildTotalMax;
 
+            // ⭐ **その巣の親が持っている技を、そのまま卵に載せる**（2026-08-19・作者の指示）。
+            //
+            // ⚠️ 前は `hasSkills: false` で作り、**孵すまで技が分からなかった**。
+            //    1つの巣から出る5個（盗み4＋撃破1）が全部バラバラの技だったので、
+            //    「この技が欲しいからこの巣を攻略する」という動機が成立しなかった
+            //    ── 卵1個の実時間の 84% が「狙った種族の巣を探す」コストなのに、
+            //    掘り当てても中身が読めない、という形だった。
+            //
+            // ⭐ これで巣が**中身の読める箱**になる。⚠️ 確率は1ミリも動かしていない
+            //    （同じ袋から同じように引いている）。動いたのは「いつ分かるか」だけ。
+            SkillsOfNest(nest, out string? skill2, out string? skill3);
+
             return new Egg(
                 $"e{serial.ToString().PadLeft(3, '0')}",
                 nest.SpeciesId,
                 SpreadWild(rng, total),
                 0, 0, null, null, 1, how,
-                hasSkills: false, skill2: null, skill3: null,
+                hasSkills: true, skill2: skill2, skill3: skill3,
                 rarity: rarity, element: element);
+        }
+
+        /// <summary>その巣が抱えている技。⭐ **巣ごとに固定**（何度見ても同じ）。
+        ///
+        /// ⭐ 雑魚の編成が既にこの形（<see cref="Steal.RngFor"/>）なので、それに揃えた。
+        /// ⚠️ 揃える前は、雑魚だけ固定で**親と卵は挑むたびに変わる**という非対称だった。
+        ///
+        /// ⚠️ 巣の id と、その巣を何回盗んだかは**混ぜない**。盗んでも中身は変わらない
+        /// （変わると「この巣を掘り切る」という判断が成り立たない）。</summary>
+        public static void SkillsOfNest(Nest nest, out string? skill2, out string? skill3)
+        {
+            var species = SpeciesTable.ById(nest.SpeciesId);
+            var rng = new Rng(0).Stream($"nest-skills:{nest.Id}");
+            RollSkills23(rng, nest.SpeciesId, species.Skill1, out skill2, out skill3);
         }
 
         /// <summary>孵す。⭐ 野生の卵はここでスキル2・3のガチャを引く。
@@ -336,13 +379,16 @@ namespace EggCommand.Core
         /// 「どれを狙うか」が作業になり、ヌシ本体に一度も触れないまま負けることがあった。
         /// 1体にすると、難しさがその1体の技の噛み合いだけで決まる。
         ///
-        /// ⭐ 変異を4回重ねた個体という扱い。上限が 44/88 に上がるので、
+        /// ⭐ 変異を4回重ねた個体という扱い。上限が 44/132 に上がるので、
         /// ボス専用の例外ルールを足さずに強くできる。
         /// ⭐ 震撼（全体強攻撃）は枠2へ。枠1は CT が無いので、大技はここに置いて CT を効かせる。</summary>
         public static List<Creature> MakeBossParty()
         {
             const int mutation = 4;
-            var wild = Stats.ApplyTotalCap(new StatBlock(16, 22, 21, 3), mutation);
+            // ⭐ 抵抗を厚く持たせる。⚠️ ここが 0 だと、弱化を積むだけで
+            //    ヌシが一度も動かないまま終わる（速度3の個体は元々そうなりやすい）。
+            //    ⚠️ 命中は低め ── ヌシの弱化まで通ると、事故で一方的になる。
+            var wild = Stats.ApplyTotalCap(new StatBlock(16, 22, 21, 3, 8, 24), mutation);
             return new List<Creature>
             {
                 new Creature("boss-0", "nushi", wild, new StatBlock(0, 0, 0, 0), 0,

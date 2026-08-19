@@ -23,6 +23,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EggCommand.Core\EggCommand.Core.csproj" />
+    <!-- 現行の記録は書き出す側と同じ手順で作る（SeriesRecord を共有する） -->
+    <ProjectReference Include="..\EggCommand.Sim\EggCommand.Sim.csproj" />
+  </ItemGroup>
+
+  <!-- いまの実装の出力を凍らせた記録。⚠️ 移植の証拠ではない。
+       遊びを意図して変えたときだけ sim の record で作り直す。 -->
+  <ItemGroup>
+    <None Include="..\records\*.json" Link="records\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- TS を実走させた「正解」。`node scripts/goldens.mjs` が唯一の出所。

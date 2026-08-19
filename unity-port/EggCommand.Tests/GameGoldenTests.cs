@@ -5,6 +5,11 @@ namespace EggCommand.Tests;
 
 public class NestGoldenTests
 {
+    /// <summary>⚠️ 素質の合計上限を ×2 → ×3 にした（2026-08-18）ので、段ごとの総量も 1.5倍になった。
+    /// ⭐ **坂の形は1つも変えていない** ── そこをここで固定する。
+    /// ⚠️ 段だけを勝手に緩めたり急にしたりしたら、比が崩れて落ちる。</summary>
+    private const double TierScale = 3.0 / 2.0;
+
     [Fact]
     public void 段階ごとの素質合計が一致する()
     {
@@ -12,8 +17,11 @@ public class NestGoldenTests
         foreach (var entry in golden.GetProperty("tiers").EnumerateArray())
         {
             int tier = entry.GetProperty("tier").GetInt32();
-            Assert.Equal(entry.GetProperty("wildTotal").GetInt32(), Nests.WildTotalForTier(tier));
+            int ported = entry.GetProperty("wildTotal").GetInt32();
+            Assert.Equal((int)System.Math.Floor(ported * TierScale + 0.5), Nests.WildTotalForTier(tier));
         }
+        // ⭐ 最終段はいまも「1体で振り切れる量」ちょうど
+        Assert.Equal(Stats.WildTotalMax, Nests.WildTotalForTier(5));
     }
 
     /// <summary>⭐ id で引く。並び順も件数も見ない（巣を足しても落ちない）。
@@ -35,7 +43,19 @@ public class NestGoldenTests
         Nests.Audit();
     }
 
-    /// <summary>⚠️ 乱数の消費順がそのまま出る。ここがずれたら以降の全部がずれる。</summary>
+    /// <summary>⚠️ **素質を配る乱数の消費が変わった**（2026-08-18）。
+    ///
+    /// 素質が4本から6本になったので、<c>Nests.SpreadWild</c> の並べ替えも
+    /// <c>Breeding.Breed</c> の継承判定も、引く回数そのものが増えた。
+    /// ⭐ つまり**素質より後に引く全部**（技・色・変異・孵化）が移植元とは別の系列になる。
+    /// これは移植のミスではなく、素質を足すと決めた時点で必ずこうなる。
+    ///
+    /// ⚠️ **ゴールデンは作り直さない。**作り直すと「移植元と一致している」証明が消える。
+    /// 消えるのは「同じ乱数から同じ個体が出る」証明だけで、
+    /// 乱数そのもの・技表・種族表・戦闘式・削り方の証明は1つも失われていない
+    /// （それぞれ別のゴールデンで見続けている）。
+    ///
+    /// ⭐ 系列そのものの取りこぼしは SeriesRecordTests（現行の記録）が受け持つ。</summary>
     [Fact]
     public void 巣の守り手が一致する()
     {
@@ -56,12 +76,11 @@ public class NestGoldenTests
                 string where = $"{nestId}[{i - 1}]";
                 Assert.Equal(unitJson.GetProperty("id").GetString(), unit.Id);
                 Assert.Equal(unitJson.GetProperty("speciesId").GetString(), unit.SpeciesId);
-                Assert.True(Golden.Block(unitJson.GetProperty("wild")).Equals(unit.Wild),
-                    $"{where}: 素質が {unit.Wild}");
-                Golden.SameSkills23(unitJson.GetProperty("skills23"), unit.Skill2, unit.Skill3, where);
-                Assert.Equal(unitJson.GetProperty("wildTotal").GetInt32(), Creatures.WildTotalOf(unit));
-                Assert.True(Golden.Block(unitJson.GetProperty("actual")).Equals(Creatures.StatsOf(unit)),
-                    $"{where}: 実値が {Creatures.StatsOf(unit)}");
+                // ⚠️ 素質と、素質より後に引く技は別系列（上の注記）。
+                // ⭐ 代わりに「段の総量を超えていない」ことを見る
+                Assert.True(Creatures.WildTotalOf(unit) <= Nests.WildTotalForTier(nest.Tier),
+                    $"{where}: 素質合計が {Creatures.WildTotalOf(unit)}");
+                Assert.NotNull(unit.Skill2);
             }
         }
     }
@@ -82,21 +101,20 @@ public class NestGoldenTests
 
             Assert.Equal(eggJson.GetProperty("id").GetString(), egg.Id);
             Assert.Equal(eggJson.GetProperty("speciesId").GetString(), egg.SpeciesId);
-            Assert.True(Golden.Block(eggJson.GetProperty("wild")).Equals(egg.Wild), $"{where}: 卵の素質が {egg.Wild}");
-            Assert.Equal(eggJson.GetProperty("mutationCounter").GetInt32(), egg.MutationCounter);
             Assert.Equal(eggJson.GetProperty("generation").GetInt32(), egg.Generation);
             // ⭐ 野生の卵は技が未定（孵すときにガチャ）
             Assert.False(egg.HasSkills);
-
+            // ⚠️ 素質・変異・技は別系列（クラスの注記）。⭐ 孵しても素質が変わらないことは見続ける
+            var before = egg.Wild;
             var hatched = Nests.Hatch(rng, egg, "c007");
-            var hatchedJson = entry.GetProperty("hatched");
-            Assert.Equal(hatchedJson.GetProperty("id").GetString(), hatched.Id);
-            Assert.True(Golden.Block(hatchedJson.GetProperty("wild")).Equals(hatched.Wild),
-                $"{where}: 孵した素質が {hatched.Wild}");
-            Golden.SameSkills23(hatchedJson.GetProperty("skills23"), hatched.Skill2, hatched.Skill3, where);
+            Assert.Equal(entry.GetProperty("hatched").GetProperty("id").GetString(), hatched.Id);
+            Assert.Equal(before, hatched.Wild);
+            Assert.True(hatched.Skill2 != null, $"{where}: 孵しても技が決まっていない");
         }
     }
 
+    /// <summary>⚠️ ヌシに抵抗 24・命中 8 を足した（2026-08-18）。
+    /// ⭐ 移植元にある4本（HP・攻・防・速）は**1つも動かしていない**ので、そこは丸ごと照合する。</summary>
     [Fact]
     public void ボスが一致する()
     {
@@ -112,7 +130,13 @@ public class NestGoldenTests
             var unit = boss[i++];
             Assert.Equal(entry.GetProperty("id").GetString(), unit.Id);
             Assert.Equal(entry.GetProperty("speciesId").GetString(), unit.SpeciesId);
-            Assert.True(Golden.Block(entry.GetProperty("wild")).Equals(unit.Wild), $"ボスの素質が {unit.Wild}");
+            var ported = Golden.Block(entry.GetProperty("wild"));
+            Assert.True(ported.Hp == unit.Wild.Hp && ported.Atk == unit.Wild.Atk
+                && ported.Def == unit.Wild.Def && ported.Spd == unit.Wild.Spd,
+                $"ボスの素質（移植元の4本）が {unit.Wild}");
+            // ⚠️ 足した2本。⭐ 抵抗が 0 に戻ったら、弱化を積むだけでヌシが止まる
+            Assert.Equal(8, unit.Wild.Acc);
+            Assert.Equal(24, unit.Wild.Res);
             Assert.Equal(entry.GetProperty("mutationCounter").GetInt32(), unit.MutationCounter);
             Golden.SameSkills23(entry.GetProperty("skills23"), unit.Skill2, unit.Skill3, "boss");
         }
@@ -132,8 +156,10 @@ public class BreedingGoldenTests
         Assert.Equal(golden.GetProperty("mutationCounterLimit").GetInt32(), Breeding.MutationCounterLimit);
     }
 
-    /// <summary>⭐ 較正済みの「変異 2.5%×3回」がここに乗っている。
-    /// 乱数の消費が1つでもずれたら、出る子が変わる。</summary>
+    /// <summary>⚠️ 素質が6本になり、継承の判定を引く回数が 4→6 に増えた（2026-08-18）。
+    /// ⭐ 較正済みの「変異 2.5%×3回」という**決め事**は 配合の定数が一致する が見続ける。
+    /// ここは系列が別になったので、比べられるのは形だけ。
+    /// 系列の取りこぼしは SeriesRecordTests（現行の記録）が受け持つ。</summary>
     [Fact]
     public void 配合の結果が一致する()
     {
@@ -149,8 +175,8 @@ public class BreedingGoldenTests
         {
             var creature = pool[p++];
             Assert.Equal(entry.GetProperty("id").GetString(), creature.Id);
-            Assert.True(Golden.Block(entry.GetProperty("wild")).Equals(creature.Wild),
-                $"親 {creature.Id} の素質が {creature.Wild}");
+            Assert.True(Stats.TotalOf(creature.Wild) <= Stats.WildTotalMax,
+                $"親 {creature.Id} の素質合計が {Stats.TotalOf(creature.Wild)}");
         }
 
         foreach (var entry in golden.GetProperty("bred").EnumerateArray())
@@ -167,20 +193,20 @@ public class BreedingGoldenTests
             var outcome = Breeding.Breed(rng, a, b, serial);
 
             string where = $"seed={seed} {aId}×{bId}";
-            Assert.True(entry.GetProperty("mutations").GetInt32() == outcome.Mutations,
-                $"{where}: 変異回数が {outcome.Mutations}");
+            // ⚠️ 当たり外れの並びは別系列。⭐ 回数の上限（3回まで）は決め事なので見続ける
+            Assert.InRange(outcome.Mutations, 0, Breeding.MutationRolls);
 
             var eggJson = entry.GetProperty("egg");
             Assert.Equal(eggJson.GetProperty("id").GetString(), outcome.Egg.Id);
-            Assert.Equal(eggJson.GetProperty("speciesId").GetString(), outcome.Egg.SpeciesId);
-            Assert.True(Golden.Block(eggJson.GetProperty("wild")).Equals(outcome.Egg.Wild),
-                $"{where}: 子の素質が {outcome.Egg.Wild}");
-            Assert.Equal(eggJson.GetProperty("mutationCounter").GetInt32(), outcome.Egg.MutationCounter);
-            Assert.Equal(eggJson.GetProperty("paletteIndex").GetInt32(), outcome.Egg.PaletteIndex);
+            // ⭐ 世代は乱数を通らない。⚠️ ここが動いたら血統の数え方が壊れている
             Assert.Equal(eggJson.GetProperty("generation").GetInt32(), outcome.Egg.Generation);
+            Assert.Equal(System.Math.Max(a.MutationCounter, b.MutationCounter) + outcome.Mutations,
+                outcome.Egg.MutationCounter);
             // ⭐ 配合の卵は技が決まっている。孵すときに引き直さない
             Assert.True(outcome.Egg.HasSkills);
-            Golden.SameSkills23(eggJson.GetProperty("skills23"), outcome.Egg.Skill2, outcome.Egg.Skill3, where);
+            // ⭐ 上限は変異ぶん押し上がる（押し上げないと変異の +2 が即削られる）
+            Assert.True(Stats.TotalOf(outcome.Egg.Wild)
+                <= Stats.WildTotalMaxFor(outcome.Egg.MutationCounter), $"{where}: 合計が上限超え");
         }
     }
 }
@@ -197,7 +223,8 @@ public class GameGoldenTests
     }
 
     /// <summary>⭐ newGame から一連の操作までを丸ごと。
-    /// 系統ごとの乱数（nest / egg / hatch / steal / breed）がずれていないかが出る。</summary>
+    /// 系統ごとの乱数（nest / egg / hatch / steal / breed）が**取り違えられていない**かが出る。
+    /// ⚠️ 中身の数（素質・技）は別系列になった ── NestGoldenTests の注記を見る。</summary>
     [Fact]
     public void ゲームの進行が一致する()
     {
@@ -265,11 +292,10 @@ public class GameGoldenTests
             string spot = $"{where}/{creature.Id}";
             Assert.True(entry.GetProperty("id").GetString() == creature.Id, $"{spot}: id");
             Assert.True(entry.GetProperty("speciesId").GetString() == creature.SpeciesId, $"{spot}: 種族");
-            Assert.True(Golden.Block(entry.GetProperty("wild")).Equals(creature.Wild), $"{spot}: 素質が {creature.Wild}");
-            Assert.True(entry.GetProperty("mutationCounter").GetInt32() == creature.MutationCounter, $"{spot}: 変異");
             Assert.True(entry.GetProperty("generation").GetInt32() == creature.Generation, $"{spot}: 世代");
             Assert.True(entry.GetProperty("earned").GetInt32() == creature.Earned, $"{spot}: 育成点");
-            Golden.SameSkills23(entry.GetProperty("skills23"), creature.Skill2, creature.Skill3, spot);
+            Assert.True(Stats.TotalOf(creature.Wild) <= Stats.WildTotalMaxFor(creature.MutationCounter),
+                $"{spot}: 素質合計が {Stats.TotalOf(creature.Wild)}");
         }
 
         var eggs = expected.GetProperty("eggs");
@@ -279,17 +305,30 @@ public class GameGoldenTests
         {
             var egg = game.Eggs[i++];
             Assert.True(entry.GetProperty("id").GetString() == egg.Id, $"{where}: 卵 id");
-            Assert.True(entry.GetProperty("speciesId").GetString() == egg.SpeciesId, $"{where}: 卵の種族");
-            Assert.True(Golden.Block(entry.GetProperty("wild")).Equals(egg.Wild), $"{where}: 卵の素質が {egg.Wild}");
             Assert.True(Golden.Origin(entry.GetProperty("how").GetString()!) == egg.How, $"{where}: 入手経路");
         }
 
-        Assert.Equal(Golden.Strings(expected.GetProperty("party")), game.Party);
+        // ⭐ プレイヤーが選んだ枠は乱数を通らない。ここは丸ごと照合する
+        //
+        // ⚠️ **編成は 1本 → 4本（放置1＋巣3）に分けた**（2026-08-18）。
+        //    移植元の 1本 は「戦闘に出す編成」なので、**巣の編成**と突き合わせる。
+        //    ⭐ ゴールデンの値は変えていない ── 読む場所だけを移した。
+        var roster = Games.RosterOf(game, PartyKind.Nest);
+        Assert.Equal(Golden.Strings(expected.GetProperty("party")), roster);
 
+        // ⚠️ 空き枠は「素質の高い順」で埋まるので、素質が別系列になれば並びも変わる。
+        // ⭐ 見続けるのは「選んだ枠が必ず先頭に来る」「保管にある個体だけで埋まる」の2つ。
         var partyOf = new List<string>();
         foreach (var c in Games.PartyOf(game)) partyOf.Add(c.Id);
-        Assert.True(Golden.Strings(expected.GetProperty("partyOf")).Count == partyOf.Count
-            && string.Join(",", Golden.Strings(expected.GetProperty("partyOf"))) == string.Join(",", partyOf),
-            $"{where}: 出撃が {string.Join(",", partyOf)}");
+        Assert.True(Golden.Strings(expected.GetProperty("partyOf")).Count == partyOf.Count,
+            $"{where}: 出撃数が {partyOf.Count}");
+        for (int k = 0; k < roster.Count && k < partyOf.Count; k++)
+        {
+            Assert.True(roster[k] == partyOf[k], $"{where}: 選んだ枠が先頭に来ていない");
+        }
+        foreach (var id in partyOf)
+        {
+            Assert.True(System.Linq.Enumerable.Any(game.Storage.Creatures, c => c.Id == id), $"{where}: 保管に無い {id}");
+        }
     }
 }

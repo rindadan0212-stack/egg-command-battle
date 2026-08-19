@@ -26,6 +26,12 @@ namespace EggCommand.Sim
     ///   dotnet run --project EggCommand.Sim -- pace      決着までの行動数
     ///   dotnet run --project EggCommand.Sim -- book      図鑑を書き出す（種族・技・特性）
     ///   dotnet run --project EggCommand.Sim -- wiki      Wiki の表ページを書き出す（数値の二重管理を避ける）
+    ///   dotnet run --project EggCommand.Sim -- record    現行の記録を作り直す（⚠️ 遊びを変えたときだけ）
+    ///   dotnet run --project EggCommand.Sim -- slant     得意・不得意が素質と独立して引かれているか
+    ///   dotnet run --project EggCommand.Sim -- statvalue ステ1点が勝率を何 pt 動かすか（ステごとの価値差）
+    ///   dotnet run --project EggCommand.Sim -- skillvalue 技1つが勝率を何 pt 動かすか（特性と同じ物差し）
+    ///   dotnet run --project EggCommand.Sim -- turnvalue  1手で何手ぶんを生むか（算数。AI を通さない）
+    ///   dotnet run --project EggCommand.Sim -- delivered  算数の見積もりが実戦で入っているか（食い違いを掘る）
     /// </summary>
     public static class Program
     {
@@ -37,9 +43,15 @@ namespace EggCommand.Sim
 
             string what = args.Length > 0 ? args[0] : "all";
             int seed = DefaultSeed;
+            int bump = 0;
+            int levels = 0;
             for (int i = 1; i < args.Length - 1; i++)
             {
                 if (args[i] == "--seed") int.TryParse(args[i + 1], out seed);
+                // ⭐ 足す量を外から変えられる。⚠️ 上下限のあるステは増やしても飽和するので、
+                //    「配る量を増やせば価値が揃うのか」はここを動かして確かめる。
+                if (args[i] == "--bump") int.TryParse(args[i + 1], out bump);
+                if (args[i] == "--levels") int.TryParse(args[i + 1], out levels);
             }
 
             // ⚠️ 中身が繋がっていない状態で測っても意味が無い。先に数える
@@ -66,6 +78,19 @@ namespace EggCommand.Sim
                 }
                 case "pace": Pace(seed); break;
                 case "landprobe": LandProbe(); break;
+                // ⭐ 技と種族を手で書くための帳面（Sheet.cs）
+                case "sheet": Sheet.Run(args.Length > 1 ? args[1] : ""); break;
+                case "slant": SlantProbe(seed); break;
+                case "statvalue": StatValue(seed, bump, levels); break;
+                case "skillvalue": SkillValue(seed); break;
+                case "turnvalue": TurnValue(); break;
+                case "delivered": Delivered(seed); break;
+                case "record":
+                {
+                    // ⚠️ 意図して遊びを変えたときだけ走らせる（SeriesRecord の注記）
+                    Console.WriteLine("現行の記録を書き直した: " + SeriesRecord.Write("records/series.json"));
+                    break;
+                }
                 case "book":
                 {
                     // ⚠️ 置き場所は決め打ち。毎回同じ場所に上書きする（版が散らからないように）
@@ -94,6 +119,10 @@ namespace EggCommand.Sim
             public readonly Dictionary<string, int> Chosen = new Dictionary<string, int>();
             /// <summary>場に出ていた技（選ばれたかは問わない）。採用率の分母。</summary>
             public readonly Dictionary<string, int> Present = new Dictionary<string, int>();
+            /// <summary>枠ごとの選ばれた回数。⭐ 「枠1ばかり撃っている」かを数える唯一の出所。</summary>
+            public readonly int[] BySlot = new int[3];
+            /// <summary>手番が回ってきたとき、枠が待ちで塞がっていた回数。</summary>
+            public readonly int[] Locked = new int[3];
         }
 
         /// <param name="land">弱化が通るかを引く乱数。
@@ -121,7 +150,14 @@ namespace EggCommand.Sim
                 var actor = Battle.NextActor(state);
                 if (actor == null) break;
 
+                // ⚠️ 選ぶ前に数える（選んだ結果ではなく、選べたかを見たい）
+                for (int i = 1; i < 3; i++)
+                {
+                    if (Battle.SkillAt(actor, i) != null && actor.Cooldowns[i] > 0) fight.Locked[i]++;
+                }
+
                 int slot = Ai.ChooseAction(state, actor);
+                if (slot >= 0 && slot < fight.BySlot.Length) fight.BySlot[slot]++;
                 var skill = Battle.SkillAt(actor, slot);
                 if (skill != null) Bump(fight.Chosen, skill.Id);
 
@@ -185,8 +221,16 @@ namespace EggCommand.Sim
         // ── 種族どうし ────────────────────────────────────
 
         /// <summary>⭐ **種族を足した日に一番見たいもの。**
-        /// どれかが全対戦で勝ち越していたら、その種族を選ぶのが最適解になり、
-        /// 他の種族が飾りになる（＝組み合わせが生まれない）。</summary>
+        ///
+        /// ⚠️ **総合勝率を 50% に揃えにいかない**（作者の判断 2026-08-19）。
+        /// 種族には得意不得意があり、ビルドも違うので、**差が出るのは必然**。
+        /// 揃えにいくと、せっかく作った「止める／重い／配る」という顔が消える。
+        /// ⭐ 物には役割がある。適材適所。
+        ///
+        /// ⭐ **見るのは総合ではなく「刺さる相手を持っているか」。**
+        /// | 勝ち越す相手が 0 | どこにも居場所が無い ── 役割が無い |
+        /// | 負け越す相手が 0 | 誰の役割も奪う ── 対策が存在しない |
+        /// ⚠️ 総合が 30% でも、3種族に勝ち越しているなら**それは役割**であって欠陥ではない。</summary>
         private static void Species(int seed)
         {
             const int Samples = 40;
@@ -199,12 +243,12 @@ namespace EggCommand.Sim
             Console.WriteLine($"■ 種族どうしの勝率（段階{Tier}・各{Samples}回・行が攻め手）");
             Console.Write("            ");
             foreach (var id in ids) Console.Write($"{id,10}");
-            Console.WriteLine("      総合");
+            Console.WriteLine("      総合  勝ち越し  負け越し");
 
             foreach (var a in ids)
             {
                 Console.Write($"{a,12}");
-                int wonAll = 0, playedAll = 0;
+                int wonAll = 0, playedAll = 0, beats = 0, loses = 0;
                 foreach (var b in ids)
                 {
                     int won = 0;
@@ -216,12 +260,21 @@ namespace EggCommand.Sim
                         if (fight.Result == Outcome.Ally) won++;
                     }
                     Console.Write($"{Pct(won, Samples),10}");
-                    if (a != b) { wonAll += won; playedAll += Samples; }
+                    // ⚠️ 自分どうし（鏡）は数えない。必ず 50% 付近になるので意味が無い
+                    if (a == b) continue;
+                    wonAll += won;
+                    playedAll += Samples;
+                    // ⭐ 誤差（±8%）を跨いだものだけを「刺さる／刺さらない」と数える
+                    if (100 * won / Samples >= 58) beats++;
+                    if (100 * won / Samples <= 42) loses++;
                 }
-                Console.WriteLine($"{Pct(wonAll, playedAll),10}");
+                Console.WriteLine($"{Pct(wonAll, playedAll),10}{beats,8}{loses,8}");
             }
 
-            Console.WriteLine("  ⚠️ 総合が 35〜65% から外れた種族は、選ぶ理由か避ける理由が固定されている");
+            Console.WriteLine();
+            Console.WriteLine("  ⭐ **総合は揃えなくてよい。**種族には得意不得意があり、差が出るのは必然。");
+            Console.WriteLine("  ⚠️ 見るのは右の2列 ── **勝ち越す相手が 0**（居場所が無い）と");
+            Console.WriteLine("     **負け越す相手が 0**（対策が存在しない）だけが直し先。");
         }
 
         // ── 技ごとの採用率 ──────────────────────────────────
@@ -473,6 +526,19 @@ namespace EggCommand.Sim
                 new TraitCase(Traits.Grit, "shield-wall", "harden"),
                 new TraitCase(Traits.Flurry, "attack-twice", "attack-thrice"),
                 new TraitCase(Traits.Leech, "attack", "attack-twice"),
+                // ── 条件付きの層（2026-08-19）。噛み合わせは Trait.cs の欄のとおり
+                // ⚠️ 先駆け・置き土産・背水・粘り腰は「動き」の条件が技より広いので、
+                //    右（噛み合わない技）も多少動くのは織り込み（返し身と同じ性格）
+                new TraitCase(Traits.Opener, "immune", "slow-all"),
+                new TraitCase(Traits.Parting, "taunt", "revive"),
+                new TraitCase(Traits.Pursuit, "curse", "poison"),
+                new TraitCase(Traits.Desperation, "taunt", "guts"),
+                new TraitCase(Traits.Tenacity, "heal-ratio", "regen"),
+                // ⭐ 畳み掛けは「弱化を通すこと」が条件なので、弱化技を持たせる
+                new TraitCase(Traits.Surge, "curse", "poison"),
+                // ⭐ 盤面を見る2件。⚠️ 条件を作る技（止める／倒れる）を持たせないと測れない
+                new TraitCase(Traits.Ambush, "stun", "stun-heavy"),
+                new TraitCase(Traits.Legacy, "taunt", "attack-all-heavy"),
             };
             // ⚠️ 対照。どの特性とも噛み合わない組み合わせ（単発の一撃 + 自己強化）どうし
             const string Dull2 = "attack-heavy";
@@ -481,6 +547,8 @@ namespace EggCommand.Sim
             Console.WriteLine();
             Console.WriteLine($"■ 特性の効き目（段階{Tier}・各{Samples}回・属性は両側そろえる）");
             Console.WriteLine("  まったく同じ編成どうしで、片側にだけ特性を足したときの勝率の伸び");
+            Console.WriteLine("  ⭐ pt ＝ 勝率の**差**（54.5% → 74.5% なら 20.0pt）。⚠️ 誤差は ±2.5pt 程度");
+            Console.WriteLine("  ⭐ 左＝噛み合う技を持たせたとき / 右＝わざと関係ない技を持たせたとき");
 
             foreach (var one in cases)
             {
@@ -567,17 +635,22 @@ namespace EggCommand.Sim
         /// ⚠️ 見るのは「raids 0 でどの型も解けない段があるか」。あればそれは設計の穴。</summary>
         private static void Infiltrate(int seed)
         {
-            // ⚠️ 素質は合計80まで。1ステ上限40
+            // ⚠️ 素質は合計120まで。1ステ上限40（＝3つまで振り切れる）
+            //                        HP  攻  防  速  命中 抵抗
             var shapes = new[]
             {
                 new PartyShape("速度ぞろい",
-                    new StatBlock(10, 10, 20, 40), new StatBlock(10, 10, 20, 40), new StatBlock(10, 10, 20, 40)),
+                    new StatBlock(20, 10, 20, 40, 10, 20), new StatBlock(20, 10, 20, 40, 10, 20),
+                    new StatBlock(20, 10, 20, 40, 10, 20)),
                 new PartyShape("均等ぞろい",
-                    new StatBlock(20, 20, 20, 20), new StatBlock(20, 20, 20, 20), new StatBlock(20, 20, 20, 20)),
+                    new StatBlock(20, 20, 20, 20, 20, 20), new StatBlock(20, 20, 20, 20, 20, 20),
+                    new StatBlock(20, 20, 20, 20, 20, 20)),
                 new PartyShape("役割分担",
-                    new StatBlock(0, 40, 0, 40), new StatBlock(40, 0, 40, 0), new StatBlock(10, 10, 20, 40)),
+                    new StatBlock(0, 40, 0, 40, 40, 0), new StatBlock(40, 0, 40, 0, 0, 40),
+                    new StatBlock(10, 10, 20, 40, 10, 30)),
                 new PartyShape("耐久ぞろい",
-                    new StatBlock(40, 0, 40, 0), new StatBlock(40, 0, 40, 0), new StatBlock(40, 0, 40, 0)),
+                    new StatBlock(40, 0, 40, 0, 0, 40), new StatBlock(40, 0, 40, 0, 0, 40),
+                    new StatBlock(40, 0, 40, 0, 0, 40)),
             };
             const int Samples = 17;
             // ⭐ 旧設計（一投）の実測は「成功する角度の幅 6〜17度」。そこを目安にする
@@ -590,9 +663,10 @@ namespace EggCommand.Sim
             Console.WriteLine($"  数字 = 通る角度の幅（一番狭い一投）。⭐ 目安は {WantDegrees}度以上・× は解なし");
             Console.WriteLine("  ⭐ raids が増えて解けなくなるのは仕様。⚠️ raids 0 の段で全滅したら設計の穴");
 
-            foreach (var shape in shapes)
+            // ⭐ 参照編成そのもの。⚠️ **ここが × なら盤の生成のバグ**（線引きの片側）
+            foreach (var shape in Prepend(shapes))
             {
-                var party = shape.Party();
+                var party = shape.Party(0);
                 double reach = 0;
                 foreach (var c in party) reach += Steal.DistanceFor(c);
 
@@ -611,7 +685,9 @@ namespace EggCommand.Sim
                         int window;
                         // ⚠️ 「解が在るか」ではなく「通る角度が何度ぶんあるか」を見る。
                         //    幅1度の針の穴は、プレイヤーには「運が悪い」としか見えない
-                        bool ok = Steal.FindRoomySolution(field, party, Samples,
+                        // ⚠️ 参照編成は段ごとに素質が違う。段の中で組み直す
+                        var probe = shape.Party(tier);
+                        bool ok = Steal.FindRoomySolution(field, probe, Samples,
                             WantDegrees, Give, out plan, out window);
                         cells.Add(ok ? $"{window,3}°" : "  × ");
                     }
@@ -663,51 +739,66 @@ namespace EggCommand.Sim
             Console.WriteLine("  列は raids 0 / 1 / 2 / 3。－ は雑魚が居ない段");
         }
 
-        /// <summary>弱化の通る率が、現実の速度でどれだけ動くか。
-        /// ⚠️ ±30 は「速度比が ±1」のときの値。実際の個体でいくつ動くのかを測る。</summary>
+        /// <summary>弱化の通る率が、実際にどれだけ動くか。
+        /// ⚠️ 定数だけ見ても効き目が読めないので、現実のステ域で測る。</summary>
         private static void LandProbe()
         {
             Console.WriteLine();
-            Console.WriteLine("■ 速度で通る率が実際にどれだけ動くか");
+            Console.WriteLine("■ 命中と抵抗の差で、通る率がどれだけ動くか");
 
-            // ⭐ 段階5の想定編成から、速度の実値の幅を取る
+            var accs = new List<int>();
+            var resists = new List<int>();
             var speeds = new List<int>();
             for (int tier = 1; tier <= 5; tier++)
                 foreach (var c in Steal.ReferenceParty(tier))
+                {
+                    accs.Add(Creatures.StatsOf(c).Acc);
+                    resists.Add(Creatures.StatsOf(c).Res);
                     speeds.Add(Creatures.StatsOf(c).Spd);
-            speeds.Sort();
-            Console.WriteLine($"  想定編成の速度: 最小 {speeds[0]} / 中央 {speeds[speeds.Count/2]} / 最大 {speeds[speeds.Count-1]}");
+                }
+            accs.Sort(); resists.Sort(); speeds.Sort();
+            Console.WriteLine($"  想定編成の命中: 最小 {accs[0]} / 中央 {accs[accs.Count/2]} / 最大 {accs[accs.Count-1]}");
+            Console.WriteLine($"  想定編成の抵抗: 最小 {resists[0]} / 中央 {resists[resists.Count/2]} / 最大 {resists[resists.Count-1]}");
 
-            // 種族の基礎速度も見る
-            int lo = int.MaxValue, hi = 0;
-            foreach (var sp in SpeciesTable.All) { lo = Math.Min(lo, sp.Base.Spd); hi = Math.Max(hi, sp.Base.Spd); }
-            Console.WriteLine($"  種族の基礎速度: {lo} 〜 {hi}");
+            // ⚠️ **目盛りを手で書かない。**0/15/30/45 と書いてあったが、桁を 5倍にした日に
+            //    置き去りになり、実際は 0〜300 の帯を「0〜45」で測っていた
+            //    ── 表の数字が全部 0 に潰れて、差が見えなくなっていた（2026-08-19 の監査）。
+            // ⭐ 想定編成で実際に出る帯から4点を引く。
+            int lo = Math.Min(accs[0], resists[0]);
+            int hi = Math.Max(accs[accs.Count - 1], resists[resists.Count - 1]);
+            var axis = new int[4];
+            for (int i = 0; i < axis.Length; i++)
+                axis[i] = lo + (hi - lo) * i / (axis.Length - 1);
 
             Console.WriteLine();
-            Console.WriteLine("  自分 / 相手     15    25    35    45");
-            foreach (int mine in new[] { 15, 25, 35, 45 })
+            Console.WriteLine("  命中 / 抵抗  " + string.Join("  ", Array.ConvertAll(axis, v => $"{v,5}")));
+            foreach (int mine in axis)
             {
                 var row = new List<string>();
-                foreach (int yours in new[] { 15, 25, 35, 45 })
+                foreach (int yours in axis)
                 {
-                    double ratio = (double)(mine - yours) / (mine + yours);
-                    int moved = (int)Math.Floor(ratio * Battle.LandSwing + 0.5);
-                    row.Add($"{moved,+4}");
+                    row.Add($"{(mine - yours) / Battle.LandStatDivisor,+5}");
                 }
-                Console.WriteLine($"  {mine,6}     " + string.Join("  ", row));
+                Console.WriteLine($"  {mine,10}   " + string.Join("  ", row));
             }
-            Console.WriteLine("  ⭐ 表の数字が『素の率に足される %ポイント』");
+            Console.WriteLine($"  ⭐ 表の数字が『素の率に足される %ポイント』（属性 ±{Battle.LandElementSwing} が別に乗る）");
+            Console.WriteLine($"  ⚠️ 床 {Battle.LandFloor}% / 天井 {Battle.LandCeil}%");
 
             Console.WriteLine();
             Console.WriteLine("■ 強化が実時間でどれだけ保つか（3行動ぶんの強化）");
-            Console.WriteLine("  ⚠️ 持続は『その個体の行動回数』なので、速い個体ほど早く切れる");
-            foreach (int spd in new[] { 15, 25, 35, 45 })
+            Console.WriteLine("  ⭐ 速度を弱化の式から外したので、ここは『速さの取引』としてだけ残る");
+            // ⭐ 速度の目盛りも実測の帯から引く（同じ理由）
+            int slow = speeds[0];
+            int fast = speeds[speeds.Count - 1];
+            var spdAxis = new int[4];
+            for (int i = 0; i < spdAxis.Length; i++)
+                spdAxis[i] = slow + (fast - slow) * i / (spdAxis.Length - 1);
+            foreach (int spd in spdAxis)
             {
                 int rate = Battle.GaugeRate(spd);
-                double perAction = (double)Battle.GaugeMax / rate;   // 1行動に要する刻み
-                Console.WriteLine($"  速度 {spd,2}: 1行動 {perAction,5:0.0} 刻み → 3行動 {perAction*3,5:0.0} 刻み");
+                double perAction = (double)Battle.GaugeMax / rate;
+                Console.WriteLine($"  速度 {spd,4}: 1行動 {perAction,5:0.0} 刻み → 3行動 {perAction*3,5:0.0} 刻み");
             }
-            Console.WriteLine("  ⭐ 速い個体は同じ『3行動』でも実時間が短い＝強化の覆う時間が短い");
         }
 
         /// <summary>盤を1枚作るのに何ミリ秒かかるか。⚠️ 画面に入るたび走るなら、ここが体感になる。</summary>
@@ -829,11 +920,24 @@ namespace EggCommand.Sim
             public readonly string Name;
             private readonly StatBlock[] _wild;
 
+            /// <summary>⭐ 段ごとに組み直す編成（参照編成）を渡すとき用。null なら固定の型。</summary>
+            private readonly Func<int, List<Creature>>? _byTier;
+
             public PartyShape(string name, params StatBlock[] wild)
             {
                 Name = name;
                 _wild = wild;
             }
+
+            public PartyShape(string name, Func<int, List<Creature>> byTier)
+            {
+                Name = name;
+                _wild = new StatBlock[0];
+                _byTier = byTier;
+            }
+
+            public List<Creature> Party(int tier) =>
+                _byTier != null ? _byTier(tier < 1 ? 1 : tier) : Party();
 
             /// <summary>⚠️ 種族は揃える。種族基礎が混ざると、測っているのが型か種族か分からなくなる。</summary>
             public List<Creature> Party()
@@ -848,6 +952,697 @@ namespace EggCommand.Sim
             }
         }
 
+        /// <summary>⭐ 参照編成を先頭に足す。⚠️ 盤は参照編成で解けることを検査してから出荷される。
+        /// ここが × なら「解けるはずの盤が解けない」＝生成のバグ。</summary>
+        private static PartyShape[] Prepend(PartyShape[] shapes)
+        {
+            var list = new List<PartyShape>
+            {
+                new PartyShape("参照編成（生成の検査に使う相手）", Steal.ReferenceParty),
+            };
+            list.AddRange(shapes);
+            return list.ToArray();
+        }
+
+        /// <summary>得意・不得意が**素質の配りと独立して**引かれているかを数える。
+        ///
+        /// ⚠️ 種族や素質に引きずられていると、「素質は理想なのに得意が真逆」という
+        /// 当たり外れが起きなくなる（＝厳選する理由が1つ減る）。
+        /// ⭐ 独立なら、得意が一番高い素質に乗る率は **1/6 ≒ 16.7%** に落ち着く。</summary>
+        /// <summary>ステ1点が勝率を何 pt 動かすか。**「どのステが強いか」ではなく「1点の価値」。**
+        ///
+        /// ⭐ 特性のときと同じ測り方 — 両側にまったく同じ編成を組み、片側の1ステだけを足す。
+        /// 出る差はそのステのぶんだけになる。
+        ///
+        /// ⚠️ **式から手で出した効き目は当てにならない。**
+        /// 弱化命中・弱化耐性は通る率に **%ポイントで足す**、攻撃・防御は **比で効く**、
+        /// HP は最大HPに **3倍で乗る**。単位が違うものは、勝率という1つの物差しでしか比べられない。
+        ///
+        /// ⚠️ 1点あたりが揃っていないほど、育成の +1 の意味がステで食い違っている。</summary>
+        private static void StatValue(int seed, int bumpOverride, int levelsOverride)
+        {
+            // ⚠️ 特性（400回）と同じ数を取る。数 pt しか動かないステがあり、
+            //    少ないと種を変えるだけで符号が変わる。
+            const int Samples = 400;
+            // ⭐ 育成の上限（20）の半分。⚠️ 1点だけ足しても勝率の揺れに埋もれて測れない。
+            int Bump = bumpOverride > 0 ? bumpOverride : 10;
+            // ⭐ 育成の上限の半分。⚠️ 1レベルだけでは勝率の揺れに埋もれる
+            int Levels = levelsOverride > 0 ? levelsOverride : 10;
+
+            int total = Stats.WildTotalMax;
+            int high = total * 3 / 8;
+            int low = total / 8;
+            var full = new[]
+            {
+                new Role("攻撃役", new StatBlock(low, high, low, high), "attack-heavy", "attack-twice"),
+                new Role("壁役", new StatBlock(high, low, high, low), "bulwark", "harden"),
+                new Role("弱化役", new StatBlock(high, low, low, high), "curse", "slow-all"),
+            };
+
+            Console.WriteLine();
+            Console.WriteLine($"■ ステ1点の価値（各{Samples}回・片側の3体だけ +{Bump}）");
+            Console.WriteLine("  ⭐ 両側は同じ組み合わせ。足したステのぶんだけが差になる");
+            Console.WriteLine();
+
+            double basePct = BumpedWinRate(seed, full, null, 0, Samples);
+            Console.WriteLine($"  足さない（基準）        {basePct,5:0.0}%");
+            Console.WriteLine();
+
+            foreach (var key in Stats.Keys)
+            {
+                double pct = BumpedWinRate(seed, full, key, Bump, Samples);
+                double gain = pct - basePct;
+                Console.WriteLine($"  {Stats.LabelOf(key),-8} +{Bump}   {pct,5:0.0}%"
+                    + $"   基準から {gain,5:0.0}pt   1点あたり {gain / Bump,5:0.00}pt");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("  ⚠️ 1点あたりが揃っていないほど、育成の +1 の意味がステで食い違っている");
+
+            // ⭐ **こちらが本番の物差し。**遊びで配られるのは「1点」ではなく「1レベル」で、
+            //    1レベルの伸びはステごとに違う（素質 × 割合）。揃っているべきはこちら。
+            Console.WriteLine();
+            Console.WriteLine($"■ 1レベルぶんの価値（各{Samples}回・片側の3体だけ {Levels}レベル）");
+            Console.WriteLine();
+            foreach (var key in Stats.Keys)
+            {
+                double pct = LeveledWinRate(seed, full, key, Levels, Samples);
+                double gain = pct - basePct;
+                string how = Creatures.GrowthPermilOf(key) > 0
+                    ? $"素質の{Creatures.GrowthPermilOf(key) / 10.0,4:0.0}%"
+                    : $"平らに ＋{Creatures.GrowthFlatOf(key)}   ";
+                Console.WriteLine($"  {Stats.LabelOf(key),-8} {how}"
+                    + $"   {pct,5:0.0}%   基準から {gain,5:0.0}pt   1レベル {gain / Levels,5:0.00}pt");
+            }
+            Console.WriteLine();
+            Console.WriteLine("  ⚠️ ここが揃っていないと、レベルを上げたときの手応えがステで食い違う");
+        }
+
+        /// <summary>片側の1ステだけを「N レベルぶん」伸ばしたときの勝率。
+        /// ⭐ 伸ばし方は本番と同じ <see cref="Creatures.TrainedFor"/> を通す。</summary>
+        private static double LeveledWinRate(int seed, Role[] roles, StatKey key, int levels, int samples)
+        {
+            int won = 0;
+            for (int i = 0; i < samples; i++)
+            {
+                var rng = new Rng(seed + i).Stream("statvalue");
+                var land = new Rng(seed + i).Stream("land-statvalue");
+                int serial = 0;
+                var mine = Leveled(Shaped(rng, roles, ref serial), key, levels);
+                var theirs = Shaped(rng, roles, ref serial);
+                if (Run(mine, theirs, land).Result == Outcome.Ally) won++;
+            }
+            return samples == 0 ? 0.0 : 100.0 * won / samples;
+        }
+
+        /// <summary>1つのステだけを N レベルぶん伸ばした編成。</summary>
+        private static List<Creature> Leveled(List<Creature> party, StatKey key, int levels)
+        {
+            var made = new List<Creature>();
+            foreach (var c in party)
+            {
+                int grown = Creatures.TrainedFor(c.SpeciesId, c.Wild, levels)[key];
+                made.Add(Rebuilt(c, c.Trained.With(key, c.Trained[key] + grown)));
+            }
+            return made;
+        }
+
+        /// <summary>片側の1ステだけを足したときの勝率。
+        /// ⚠️ 種と tag を足す前後で必ず同じにする（違う列を引くと編成の差を測ってしまう）。</summary>
+        private static double BumpedWinRate(int seed, Role[] roles, StatKey? key, int amount, int samples)
+        {
+            int won = 0;
+            for (int i = 0; i < samples; i++)
+            {
+                var rng = new Rng(seed + i).Stream("statvalue");
+                var land = new Rng(seed + i).Stream("land-statvalue");
+                int serial = 0;
+                var mine = Shaped(rng, roles, ref serial);
+                var theirs = Shaped(rng, roles, ref serial);
+                if (key.HasValue) mine = Boosted(mine, key.Value, amount);
+                if (Run(mine, theirs, land).Result == Outcome.Ally) won++;
+            }
+            return samples == 0 ? 0.0 : 100.0 * won / samples;
+        }
+
+        /// <summary>1つのステだけを足した編成。
+        /// ⭐ 育てた分に足すので、実値の作り方（得意・不得意の ±15% 込み）は本番と同じ。</summary>
+        private static List<Creature> Boosted(List<Creature> party, StatKey key, int amount)
+        {
+            var made = new List<Creature>();
+            foreach (var c in party) made.Add(Rebuilt(c, c.Trained.With(key, c.Trained[key] + amount)));
+            return made;
+        }
+
+        /// <summary>育てた分だけ差し替えた同じ個体。⚠️ 欄は書き換えず作り直す。</summary>
+        private static Creature Rebuilt(Creature c, StatBlock trained) => new Creature(
+            c.Id, c.SpeciesId, c.Wild, trained, c.Earned,
+            c.MutationCounter, c.Skill2, c.Skill3, c.PaletteIndex,
+            c.ParentA, c.ParentB, c.Generation, c.Strong, c.Weak,
+            c.Element, c.TraitId);
+
+        /// <summary>技1つの効き目。⭐ **特性と同じ物差し（勝率の差）で並べる。**
+        ///
+        /// ⚠️ `sim skills` は「AI がどれだけ選ぶか（採用率）」で、**強さではない**。
+        /// よく選ばれる技が強いとは限らないし、選ばれない技が弱いとも限らない
+        /// （AI の採点が古いだけ、ということが実際にあった ── 2026-08-19 の23技）。
+        ///
+        /// ⭐ 測り方は特性と同じ: まったく同じ編成を2つ並べ、**片側の枠2だけ**を差し替える。
+        /// 相手の枠2は基準の技（<see cref="SkillValueControl"/>）のまま。
+        /// つまり出る数は **「その枠に基準の技を入れる代わりにこれを入れたら何 pt 動くか」**。
+        ///
+        /// ⚠️ **場面を選ぶ技は低く出る**（蘇生は味方が倒れていないと働かない、
+        /// 挑発は殴られないと働かない）。低い＝弱いではなく、**この測り方では出ない**だけ。
+        /// ⭐ それでも並べる価値はある ── 「どの技も同じくらい」が理想なので、
+        /// 突出しているものと沈んでいるものが見える。</summary>
+        private static void SkillValue(int seed)
+        {
+            const int Samples = 400;
+            const int Tier = 5;
+
+            Console.WriteLine();
+            Console.WriteLine($"■ 技1つの効き目（段階{Tier}・各{Samples}回・属性は両側そろえる）");
+            Console.WriteLine($"  枠3 を「{Skills.ById(SkillValueControl).Name}」から差し替えたときの勝率の伸び");
+            Console.WriteLine($"  ⚠️ 枠1＝種族の通常攻撃 / 枠2＝{Skills.ById(SkillValueFiller).Name}（両側そろえて固定）");
+            Console.WriteLine("  ⭐ pt ＝ 勝率の**差**。⚠️ 誤差は ±2.5pt 程度");
+            Console.WriteLine("  ⚠️ 場面を選ぶ技（蘇生・挑発など）は、この測り方では低く出る");
+            Console.WriteLine();
+
+            double baseAll = SkillWinRate(seed, "skillvalue",
+                SkillValueControl, SkillValueControl, Samples, Tier, false);
+            double baseOne = SkillWinRate(seed, "skillvalue-one",
+                SkillValueControl, SkillValueControl, Samples, Tier, true);
+            Console.WriteLine($"  基準どうし   3体とも {baseAll,5:0.0}%   1体だけ {baseOne,5:0.0}%");
+            Console.WriteLine();
+            Console.WriteLine($"  {"技",-14}  {"3体とも",8}  {"1体だけ",8}");
+
+            var rows = new List<Row>();
+            foreach (var skill in Skills.All)
+            {
+                if (skill.Id == SkillValueControl) continue;
+                rows.Add(new Row
+                {
+                    Name = skill.Name,
+                    All = SkillWinRate(seed, "skillvalue", skill.Id, SkillValueControl,
+                        Samples, Tier, false) - baseAll,
+                    One = SkillWinRate(seed, "skillvalue-one", skill.Id, SkillValueControl,
+                        Samples, Tier, true) - baseOne,
+                });
+            }
+            rows.Sort((a, b) => b.One.CompareTo(a.One));
+
+            foreach (var row in rows)
+            {
+                Console.WriteLine($"  {row.Name,-14}  {row.All,6:0.0}pt  {row.One,6:0.0}pt");
+            }
+            Console.WriteLine();
+            Console.WriteLine("  ⚠️ **1体だけの列を信じる。**3体とも持たせると、重ねて効く技（全体攻撃・");
+            Console.WriteLine("     回復）が3倍になり、重ならない技（強化・挑発）が余る ── 技の差ではなく");
+            Console.WriteLine("     「重ねられるか」を測ってしまう。⭐ 並びは1体だけの列の順");
+        }
+
+        /// <summary>差し替えの基準にする技。⭐ 一番あたりまえの一撃。
+        /// ⚠️ ここを強い技にすると全部が負の数で並び、読みにくくなる。</summary>
+        private const string SkillValueControl = "attack";
+
+        /// <summary>枠2 を埋める技。⭐ どの編成も持っている「もう1発の攻撃」。
+        /// ⚠️ ここを空にすると、測っているのが技の強さではなく「攻撃の数」になる。</summary>
+        private const string SkillValueFiller = "attack-heavy";
+
+        /// <summary>片側の枠2 だけを差し替えたときの勝率。
+        /// ⚠️ 種と tag を差し替えの前後で必ず同じにする（違う列を引くと編成の差を測ってしまう）。</summary>
+        private sealed class Row
+        {
+            public string Name = string.Empty;
+            public double All;
+            public double One;
+        }
+
+        /// <param name="onlyFirst">⭐ true なら**先頭の1体だけ**が差し替わる。
+        /// ⚠️ 3体とも差し替えると、重ねて効く技だけが不当に高く出る。</param>
+        private static double SkillWinRate(int seed, string tag, string mine, string theirs,
+            int samples, int tier, bool onlyFirst)
+        {
+            int won = 0;
+            for (int i = 0; i < samples; i++)
+            {
+                var rng = new Rng(seed + i).Stream(tag);
+                var land = new Rng(seed + i).Stream($"land-{tag}");
+                int serial = 0;
+                // ⚠️ **枠2 は両側とも本物の攻撃で埋める。**空にしていたとき、
+                //    支援・弱化の技が軒並み −15pt 前後で並んだ ── あれは技の弱さではなく
+                //    「攻撃が1つ減る」ことの重さを測っていた（枠1 と合わせて手が2つしか無い編成）。
+                //    ⭐ 埋めておけば「3つ目の枠に、もう1発の攻撃か・それ以外か」という
+                //    実際の選択と同じ形になる。
+                var fight = Run(
+                    SkillParty(rng, mine, onlyFirst, tier, ref serial),
+                    SkillParty(rng, theirs, onlyFirst, tier, ref serial),
+                    land);
+                if (fight.Result == Outcome.Ally) won++;
+            }
+            return samples == 0 ? 0.0 : 100.0 * won / samples;
+        }
+
+        /// <summary>枠3 だけを差し替えた編成。⚠️ 枠2 は両側とも <see cref="SkillValueFiller"/>。</summary>
+        private static List<Creature> SkillParty(Rng rng, string slot3, bool onlyFirst,
+            int tier, ref int serial)
+        {
+            var party = new List<Creature>();
+            var ids = new List<string>();
+            foreach (var sp in SpeciesTable.All) ids.Add(sp.Id);
+
+            for (int i = 0; i < Games.PartySize; i++)
+            {
+                string speciesId = ids[rng.Int(0, ids.Count)];
+                var born = Born(rng, speciesId, tier, ref serial, Element.Fire);
+                // ⭐ 1体だけの回では、2体目以降は基準の技のまま
+                string mine = !onlyFirst || i == 0 ? slot3 : SkillValueControl;
+                party.Add(new Creature(
+                    born.Id, born.SpeciesId, born.Wild, born.Trained, born.Earned,
+                    born.MutationCounter, SkillValueFiller, mine, born.PaletteIndex,
+                    born.ParentA, born.ParentB, born.Generation, born.Strong, born.Weak,
+                    born.Element, null));
+            }
+            return party;
+        }
+
+        // ══ 1手あたりの価値（算数）═══════════════════════════
+        //
+        // ⭐ **AI もサイコロも通さない。**（作者の判断 2026-08-19）
+        // ⚠️ AI を通す測り方（sim skillvalue / traits / species）は、AI の腕を測ってしまう。
+        //    実際 2026-08-19 に AI の採点定数が古く、**23技を一度も選ばなかった**ことが判明した。
+        //    あのとき その23技は「弱い」と測れていた ── 順位付けには使えない。
+        // ⭐ ここは式だけで出すので、AI が賢くなっても愚かでも同じ数が出る。
+        //
+        // ⚠️ **勘で置いた見積もりには「見積」と印を付ける。**
+        //    文脈で価値が変わるもの（挑発・ガッツ・蘇生）は算数にならない。
+
+        /// <summary>挑発1回ぶんの見積もり。⚠️ 狙いを1回ずらす価値。🚧 未測定。</summary>
+        private const double GuessTauntPerHit = 0.3;
+
+        /// <summary>ガッツが致命傷を耐えたときの見積もり。⭐ およそ一撃ぶん。🚧 未測定。</summary>
+        private const double GuessGuts = 1.0;
+
+        /// <summary>免疫・ブロック1ターンぶんの見積もり。
+        /// ⚠️ 相手が弱化を撃ってこなければ 0。🚧 未測定。</summary>
+        private const double GuessWardPerTurn = 0.3;
+
+        /// <summary>CT を1縮める／延ばす見積もり。
+        /// ⭐ 枠2・3 が選ばれるのは全手番の 31%（`sim pace` 実測）なので、そのぶんだけ効く。</summary>
+        private const double GuessCtPerStep = 0.31;
+
+        /// <summary>蘇生で戻った個体が、その後動ける回数の見積もり。🚧 未測定。</summary>
+        private const double GuessReviveTurns = 3.0;
+
+        /// <summary>強化1つを消したときの見積もり。⭐ 相手が撒くのに使った1手ぶん。</summary>
+        private const double GuessBuffWorth = 0.9;
+
+        /// <summary>**後で効くものの割引**（毒・リジェネ・強化・弱化）。
+        ///
+        /// ⚠️ 表に書いてある持続を、そのまま足してはいけない。`sim delivered` の実測（2026-08-19）:
+        /// ・毒の持続は**4ターン**だが、実際に削れたのは**平均 2.1回**
+        ///   （残り 1,389ターンぶんが捨てられ、うち 580体は毒が乗ったまま倒れた）
+        /// ・量では一撃の **1.13倍** 入っているのに、勝率では **±0**
+        ///
+        /// ⭐ 理由は2つ:
+        /// 1. **使い切る前に決着する**（相手が先に倒れる／戦闘が終わる）
+        /// 2. **直接ダメージは相手の手番を奪うが、後から効くものは奪わない** ──
+        ///    同じ総量でも、遅れて入るぶん相手が動く回数が増える
+        ///
+        /// 🚧 **毒1件からの見積もり。**強化・弱化にも同じ係数を当てているが、測っていない。</summary>
+        private const double LateDiscount = 0.7;
+
+        private sealed class TurnRow
+        {
+            public string Name = string.Empty;
+            public double Value;
+            public bool Guessed;
+            public string Why = string.Empty;
+            public int Ct;
+        }
+
+        /// <summary>1手を使って何手ぶんを生むか。⭐ 基準は「枠1 の一撃 ＝ 1.0」。</summary>
+        private static void TurnValue()
+        {
+            var mid = MiddleUnit();
+            int atk = mid.Atk, def = mid.Def;
+            int maxHp = mid.Hp * Battle.HpScale;
+            int one = Battle.DamageOf(Skills.DamagePowerOf(PowerTier.Medium), atk, def, 1.0);
+
+            Console.WriteLine();
+            Console.WriteLine("■ 1手で何手ぶんを生むか（算数・AI を通さない）");
+            Console.WriteLine($"  代表の個体: HP {mid.Hp}（最大HP {maxHp:N0}）/ 攻撃 {atk} / 防御 {def}");
+            Console.WriteLine($"  基準: 枠1 の一撃 ＝ {one:N0} ダメージ ＝ 最大HP の {100.0 * one / maxHp:0.0}% ＝ **1.0手ぶん**");
+            Console.WriteLine();
+            Console.WriteLine("  ⭐ 1.0 を超えれば「枠1 で殴るより得」、下回れば「殴ったほうが得」");
+            Console.WriteLine("  ⚠️ 「見積」印は文脈で変わるもの ── 算数ではなく勘です");
+            Console.WriteLine($"  ⚠️ 後で効くもの（毒・回復・強化・弱化）は ×{LateDiscount} 割り引いています");
+            Console.WriteLine("     ── 使い切る前に決着し、相手の手番も奪えないため（`sim delivered` 実測）");
+            Console.WriteLine();
+
+            // ⚠️ **一覧も TurnValueOf を通す。**別々に足していた頃、
+            //    味方全体の掛け算がこちらだけ抜けていた（2026-08-19 の監査）。
+            var rows = new List<TurnRow>();
+            foreach (var skill in Skills.All)
+            {
+                double total = TurnValueOf(skill, out string why);
+                rows.Add(new TurnRow
+                {
+                    Name = skill.Name,
+                    Value = total,
+                    Guessed = why.StartsWith("見積"),
+                    Why = why.StartsWith("見積 ") ? why.Substring(3) : why,
+                    Ct = skill.Ct,
+                });
+            }
+            rows.Sort((a, b) => b.Value.CompareTo(a.Value));
+
+            Console.WriteLine($"  {"技",-14}{"手ぶん",8}{"CT",4}  内訳");
+            foreach (var r in rows)
+            {
+                string mark = r.Guessed ? "見積" : "    ";
+                Console.WriteLine($"  {r.Name,-14}{r.Value,8:0.00}{r.Ct,4}  {mark} {r.Why}");
+            }
+            Console.WriteLine();
+            Console.WriteLine("  ⚠️ CT は「1戦闘に何回撃てるか」を決めるだけで、1回ぶんの価値には効きません");
+            Console.WriteLine($"  ⭐ 1体が動けるのはおよそ 5.6手（`sim pace`）。CT5 なら1戦闘に1回");
+        }
+
+        /// <summary>代表の個体。⭐ **種族の基礎値の平均 ＋ 野生を均等に配ったぶん**（育成なし）。
+        /// ⚠️ ここを1つに保たないと、`turnvalue` と帳面の検査が別の相手を測ることになる。</summary>
+        private static StatBlock MiddleUnit()
+        {
+            var baseSum = new int[Stats.Keys.Length];
+            int count = 0;
+            foreach (var sp in SpeciesTable.All)
+            {
+                if (sp.Id == Encounters.BossSpeciesId) continue;
+                for (int i = 0; i < Stats.Keys.Length; i++) baseSum[i] += sp.Base[Stats.Keys[i]];
+                count++;
+            }
+            int wildEach = Stats.WildTotalMax / Stats.Keys.Length;
+            var mid = new StatBlock(0, 0, 0, 0);
+            for (int i = 0; i < Stats.Keys.Length; i++)
+                mid = mid.With(Stats.Keys[i], baseSum[i] / count + wildEach * Stats.Scale);
+            return mid;
+        }
+
+        /// <summary>技1つの手ぶん。⭐ **帳面の検査から呼ぶ入口。**
+        /// ⚠️ 表に載っていない技（まだ実装していないもの）も測れる。</summary>
+        public static double TurnValueOf(Skill skill, out string why)
+        {
+            var mid = MiddleUnit();
+            int atk = mid.Atk, def = mid.Def;
+            int maxHp = mid.Hp * Battle.HpScale;
+            int one = Battle.DamageOf(Skills.DamagePowerOf(PowerTier.Medium), atk, def, 1.0);
+
+            double total = 0;
+            bool guessed = false;
+            var reasons = new List<string>();
+            foreach (var e in skill.Effects)
+                total += ValueOf(e, skill, mid, maxHp, one, ref guessed, reasons) * e.Chance / 100.0;
+            // ⚠️ **味方全体も対象数ぶん。**敵全体だけ掛けていたので、
+            //    全体回復が単体回復と同じ値で並んでいた（2026-08-19・帳面を広げたときに発覚）。
+            // ⭐ ダメージは ValueOf の中で自分で数えているので、ここでは掛けない。
+            if (!HasDamage(skill)
+                && (skill.Target == Target.EnemyAll || skill.Target == Target.AllyAll))
+            {
+                total *= Games.PartySize;
+            }
+
+            why = (guessed ? "見積 " : "") + string.Join(" ＋ ", reasons);
+            return total;
+        }
+
+        private static bool HasDamage(Skill skill)
+        {
+            foreach (var e in skill.Effects)
+            {
+                if (e.Kind == EffectKind.Damage) return true;
+            }
+            return false;
+        }
+
+        /// <summary>効果1つの手ぶん。⚠️ 確率は呼び側で掛ける。</summary>
+        private static double ValueOf(Effect e, Skill skill, StatBlock mid, int maxHp, int one,
+            ref bool guessed, List<string> why)
+        {
+            int atk = mid.Atk, def = mid.Def;
+            switch (e.Kind)
+            {
+                case EffectKind.Damage:
+                {
+                    // ⚠️ **`== Atk ? atk : def` と書かない。**スピード依存を足した日に、
+                    //    Spd が黙って**防御**で測られていた（2026-08-19 の監査）。
+                    //    ⭐ 選び方は Core の1か所（Battle.AttackStatOf）に寄せる。
+                    int stat = Battle.AttackStatOf(mid, new UnitStatus(), e.Scale);
+                    int hit = Battle.DamageOf(Skills.DamagePowerOf(e.Power), stat,
+                        e.Pierce ? 0 : def, 1.0);
+                    // ⚠️ ランダムな1体は「1体」。全体と同じに数えない
+                    int targets = skill.Target == Target.EnemyAll ? Games.PartySize : 1;
+                    double v = (double)hit * e.Repeat * targets / one;
+                    why.Add($"ダメージ {hit:N0}×{e.Repeat}×{targets}体");
+                    return v;
+                }
+                case EffectKind.HealRatio:
+                    // ⚠️ **満タンに近い相手へ撃つと、はみ出したぶんは捨てられる。**
+                    //    ここは「削られた相手に撃った」ときの上限値なので、実戦では下がる
+                    why.Add($"回復 最大HPの{e.Percent}%（削られた相手に撃ったとき）");
+                    return (double)maxHp * e.Percent / 100.0 / one;
+
+                case EffectKind.Poison:
+                case EffectKind.Regen:
+                {
+                    double amount = (double)maxHp * Skills.TickPercent / 100.0 * e.Stacks * e.Turns;
+                    why.Add($"{(e.Kind == EffectKind.Poison ? "毒" : "回復")} "
+                        + $"最大HPの{Skills.TickPercent * e.Stacks * e.Turns}%（後で効くので割引）");
+                    return amount / one * LateDiscount;
+                }
+                case EffectKind.Shield:
+                    why.Add($"盾{e.Count}枚＝相手の{e.Count}発を消す");
+                    return e.Count;
+
+                case EffectKind.Stun:
+                    why.Add($"相手の{e.Turns}手を消す");
+                    return e.Turns;
+
+                case EffectKind.Sleep:
+                    why.Add($"相手の{e.Turns}手を消す（殴ると解ける→半分）");
+                    return e.Turns * 0.5;
+
+                case EffectKind.Buff:
+                {
+                    double pct = Skills.BuffPercent / 100.0;
+                    if (e.Stat == StatKey.Def)
+                    {
+                        // ⭐ 防御は被ダメの増減。⚠️ 攻撃・速度と違って**線形ではない**
+                        //    （軟化定数 550 が防御そのものより大きいので、±30% がほとんど動かない）
+                        // ⚠️ 上げると下げるで式が違う。同じ式で並べて **どちらも 0.22** になっていた（道具の不備）
+                        double now = (double)Battle.DefSoften / (Battle.DefSoften + def);
+                        double moved = (double)Battle.DefSoften
+                            / (Battle.DefSoften + def * (1 + pct * e.Sign));
+                        double gap = Math.Abs(1 - moved / now);
+                        why.Add(e.Sign > 0
+                            ? $"被ダメ −{gap * 100:0}% × {e.Turns}ターン（後で効くので割引）"
+                            : $"与ダメ +{gap * 100:0}% × {e.Turns}ターン（後で効くので割引）");
+                        return gap * e.Turns * LateDiscount;
+                    }
+                    why.Add($"{Stats.LabelOf(e.Stat)} {(e.Sign > 0 ? "+" : "−")}{Skills.BuffPercent}%"
+                        + $" × {e.Turns}ターン（後で効くので割引）");
+                    return pct * e.Turns * LateDiscount;
+                }
+                case EffectKind.Gauge:
+                    // ⚠️ 減らす側は Percent が負。そのまま返して **−0.26 で並んでいた**（道具の不備）。
+                    //    ⭐ 相手のゲージを減らすのも「相手の手番を削る」ぶんの価値がある
+                    why.Add($"ゲージ {e.Percent:+0;-0}%");
+                    return Math.Abs(e.Percent) / 100.0;
+
+                case EffectKind.Ct:
+                    guessed = true;
+                    why.Add($"CT {e.Delta:+0;-0}");
+                    return Math.Abs(e.Delta) * GuessCtPerStep;
+
+                case EffectKind.Taunt:
+                    // ⚠️ 挑発は Hits に入っている。Count を読んで **0.00 で並んでいた**（道具の不備）
+                    guessed = true;
+                    why.Add($"狙いを{e.Hits}回ずらす");
+                    return e.Hits * GuessTauntPerHit;
+
+                case EffectKind.Guts:
+                    guessed = true;
+                    why.Add("致命傷を1回耐える");
+                    return GuessGuts;
+
+                case EffectKind.Immune:
+                case EffectKind.Block:
+                    guessed = true;
+                    why.Add($"相手の弱化を{e.Turns}ターン無駄にする");
+                    return e.Turns * GuessWardPerTurn;
+
+                case EffectKind.Dispel:
+                    guessed = true;
+                    why.Add($"強化を{e.Count}つ消す");
+                    return e.Count * GuessBuffWorth;
+
+                case EffectKind.Steal:
+                    guessed = true;
+                    why.Add($"強化を{e.Count}つ奪う（消す＋得る）");
+                    return e.Count * GuessBuffWorth * 2;
+
+                case EffectKind.Revive:
+                    guessed = true;
+                    why.Add($"HP{e.Percent}%で復帰");
+                    return GuessReviveTurns;
+
+                default:
+                    guessed = true;
+                    why.Add(e.Kind.ToString());
+                    return 0;
+            }
+        }
+
+        /// <summary>算数の見積もりが、実戦で本当に入っているか。
+        ///
+        /// ⭐ **算数とシミュレーションが食い違ったところを掘る道具**（2026-08-19）。
+        /// 毒は算数で 1.44手ぶん（枠1 の1.4倍）なのに、勝率で測ると −0.1pt だった。
+        /// ⚠️ どちらが嘘かではなく、**間に何が挟まっているか**を見る。</summary>
+        private static void Delivered(int seed)
+        {
+            const int Battles = 200;
+            const int Tier = 5;
+
+            var ids = new List<string>();
+            foreach (var sp in SpeciesTable.All) ids.Add(sp.Id);
+
+            int cast = 0, ticks = 0, poisonSum = 0, hitSum = 0, hits = 0;
+            int diedWithPoison = 0, poisonLeft = 0;
+
+            for (int i = 0; i < Battles; i++)
+            {
+                var rng = new Rng(seed + i).Stream("delivered");
+                var land = new Rng(seed + i).Stream("land-delivered");
+                int serial = 0;
+                // ⭐ 両側に毒を持たせる（片側だけだと勝ち負けの偏りが混ざる）
+                var state = Battle.CreateBattle(
+                    TraitParty(rng, "poison", null, null, Tier, ref serial),
+                    TraitParty(rng, "poison", null, null, Tier, ref serial),
+                    land);
+
+                int read = 0;
+                while (state.Result == null && state.Actions < Battle.MaxActions)
+                {
+                    var actor = Battle.NextActor(state);
+                    if (actor == null) break;
+                    Battle.PerformAction(state, actor, Ai.ChooseAction(state, actor));
+
+                    for (; read < state.Log.Count; read++)
+                    {
+                        var e = state.Log[read];
+                        if (e.Kind == BattleEventKind.Applied && e.Label != null
+                            && e.Label.StartsWith("毒")) cast++;
+                        else if (e.Kind == BattleEventKind.Poison) { ticks++; poisonSum += e.Amount; }
+                        else if (e.Kind == BattleEventKind.Damage) { hits++; hitSum += e.Amount; }
+                    }
+                }
+
+                // ⚠️ 終わった時点で毒が残っている ＝ **捨てられたぶん**
+                foreach (var unit in state.Units)
+                {
+                    if (unit.Status.Poison.Turns <= 0) continue;
+                    poisonLeft += unit.Status.Poison.Turns;
+                    if (!Battle.IsAlive(unit)) diedWithPoison++;
+                }
+            }
+
+            Console.WriteLine();
+            Console.WriteLine($"■ 毒が実戦でどれだけ入っているか（{Battles}戦・両側が毒持ち）");
+            Console.WriteLine();
+            Console.WriteLine($"  毒を撃った回数        {cast,8}");
+            Console.WriteLine($"  実際に削れた回数      {ticks,8}   （1回撃つと平均 {(cast == 0 ? 0 : (double)ticks / cast),4:0.0} 回）");
+            Console.WriteLine($"  ⚠️ 表の持続は4ターン ── ここが4より小さければ**使い切れていない**");
+            Console.WriteLine();
+            Console.WriteLine($"  毒で入った合計        {poisonSum,8:N0}");
+            Console.WriteLine($"  直接の一撃 平均       {(hits == 0 ? 0 : hitSum / hits),8:N0}   （{hits} 発）");
+            double perCast = cast == 0 ? 0 : (double)poisonSum / cast;
+            double one = hits == 0 ? 1 : (double)hitSum / hits;
+            Console.WriteLine($"  1回の毒で入った量     {perCast,8:N0}   ＝ 一撃の {perCast / one,4:0.00} 倍");
+            Console.WriteLine();
+            Console.WriteLine($"  ⚠️ 使い切る前に終わった毒（残ターンの合計） {poisonLeft}");
+            Console.WriteLine($"     うち相手が倒れて消えたもの               {diedWithPoison} 体ぶん");
+            Console.WriteLine();
+            Console.WriteLine("  ⭐ 算数の見積もりは 1.44倍（最大HPの20% ÷ 一撃）。");
+            Console.WriteLine("     実測がこれを大きく下回るなら、**持続を使い切れていない**のが原因。");
+        }
+
+        private static void SlantProbe(int seed)
+        {
+            const int Samples = 4000;
+            var rng = new Rng(seed).Stream("slantprobe");
+            int n = Stats.Keys.Length;
+
+            var strongCount = new int[n];
+            var weakCount = new int[n];
+            int strongOnTop = 0, weakOnTop = 0, strongOnBottom = 0;
+            // 種族ごとの「得意がどのステに乗ったか」。⚠️ 種族で偏るならここに出る
+            var perSpecies = new Dictionary<string, int[]>();
+            foreach (var species in SpeciesTable.All) perSpecies[species.Id] = new int[n];
+
+            for (int i = 0; i < Samples; i++)
+            {
+                // ⭐ 出荷の経路を通す（MakeEgg → Hatch）。組み立て直すと偏りが測定から消える
+                var nest = Nests.All[rng.Int(0, Nests.All.Length)];
+                var egg = Nests.MakeEgg(rng, nest, EggOrigin.Stolen, i + 1);
+                StatKey strong, weak;
+                Nests.RollSlant(rng, out strong, out weak);
+                var creature = Nests.Hatch(rng, egg, $"p{i}", strong, weak, null);
+
+                strongCount[(int)strong]++;
+                weakCount[(int)weak]++;
+                perSpecies[creature.SpeciesId][(int)strong]++;
+
+                // 一番高い素質・一番低い素質
+                var top = Stats.Keys[0];
+                var bottom = Stats.Keys[0];
+                foreach (var key in Stats.Keys)
+                {
+                    if (creature.Wild[key] > creature.Wild[top]) top = key;
+                    if (creature.Wild[key] < creature.Wild[bottom]) bottom = key;
+                }
+                if (strong == top) strongOnTop++;
+                if (weak == top) weakOnTop++;
+                if (strong == bottom) strongOnBottom++;
+            }
+
+            Console.WriteLine();
+            Console.WriteLine($"■ 得意・不得意の引かれ方（{Samples} 体・出荷の経路で孵化）");
+            Console.WriteLine($"  ⭐ 独立なら どれも 1/{n} ≒ {100.0 / n:0.0}%");
+            Console.WriteLine();
+            Console.Write("  得意の行き先  ");
+            for (int i = 0; i < n; i++)
+                Console.Write($"{Stats.LabelOf(Stats.Keys[i])} {100.0 * strongCount[i] / Samples,5:0.0}%  ");
+            Console.WriteLine();
+            Console.Write("  不得意の行き先");
+            for (int i = 0; i < n; i++)
+                Console.Write($"{Stats.LabelOf(Stats.Keys[i])} {100.0 * weakCount[i] / Samples,5:0.0}%  ");
+            Console.WriteLine();
+            Console.WriteLine();
+            Console.WriteLine($"  得意が**一番高い素質**に乗った   {100.0 * strongOnTop / Samples,5:0.0}%  ⭐ 噛み合った個体");
+            Console.WriteLine($"  不得意が**一番高い素質**に乗った {100.0 * weakOnTop / Samples,5:0.0}%  ⚠️ 真逆の個体");
+            Console.WriteLine($"  得意が**一番低い素質**に乗った   {100.0 * strongOnBottom / Samples,5:0.0}%  ⚠️ 無駄になった個体");
+            Console.WriteLine();
+            Console.WriteLine("  種族ごとの得意の行き先（⚠️ 種族で偏るならここが揃わない）");
+            foreach (var species in SpeciesTable.All)
+            {
+                var row = perSpecies[species.Id];
+                int total = 0;
+                foreach (var v in row) total += v;
+                if (total == 0) continue;
+                Console.Write($"    {species.Name,-6}({total,4}体) ");
+                for (int i = 0; i < n; i++) Console.Write($"{100.0 * row[i] / total,5:0.0}% ");
+                Console.WriteLine();
+            }
+        }
+
         // ── テンポ ──────────────────────────────────────
 
         private static void Pace(int seed)
@@ -857,6 +1652,8 @@ namespace EggCommand.Sim
             foreach (var s in SpeciesTable.All) ids.Add(s.Id);
 
             int actions = 0, draws = 0, longest = 0;
+            var bySlot = new int[3];
+            var locked = new int[3];
             for (int i = 0; i < Battles; i++)
             {
                 var rng = new Rng(seed + i).Stream("pace");
@@ -868,12 +1665,30 @@ namespace EggCommand.Sim
                 actions += fight.Actions;
                 if (fight.Result == Outcome.Draw) draws++;
                 if (fight.Actions > longest) longest = fight.Actions;
+                for (int k = 0; k < 3; k++) { bySlot[k] += fight.BySlot[k]; locked[k] += fight.Locked[k]; }
             }
 
             Console.WriteLine();
             Console.WriteLine($"■ 決着まで（{Battles}戦）");
             Console.WriteLine($"  平均 {(double)actions / Battles,5:0.0} 行動 / 最長 {longest} / 引き分け {draws}");
             Console.WriteLine("  ⚠️ 引き分けが出るなら、決め手が無い組み合わせがある");
+
+            // ⭐ **「枠1ばかり撃っている」を数字にする。**
+            // ⚠️ 枠1 は種族の通常攻撃で CT 0 ── いつでも撃てる。
+            //    枠2・3 が待ちで塞がっている間、選べる手はこれだけになる。
+            int chosen = bySlot[0] + bySlot[1] + bySlot[2];
+            Console.WriteLine();
+            Console.WriteLine("■ どの枠を撃っているか");
+            for (int k = 0; k < 3; k++)
+            {
+                string extra = k == 0
+                    ? "（種族の通常攻撃・CT 0）"
+                    : $"  手番が来たとき待ちで塞がっていた回数 {locked[k]}";
+                Console.WriteLine($"  枠{k + 1}  {bySlot[k],6} 回  {100.0 * bySlot[k] / chosen,5:0.0}%{extra}");
+            }
+            int lockedAll = locked[1] + locked[2];
+            Console.WriteLine($"  ⚠️ 枠2・3 が塞がっていた割合 {100.0 * lockedAll / (chosen * 2),5:0.0}%"
+                + "（手番 × 2枠 に対して）");
         }
     }
 }

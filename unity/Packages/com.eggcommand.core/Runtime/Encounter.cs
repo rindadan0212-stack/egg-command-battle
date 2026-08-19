@@ -55,26 +55,33 @@ namespace EggCommand.Core
             }
         }
 
-        /// <summary>段階ごとに解禁される種族。⭐ **深い巣ほど顔ぶれが増える。**
+        /// <summary>段階ごとに出る種族。
         ///
-        /// ⚠️ 以前は段階と無関係に7種から一様に引いていた。浅瀬の巣に
-        /// 実測で総合勝率が突出している種族（hirabe 68.2%）が立ちうる形だった。
+        /// ⭐ **どの段でも全種族が出る**（作者の指示 2026-08-19）。
+        /// ⚠️ 前は「深い段ほど顔ぶれが増える」累積にしていたが、
+        /// **段後半の種族が実質いつまでも出てこなかった** ── 深い段へ行けるようになるまで
+        /// 存在しないのと同じで、足した種族が遊びに現れなかった。
         ///
-        /// ⭐ 並びは `sim species` の総合勝率の低い順。弱い顔ぶれから覚えていける。
-        /// ⚠️ **これは釣り合いの直し方ではない。**hirabe の 68.2% は
-        /// 「35〜65% から外れた種族」として別途直すべきもので、
-        /// ここで奥へ隠すのは**問題を見えなくしているだけ**。混同しないこと。
+        /// ⚠️ **釣り合いを段で隠さない。**強い種族を奥へ置くのは
+        /// 「問題を見えなくしているだけ」で、直したことにならない。
+        /// ⭐ 段の難しさは**素質の合計**（<see cref="Nests.WildTotalForTier"/>）が持つ。顔ぶれではない。
         ///
-        /// ⚠️ 増えるだけで減らない（累積）。⭐ 上の段で覚えた顔ぶれが消えると、
-        /// 「この種族はこう動く」という学習が無駄になる。</summary>
-        private static readonly string[][] ByTier =
+        /// ⚠️ ボスだけは出さない（<see cref="BossSpeciesId"/>）。
+        /// ⚠️ 段ごとの形（5段ぶんの配列）は残す ── 段で分けたくなった日に戻せるように。</summary>
+        private static readonly string[][] ByTier = BuildByTier();
+
+        private static string[][] BuildByTier()
         {
-            new[] { "tsunoga", "tamaru" },                                  // 段1
-            new[] { "tsunoga", "tamaru", "togeru" },                        // 段2
-            new[] { "tsunoga", "tamaru", "togeru", "haneru", "nobiru" },    // 段3
-            new[] { "tsunoga", "tamaru", "togeru", "haneru", "nobiru", "marumi" },
-            new[] { "tsunoga", "tamaru", "togeru", "haneru", "nobiru", "marumi", "hirabe" },
-        };
+            var all = new List<string>();
+            foreach (var species in SpeciesTable.All)
+            {
+                if (species.Id == BossSpeciesId) continue;
+                all.Add(species.Id);
+            }
+            var table = new string[5][];
+            for (int i = 0; i < table.Length; i++) table[i] = all.ToArray();
+            return table;
+        }
 
         public static IReadOnlyList<string> PoolFor(int tier)
         {
@@ -244,9 +251,15 @@ namespace EggCommand.Core
             var pool = PoolFor(tier);
             string speciesId = pool[rng.Int(0, pool.Count)];
             string place = Places[rng.Int(0, Places.Length)];
-            // ⭐ レベルは段階に比例。振れ幅を段階の間隔より小さくして、
-            //    「数が大きいほど手強い」という読みが必ず当たるようにする
-            int level = tier * 10 + rng.Int(-4, 5);
+            // ⭐ レベルは**個体と同じものさし**で出す。
+            // ⚠️ `tier * 10`（6〜54）で出していた頃は、同じ画面に並ぶ手持ちの Lv
+            //    （<see cref="Levels.Of"/> は 36〜140）と**桁が違う数**を
+            //    「Lv」という同じ名前で見せていた ── 段5の巣が Lv50 と書いてあるのに、
+            //    そこから生まれる子が Lv120 になる（2026-08-19 の監査）。
+            // ⭐ 巣の Lv ＝ **そこの親の野生レベル合計** ＝ 生まれてくる子の初期 Lv。
+            //    振れ幅は段階の間隔（21）より小さくして、
+            //    「数が大きいほど手強い」という読みが必ず当たるようにする。
+            int level = Nests.WildTotalForTier(tier) + rng.Int(-4, 5);
 
             var nest = new Nest($"wild-{serial}", $"{place}の巣", speciesId, tier);
             // ⚠️ 時刻を渡されなければ期限を持たない（較正済みの検査と移植元の経路のため）

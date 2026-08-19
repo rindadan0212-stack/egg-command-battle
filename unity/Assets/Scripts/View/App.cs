@@ -70,7 +70,10 @@ namespace EggCommand.View
         private void Start()
         {
             // ⭐ 保存があれば続きから。無ければ新しく始める
-            Game = FreshStart ? null : SaveFile.Read();
+            // ⚠️ **「保存が無い」と「読めなかった」を分ける。**
+            //    分けないと、読めなかった日に新しいゲームを作り、20秒後にそれを
+            //    元のファイルへ書き戻して、遊んだ結果が復旧不能に消える。
+            Game = FreshStart ? null : SaveFile.Read(out _readFailed);
             // ⚠️ 時刻を渡す。渡さないと最初の3つの巣が**期限を持たない**まま作られ、
             //    「巣ごとに居座る時間がある」という規則がその巣にだけ効かない
             if (Game == null) Game = Games.NewGame(Seed, Now());
@@ -92,15 +95,22 @@ namespace EggCommand.View
             if (Game == null) return;
             _sinceSave += Time.unscaledDeltaTime;
             if (_sinceSave < SaveEvery) return;
-            _sinceSave = 0f;
-            // ⚠️ 定期の書き出しも同じ憶えを通す（変わっていなければ書かない）
-            _lastSaved = SaveFile.Write(Game, _lastSaved);
+            // ⚠️ **必ず Save() を通す。**ここで SaveFile.Write を直に呼んでいた頃は、
+            //    「読めなかったら書かない」のような約束をこの経路だけがすり抜けた
+            Save();
         }
 
         // ⚠️ 閉じる/隠れるときに必ず書く。Android は OnApplicationQuit が来ないことがある
         private void OnApplicationPause(bool paused) { if (paused) Save(); }
         private void OnApplicationFocus(bool focused) { if (!focused) Save(); }
         private void OnApplicationQuit() => Save();
+
+        /// <summary>右肩を押せる入口にする。⚠️ 画面を組んだあとに呼ぶ
+        /// （Show の中で Bind が走ったあとでないと消される）。</summary>
+        public void ShowExtra(string label, System.Action onTap)
+        {
+            if (_frame != null) _frame.ShowExtra(label, onTap);
+        }
 
         /// <summary>いま書く。⭐ 状態が変わる操作のあとに呼ぶ。
         ///
@@ -112,12 +122,19 @@ namespace EggCommand.View
         public void Save()
         {
             if (Game == null) return;
+            // ⚠️ **読めなかった保存の上には書かない。**このまま書くと、直せたはずの
+            //    ファイル（版が新しすぎるだけ、等）が作り直した中身で潰れる。
+            //    ⭐ 遊べはする。次に正しく読める版で開けば続きから戻る
+            if (_readFailed) return;
             _sinceSave = 0f;
             _lastSaved = SaveFile.Write(Game, _lastSaved);
         }
 
         /// <summary>最後に書き出した中身。⚠️ 比べるためだけに持つ。</summary>
         private string _lastSaved;
+
+        /// <summary>保存が在るのに読めなかった。⚠️ 立っている間は一切書かない。</summary>
+        private bool _readFailed;
 
         // ── 器 ──────────────────────────────────────────
 
@@ -196,7 +213,11 @@ namespace EggCommand.View
                 : _sky.sprite != null ? Color.white : Ui.SkyOf(sky);
             _sky.raycastTarget = screen != Screen.Steal;
 
-            _frame.Bind(home, TitleOf(screen), BadgeOf(screen), () => Show(Screen.Home));
+            // ⚠️ **戦闘中は戻れない。**戻れると、
+            //    不利な盤面をいつでも無かったことにできてしまう。
+            bool canBack = screen != Screen.Battle;
+            _frame.Bind(home, TitleOf(screen), BadgeOf(screen),
+                canBack ? (System.Action)(() => Show(Screen.Home)) : null, canBack);
             // ⚠️ 孵化はホームへ移したのでドックから外した。札は3枚
             _frame.BindPanel(0, "探索", $"{Game.Encounters.Count}", () => Show(Screen.Nests));
             _frame.BindPanel(1, "配合", $"{Game.Storage.Creatures.Count}体", () => Show(Screen.Breed));
@@ -205,6 +226,14 @@ namespace EggCommand.View
             _frame.HidePanelsFrom(3);
 
             var body = _frame.Body;
+            // ⚠️ View で唯一ここだけ素通しだった。AppFrame から Body を消すと
+            //    毎フレーム落ちて、真っ黒のまま何も動かなくなる
+            if (body == null)
+            {
+                Debug.LogError("AppFrame に Body が無い（各画面を入れる場所）。"
+                    + "「画面に足りない部品を足す」で戻せる");
+                return;
+            }
             // ⚠️ Destroy はフレームの終わりまで効かない。
             //    そのまま組み直すと、同じフレームのあいだ古い画面が生きていて、
             //    見えない古いボタンがクリックを受け取る（実測で3枚積み重なった）。
@@ -280,7 +309,9 @@ namespace EggCommand.View
             {
                 case Screen.Box:
                 case Screen.Breed: return $"{Game.Storage.Creatures.Count}/{Game.Storage.Slots}";
-                case Screen.Battle: return Battle == null ? "" : $"行動 {Battle.Actions}";
+                // ⚠️ 行動回数は出さない。⭐ 数えて楽しむものではなく、
+                //    出すと「減らすべき数」に見えてしまう
+                case Screen.Battle: return "";
                 default: return "";
             }
         }

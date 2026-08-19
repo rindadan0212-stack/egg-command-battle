@@ -12,14 +12,24 @@ namespace EggCommand.View
     public sealed class UnitStand : MonoBehaviour
     {
         [SerializeField] private Image _art;
+        /// <summary>HP の帯まるごと（ピル）。⭐ **上の帯に出すときは、こちらを消す。**
+        /// ⚠️ 同じ数を2か所に出さない。どちらを見ればいいか決まらなくなる。</summary>
+        [SerializeField] private GameObject _hpBar;
         [SerializeField] private Image _hpFill;
         [SerializeField] private Image _hpBadge;
         [SerializeField] private Text _hpNumber;
+        /// <summary>行動ゲージの帯まるごと。⭐ HP と一緒に上の帯へ移すときに消す。</summary>
+        [SerializeField] private GameObject _gaugeBar;
         [SerializeField] private Image _gaugeFill;
         [SerializeField] private GameObject _glow;
         [SerializeField] private Image _elementMark;
         [SerializeField] private Image _elementBeats;
         [SerializeField] private Text _status;
+        /// <summary>狙い先の印。⭐ **いま誰を狙っているか**を体の上で示す。
+        /// ⚠️ 別の欄に「狙い: 2番」と書くと、盤とラベルを目で往復することになる。</summary>
+        [SerializeField] private GameObject _targetMark;
+        /// <summary>体そのものの押しどころ。⭐ 押すと狙い先になる。</summary>
+        [SerializeField] private Button _tap;
 
         /// <summary>帯の伸びる元の幅。⚠️ 実行時に縮めるので、最初に控えておく。</summary>
         private float _hpFullWidth = -1f;
@@ -63,8 +73,31 @@ namespace EggCommand.View
             Fill(_gaugeFill, _gaugeShown, _gaugeFullWidth, null);
         }
 
-        public void Bind(Unit unit, bool isActor, bool isFoe)
+        public void Bind(Unit unit, bool isActor, bool isFoe) => Bind(unit, isActor, isFoe, false, null);
+
+        /// <param name="isTarget">いま狙い先に選ばれているか。</param>
+        /// <param name="onTap">押されたとき。⚠️ null なら押せない（倒れている・決着後）。</param>
+        /// <param name="showHp">HP の帯を体の足元に出すか。
+        /// ⭐ 相手が1体のときは**上の帯**に出すので、ここは消す。</param>
+        public void Bind(Unit unit, bool isActor, bool isFoe, bool isTarget, System.Action onTap,
+            bool showHp = true)
         {
+            if (_targetMark != null) _targetMark.SetActive(isTarget);
+            if (_hpBar != null) _hpBar.SetActive(showHp);
+            // ⚠️ **属性の印も一緒に消す。**HP の帯だけ消したとき、印が体の右に
+            //    取り残されて「何かの破片」に見えた（実測）。
+            //    ⭐ 上の帯が属性の色を持っているので、二重でもある。
+            if (_elementMark != null) _elementMark.gameObject.SetActive(showHp);
+            if (_elementBeats != null) _elementBeats.gameObject.SetActive(showHp);
+            // ⚠️ 行動ゲージも一緒に。HP だけ消したとき、白い線が体の下に
+            //    取り残されて破片に見えた（実測）。⭐ 読むものは1か所へ集める
+            if (_gaugeBar != null) _gaugeBar.SetActive(showHp);
+            if (_tap != null)
+            {
+                _tap.onClick.RemoveAllListeners();
+                _tap.interactable = onTap != null;
+                if (onTap != null) _tap.onClick.AddListener(() => onTap());
+            }
             if (_hpFullWidth < 0f && _hpFill != null) _hpFullWidth = _hpFill.rectTransform.sizeDelta.x;
             if (_gaugeFullWidth < 0f && _gaugeFill != null) _gaugeFullWidth = _gaugeFill.rectTransform.sizeDelta.x;
 
@@ -80,14 +113,16 @@ namespace EggCommand.View
             var tint = alive ? (isFoe ? Ui.Danger : Ui.Good) : Ui.InkFaint;
             float ratio = unit.MaxHp > 0 ? (float)unit.Hp / unit.MaxHp : 0f;
             Fill(_hpFill, ratio, _hpFullWidth, tint);
-            if (_hpBadge != null) _hpBadge.color = tint;
-            if (_hpNumber != null)
+            // ⭐ **丸は属性の色。**⚠️ 残りHPは帯の長さで読ませるので、数字は出さない
+            //    （数字と帯で同じことを2回言うと、どちらを見ればいいか決まらない）。
+            //    ⚠️ 倒れているときだけは薄い色に落とす（生死は帯より丸のほうが早く読める）。
+            if (_hpBadge != null)
             {
-                _hpNumber.text = unit.Hp.ToString();
-                // ⚠️ 桁が増えると丸からはみ出す。字を縮めて折り返させない
-                _hpNumber.fontSize = unit.Hp >= 1000 ? 16 : unit.Hp >= 100 ? 19 : 23;
-                _hpNumber.horizontalOverflow = HorizontalWrapMode.Overflow;
+                _hpBadge.color = alive
+                    ? ElementMark.ColorOf(unit.Creature.Element)
+                    : Ui.InkFaint;
             }
+            if (_hpNumber != null) _hpNumber.gameObject.SetActive(false);
 
             // ⚠️ 組み直しのたびに出し直さない。前に出していた値から続ける
             _key = unit.Key;

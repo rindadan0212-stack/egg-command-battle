@@ -14,24 +14,44 @@ namespace EggCommand.Core
     /// </summary>
     public static class Ai
     {
+        // ⚠️ **固定値の単位は「実HP」。**採点の土俵はダメージ・回復・毒の見積もり（＝実HP）なので、
+        //    固定値も同じ桁に乗せないと比べ物にならない。
+        //    ⭐ 2026-08-19 の桁上げ（実ダメージが Battle.HpSpace 倍）でここが取り残され、
+        //    弱化・スタン・CT・挑発・ゲージ・強化解除・蘇生・ガッツ・免疫の23技が
+        //    **採用率 0.00**（AI が一度も選ばない）になっていた ── `sim skills` で発見。
+        //    数字どうしの比は較正済みのまま、倍率だけ揃えて戻す。
+        //    ⚠️ 桁を動かすときは必ずこの8つも一緒に動くか確かめること（比で書いてあれば自動で動く）。
+
         /// <summary>ステータスを1%動かすことの価値。</summary>
-        private const double BuffValue = 0.5;
+        private const double BuffValue = 0.5 * Battle.HpSpace;
         /// <summary>相手の手番を1つ奪うことの価値。⭐ 行動回数は全出力への倍率なので高く見る。</summary>
-        private const double StunValue = 26;
+        private const double StunValue = 26 * Battle.HpSpace;
         /// <summary>CT を1つ動かすことの価値。</summary>
-        private const double CtValue = 6;
+        private const double CtValue = 6 * Battle.HpSpace;
         /// <summary>狙い先を縛る1回ぶんの価値。</summary>
-        private const double TauntValue = 7;
+        private const double TauntValue = 7 * Battle.HpSpace;
         /// <summary>ゲージを1%動かすことの価値。⭐ 手番の奪い合いなので高め。</summary>
-        private const double GaugeValue = 0.35;
+        private const double GaugeValue = 0.35 * Battle.HpSpace;
         /// <summary>強化を1個 剥がすことの価値。⭐ 奪うほうは自分にも乗るので倍。</summary>
-        private const double DispelValue = 9;
+        private const double DispelValue = 9 * Battle.HpSpace;
         /// <summary>倒れた味方を1体戻すことの価値。</summary>
-        private const double ReviveValue = 40;
+        private const double ReviveValue = 40 * Battle.HpSpace;
         /// <summary>ガッツ・免疫の価値（状況が読みにくいので控えめの固定値）。</summary>
-        private const double GuardianValue = 10;
+        private const double GuardianValue = 10 * Battle.HpSpace;
 
         /// <summary>味方に倒れている者が居るか。⚠️ 蘇生の採点だけに使う。</summary>
+        /// <summary>倒れている味方の先頭。⚠️ 居なければ null（蘇生の見積もりが 0 になる）。</summary>
+        private static Unit? FirstDown(BattleState state, Side side)
+        {
+            Unit? found = null;
+            foreach (var unit in state.Units)
+            {
+                if (unit.Side != side || Battle.IsAlive(unit)) continue;
+                if (found == null || unit.Slot < found.Slot) found = unit;
+            }
+            return found;
+        }
+
         private static bool IsAnyDown(BattleState state, Unit actor)
         {
             foreach (var unit in state.Units)
@@ -41,14 +61,15 @@ namespace EggCommand.Core
             return false;
         }
 
-        private static int EstimateDamage(Unit actor, Unit target, PowerTier tier, DamageScale scale)
+        private static int EstimateDamage(Unit actor, Unit target, PowerTier tier, DamageScale scale,
+            bool pierce = false)
         {
             var a = Creatures.StatsOf(actor.Creature);
             var t = Creatures.StatsOf(target.Creature);
-            int attackStat = scale == DamageScale.Atk
-                ? Battle.EffectiveStat(a.Atk, actor.Status.Atk)
-                : Battle.EffectiveStat(a.Def, actor.Status.Def);
-            int defenseStat = Battle.EffectiveStat(t.Def, target.Status.Def);
+            int attackStat = Battle.AttackStatOf(a, actor.Status, scale);
+            // ⚠️ 防御無視をここで数えないと、AI から見て「防御無視攻撃」が素の攻撃と同じ値になり、
+            //    CT の短い技に必ず負けて**一度も選ばれない**（実測 0.00 だった）
+            int defenseStat = pierce ? 0 : Battle.EffectiveStat(t.Def, target.Status.Def);
             double mult = Battle.ElementMultiplier(
                 actor.Creature.Element,
                 target.Creature.Element);
@@ -59,7 +80,7 @@ namespace EggCommand.Core
         /// 盾持ちに対しては多段のほうが通る（そこまでは数えていない — 概算でよい）。</summary>
         private static int EstimateTotal(Unit actor, Unit target, Effect effect)
         {
-            return EstimateDamage(actor, target, effect.Power, effect.Scale) * effect.Repeat;
+            return EstimateDamage(actor, target, effect.Power, effect.Scale, effect.Pierce) * effect.Repeat;
         }
 
         private static double ScoreOf(BattleState state, Unit actor, int slot)
@@ -84,9 +105,71 @@ namespace EggCommand.Core
             var weakest = byRatio[0];
 
             // その効果が誰に向くか
+            // ⚠️ AllyDown を focus（敵）にしていると、蘇生を敵に撃つ見積もりになる
+            var downed = FirstDown(state, actor.Side);
+            // ⚠️ **味方に配る技は Battle に聞く。**ここで「一番弱った味方」と決め打ちしていた頃は、
+            //    実際の配り先（伸ばす札はそのステが一番高い味方）とずれていて、
+            //    「もう掛かっているか」の判定が常に別人を見ていた。
             var subject = skill.Target == Target.Self ? actor
-                : skill.Target == Target.AllyLowest ? weakest
+                : skill.Target == Target.AllyLowest || skill.Target == Target.AllyOne
+                    ? Battle.AllyLandingFor(state, actor, skill) ?? weakest
+                : skill.Target == Target.AllyDown ? downed
+                // ⭐ 味方全体は「一番弱った味方」を代表にして測る
+                : skill.Target == Target.AllyAll ? weakest
+                // ⚠️ **ランダムは狙えない。**`focus`（一番弱った敵）にしていた頃、
+                //    単体技と**完全に同点**になっていた ── 瀕死が1体居ると
+                //    「その1体の残HP」まで値打ちが落ち、居なければ狙えるのと同じ値だった
+                //    （2026-08-19 の監査）。⭐ 真ん中の相手を代表にする。
+                : skill.Target == Target.EnemyRandom ? byHp[byHp.Count / 2]
                 : focus;
+            // ⚠️ 倒れた味方が居ないなら蘇生は0点（撃っても何も起きない）
+            if (skill.Target == Target.AllyDown && subject == null) return 0;
+
+            // ⚠️ **全体に効く技は、ダメージ以外も対象数ぶん効く。**
+            //    ⭐ ダメージだけ `foes` を回して足していたので、毒・弱化・スタン・ゲージ・
+            //    強化解除の全体版は**1体ぶんの見積もり**になり、単体版に負けていた。
+            //    実測（2026-08-19 の監査）: 毒・全体 3,326 対 毒 9,240 で逆転し、
+            //    `sim skills` で**採用率 0.00**（57技で唯一）だった。
+            // ⚠️ ダメージは上で残HPの頭打ちを入れているので、ここでは掛けない。
+            // ⚠️ **味方全体を「代表1体 × 人数」で測らない。**
+            //    ⭐ 味方に配るものは対象ごとに頭打ち（満タンには回復が乗らない・
+            //    既に盾がある相手には無駄）があるので、代表を人数倍すると桁が狂う。
+            //    実測（2026-08-19 の監査）: 満タン2体＋瀕死1体に全体回復を撃つと、
+            //    実際の値打ち 8,505 に対し **25,515**（3倍）と見積もっていた。
+            //    逆に代表が盾持ちだと、他2体が裸でも **0点**になっていた。
+            // ⭐ だから「配るもの」は下で1体ずつ回す。ここでは掛けない。
+            var spreadOver = skill.Target == Target.EnemyAll ? foes
+                : skill.Target == Target.AllyAll ? friends : null;
+
+            // ⭐ **「何体に効くか」で数える。**⚠️ 人数をそのまま掛けない。
+            //    実測（2026-08-19 の監査）: 満タン2体＋瀕死1体に全体回復を撃つと、
+            //    実際の値打ち 8,505 に対し **25,515**（3倍）と見積もっていた。
+            //    逆に代表が盾持ちだと、他2体が裸でも **0点**になっていた。
+            int Useful(Effect e)
+            {
+                if (spreadOver == null) return 1;
+                int n = 0;
+                foreach (var one in spreadOver)
+                {
+                    switch (e.Kind)
+                    {
+                        // ⚠️ 満タンの相手に回復は乗らない
+                        case EffectKind.HealRatio:
+                        case EffectKind.Regen:
+                            if (one.Hp < one.MaxHp) n++;
+                            break;
+                        // ⚠️ もう持っている相手には掛け直すだけ
+                        case EffectKind.Shield: if (one.Status.Shield == 0) n++; break;
+                        case EffectKind.Guts: if (one.Status.Guts == 0) n++; break;
+                        case EffectKind.Immune: if (one.Status.Immune == 0) n++; break;
+                        case EffectKind.Block: if (one.Status.Block == 0) n++; break;
+                        case EffectKind.Stun: if (one.Status.Stun == 0) n++; break;
+                        case EffectKind.Sleep: if (one.Status.Sleep == 0) n++; break;
+                        default: n++; break;
+                    }
+                }
+                return n;
+            }
 
             double score = 0;
             foreach (var effect in skill.Effects)
@@ -95,6 +178,9 @@ namespace EggCommand.Core
                 //    ⚠️ これが無いと AI が「必ず通る前提」で弱化を選び続ける
                 double land = Battle.LandChanceOf(effect, actor, subject) / 100.0;
                 double before = score;
+                // ⭐ ダメージは自前で全員ぶんを足すので、掛け算の対象から外す
+                int fanOut = effect.Kind == EffectKind.Damage ? 1 : Useful(effect);
+
 
                 switch (effect.Kind)
                 {
@@ -211,9 +297,8 @@ namespace EggCommand.Core
                     {
                         // ⭐ 乗っている強化の個数だけ価値がある。何も乗っていなければ 0
                         int boons = 0;
-                        foreach (var key in Stats.Keys)
+                        foreach (var key in Stats.BuffKeys)
                         {
-                            if (key == StatKey.Hp) continue;
                             ref var mod = ref subject.Status.ModOf(key);
                             if (mod.Turns > 0 && mod.Percent > 0) boons++;
                         }
@@ -231,17 +316,21 @@ namespace EggCommand.Core
                         score += IsAnyDown(state, actor) ? ReviveValue : 0;
                         break;
 
+                    // ⚠️ **どちらも subject（掛かる相手）を見る。**actor（掛ける本人）を
+                    //    見ていた頃は、味方1体に配る技なのに自分の状態で判断していたので、
+                    //    ガッツは「自分が瀕死でなければ0点」＝味方がどれだけ瀕死でも撃たず、
+                    //    免疫は自分に付いていれば味方が丸裸でも撃たなかった。
                     case EffectKind.Guts:
                     {
                         // 追い詰められているときだけ価値がある
-                        bool hurt = (double)actor.Hp / actor.MaxHp < 0.5;
-                        score += hurt && actor.Status.Guts == 0 ? GuardianValue : 0;
+                        bool hurt = (double)subject.Hp / subject.MaxHp < 0.5;
+                        score += hurt && subject.Status.Guts == 0 ? GuardianValue : 0;
                         break;
                     }
 
                     case EffectKind.Immune:
-                        // 既に弱化を受けているなら、掛け直しても消えないので価値は低い
-                        score += actor.Status.Immune == 0 ? GuardianValue : 0;
+                        // 既に免疫が付いているなら、掛け直しても増えないので価値は低い
+                        score += subject.Status.Immune == 0 ? GuardianValue : 0;
                         break;
 
                     // ⚠️ 効果を足したのにここへ来ないと、その技のスコアは 0 のまま。
@@ -252,7 +341,8 @@ namespace EggCommand.Core
                             $"{effect.Kind} を AI が採点できない。ScoreOf に case を足す");
                 }
 
-                if (land < 1.0) score = before + (score - before) * land;
+                // ⭐ 外れるぶんを割り引き、全体に効くものは対象数ぶん掛ける
+                score = before + (score - before) * land * fanOut;
             }
             return score;
         }

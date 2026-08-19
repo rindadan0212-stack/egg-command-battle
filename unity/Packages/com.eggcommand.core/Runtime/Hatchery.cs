@@ -37,7 +37,10 @@ namespace EggCommand.Core
     /// </summary>
     public static class Hatchery
     {
-        public const int Slots = 5;
+        /// <summary>同時に温められる数。⭐ **6枠（3列×2段）**。
+        /// ⚠️ 5 だったときはホームで 3＋2 の不揃いになり、画面の余白も目立った
+        /// （2026-08-19・作者判断で 6 へ）。</summary>
+        public const int Slots = 6;
 
         public static long Now(DateTime utc) =>
             (long)(utc - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;

@@ -9,6 +9,35 @@ public class SnapshotTests
 {
     private const long T0 = 1_700_000_000;
 
+    /// <summary>⭐ **古い保存（育てた分が得意1本だけ）を読み直すと、全ステに揃う。**
+    ///
+    /// ⚠️ 2026-08-19 に育成を全ステへ変えた。そのまま読むと、同じ Lv なのに
+    /// 新しく育てた個体より弱い個体が保存に残り続ける。
+    /// ⭐ 育てた分は Earned から一意に決まるので、読むときに作り直せる。</summary>
+    [Fact]
+    public void 古い保存の育てた分は全ステへ揃う()
+    {
+        var game = Games.NewGame(1, T0);
+        // ⚠️ 「得意1本にだけ乗った」古い形を手で作る
+        var old = new Creature("old", "tamaru",
+            new StatBlock(20, 20, 20, 20, 20, 20),
+            new StatBlock(0, 0, 0, 9, 0, 0), 9, 0, null, null, 0, null, null, 1,
+            StatKey.Spd, StatKey.Res);
+        game.Storage = Storages.Accept(game.Storage, old);
+
+        var back = Snapshots.Load(Snapshots.Save(game));
+        Creature found = null;
+        foreach (var c in back.Storage.Creatures) if (c.Id == "old") found = c;
+        Assert.NotNull(found);
+        // ⭐ 読み直すと、いまの規則（素質の割合）で作り直される
+        var want = Creatures.TrainedFor(found.SpeciesId, found.Wild, found.Earned);
+        foreach (var key in Stats.Keys)
+        {
+            Assert.Equal(want[key], found.Trained[key]);
+            Assert.True(found.Trained[key] > 0, $"{Stats.LabelOf(key)} が伸びていない");
+        }
+    }
+
     /// <summary>ひととおり触った状態を作る。⭐ 空の状態だけ通しても検査にならない。</summary>
     private static Game Played()
     {
@@ -47,6 +76,12 @@ public class SnapshotTests
             Assert.Equal(x.Strong, y.Strong);
             Assert.Equal(x.Weak, y.Weak);
             Assert.Equal(x.Generation, y.Generation);
+            // ⚠️ ここから下は比べていなかった欄。⭐ 落ちても誰も気づけない場所だった
+            Assert.Equal(x.MutationCounter, y.MutationCounter);
+            Assert.Equal(x.PaletteIndex, y.PaletteIndex);
+            Assert.Equal(x.TraitId, y.TraitId);
+            Assert.Equal(x.Element, y.Element);
+            Assert.Equal(x.SkillPoints, y.SkillPoints);
         }
         Assert.Equal(a.Eggs.Count, b.Eggs.Count);
         for (int i = 0; i < a.Eggs.Count; i++)
@@ -71,9 +106,19 @@ public class SnapshotTests
             Assert.Equal(a.Encounters[i].Level, b.Encounters[i].Level);
         }
         Assert.Equal(a.Party, b.Party);
-        Assert.Equal(a.Idle.Materials, b.Idle.Materials);
+        Assert.Equal(a.Idle.Exp, b.Idle.Exp);
         Assert.Equal(a.Idle.Defeated, b.Idle.Defeated);
         Assert.Equal(a.Idle.LastUnix, b.Idle.LastUnix);
+        Assert.Equal(a.Idle.EnemyHp, b.Idle.EnemyHp);
+        Assert.Equal(a.Idle.Charge, b.Idle.Charge);
+        Assert.Equal(a.Idle.DownUntil.Count, b.Idle.DownUntil.Count);
+
+        // ⚠️ **乱数は10系統ぜんぶ見る。**1本だけ見ていた頃は、StreamsOf から
+        //    落ちた系統が読み込みで無音に巻き戻っても検査を通っていた
+        var left = Snapshots.Save(a).Rng;
+        var right = Snapshots.Save(b).Rng;
+        Assert.Equal(left.Count, right.Count);
+        for (int i = 0; i < left.Count; i++) Assert.Equal(left[i], right[i]);
     }
 
     [Fact]

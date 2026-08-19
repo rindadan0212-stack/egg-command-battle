@@ -44,15 +44,40 @@ namespace EggCommand.View
         // ⚠️ 器が**白**になったので、字は濃い側。以前の淡い字だと全部消える。
         //    色はモック（参考/モック_タマゴハンター/）の濃紺に合わせてある。
         public static readonly Color Ink = new Color32(0x2b, 0x33, 0x50, 0xff);
-        public static readonly Color InkDim = new Color32(0x8e, 0x93, 0xa8, 0xff);
-        public static readonly Color InkFaint = new Color32(0xb8, 0xbc, 0xc9, 0xff);
+
+        // ⚠️ **淡い2色は読めていなかった**（2026-08-18・実測して差し替え）。
+        //    コントラスト比（白い札 / 空の水色）:
+        //      直す前   InkDim 3.0 / 2.3     InkFaint 1.9 / 1.4   ← 目安 4.5 を大きく割る
+        //      直した後 InkDim 7.1 / 5.4     InkFaint 5.4 / 4.1
+        //    ⭐ 「うすい＝控えめ」を色の薄さでやると、控えめを通り越して消える。
+        //    濃さは保ったまま**彩度を落として**主役から下げる。
+        //    ⚠️ 空（水色）の上は白い札より条件が悪い。淡いほうを基準に決めること。
+        public static readonly Color InkDim = new Color32(0x4c, 0x53, 0x6b, 0xff);
+        public static readonly Color InkFaint = new Color32(0x63, 0x69, 0x80, 0xff);
         /// <summary>色つきの札の上に置く字。⭐ どの色の上でも濃紺で通す（読み方を変えない）。</summary>
         public static readonly Color OnLead = new Color32(0x2b, 0x33, 0x50, 0xff);
-        /// <summary>差し色。⭐ 主導線1つと「今ここ」にしか使わない。</summary>
+        /// <summary>差し色。⭐ 主導線1つと「今ここ」にしか使わない。
+        /// ⚠️ **面（押しどころ・印・帯）専用。**字には <see cref="AccentInk"/> を使う。</summary>
         public static readonly Color Accent = new Color32(0xf5, 0x9e, 0x0b, 0xff);
+
+        /// <summary>差し色の**字**。⭐ 白い札の上でも読める濃さ（明暗比 5.0）。
+        ///
+        /// ⚠️ <see cref="Accent"/> をそのまま字に使うと、白い札の上で **2.1** しかない
+        /// （実測 2026-08-19・「強化」の数字 +11 で発覚）。
+        /// ⭐ 面は明るいままでよい ── 字だけ濃い側へ寄せる。同じ橙なので意味は繋がる。</summary>
+        public static readonly Color AccentInk = new Color32(0xb4, 0x53, 0x09, 0xff);
         // ⚠️ 札の中央が鋼色（#647685）なので、沈んだ赤／緑は読めない。明るい側へ寄せた
+        // ⚠️ **面（帯・丸・演出の数字）専用。**字には下の …Ink を使う。
         public static readonly Color Danger = new Color32(0xe0, 0x4f, 0x5f, 0xff);
         public static readonly Color Good = new Color32(0x2f, 0xa8, 0x4a, 0xff);
+
+        /// <summary>良い側／危ない側の**字**。⭐ 白い札の上でも読める濃さ。
+        ///
+        /// ⚠️ <see cref="Good"/> <see cref="Danger"/> をそのまま字に使うと、
+        /// 白い札の上で **3.1 / 3.9** しかない（実測 2026-08-19・得意▲と不得意▼で発覚）。
+        /// ⭐ 器が鋼色から白へ変わった日に、面の色だけ残って字が取り残されていた。</summary>
+        public static readonly Color GoodInk = new Color32(0x1e, 0x7a, 0x38, 0xff);
+        public static readonly Color DangerInk = new Color32(0xc0, 0x30, 0x3f, 0xff);
         // WARN: containers are drawn with panel.png; there is no colour-filled container
 
         /// <summary>画面ごとの地。⚠️ 器が白なので**淡くしすぎない**（輪郭が無いので消える）。
@@ -241,6 +266,96 @@ namespace EggCommand.View
             text.verticalOverflow = VerticalWrapMode.Overflow;
             Place(rect, left, top, width, height);
             return text;
+        }
+
+        /// <summary>その幅で折り返したときに要る高さ。
+        ///
+        /// ⭐ **器の高さを決め打ちにしないため。**⚠️ 決め打ちにすると、
+        /// 語が1つ増えた日に字が枠から出る（覆いは中身の量が技ごとに違う）。
+        ///
+        /// ⚠️ 仮の部品を作って測って捨てる。<c>Text.preferredHeight</c> は
+        /// **rect の幅が入っていないと折り返しを勘定しない**ので、
+        /// 幅を入れてから読む（入れないと1行ぶんしか返らない）。</summary>
+        /// <summary>桁区切り。⭐ **大きい数を出す所は全部ここを通す。**
+        ///
+        /// ⚠️ ステの桁を上げた（2026-08-19）ので、HP は6桁まで伸びる。
+        /// 目で桁を数えさせないために区切る。
+        /// ⚠️ 端末の地域設定で区切り文字が変わらないよう、文化を固定する。</summary>
+        public static string Digits(int value) =>
+            value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+
+        public static float Height(string content, int size, float width)
+        {
+            var go = new GameObject("Measure", typeof(RectTransform));
+            var rect = (RectTransform)go.transform;
+            rect.sizeDelta = new Vector2(width, 10f);
+            var text = go.AddComponent<Text>();
+            text.text = content;
+            text.font = TheFont;
+            text.fontSize = size;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            float height = text.preferredHeight;
+            // ⚠️ Destroy はフレームの終わりまで効かない。⭐ 測ったら即その場で消す
+            UnityEngine.Object.DestroyImmediate(go);
+            return height;
+        }
+
+        /// <summary>選んでいることを示す**角丸の輪**。
+        ///
+        /// ⚠️ 四角い輪郭の絵は素材に無い（`Resources/UI/NOTICE.md`）。
+        /// 4本の帯で組むと角が直角になり、丸い札の上で浮く（作者の指摘 2026-08-19）。
+        /// ⭐ **角丸の札を2枚重ねる** ── 外を差し色、内を白にすると輪になる。
+        ///
+        /// ⚠️ 中身より**後ろ**に置くこと（前に出すと絵を隠す）。呼ぶ側で並び順を決める。</summary>
+        public static RectTransform Ring(Transform parent, string name,
+            float left, float top, float width, float height, float thick = 8f)
+        {
+            var ring = Rect(name, parent);
+            Place(ring, left, top, width, height);
+            var outer = ring.gameObject.AddComponent<Image>();
+            outer.sprite = SkinOf("panel");
+            outer.type = Image.Type.Sliced;
+            outer.color = Accent;
+            outer.raycastTarget = false;
+
+            var inner = Rect("Inner", ring);
+            Place(inner, thick, thick, width - thick * 2f, height - thick * 2f);
+            var face = inner.gameObject.AddComponent<Image>();
+            face.sprite = SkinOf("panel");
+            face.type = Image.Type.Sliced;
+            face.color = Color.white;
+            face.raycastTarget = false;
+            return ring;
+        }
+
+        /// <summary>卵1個の升。⭐ **どの画面でも同じ形**（絵・★・一言）。
+        ///
+        /// ⚠️ 揃える前は3画面で全部違った ── 合成のたまごは**卵の絵が無く**、
+        /// 技を鍛えるはシアンの押しどころ、卵を選ぶだけが絵つきだった
+        /// （レビュー指摘 2026-08-19）。
+        ///
+        /// ⚠️ 押しどころは呼ぶ側が足す（押せない場面があるので、ここでは決めない）。</summary>
+        public static RectTransform EggCell(Transform parent, string name, Egg egg,
+            string note, Color noteInk, float left, float top, float width, float height,
+            bool dim = false)
+        {
+            var cell = Rect(name, parent);
+            Place(cell, left, top, width, height);
+            var plate = cell.gameObject.AddComponent<Image>();
+            plate.sprite = SkinOf("panel");
+            plate.type = Image.Type.Sliced;
+            plate.color = dim ? new Color(1f, 1f, 1f, 0.55f) : Color.white;
+
+            float art = Mathf.Min(width - 48f, height - 96f);
+            Pixel(cell, "Art", EggArt.Sprite, EggArt.Shell,
+                (width - art) / 2f, 14f, art);
+            Label(cell, "Stars", Rarities.StarsOf(egg.Rarity), 24,
+                dim ? InkFaint : AccentInk, TextAnchor.MiddleCenter,
+                0f, height - 76f, width, 32f);
+            Label(cell, "Note", note, 26, dim ? InkFaint : noteInk,
+                TextAnchor.MiddleCenter, 0f, height - 44f, width, 36f);
+            return cell;
         }
 
         /// <summary>押せるもの。⭐ 角丸を使えるのはここだけ（今は面で表す）。

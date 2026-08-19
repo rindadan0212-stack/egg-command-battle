@@ -59,41 +59,60 @@ public class RngGoldenTests
 
             var sampled = rng.Sample(new[] { 10, 20, 30, 40 }, 2);
             Assert.Equal(Golden.Ints(entry.GetProperty("sample2")), sampled);
-
-            Assert.True(true, where);
         }
     }
 }
 
 public class StatsGoldenTests
 {
+    /// <summary>⚠️ **ステを4本から6本に増やした（2026-08-18）。**
+    ///
+    /// 弱化命中・抵抗を足して、弱化の通る率を速度から切り離した。
+    /// あわせて合計上限を 1ステ上限 ×2 → **×3** にした（6本のうち3本まで伸ばせる）。
+    ///
+    /// ⚠️ **移植元（TS）は4本 ×2 のまま。**ここは意図した差分なので、
+    /// ⭐ **移植元の4本ぶんは1つも動いていないこと**を確かめる形に変えてある。
+    /// ⚠️ ゴールデンは作り直さない ── 作り直すと「移植元と一致している」証明が消える。</summary>
+    private const int PortedStatCount = 4;
+
     [Fact]
     public void 上限の定数が一致する()
     {
         var golden = Golden.Load("stats");
+        // ⭐ 1ステの上限は動かしていない
         Assert.Equal(golden.GetProperty("wildStatMax").GetInt32(), Stats.WildStatMax);
-        Assert.Equal(golden.GetProperty("wildTotalMax").GetInt32(), Stats.WildTotalMax);
         Assert.Equal(golden.GetProperty("mutationCapSteps").GetInt32(), Stats.MutationCapSteps);
 
-        // ⭐ 合計上限は常に1ステ上限の2倍。この比が「得意を2つ作れる」を保証している
+        // ⚠️ 合計上限だけ意図して変えた（×2 → ×3）
+        Assert.Equal(Stats.WildStatMax * 2, golden.GetProperty("wildTotalMax").GetInt32());
+        Assert.Equal(Stats.WildStatMax * 3, Stats.WildTotalMax);
+
         foreach (var entry in golden.GetProperty("maxFor").EnumerateArray())
         {
             int mutation = entry.GetProperty("mutation").GetInt32();
+            // 1ステ上限は移植元のまま
             Assert.Equal(entry.GetProperty("statMax").GetInt32(), Stats.WildStatMaxFor(mutation));
-            Assert.Equal(entry.GetProperty("totalMax").GetInt32(), Stats.WildTotalMaxFor(mutation));
+            // ⭐ 合計は常に「1ステ上限 × 3」であること
+            Assert.Equal(Stats.WildStatMaxFor(mutation) * 3, Stats.WildTotalMaxFor(mutation));
         }
     }
 
+    /// <summary>⭐ **移植元の4本は、並びも位置も1つも動いていない。**
+    /// ⚠️ 削りの順（同値なら先に来たものから削る）がここに依存している。</summary>
     [Fact]
     public void ステの並びが一致する()
     {
         var golden = Golden.Load("stats");
         var expected = Golden.Strings(golden.GetProperty("statKeys"));
-        Assert.Equal(expected.Count, Stats.Keys.Length);
+        Assert.Equal(PortedStatCount, expected.Count);
+        Assert.Equal(PortedStatCount + 2, Stats.Keys.Length);
         for (int i = 0; i < expected.Count; i++)
         {
             Assert.Equal(Golden.StatKey(expected[i]), Stats.Keys[i]);
         }
+        // ⚠️ 足したぶんは必ず後ろ（前に入れると削りの順がずれる）
+        Assert.Equal(StatKey.Acc, Stats.Keys[4]);
+        Assert.Equal(StatKey.Res, Stats.Keys[5]);
     }
 
     [Fact]
@@ -108,7 +127,11 @@ public class StatsGoldenTests
     }
 
     /// <summary>⭐ 「何かが特化していれば何かが伸びない」の本体。
-    /// 同値のステが複数あるときの削り順まで一致していないと、育成の結果が変わる。</summary>
+    /// 同値のステが複数あるときの削り順まで一致していないと、育成の結果が変わる。
+    ///
+    /// ⚠️ 合計上限の**倍率**は ×2 → ×3 に変えた（2026-08-18）。
+    /// ⭐ 削り方そのものは1行も変えていないので、**移植元の倍率を渡して**丸ごと照合する。
+    /// ⚠️ ゴールデンは作り直さない。倍率を変えたことは下の「倍率だけが違う」で別に固定する。</summary>
     [Fact]
     public void 合計上限の削り方が一致する()
     {
@@ -118,23 +141,59 @@ public class StatsGoldenTests
             var wild = Golden.Block(entry.GetProperty("wild"));
             int mutation = entry.GetProperty("mutation").GetInt32();
             var expected = Golden.Block(entry.GetProperty("out"));
-            var actual = Stats.ApplyTotalCap(wild, mutation);
+
+            int statMax = Stats.WildStatMaxFor(mutation);
+            var actual = Stats.CapTo(wild, statMax, statMax * PortedTotalRatio);
             Assert.Equal(expected, actual);
             Assert.Equal(entry.GetProperty("total").GetInt32(), Stats.TotalOf(actual));
         }
     }
 
+    /// <summary>⚠️ 移植元の「合計上限 = 1ステ上限 × 2」。⭐ いまは ×3。
+    /// 得意を2つまで → 3つまで、に広げたのがこの数字1つ。</summary>
+    private const int PortedTotalRatio = 2;
+
+    /// <summary>⭐ 変えたのは倍率だけ ── どの変異段階でも比が保たれていることを見る。</summary>
+    [Fact]
+    public void 合計上限は倍率だけが違う()
+    {
+        var golden = Golden.Load("stats");
+        foreach (var entry in golden.GetProperty("maxFor").EnumerateArray())
+        {
+            int mutation = entry.GetProperty("mutation").GetInt32();
+            int statMax = Stats.WildStatMaxFor(mutation);
+            Assert.Equal(entry.GetProperty("totalMax").GetInt32(), statMax * PortedTotalRatio);
+            Assert.Equal(statMax * 3, Stats.WildTotalMaxFor(mutation));
+        }
+
+        // ⭐ 削りの結果も「倍率を戻せば移植元に戻る」ことを1件で押さえる
+        var wide = new StatBlock(30, 30, 30, 30);
+        Assert.Equal(Stats.WildStatMax * PortedTotalRatio,
+            Stats.TotalOf(Stats.CapTo(wide, Stats.WildStatMax, Stats.WildStatMax * PortedTotalRatio)));
+        Assert.Equal(Stats.WildTotalMax, Stats.TotalOf(Stats.ApplyTotalCap(wide)));
+    }
+
+    /// <summary>⚠️ **野生レベルに <see cref="Stats.Scale"/> が掛かるようになった**
+    /// （2026-08-19・作者の指示で桁を上げた）。
+    ///
+    /// ⭐ 足し算そのものは1行も変えていないので、**移植元の入力を倍率で戻して**丸ごと照合する。
+    /// 野生レベルを Scale で割った値を渡せば、移植元と同じ答えが出る。
+    /// ⚠️ ゴールデンは作り直さない ── 作り直すと「移植元と一致している」証明が消える。</summary>
     [Fact]
     public void 実値の求め方が一致する()
     {
         var golden = Golden.Load("stats");
         foreach (var entry in golden.GetProperty("actualStats").EnumerateArray())
         {
+            var wild = Golden.Block(entry.GetProperty("wild"));
             var actual = Stats.ActualStats(
                 Golden.Block(entry.GetProperty("base")),
-                Golden.Block(entry.GetProperty("wild")),
+                wild,
                 Golden.Block(entry.GetProperty("trained")));
-            Assert.Equal(Golden.Block(entry.GetProperty("out")), actual);
+            // ⭐ 増えたのは「野生レベル × (Scale − 1)」ちょうど
+            var want = Golden.Block(entry.GetProperty("out"));
+            foreach (var key in Stats.Keys)
+                Assert.Equal(want[key] + wild[key] * (Stats.Scale - 1), actual[key]);
         }
     }
 }
@@ -154,16 +213,63 @@ public class SkillsGoldenTests
     /// 引き受け役は盾・かばうと役割が重なっていて、狙い先を縛るほうが手として太い。</summary>
     private static readonly HashSet<string> Reclassified = new HashSet<string> { "ct-long", "taunt" };
 
+    /// <summary>意図して CT を下げた技（2026-08-19・作者の指示）。
+    /// ⭐ **ここに書いたものだけが許される。**書いていない技の CT が変わったら落ちる。
+    ///
+    /// ⚠️ 1体が動けるのは1戦闘でおよそ **5.6手**（`sim pace`）。CT6・7 の技は
+    /// **1戦闘に1回しか撃てず**、全手番の **68.8% が枠1（種族の通常攻撃・CT0）**になっていた。
+    /// ⭐ 上限を **5** に下げた。
+    /// ⚠️ **盤面をひっくり返しうる4件（蘇生・蘇生・大・全体強攻撃・全体連撃）は 7 のまま。**
+    /// 1回きりであることが持ち味なので、短くすると別物になる。
+    ///
+    /// ⚠️ ゴールデンは作り直さない ── 作り直すと「移植元と一致している」証明が消える。</summary>
+    private static readonly HashSet<string> CtLowered = new HashSet<string>
+    {
+        "attack-heavy", "stun", "guts", "attack-thrice", "attack-def-twice", "venom-heavy",
+        "heal-big", "slow-all", "heal-miracle", "shield-wall", "guts-deep", "immune-long",
+        "stun-heavy", "ct-lock", "buff-steal", "sleep",
+    };
+
+    /// <summary>下げたあとの CT。⭐ 全部これ1つ（上限をそろえたので値も1つ）。</summary>
+    private const int CtCap = 5;
+
+    /// <summary>意図して移植元から**狙い先**を変えた技（2026-08-18）。
+    ///
+    /// ⚠️ 移植元では強化が全部「自分」、回復が全部「一番弱った味方（自動）」だった。
+    /// ⭐ **味方1体を選んで掛ける**形にしたので、狙い先と説明文が変わる。
+    /// 理由: 強化13技すべてが Self だったため、プレイヤーが決めているのが
+    /// 「いま動く1体が3枠のどれを押すか」だけになっていた ── 「誰に配るか」の軸が無かった。
+    ///
+    /// ⚠️ **挑発は不具合の修正でもある。**効果を「相手に付ける弱化」に作り替えたのに
+    /// 技の狙い先が Self のままで、縛りが一度も発動していなかった。
+    ///
+    /// ⚠️ **ここに書いたものだけが許される。**⭐ CT・名前・効果の中身は全件そのまま見続ける。</summary>
+    private static readonly HashSet<string> Retargeted = new HashSet<string>
+    {
+        "atk-up", "def-up", "spd-up",       // 自分 → 味方1体
+        "regen", "heal-ratio", "shield",    // 一番弱った味方 → 味方1体
+        "guts", "immune",                   // 自分 → 味方1体
+        "taunt",                            // 自分 → 敵1体（不具合の修正）
+    };
+
 
     [Fact]
     public void 威力と割合の表が一致する()
     {
         var golden = Golden.Load("skills");
+        // ⚠️ **威力の意味そのものを変えた**（2026-08-19・作者の指示）。
+        //    移植元は「絶対値」（12/20/30/42）、いまは「攻撃力の何倍か」（×1.2/1.5/2.0/3.0）。
+        //    ⭐ 単位が違うので数の照合はできない。**段位の順が崩れていないこと**だけを見る。
+        // ⚠️ ゴールデンは作り直さない ── 移植元の値はここに残り続ける。
         var power = golden.GetProperty("damagePower");
-        Assert.Equal(power.GetProperty("小").GetInt32(), Skills.DamagePowerOf(PowerTier.Small));
-        Assert.Equal(power.GetProperty("中").GetInt32(), Skills.DamagePowerOf(PowerTier.Medium));
-        Assert.Equal(power.GetProperty("大").GetInt32(), Skills.DamagePowerOf(PowerTier.Large));
-        Assert.Equal(power.GetProperty("特大").GetInt32(), Skills.DamagePowerOf(PowerTier.Huge));
+        Assert.True(power.GetProperty("小").GetInt32() < power.GetProperty("中").GetInt32());
+        Assert.True(power.GetProperty("中").GetInt32() < power.GetProperty("大").GetInt32());
+        Assert.True(power.GetProperty("大").GetInt32() < power.GetProperty("特大").GetInt32());
+        Assert.True(Skills.DamagePowerOf(PowerTier.Small) < Skills.DamagePowerOf(PowerTier.Medium));
+        Assert.True(Skills.DamagePowerOf(PowerTier.Medium) < Skills.DamagePowerOf(PowerTier.Large));
+        Assert.True(Skills.DamagePowerOf(PowerTier.Large) < Skills.DamagePowerOf(PowerTier.Huge));
+        // ⭐ 等倍（PowerUnit）より下の段位は作らない ── 「攻撃するより弱い技」は要らない
+        Assert.True(Skills.DamagePowerOf(PowerTier.Small) >= Skills.PowerUnit);
         Assert.Equal(golden.GetProperty("buffPercent").GetInt32(), Skills.BuffPercent);
         Assert.Equal(golden.GetProperty("tickPercent").GetInt32(), Skills.TickPercent);
     }
@@ -189,14 +295,43 @@ public class SkillsGoldenTests
 
             Assert.Equal(id, skill.Id);
             Assert.Equal(entry.GetProperty("name").GetString(), skill.Name);
-            Assert.Equal(entry.GetProperty("gist").GetString(), skill.Gist);
-            Assert.Equal(entry.GetProperty("ct").GetInt32(), skill.Ct);
-            Assert.Equal(Golden.Target(entry.GetProperty("target").GetString()!), skill.Target);
+            if (CtLowered.Contains(id))
+            {
+                // ⭐ 下げた先は全部 CtCap。⚠️ 移植元が既に CtCap 以下だったなら
+                //    「下げた」ことになっていないので、表から外すべき（ここで落ちる）
+                Assert.True(entry.GetProperty("ct").GetInt32() > CtCap,
+                    $"{id}: 移植元の CT は {entry.GetProperty("ct").GetInt32()} で、下げる必要が無い");
+                Assert.Equal(CtCap, skill.Ct);
+            }
+            else
+            {
+                Assert.Equal(entry.GetProperty("ct").GetInt32(), skill.Ct);
+            }
+            if (Retargeted.Contains(id))
+            {
+                // ⚠️ 狙い先を変えたので説明文も変わる。⭐ 移植元と違うことだけ確かめる
+                //    （同じなら直し忘れ）
+                Assert.NotEqual(Golden.Target(entry.GetProperty("target").GetString()!), skill.Target);
+            }
+            else
+            {
+                Assert.Equal(entry.GetProperty("gist").GetString(), skill.Gist);
+                Assert.Equal(Golden.Target(entry.GetProperty("target").GetString()!), skill.Target);
+            }
 
             // ⭐ 枠1 の CT は常に 0。CT は技ではなく枠の性質
             Assert.Equal(entry.GetProperty("ctSlot0").GetInt32(), Skills.EffectiveCt(0, skill));
-            Assert.Equal(entry.GetProperty("ctSlot1").GetInt32(), Skills.EffectiveCt(1, skill));
-            Assert.Equal(entry.GetProperty("ctSlot2").GetInt32(), Skills.EffectiveCt(2, skill));
+            if (CtLowered.Contains(id))
+            {
+                // ⭐ 枠2・3 は技の CT そのもの（下げた先）
+                Assert.Equal(CtCap, Skills.EffectiveCt(1, skill));
+                Assert.Equal(CtCap, Skills.EffectiveCt(2, skill));
+            }
+            else
+            {
+                Assert.Equal(entry.GetProperty("ctSlot1").GetInt32(), Skills.EffectiveCt(1, skill));
+                Assert.Equal(entry.GetProperty("ctSlot2").GetInt32(), Skills.EffectiveCt(2, skill));
+            }
 
             // 同じ id を引けること（表に無いものは投げる側の確認は別テスト）
             Assert.Same(skill, Skills.ById(id));
@@ -263,26 +398,101 @@ public class SkillsGoldenTests
         }
     }
 
-    /// <summary>⭐ 種族ごとにプールを分けていること。枠1と同じ技が外れていること。
+    /// <summary>⚠️ **卵ガチャを枠ごとの型プールに作り替えた（2026-08-18）。**
     ///
-    /// ⚠️ **ここだけは「完全に同じ」を要求する。** プールは乱数で引く対象なので、
-    /// 既にある種族のプールに1つ足すと、そこから孵る卵の技が全部ずれ、
-    /// nest / game / breeding の照合がまとめて落ちる。
+    /// 移植元は「種族に1つのプールから枠2・3 を2つ引く」だった。
+    /// ⭐ いまは **枠2 と枠3 で別の型**（アタック / サポート / デバフ / ヒール）から1つずつ引く。
+    /// 理由: 狙った組み合わせが 2.8〜4.8% でしか出ず、
+    /// 「この巣からは何が来るか」も読めなかった。
     ///
-    /// ⭐ つまり **移植済みの4種のプールは凍結**。新しい技は**新しい種族のプールへ**入れる。
-    /// 既存種族に技を足したくなったら、それは golden を捨てる判断なので、先に決める。</summary>
+    /// ⚠️ **ゴールデンは作り直さない。**移植元の中身と比べられなくなったので、
+    /// ⭐ ここで見続けるのは**規則のほう**にする:
+    ///   ・枠1 と同じ技はプールから外れている
+    ///   ・種族ごとにプールが違う（どこで奪っても同じ技、にならない）
+    ///   ・移植元のプールにあった技は、いまもどこかの種族から手に入る
+    /// ⚠️ 最後の1つが「技が黙って入手不能になる」を止める（プールを作り替えた日の本当の危険はそこ）。</summary>
     [Fact]
-    public void 移植した卵ガチャのプールが1つも変わっていない()
+    public void 移植した技はいまも手に入る()
     {
         var golden = Golden.Load("skills");
+        var anywhere = new HashSet<string>();
+        foreach (var species in SpeciesTable.All)
+        {
+            anywhere.Add(species.Skill1);
+            foreach (var id in Skills.GachaPoolOf(species.Id, species.Skill1)) anywhere.Add(id);
+        }
+
+        var shapes = new HashSet<string>();
         foreach (var entry in golden.GetProperty("gachaPools").EnumerateArray())
         {
             string species = entry.GetProperty("species").GetString()!;
             string skill1 = entry.GetProperty("skill1").GetString()!;
-            var expected = Golden.Strings(entry.GetProperty("pool"));
-            Assert.Equal(expected, Skills.GachaPoolOf(species, skill1));
-            Assert.DoesNotContain(skill1, Skills.GachaPoolOf(species, skill1));
+            var pool = Skills.GachaPoolOf(species, skill1);
+
+            Assert.DoesNotContain(skill1, pool);
+            Assert.True(shapes.Add(string.Join(",", pool)),
+                $"{species} のプールが他の種族と丸ごと同じ（巣を選ぶ理由が消える）");
+
+            foreach (string id in Golden.Strings(entry.GetProperty("pool")))
+            {
+                Assert.True(anywhere.Contains(id),
+                    $"{id}: 移植元では {species} から出たのに、いまはどこからも手に入らない");
+            }
         }
+    }
+
+    /// <summary>袋の不変条件。⭐ **型の縛りを外した代わりに置いたもの**（2026-08-19）。
+    ///
+    /// ⚠️ 型で縛っていた頃、この検査は「枠2 と枠3 が別の型」だった。
+    /// 縛りが守っていたのは「1つの種族が単一の役割にならない」ことだったので、
+    /// **それを直接数える**形へ書き直してある。
+    ///
+    /// ⚠️ 縛りを外したぶん、代わりに数えるものが増えた:
+    /// <list type="number">
+    /// <item>袋の大きさ ── ⭐ **狙える確率はここだけで決まる**（1/(a×b)）</item>
+    /// <item>1つの技が入っている袋の数 ── ⚠️ 増やすと「どこで奪っても同じ」に戻る</item>
+    /// <item>枠2 と枠3 の重なり ── 同じ技が2枠を占めると片方が無駄</item>
+    /// <item>役割の偏り ── 2つの袋が同じ役割だけだと、分けた意味が無い</item>
+    /// </list></summary>
+    [Fact]
+    public void 袋の不変条件()
+    {
+        var homes = new Dictionary<string, List<string>>();
+        foreach (var species in SpeciesTable.All)
+        {
+            var a = species.Slot2.Pool;
+            var b = species.Slot3.Pool;
+
+            Assert.True(a.Count > 0 && b.Count > 0, $"{species.Id}: 袋が空");
+            Assert.True(a.Count <= Skills.PoolMax,
+                $"{species.Id}: 枠2 が {a.Count} 件（上限 {Skills.PoolMax}）");
+            Assert.True(b.Count <= Skills.PoolMax,
+                $"{species.Id}: 枠3 が {b.Count} 件（上限 {Skills.PoolMax}）");
+
+            foreach (var id in a)
+                Assert.DoesNotContain(id, b);
+
+            var roles = new HashSet<SkillType>();
+            foreach (var id in a) roles.Add(Skills.TypeOf(Skills.ById(id)));
+            foreach (var id in b) roles.Add(Skills.TypeOf(Skills.ById(id)));
+            Assert.True(roles.Count >= 2, $"{species.Id}: 2つの袋が同じ役割しか持たない");
+
+            foreach (var id in a) Home(homes, id, $"{species.Id}枠2");
+            foreach (var id in b) Home(homes, id, $"{species.Id}枠3");
+        }
+
+        foreach (var pair in homes)
+        {
+            Assert.True(pair.Value.Count <= Skills.SpreadMax,
+                $"{pair.Key}: {pair.Value.Count} か所の袋に居る（上限 {Skills.SpreadMax}）"
+                + $" ── {string.Join(" ", pair.Value)}");
+        }
+    }
+
+    private static void Home(Dictionary<string, List<string>> homes, string id, string where)
+    {
+        if (!homes.TryGetValue(id, out var list)) homes[id] = list = new List<string>();
+        list.Add(where);
     }
 
     [Fact]
@@ -334,7 +544,13 @@ public class SpeciesGoldenTests
     public void 移植した種族が1つも変わっていない()
     {
         var golden = Golden.Load("species");
-        Assert.Equal(golden.GetProperty("baseTotal").GetInt32(), SpeciesTable.BaseTotal);
+        // ⚠️ **基礎値の合計は意図して変えた**（80 → 120・2026-08-19・作者の判断）。
+        //    弱化命中・弱化耐性が全種族 0 で、育成の同じ ＋20 が他ステの倍の倍率
+        //    （+115% 対 +52〜63%）で効いていたため。
+        // ⭐ 既存の4本は1つも触っていない ── 下の照合がそれを示す。
+        Assert.Equal(80, golden.GetProperty("baseTotal").GetInt32());
+        // ⚠️ 合計 120 は「移植元の 80 ＋ 弱化2本ぶん 40」。さらに桁を Scale 倍してある
+        Assert.Equal(120 * Stats.Scale, SpeciesTable.BaseTotal);
 
         var list = golden.GetProperty("list");
 
@@ -362,11 +578,26 @@ public class SpeciesGoldenTests
             {
                 Assert.Equal(entry.GetProperty("skill1").GetString(), species.Skill1);
             }
-            Assert.Equal(Golden.Block(entry.GetProperty("base")), species.Base);
+            // ⭐ **移植元の4本（HP・攻撃・防御・速度）は1つも変えていない。**
+            // ⚠️ 弱化命中・弱化耐性は移植元に無い欄なので、ここでは比べない
+            //    （2026-08-19 に全種族へ配った。下で合計として検査する）。
+            // ⭐ **移植元の4本は、配分が1つも動いていない。**
+            // ⚠️ 桁だけ Stats.Scale 倍にした（2026-08-19・作者の指示「大きな桁にしたい」）。
+            //    倍率で戻せば移植元と1つも違わないので、照合の強さは落ちていない。
+            var was = Golden.Block(entry.GetProperty("base"));
+            Assert.Equal(was.Hp * Stats.Scale, species.Base.Hp);
+            Assert.Equal(was.Atk * Stats.Scale, species.Base.Atk);
+            Assert.Equal(was.Def * Stats.Scale, species.Base.Def);
+            Assert.Equal(was.Spd * Stats.Scale, species.Base.Spd);
 
             // ⚠️ 種族ごとに基礎値の合計を変えない
-            Assert.Equal(entry.GetProperty("baseTotal").GetInt32(), Stats.TotalOf(species.Base));
+            Assert.Equal(entry.GetProperty("baseTotal").GetInt32(),
+                was.Hp + was.Atk + was.Def + was.Spd);
             Assert.Equal(SpeciesTable.BaseTotal, Stats.TotalOf(species.Base));
+            // ⭐ 足したぶんも全種族で同じ（差は配分だけ）
+            Assert.Equal(
+                SpeciesTable.BaseTotal - entry.GetProperty("baseTotal").GetInt32() * Stats.Scale,
+                species.Base.Acc + species.Base.Res);
 
             // ⚠️ 枠1 を差し替えた種族は名前も当然変わる（上の表が根拠）
             if (!Rebuilt.ContainsKey(id))

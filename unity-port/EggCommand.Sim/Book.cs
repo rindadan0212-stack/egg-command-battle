@@ -78,9 +78,17 @@ namespace EggCommand.Sim
                 html.Append(Num(b.Hp)).Append(Num(b.Atk)).Append(Num(b.Def)).Append(Num(b.Spd));
 
                 html.Append("<td class=pool>");
-                foreach (var id in species.Gacha)
+                // ⭐ 枠ごとに型が違う。どちらの枠から出るかが読めるように分けて出す
+                foreach (var slot in new[] { species.Slot2, species.Slot3 })
                 {
-                    html.Append("<span class=chip>").Append(Esc(Skills.ById(id).Name)).Append("</span>");
+                    html.Append("<div class=eff><b>").Append(Esc(Skills.FlavorOf(slot.Pool)))
+                        .Append("</b> ");
+                    foreach (var id in slot.Pool)
+                    {
+                        html.Append("<span class=chip>").Append(Esc(Skills.ById(id).Name))
+                            .Append("</span>");
+                    }
+                    html.Append("</div>");
                 }
                 html.Append("</td>");
 
@@ -99,7 +107,8 @@ namespace EggCommand.Sim
             {
                 if (effect.Kind == EffectKind.Damage)
                 {
-                    return effect.Scale == DamageScale.Def ? "防御で伸びる" : "攻撃で伸びる";
+                    // ⚠️ 二択で書かない（スピードを足した日にここだけ古くなった）
+            return Skills.LabelOf(effect.Scale) + "で伸びる";
                 }
             }
             return "ダメージ無し";
@@ -135,9 +144,13 @@ namespace EggCommand.Sim
             foreach (var species in SpeciesTable.All)
             {
                 Add(from, species.Skill1, species.Name + "（枠1）");
-                foreach (var id in species.Gacha)
+                foreach (var id in species.Slot2.Pool)
                 {
-                    if (id != species.Skill1) Add(from, id, species.Name);
+                    if (id != species.Skill1) Add(from, id, species.Name + "（枠2）");
+                }
+                foreach (var id in species.Slot3.Pool)
+                {
+                    if (id != species.Skill1) Add(from, id, species.Name + "（枠3）");
                 }
             }
 
@@ -145,32 +158,25 @@ namespace EggCommand.Sim
             html.Append("<p class=note>⭐ <b>どの種族から出るか</b>が右端。"
                 + "空欄の技は<b>手に入らない</b>（数える検査が落ちる）。<br>"
                 + "⚠️ 確率が付くのは<b>ダメージと強化以外</b>。"
-                + "相手に掛けるものだけ、実際の率が速度差で ±30pt 動く。</p>");
+                + "相手に掛けるものだけ、実際の率が（弱化命中 − 弱化耐性）÷2 ポイント動く。</p>");
 
+            // ⭐ 並びは Wiki の技ページと同じ5項目（スキル名 / 威力 / 効果 / 上昇量 / CT）
             html.Append("<div class=scroll><table><thead><tr>"
-                + "<th>技</th><th class=num>CT</th><th>対象</th><th>効果</th>"
+                + "<th>スキル名</th><th>型</th><th class=num>威力</th><th>効果</th>"
+                + "<th>レベルごとの上昇量</th><th class=num>CT</th>"
                 + "<th>出る種族</th></tr></thead><tbody>");
 
             foreach (var skill in Skills.All)
             {
                 html.Append("<tr>");
                 html.Append("<td class=name><b>").Append(Esc(skill.Name)).Append("</b><br><code>")
-                    .Append(Esc(skill.Id)).Append("</code><br><span class=dim>")
-                    .Append(Esc(skill.Gist)).Append("</span></td>");
+                    .Append(Esc(skill.Id)).Append("</code></td>");
+                html.Append("<td class=tight>").Append(Esc(Skills.LabelOf(skill.Type))).Append("</td>");
+                // ⚠️ ダメージのある技だけ。他は空欄
+                html.Append("<td class=num>").Append(Esc(SkillText.PowerOf(skill))).Append("</td>");
+                html.Append("<td>").Append(Esc(SkillText.Describe(skill))).Append("</td>");
+                html.Append("<td class=tight>").Append(Esc(SkillText.GrowthOf(skill))).Append("</td>");
                 html.Append(Num(skill.Ct));
-                html.Append("<td class=tight>").Append(Esc(TargetLabel(skill.Target))).Append("</td>");
-
-                html.Append("<td>");
-                foreach (var effect in skill.Effects)
-                {
-                    html.Append("<div class=eff>").Append(Esc(EffectLabel(effect)));
-                    if (effect.Chance < 100)
-                    {
-                        html.Append(" <span class=chance>").Append(effect.Chance).Append("%</span>");
-                    }
-                    html.Append("</div>");
-                }
-                html.Append("</td>");
 
                 html.Append("<td class=pool>");
                 List<string>? owners;
@@ -180,6 +186,11 @@ namespace EggCommand.Sim
                     {
                         html.Append("<span class=chip>").Append(Esc(owner)).Append("</span>");
                     }
+                }
+                else if (Skills.Undistributed.Contains(skill.Id))
+                {
+                    // ⭐ 実装済みだがまだ配っていない（作者指示 2026-08-19）。事故の「手に入らない」と分ける
+                    html.Append("<span class=chip>🚧 未配布</span>");
                 }
                 else
                 {
@@ -197,40 +208,8 @@ namespace EggCommand.Sim
             list!.Add(value);
         }
 
-        private static string TargetLabel(Target target)
-        {
-            switch (target)
-            {
-                case Target.EnemyOne: return "敵1体";
-                case Target.EnemyAll: return "敵全体";
-                case Target.AllyLowest: return "味方1体";
-                default: return "自分";
-            }
-        }
-
-        private static string EffectLabel(Effect e)
-        {
-            switch (e.Kind)
-            {
-                case EffectKind.Damage:
-                    string scale = e.Scale == DamageScale.Def ? "防御" : "攻撃";
-                    string times = e.Repeat > 1 ? $" ×{e.Repeat}回" : "";
-                    return $"ダメージ {Skills.LabelOf(e.Power)}（{scale}で伸びる）{times}";
-                case EffectKind.Buff:
-                    string dir = e.Sign > 0 ? "UP" : "DOWN";
-                    return $"{Stats.LabelOf(e.Stat)}{dir} {Skills.BuffPercent}% / {e.Turns}行動";
-                case EffectKind.Poison: return $"毒 ×{e.Stacks} / {e.Turns}行動";
-                case EffectKind.Regen: return $"リジェネ ×{e.Stacks} / {e.Turns}行動";
-                case EffectKind.HealRatio: return $"HP回復 最大の{e.Percent}%";
-                case EffectKind.Shield: return $"盾 {e.Count}枚";
-                case EffectKind.Stun: return $"スタン {e.Turns}回";
-                case EffectKind.Ct: return $"CT {(e.Delta > 0 ? "+" : "")}{e.Delta}";
-                case EffectKind.Taunt: return $"挑発 {e.Hits}回ぶん";
-                case EffectKind.Guts: return $"ガッツ {e.Turns}行動";
-                case EffectKind.Immune: return $"免疫 {e.Turns}行動";
-                default: return e.Kind.ToString();
-            }
-        }
+        // ⚠️ 技と効果の言い回しは **Core の SkillText** に集約した（2026-08-18）。
+        //    ここに第2の語彙を置かない。
 
         // ── 特性 ────────────────────────────────────────
 

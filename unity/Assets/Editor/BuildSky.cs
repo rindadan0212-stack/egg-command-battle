@@ -48,6 +48,14 @@ namespace EggCommand.EditorTools
                 tex.Apply();
 
                 string path = $"{Dir}/{pair.Key}.png";
+                // ⚠️ **既にある絵は上書きしない。**この道具は下敷きを1度作るためのもので、
+                //    描き直したあとに走らせると手で描いた空が一瞬で戻っていた。
+                //    ⭐ 他の書き出し道具（BuildScreenPrefabs など）と同じ約束に揃える
+                if (System.IO.File.Exists(path))
+                {
+                    Object.DestroyImmediate(tex);
+                    continue;
+                }
                 System.IO.File.WriteAllBytes(path, tex.EncodeToPNG());
                 Object.DestroyImmediate(tex);
                 AssetDatabase.ImportAsset(path);

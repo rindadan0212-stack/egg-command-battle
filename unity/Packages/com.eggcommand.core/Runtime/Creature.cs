@@ -106,10 +106,91 @@ namespace EggCommand.Core
 
         public static Species SpeciesOf(Creature creature) => SpeciesTable.ById(creature.SpeciesId);
 
+        /// <summary>育てた分の合計。⭐ 並べ替えと画面の表示に使う。</summary>
         public static int SpentOf(Creature creature) => Stats.TotalOf(creature.Trained);
 
-        /// <summary>まだ振っていない育成ポイント。</summary>
-        public static int UnspentOf(Creature creature) => creature.Earned - SpentOf(creature);
+        /// <summary>1レベルで伸びる割合（素質に対する千分率）。0 なら
+        /// <see cref="GrowthFlatOf"/> のほうで伸びる。
+        ///
+        /// ⭐ **平らな ＋1 ではなく「素質の何%」。**（作者の判断 2026-08-19）
+        /// ⚠️ ＋1 を平らに配っていたとき、1点の価値がステで **22倍** ちがった
+        /// （<c>sim statvalue</c> 実測: HP 2.24pt / 弱化命中 0.10pt）。
+        /// 単位が違うものを 1点 ＝ 1点 で配っていたのが原因。
+        ///
+        /// ⭐ 割合にすると **素質の高い個体はその分野の伸びも大きくなる** ──
+        /// 「素質が高い個体がその分野で有利になっていく」というこのゲーム共通の考え方が、
+        /// 育成にもそのまま通る。
+        ///
+        /// ⚠️ **値は勘で置かない。**<c>sim statvalue</c> の「1レベルぶんの価値」が
+        /// 揃うところを測って決める（1点の価値が低いステほど多く配る）。</summary>
+        public static int GrowthPermilOf(StatKey key)
+        {
+            switch (key)
+            {
+                // 1点あたり 2.24pt（一番高い）→ 一番少なく配る
+                // ⚠️ 50 では3つの種すべてで HP だけ 1割ほど高く出た（測って下げた）
+                case StatKey.Hp: return 50;
+                // 1点あたり 1.82pt
+                // ⚠️ 60 では3つの種すべてで速度だけ 1割ほど高く出た（測って下げた）
+                case StatKey.Spd: return 60;
+                // 1点あたり 1.48pt
+                case StatKey.Atk: return 70;
+                // 1点あたり 1.39pt
+                case StatKey.Def: return 90;
+                // ⚠️ 弱化命中・弱化耐性は割合で伸ばさない。理由は GrowthFlatOf
+                default: return 0;
+            }
+        }
+
+        /// <summary>1レベルで伸びる**平らな**量。⭐ 割合で伸ばせないステのため。
+        ///
+        /// ⚠️ **弱化命中・弱化耐性は「差」で効く。**通る率は <c>(命中 − 抵抗) / 2</c> という
+        /// **引き算**なので、両者を割合で伸ばすと**差まで倍になる**。
+        /// 実際 8%/Lv だと、素質 14〜54 の幅が Lv20 で 36〜140 に開き、
+        /// 通る率の差が 20pt → **52pt**（帯は床25%〜天井95% の 70pt しかない）。
+        /// ほとんどの組み合わせが床か天井に貼り付いて、軸が死ぬ。
+        ///
+        /// ⭐ **比で効くステ（HP・攻撃・防御・速度）は割合でよい。**
+        /// 攻撃と防御の式（<see cref="Battle.DamageOf"/>）・<c>GaugeBase+速度</c>・
+        /// <c>HP×HpScale</c> はどれも比なので、
+        /// 両者が同じ割合で伸びても釣り合いは動かない。
+        ///
+        /// ⭐ 平らに配れば、通る率の差は**素質の差のまま**保たれる。</summary>
+        public static int GrowthFlatOf(StatKey key)
+        {
+            switch (key)
+            {
+                // ⚠️ 実値の単位。野生レベル1点ぶん（＝ Stats.Scale）に揃える
+                case StatKey.Acc:
+                case StatKey.Res: return Stats.Scale;
+                default: return 0;
+            }
+        }
+
+        /// <summary>育てる前の実値（＝素質）。⭐ 種族の基礎値 ＋ 野生レベル。
+        /// ⚠️ 得意・不得意の ±15% は**掛けない** ── <see cref="Slanted"/> が
+        /// 最後に実値へ掛けるので、ここで掛けると二重になる。</summary>
+        public static StatBlock BornStatsOf(string speciesId, StatBlock wild) =>
+            Stats.ActualStats(SpeciesTable.ById(speciesId).Base, wild, new StatBlock(0, 0, 0, 0));
+
+        /// <summary>育てた分。⭐ **Lv から必ず一意に決まる**（素質 × 割合 × Lv）。
+        ///
+        /// ⚠️ 足し込みで持たない。1レベルぶんを毎回丸めて足すと誤差が積もり、
+        /// 同じ素質・同じ Lv の個体でも数が食い違う。⭐ 毎回ゼロから作り直す。
+        /// ⭐ 一意に決まるので、古い保存も読むときに作り直せる（<c>Snapshot</c>）。</summary>
+        public static StatBlock TrainedFor(string speciesId, StatBlock wild, int earned)
+        {
+            if (earned <= 0) return new StatBlock(0, 0, 0, 0);
+            var born = BornStatsOf(speciesId, wild);
+            var made = new StatBlock(0, 0, 0, 0);
+            foreach (var key in Stats.Keys)
+            {
+                double grown = (double)born[key] * GrowthPermilOf(key) * earned / 1000.0
+                    + GrowthFlatOf(key) * earned;
+                made = made.With(key, (int)Math.Floor(grown + 0.5));
+            }
+            return made;
+        }
 
         /// <summary>戦闘の報酬。⚠️ 上限を超えて溜めない。</summary>
         public static void Award(Creature creature, int amount)
@@ -118,44 +199,28 @@ namespace EggCommand.Core
             creature.Earned = next > TrainMax ? TrainMax : next;
         }
 
-        /// <summary>育てる。⭐ 振り先は選ばせない — その個体の**得意**へ自動で乗る。
+        /// <summary>育てる。⭐ **1レベルにつき、6ステすべてが「素質の何%」ずつ伸びる。**
         ///
-        /// ⭐ 選ばせないのは、選択になっていなかったから。上限も対価も無い ＋1 は
-        /// 「多いほど良い」でしかなく、答えは画面が既に教えている。
-        /// ⭐ 得意の方向へ乗るので、個体ごとに違う形に育つ（全部が同じ最適形へ収束しない）。
-        /// ⚠️ 得意を持たない個体（移植元と同じ作り）は素質の高い順に乗せる。
+        /// ⚠️ 直す前は**得意1本**にだけ乗せ、そのあと**平らに ＋1**にした。
+        /// どちらも作者の指摘で作り替えている（2026-08-19）:
+        /// ・得意1本 → 「生まれた個体が弱かったら絶対に使いみちがない」
+        /// ・平らな ＋1 → 「ステの種類によって ＋1 の価値が全然違う」（実測で 22倍 の開き）
+        ///
+        /// ⭐ 割合にすると、素質の高い個体はその分野の伸びも大きくなる。
+        /// ⭐ **得意・不得意の補正は掛け直さない。**<see cref="Slanted"/> が
+        /// 最後に実値へ ±15% を掛けるので、育てた分にも自動で乗る。
+        ///
+        /// ⚠️ 振り先は選ばせない（上限も対価も無い ＋1 は選択になっていない）。
         /// </summary>
-        /// <returns>実際に伸びた点数。上限に達していれば 0。</returns>
+        /// <returns>実際に上がったレベル。上限に達していれば 0。</returns>
         public static int Grow(Creature creature, int amount)
         {
             int before = creature.Earned;
             Award(creature, amount);
             int gained = creature.Earned - before;
-            for (int i = 0; i < gained; i++)
-            {
-                var key = creature.Strong ?? Tallest(creature);
-                creature.Trained = creature.Trained.With(key, creature.Trained[key] + 1);
-            }
+            if (gained <= 0) return 0;
+            creature.Trained = TrainedFor(creature.SpeciesId, creature.Wild, creature.Earned);
             return gained;
-        }
-
-        private static StatKey Tallest(Creature creature)
-        {
-            var best = Stats.Keys[0];
-            foreach (var key in Stats.Keys)
-            {
-                if (creature.Wild[key] > creature.Wild[best]) best = key;
-            }
-            return best;
-        }
-
-        /// <summary>1点を振る。⚠️ 戻せない（取り返しがつかないほうが判断に重みが出る）。
-        /// ⚠️ 遊びからは外した（<see cref="Grow"/> が自動で振る）。移植元との照合のために残す。</summary>
-        public static void SpendPoint(Creature creature, StatKey key)
-        {
-            if (UnspentOf(creature) <= 0)
-                throw new InvalidOperationException($"{creature.Id} に振れる育成ポイントが無い");
-            creature.Trained = creature.Trained.With(key, creature.Trained[key] + 1);
         }
 
         /// <summary>3枠ぶんのスキル。⭐ 枠1は必ず種族のもの。空き枠は null。</summary>

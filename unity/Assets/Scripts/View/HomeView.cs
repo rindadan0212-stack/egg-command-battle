@@ -46,9 +46,12 @@ namespace EggCommand.View
                 var captured = slot;
                 int at = i;
                 // ⭐ 入っていれば「取り出す」、空いていれば「在庫を開く」
+                // ⚠️ **孵ったときの手を必ず渡す**（いま孵っていなくても）。
+                //    ⭐ ホームを開いたまま時間が 0 になっても、その場で押せるようにするため
                 _slots[i].Bind(slot, now, app.Now,
                     slot == null ? () => OpenPicker(at)
-                        : ready ? () => onCollect(captured) : (Action)null);
+                        : ready ? () => onCollect(captured) : (Action)null,
+                    captured == null ? null : () => onCollect(captured));
             }
 
             // ⚠️ Body の中の在庫は使わない（上段と下段を覆えないため）。
@@ -57,11 +60,13 @@ namespace EggCommand.View
             _onBegin = onBegin;
         }
 
-        /// <summary>素材の数だけ描き直す。⚠️ 画面は組み直さない（毎秒作り直すと触れない）。</summary>
+        /// <summary>EXP の数だけ描き直す。⚠️ 画面は組み直さない（毎秒作り直すと触れない）。</summary>
         private void Retime()
         {
             if (_materials == null || _app == null) return;
-            _materials.text = _app.Game.Idle.Materials.ToString();
+            // ⭐ **EXP と書く。**⚠️ 数だけ出していた頃は、丸い印の隣の数が
+            //    何の数なのか画面のどこにも書いていなかった。
+            _materials.text = $"EXP {Ui.Digits(_app.Game.Idle.Exp)}";
         }
 
         private Action<int, Egg> _onBegin;

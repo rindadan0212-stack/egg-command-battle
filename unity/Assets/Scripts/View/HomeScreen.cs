@@ -15,6 +15,16 @@ namespace EggCommand.View
             var view = app.Put<HomeView>(body, "HomeScreen");
             if (view == null) return;
 
+            // ⭐ **パーティ編成の入口。**放置の3体をここで決める。
+            // ⚠️ BOX から「出撃」を消したので、ここが唯一の入口になる。
+            Ui.Tappable(body, "Party", "パーティ編成",
+                () => PartyPanel.Show(app, PartyKind.Idle),
+                // ⚠️ **下の帯（探索・配合・BOX）より上位に見せない。**
+                //    全幅の札にしていた頃は、ナビより大きくて階層が逆転していた
+                //    （レビュー指摘 2026-08-19）。⭐ 幅を半分にして右へ寄せる。
+                // ⚠️ 縦は孵化枠の下（616+780=1396〜1556）が空いている。
+                Ui.W / 2f, 1420f, Ui.W / 2f - Ui.Margin, Ui.Tap);
+
             view.Bind(app,
                 onBegin: (slot, egg) =>
                 {
@@ -55,6 +65,11 @@ namespace EggCommand.View
 
             var view = app.Put<NestsView>(body, "NestsScreen");
             if (view == null) return;
+
+            // ⭐ **巣を選ぶ前に編成を決める。**⚠️ 潜ってから「違った」と気づいても戻れない。
+            //    ⚠️ 画面の中には置けない ── 巣の札4枚が 24〜1604 を埋めていて、
+            //    どこに置いても重なる（実測）。⭐ 画面の外（上の帯）へ出す。
+            app.ShowExtra("パーティ編成", () => PartyPanel.Show(app, PartyKind.Nest));
             view.Bind(app,
                 encounter => StealScreen.Enter(app, encounter.Nest),
                 () => app.EnterBattle(null, true));

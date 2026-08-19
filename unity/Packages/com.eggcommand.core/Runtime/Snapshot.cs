@@ -13,11 +13,13 @@ namespace EggCommand.Core
     public sealed class StatSave
     {
         public int Hp, Atk, Def, Spd;
+        /// <summary>命中・抵抗。⚠️ 0 は「この2本より前の保存」＝振っていない、で正しく読める。</summary>
+        public int Acc, Res;
 
         public static StatSave Of(StatBlock b) =>
-            new StatSave { Hp = b.Hp, Atk = b.Atk, Def = b.Def, Spd = b.Spd };
+            new StatSave { Hp = b.Hp, Atk = b.Atk, Def = b.Def, Spd = b.Spd, Acc = b.Acc, Res = b.Res };
 
-        public StatBlock To() => new StatBlock(Hp, Atk, Def, Spd);
+        public StatBlock To() => new StatBlock(Hp, Atk, Def, Spd, Acc, Res);
     }
 
     [Serializable]
@@ -72,7 +74,11 @@ namespace EggCommand.Core
     [Serializable]
     public sealed class IdleSave
     {
-        public int Materials, Defeated;
+        /// <summary>⚠️ <c>Materials</c> は 2026-08-19 より前の欄名。
+        /// ⭐ 中身は同じもの（いまの名前は EXP）。読むときだけ拾う。</summary>
+        public int Materials, Exp, Defeated;
+        /// <summary>次の敵が現れてからの1拍（Idle.SpawnSeconds）。</summary>
+        public double Spawn;
         public long LastUnix;
         public double EnemyHp, Charge;
         public List<string> DownIds = new List<string>();
@@ -90,6 +96,11 @@ namespace EggCommand.Core
         public List<IncubationSave> Incubating = new List<IncubationSave>();
         public List<EncounterSave> Encounters = new List<EncounterSave>();
         public List<string> Party = new List<string>();
+        /// <summary>巣の編成 3本を平らに並べたもの。
+        /// ⚠️ JsonUtility は入れ子の List を書けないので、区切りの数と一緒に持つ。</summary>
+        public List<string> NestParties = new List<string>();
+        public List<int> NestPartyCounts = new List<int>();
+        public int NestParty;
         public IdleSave Idle = new IdleSave();
         /// <summary>巣ごとに盗んだ回数。⚠️ 2本を添字で対にする（JsonUtility が辞書を書けない）。</summary>
         public List<string> RaidNests = new List<string>();
@@ -146,8 +157,15 @@ namespace EggCommand.Core
                 });
             }
             save.Party.AddRange(game.Party);
+            save.NestParty = game.NestParty;
+            foreach (var roster in game.NestParties)
+            {
+                save.NestPartyCounts.Add(roster.Count);
+                save.NestParties.AddRange(roster);
+            }
 
-            save.Idle.Materials = game.Idle.Materials;
+            save.Idle.Exp = game.Idle.Exp;
+            save.Idle.Spawn = game.Idle.Spawn;
             save.Idle.Defeated = game.Idle.Defeated;
             save.Idle.LastUnix = game.Idle.LastUnix;
             save.Idle.EnemyHp = game.Idle.EnemyHp;
@@ -207,8 +225,28 @@ namespace EggCommand.Core
                     e.Level, e.UntilUnix));
             }
             game.Party.AddRange(save.Party);
+            game.NestParty = save.NestParty;
+            if (save.NestPartyCounts.Count == 0)
+            {
+                // ⭐ **古い保存。**編成が1本しか無かった頃のものなので、
+                //    それを**放置と巣1の両方**へ引き継ぐ。
+                //    ⚠️ 片方だけにすると、続きから始めた人の編成が片方だけ消える。
+                game.NestParties[0].AddRange(save.Party);
+            }
+            else
+            {
+                int at = 0;
+                for (int i = 0; i < Games.NestPartySlots; i++)
+                {
+                    int n = i < save.NestPartyCounts.Count ? save.NestPartyCounts[i] : 0;
+                    for (int k = 0; k < n && at < save.NestParties.Count; k++, at++)
+                        game.NestParties[i].Add(save.NestParties[at]);
+                }
+            }
 
-            game.Idle.Materials = save.Idle.Materials;
+            // ⚠️ 古い保存は Materials にしか入っていない。⭐ 新しい欄が空なら拾う
+            game.Idle.Exp = save.Idle.Exp > 0 ? save.Idle.Exp : save.Idle.Materials;
+            game.Idle.Spawn = save.Idle.Spawn;
             game.Idle.Defeated = save.Idle.Defeated;
             game.Idle.LastUnix = save.Idle.LastUnix;
             game.Idle.EnemyHp = save.Idle.EnemyHp;
@@ -316,12 +354,22 @@ namespace EggCommand.Core
             SkillPoints = new List<int>(c.SkillPoints),
         };
 
-        private static Creature To(CreatureSave s, List<string>? notes) => new Creature(
-            s.Id, ResolveSpecies(s.SpeciesId, notes), s.Wild.To(), s.Trained.To(), s.Earned,
+        private static Creature To(CreatureSave s, List<string>? notes) =>
+            To(s, ResolveSpecies(s.SpeciesId, notes), notes);
+
+        private static Creature To(CreatureSave s, string speciesId, List<string>? notes) => new Creature(
+            s.Id, speciesId, s.Wild.To(),
+            Creatures.TrainedFor(speciesId, s.Wild.To(), s.Earned), s.Earned,
             s.MutationCounter, ResolveSkill(s.Skill2, notes), ResolveSkill(s.Skill3, notes),
             s.PaletteIndex,
             s.ParentA, s.ParentB, s.Generation, Key(s.Strong), Key(s.Weak),
             Elem(s.Element), ResolveTrait(s.Trait, notes));
+
+        // ⚠️ 育てた分は保存から読まず、**Lv から作り直す**（Creatures.TrainedFor）。
+        //    育成の規則を 2026-08-19 に二度変えており（得意1本 → 平らに＋1 → 素質の割合）、
+        //    古い保存をそのまま読むと、同じ Lv なのに弱い個体が箱に残り続ける。
+        // ⭐ 育てた分は Lv から一意に決まるので、読むたびに作り直せる ── 失うものは無い。
+        // ⚠️ 保存の欄そのものは残す（読めなくなる版を作らない）。
 
         private static EggSave Of(Egg e) => new EggSave
         {

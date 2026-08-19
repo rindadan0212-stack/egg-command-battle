@@ -25,6 +25,9 @@ public class GaugeTests
     public void 刻んで進めても手番の順が変わらない(int seed)
     {
         var plain = Play(Fresh(seed), 0);
+        // ⚠️ 列そのものが自明でないことを先に確かめる。⭐ Play が即 break する形に
+        //    退化しても「両方とも短い列」で一致してしまう
+        Assert.True(plain.Count > 5, $"手番の列が短すぎる（{plain.Count}）");
         foreach (int ticks in new[] { 1, 3, 7 })
         {
             var stepped = Play(Fresh(seed), ticks);

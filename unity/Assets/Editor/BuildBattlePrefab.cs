@@ -70,9 +70,11 @@ namespace EggCommand.EditorTools
             var stand = root.AddComponent<UnitStand>();
             var so = new SerializedObject(stand);
             so.FindProperty("_art").objectReferenceValue = art.GetComponent<Image>();
+            so.FindProperty("_hpBar").objectReferenceValue = pill.gameObject;
             so.FindProperty("_hpFill").objectReferenceValue = fill.GetComponent<Image>();
             so.FindProperty("_hpBadge").objectReferenceValue = badge.GetComponent<Image>();
             so.FindProperty("_hpNumber").objectReferenceValue = num.GetComponent<Text>();
+            so.FindProperty("_gaugeBar").objectReferenceValue = track.gameObject;
             so.FindProperty("_gaugeFill").objectReferenceValue = gauge.GetComponent<Image>();
             so.FindProperty("_glow").objectReferenceValue = glow.gameObject;
             so.FindProperty("_elementMark").objectReferenceValue = mark.GetComponent<Image>();
@@ -118,6 +120,18 @@ namespace EggCommand.EditorTools
             foeGo.name = "Foe";
             Put((RectTransform)foeGo.transform, 600f, 300f, 1.6f);
 
+            // ⚠️ **3対3 の相手もここで作る。**作っていなかった頃は _foes が空のまま出荷され、
+            //    BattleView の `if (_foes != null)` に守られて**落ちずに1体しか出ない**という
+            //    形で退行した（雑魚戦で相手が1体だけ見える）。⭐ 味方の並びを鏡にする
+            var foes = new UnitStand[3];
+            for (int i = 0; i < 3; i++)
+            {
+                var go = (GameObject)PrefabUtility.InstantiatePrefab(stand, root.transform);
+                go.name = $"Foe {i}";
+                Put((RectTransform)go.transform, 600f, 150f + 300f * i, 1f);
+                foes[i] = go.GetComponent<UnitStand>();
+            }
+
             // 手札
             float full = 1080f - 96f;
             float wide = full * 0.66f;
@@ -136,6 +150,9 @@ namespace EggCommand.EditorTools
             a.arraySize = 3;
             for (int i = 0; i < 3; i++) a.GetArrayElementAtIndex(i).objectReferenceValue = allies[i];
             so.FindProperty("_foe").objectReferenceValue = foeGo.GetComponent<UnitStand>();
+            var f = so.FindProperty("_foes");
+            f.arraySize = 3;
+            for (int i = 0; i < 3; i++) f.GetArrayElementAtIndex(i).objectReferenceValue = foes[i];
             var s = so.FindProperty("_skills");
             s.arraySize = 3;
             for (int i = 0; i < 3; i++)

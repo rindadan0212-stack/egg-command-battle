@@ -44,6 +44,64 @@ public class TraitTests
         Assert.Equal(Traits.All.Count, Traits.Wired);
     }
 
+    // ── 畳み掛け（手番を報酬にする唯一の特性）────────────
+
+    /// <summary>⭐ **弱化を通したら、そのまま続けてもう一度動ける。**
+    ///
+    /// ⚠️ **見張るのはゲージの値ではなく「次に動くのが誰か」。**
+    /// 最初この特性は `actor.Gauge = GaugeMax`（代入）で書いてあった。
+    /// ゲージの値だけを見る検査ならそれで通るが、実際には技の処理のあとに
+    /// `PerformAction` が必ず `Gauge -= GaugeMax` するので、満タンがそっくり引かれて
+    /// **繋がっているのに効果ゼロ**だった（`sim traits` で −1.5pt ＝ 何も起きていない）。
+    /// ⭐ だからここは <see cref="Battle.NextActor"/> が同じ個体を返すことまで見る。</summary>
+    [Fact]
+    public void 畳み掛けは弱化を通すと続けて動ける()
+    {
+        // ⚠️ 素で必ず通る弱化（呪詛）を選ぶ。外れると条件を満たさず、検査が揺れる
+        // ⚠️ **相手をはるかに速くする。**同じ速度だと、特性が無くても次に自分が回ってきて
+        //    検査が通ってしまう（最初それで書いて、素の側の検査が落ちて気づいた）。
+        var state = Fight(Make("a", Traits.Surge, "curse", spd: 1),
+            Make("b", null, spd: 40));
+        var actor = UnitOf(state, Side.Ally);
+        actor.Gauge = Battle.GaugeMax;
+
+        Battle.PerformAction(state, actor, 1);
+
+        Assert.True(actor.TraitSpent, "使った印が立っていない");
+        Assert.Same(actor, Battle.NextActor(state));
+    }
+
+    /// <summary>⚠️ **1戦闘1回。**縛らないと、弱化を通すたびに動けて手番が返ってこない。</summary>
+    [Fact]
+    public void 畳み掛けは一戦闘に一度だけ()
+    {
+        var state = Fight(Make("a", Traits.Surge, "curse", spd: 1),
+            Make("b", null, spd: 40));
+        var actor = UnitOf(state, Side.Ally);
+        actor.Gauge = Battle.GaugeMax;
+        Battle.PerformAction(state, actor, 1);
+
+        // ⭐ 2回目は素の消費だけ ── 続けて動けない
+        actor.Cooldowns[1] = 0;
+        int before = actor.Gauge;
+        Battle.PerformAction(state, actor, 1);
+        Assert.True(actor.Gauge < before, "2回目も満タンに戻っている（1戦闘1回になっていない）");
+    }
+
+    /// <summary>⚠️ 持たない個体は1ビットも変わらない（筆頭の約束）。</summary>
+    [Fact]
+    public void 畳み掛けを持たなければ続けて動けない()
+    {
+        var state = Fight(Make("a", null, "curse", spd: 1), Make("b", null, spd: 40));
+        var actor = UnitOf(state, Side.Ally);
+        actor.Gauge = Battle.GaugeMax;
+
+        Battle.PerformAction(state, actor, 1);
+
+        Assert.False(actor.TraitSpent);
+        Assert.NotSame(actor, Battle.NextActor(state));
+    }
+
     // ── 常時: 狙い澄まし・意地 ────────────────────────
 
     /// <summary>⭐ 筆頭の約束。特性を持たない者どうしなら、率は素の式のまま。</summary>
@@ -54,8 +112,11 @@ public class TraitTests
         var actor = UnitOf(state, Side.Ally);
         var target = UnitOf(state, Side.Enemy);
 
-        // 速度が同じなので、素の率がそのまま出る
-        Assert.Equal(60, Battle.LandChanceOf(Effect.Poison(1, 3, 60), actor, target));
+        // ⭐ 同じ種族どうしなので、動くのは**基礎の命中と耐性の差**だけ。
+        // ⚠️ 「60 のまま」と直書きしていた頃は、種族の基礎に弱化命中・弱化耐性を
+        //    配った日（2026-08-19）に落ちた。⭐ 差から出す。
+        int gap = StatAccuracyTests.GapOf(actor, target);
+        Assert.Equal(60 + gap, Battle.LandChanceOf(Effect.Poison(1, 3, 60), actor, target));
         // ⚠️ 率 100 の弱化は乱数を1度も引かない（移植した試合が1手も変わらない条件）
         Assert.Equal(100, Battle.LandChanceOf(Effect.Poison(1, 3), actor, target));
     }
@@ -67,7 +128,10 @@ public class TraitTests
         var actor = UnitOf(state, Side.Ally);
         var target = UnitOf(state, Side.Enemy);
 
-        Assert.Equal(60 + Battle.TraitAim, Battle.LandChanceOf(Effect.Poison(1, 3, 60), actor, target));
+        // ⚠️ 期待値を直書きしない（種族の基礎に弱化命中・弱化耐性が入ったので差がある）
+        int gap = StatAccuracyTests.GapOf(actor, target);
+        Assert.Equal(60 + gap + Battle.TraitAim,
+            Battle.LandChanceOf(Effect.Poison(1, 3, 60), actor, target));
     }
 
     /// <summary>⚠️ 自分・味方に掛けるものは速度でも特性でも動かない。
@@ -89,7 +153,9 @@ public class TraitTests
         var actor = UnitOf(state, Side.Ally);
         var target = UnitOf(state, Side.Enemy);
 
-        Assert.Equal(60 - Battle.TraitStubborn, Battle.LandChanceOf(Effect.Poison(1, 3, 60), actor, target));
+        int gap = StatAccuracyTests.GapOf(actor, target);
+        Assert.Equal(60 + gap - Battle.TraitStubborn,
+            Battle.LandChanceOf(Effect.Poison(1, 3, 60), actor, target));
     }
 
     /// <summary>⭐ 「必ず通る弱化」にも効く。効かないと画面の説明と食い違う。</summary>
@@ -102,7 +168,8 @@ public class TraitTests
 
         int land = Battle.LandChanceOf(Effect.Poison(1, 3), actor, target);
         Assert.True(land < 100, $"率が {land} のままで意地が働いていない");
-        Assert.Equal(100 - Battle.TraitStubborn, land);
+        int gap = StatAccuracyTests.GapOf(actor, target);
+        Assert.Equal(100 + gap - Battle.TraitStubborn, land);
     }
 
     [Fact]
@@ -112,7 +179,8 @@ public class TraitTests
         var actor = UnitOf(state, Side.Ally);
         var target = UnitOf(state, Side.Enemy);
 
-        Assert.Equal(60, Battle.LandChanceOf(Effect.Poison(1, 3, 60), actor, target));
+        int gap = StatAccuracyTests.GapOf(actor, target);
+        Assert.Equal(60 + gap, Battle.LandChanceOf(Effect.Poison(1, 3, 60), actor, target));
     }
 
     // ── 攻撃を受けたとき: 返し身 ──────────────────────
@@ -189,12 +257,15 @@ public class TraitTests
         var state = Fight(Make("a", Traits.Leech, "attack"), Make("b", null));
         var actor = UnitOf(state, Side.Ally);
         var target = UnitOf(state, Side.Enemy);
-        actor.Hp = actor.MaxHp - 30;
+        // ⚠️ **傷は最大HPの割合で作る。**手で 30 と置いていた頃は、桁を上げた日に
+        //    吸った量が最大HPを超えて頭打ちになり、別の検査（超えて吸わない）と重なった。
+        int wound = actor.MaxHp / 2;
+        actor.Hp = actor.MaxHp - wound;
 
         Battle.PerformAction(state, actor, 1);
 
         int dealt = target.MaxHp - target.Hp;
-        Assert.Equal(actor.MaxHp - 30 + dealt * Battle.TraitLeechPercent / 100, actor.Hp);
+        Assert.Equal(actor.MaxHp - wound + dealt * Battle.TraitLeechPercent / 100, actor.Hp);
     }
 
     [Fact]
@@ -346,6 +417,143 @@ public class TraitTests
         Battle.PerformAction(state, actor, 1);
 
         Assert.Equal(before, target.Gauge);
+    }
+
+    // ── 戦闘開始時: 先駆け ────────────────────────────
+
+    /// <summary>⭐ TraitWhen.BattleStart の繋ぎ先は CreateBattle だけ。</summary>
+    [Fact]
+    public void 先駆けは開幕にゲージが進んでいる()
+    {
+        var state = Fight(Make("a", Traits.Opener), Make("b", null));
+        Assert.Equal(Battle.TraitOpenerGauge, UnitOf(state, Side.Ally).Gauge);
+        Assert.Equal(0, UnitOf(state, Side.Enemy).Gauge);
+    }
+
+    // ── 倒れる一撃を受けたとき: 置き土産 ────────────────
+
+    [Fact]
+    public void 置き土産は倒れたとき残った味方のゲージが進む()
+    {
+        var state = PartingBattle(Traits.Parting, out var actor, out var holder, out var friend);
+        holder.Hp = 1;
+        int before = friend.Gauge;
+
+        Battle.PerformAction(state, actor, 1);
+
+        Assert.Equal(0, holder.Hp);
+        Assert.Equal(before + Battle.TraitPartingGauge, friend.Gauge);
+    }
+
+    /// <summary>⚠️ 毒は DealDamage を通らない ＝「一撃」ではないので働かない。
+    /// ⭐ 場面の名（倒れる**一撃**を受けたとき）と実装を揃える見張り。</summary>
+    [Fact]
+    public void 置き土産は毒で倒れたときは働かない()
+    {
+        int with = FriendGaugeAfterPoisonDown(Traits.Parting);
+        int without = FriendGaugeAfterPoisonDown(null);
+        Assert.Equal(without, with);
+    }
+
+    private static int FriendGaugeAfterPoisonDown(string? traitId)
+    {
+        var state = PartingBattle(traitId, out _, out var holder, out var friend);
+        holder.Hp = 1;
+        holder.Status.Poison = new Stacking { Stacks = 1, Turns = 1 };
+        holder.Gauge = Battle.GaugeMax;   // 次に動くのは毒で倒れる本人
+
+        Battle.NextActor(state);
+
+        Assert.Equal(0, holder.Hp);
+        return friend.Gauge;
+    }
+
+    /// <summary>味方1体 vs（特性持ち＋相方）の2体。⭐ 単体攻撃は残 HP の低い側に落ちる。</summary>
+    private static BattleState PartingBattle(string? traitId,
+        out Unit actor, out Unit holder, out Unit friend)
+    {
+        var allies = new List<Creature> { Make("a", null, "attack") };
+        var foes = new List<Creature> { Make("b0", traitId), Make("b1", null) };
+        var state = Battle.CreateBattle(allies, foes);
+        actor = UnitOf(state, Side.Ally);
+        Unit? found = null, other = null;
+        foreach (var unit in state.Units)
+        {
+            if (unit.Side != Side.Enemy) continue;
+            if (unit.Slot == 0) found = unit; else other = unit;
+        }
+        holder = found!;
+        friend = other!;
+        return state;
+    }
+
+    // ── 攻撃を当てたとき: 追い打ち・背水 ────────────────
+
+    /// <summary>⭐ しかけ（弱化）→ 回収（殴る）の2段。弱化が無ければ1ビットも変わらない。</summary>
+    [Fact]
+    public void 追い打ちは弱化が付いた相手にだけ増える()
+    {
+        int clean = PursuitDamage(poisoned: false);
+        int marked = PursuitDamage(poisoned: true);
+        Assert.True(clean > 0, "そもそも当たっていない");
+        Assert.Equal(clean + clean * Battle.TraitPursuitPercent / 100, marked);
+    }
+
+    private static int PursuitDamage(bool poisoned)
+    {
+        var state = Fight(Make("a", Traits.Pursuit, "attack"), Make("b", null, hp: 400));
+        var actor = UnitOf(state, Side.Ally);
+        var target = UnitOf(state, Side.Enemy);
+        if (poisoned) target.Status.Poison = new Stacking { Stacks = 1, Turns = 3 };
+
+        Battle.PerformAction(state, actor, 1);
+
+        return target.MaxHp - target.Hp;
+    }
+
+    [Fact]
+    public void 背水は自分のHPが半分以下のときだけ増える()
+    {
+        int high = DesperationDamage(woundToHalf: false);
+        int low = DesperationDamage(woundToHalf: true);
+        Assert.True(high > 0, "そもそも当たっていない");
+        Assert.Equal(high + high * Battle.TraitDesperationPercent / 100, low);
+    }
+
+    private static int DesperationDamage(bool woundToHalf)
+    {
+        var state = Fight(Make("a", Traits.Desperation, "attack"), Make("b", null, hp: 400));
+        var actor = UnitOf(state, Side.Ally);
+        var target = UnitOf(state, Side.Enemy);
+        if (woundToHalf) actor.Hp = actor.MaxHp / 2;
+
+        Battle.PerformAction(state, actor, 1);
+
+        return target.MaxHp - target.Hp;
+    }
+
+    // ── 攻撃を受けたとき: 粘り腰 ─────────────────────
+
+    [Fact]
+    public void 粘り腰は自分のHPが半分以下のときだけ減る()
+    {
+        int high = TenacityTaken(woundToHalf: false);
+        int low = TenacityTaken(woundToHalf: true);
+        Assert.True(high > 0, "そもそも当たっていない");
+        Assert.Equal(high - high * Battle.TraitTenacityPercent / 100, low);
+    }
+
+    private static int TenacityTaken(bool woundToHalf)
+    {
+        var state = Fight(Make("a", null, "attack"), Make("b", Traits.Tenacity, hp: 400));
+        var actor = UnitOf(state, Side.Ally);
+        var target = UnitOf(state, Side.Enemy);
+        int start = woundToHalf ? target.MaxHp / 2 : target.MaxHp;
+        target.Hp = start;
+
+        Battle.PerformAction(state, actor, 1);
+
+        return start - target.Hp;
     }
 
     // ── 入手経路 ────────────────────────────────────

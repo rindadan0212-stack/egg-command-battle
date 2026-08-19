@@ -37,18 +37,41 @@ namespace EggCommand.View
         /// <summary>失速し始める残りの割合。⭐ ここから先はだんだん遅くなる。
         /// ⚠️ 等速のまま終点で止めると「ビタ止まり」になって、
         ///    力尽きたのか壁に当たったのか区別が付かない。</summary>
-        private const float SlowFrom = 0.22f;
+        /// ⚠️ **0.22 → 0.35**（2026-08-19）。効いてはいたが短く、
+        /// 「ゆっくり止まる」と読めなかった（作者の指摘）。
+        private const float SlowFrom = 0.35f;
         /// <summary>失速しきったときの速さの割合。⚠️ 0 にすると永久に着かない。</summary>
-        private const float SlowTo = 0.18f;
+        /// ⚠️ **0.18 → 0.08**（2026-08-19）。最後をもっと粘らせる。
+        private const float SlowTo = 0.08f;
 
         /// <summary>目盛りの間隔（盤の単位＝メートル）。</summary>
-        private const float MeterStep = 50f;
+        private const float MeterStep = 10f;
+
+        /// <summary>数字を書く間隔。⚠️ 10 ごとに数字を書くと、字が縦に連なって帯になる。
+        /// ⭐ 刻みは細かく、数字は粗く ── 定規と同じ。</summary>
+        private const float MeterLabelStep = 50f;
 
         /// <summary>画面に映る世界の幅。⭐ **道より広く取る**。
         /// ⚠️ 道と同じにすると目盛りを置く場所が道の上しか無くなり、線が盤を横切る。</summary>
         private const float ViewWidth = 160f;
 
+        /// <summary>縦だけを引き伸ばす倍率。⭐ **1画面に 100m** が収まる（作者の指示 2026-08-19）。
+        ///
+        /// ⚠️ 画面は 1080×1920 なので、見える縦は「見える横 ÷ 0.5625」＝ 284 で固定。
+        /// 道を細くすれば 100 にできるが、それだと**道そのものが細くなる**。
+        /// ⭐ 道の幅はそのままに、**縦の位置だけ** 2.844 倍して伸ばす。
+        /// 284 ÷ 2.844 ＝ 100 ── 1画面に 100m。
+        ///
+        /// ⚠️ **絵は伸ばさない。**位置だけを伸ばし、ドット絵の大きさは元のまま
+        /// （非等方に伸ばすとドット絵が潰れる。画面の作法）。
+        /// ⚠️ 縦に厚みを持つもの（地・親の帯・関門）だけ、厚みにも掛ける。</summary>
+        private const float Stretch = 2.844f;
+
         /// <summary>カメラが追いつく速さ。⚠️ 速すぎると画面が跳ねて酔う。</summary>
+        /// <summary>見回しているときのカメラの追従速度。
+        /// ⚠️ **飛んでいる最中には使わない。**走者は <see cref="FlightSpeed"/>（260）で進むので、
+        /// 90 では**3倍近く置いていかれて画面から消えていた**（作者の指摘 2026-08-19）。
+        /// ⭐ 飛行中は下の <c>StepFlight</c> で走者に直に貼り付ける。</summary>
         private const float CameraCatchUp = 90f;
 
         private StealField _field;
@@ -64,8 +87,9 @@ namespace EggCommand.View
         /// <summary>どこから投げるか。⚠️ **-1 は初期位置**。それ以外は Pads の添字。</summary>
         private int _pad = -1;
 
-        /// <summary>まだ投げていない個体の絵（出発点に並ぶ）。</summary>
-        private readonly Dictionary<int, Transform> _waiting = new Dictionary<int, Transform>();
+        /// <summary>選んだ個体が変わった／1投終わった。⭐ 盤の外の帯を描き直させる。
+        /// ⚠️ 盤は帯を知らない（知らせると、盤が uGUI に依存してしまう）。</summary>
+        private Action _onChanged;
         /// <summary>着地した個体の絵（＝発射台）。</summary>
         private readonly List<Transform> _pads = new List<Transform>();
         /// <summary>関門の絵。⭐ 壁を壊したら消すので持っておく。</summary>
@@ -97,6 +121,23 @@ namespace EggCommand.View
         private readonly List<Transform> _trail = new List<Transform>();
 
         public bool Flying { get { return _run != null; } }
+
+        /// <summary>いま投げようとしている個体。⚠️ まだ誰も選べないときは -1。</summary>
+        public int Chosen { get { return _member; } }
+
+        /// <summary>⭐ **盤の外の帯から選ぶ。**
+        /// ⚠️ 飛んでいる最中と、決着したあとは受け付けない。</summary>
+        public void Choose(int member)
+        {
+            if (_run != null || _infil == null || _infil.Result != null) return;
+            if (member == _member) return;
+            if (!_infil.Left.Contains(member)) return;
+            Select(member);
+            if (_onChanged != null) _onChanged();
+        }
+
+        /// <summary>盤の外の帯が変わったら教えてもらう。</summary>
+        public void Watch(Action onChanged) { _onChanged = onChanged; }
 
         /// <param name="infil">⭐ **進み具合ごと**渡す。誰をいつ投げるかは盤で選ぶ。
         /// ⚠️ 盤はこれを持たない（<see cref="App.Infiltration"/> が持つ）。
@@ -135,8 +176,10 @@ namespace EggCommand.View
 
             // 地。⚠️ 盤の外と中を分ける。⭐ 素の四角ではなくタイルの絵を敷く
             //    （色だけの面は「まだ作っていない」ように見える）
+            // ⚠️ 縦に厚みを持つものは、厚みにも Stretch を掛ける
             Skinned("Board", "tile", new Color32(0x6f, 0x8a, 0x5e, 0xff),
-                new Vector2(0f, 0f), new Vector2((float)Steal.FieldWidth, (float)field.Height), 5f);
+                new Vector2(0f, 0f),
+                new Vector2((float)Steal.FieldWidth, (float)field.Height * Stretch), 5f);
 
             // 親が塞ぐ帯。隙間の左右2枚
             float bandMid = (float)(field.BandTop + field.BandBottom) / 2f;
@@ -156,16 +199,21 @@ namespace EggCommand.View
                 float centerX = (float)(span.From + span.To) / 2f;
                 float width = (float)(span.To - span.From);
 
-                // ⭐ **塞いでいる幅は「面」で示す。**判定（ParentSpans）とぴったり同じ寸法。
-                // ⚠️ 以前はここで絵そのものを幅いっぱいに引き伸ばしていた。
-                //    判定とは一致したが、親が**横に潰れて別の生き物に見えた**。
-                Skinned("Parent Band", "pill", new Color32(0x3a, 0x2c, 0x22, 0x88),
-                    ToWorld(centerX, bandMid), new Vector2(width, bandHeight), 3.2f);
-
-                // ⭐ 絵は**縦横比を保ったまま**、帯の高さに収まる大きさで中央に置く。
-                // ⚠️ ドット絵を非等方に伸ばさない（画面の作法）。
+                // ⭐ **絵だけで塞ぐ。**判定の箱は描かない（2026-08-18・作者判断）。
+                //
+                // ⚠️ 以前は半透明の箱を敷いて、その中に小さい絵を立たせていた。
+                //    塞ぐ幅は 56 あるのに絵は 30 しか無く（帯の厚み 30 に合わせていた）、
+                //    **箱が当たり判定で絵は飾り**にしか見えなかった。
+                // ⭐ 絵を塞ぐ幅そのものまで大きくすれば、道が塞がっていることは
+                //    絵だけで読める。⚠️ 縦横比は保つ（ドット絵を非等方に伸ばさない）。
+                //
+                // ⚠️ 縦は帯（厚み 30）より絵のほうが高くなる。判定は帯のままなので、
+                //    **絵の上下は当たらない**。⭐ それでよい ── 隙間は左右に空いていて、
+                //    そこを抜ける軌跡は絵の横を通るので、嘘にはならない。
+                // ⚠️ **絵は伸ばさない**（ドット絵を非等方に伸ばさない・画面の作法）。
+                //    ⭐ 位置だけ伸びるので、塞ぐ縦の範囲は帯（判定）が持つ。
                 PixelObject("Parent", species.Sprite, species.Palettes[0],
-                    ToWorld(centerX, bandMid), Mathf.Min(width, bandHeight), 3f);
+                    ToWorld(centerX, bandMid), width, 3f);
             }
 
             // ⭐ 関門。⚠️ 以前は1枚も描いていなかった（盤に在るのに見えなかった）
@@ -182,8 +230,9 @@ namespace EggCommand.View
 
             // ⭐ もう着地している個体は発射台として置き直す（雑魚と戦って戻ってきたとき）
             BuildPads();
-            // ⭐ まだ投げていない3体を出発点に並べる。触れば選べる
-            BuildWaiting();
+            // ⭐ **選ぶのは盤の外。**盤に立つのは「いま投げる1体」だけ（StealScreen の帯）。
+            // ⚠️ 3体を出発点に並べていた頃は、選んだ1体が Start へ移されて
+            //    ちょうど別の1体と重なり、どれを触ったのか分からなかった。
             Select(_infil.Left.Count > 0 ? _infil.Left[0] : -1);
 
             // ⭐ 画面の端に目盛り。距離が字と線の両方で分かる
@@ -229,16 +278,38 @@ namespace EggCommand.View
         /// <summary>盤の座標を世界の座標へ。⚠️ 上下の反転をここ1箇所に閉じ込める。</summary>
         private Vector2 ToWorld(float fx, float fy)
         {
-            return new Vector2(fx - (float)Steal.FieldWidth / 2f, (float)_field.Height / 2f - fy);
+            // ⭐ **縦だけ Stretch 倍。**横はそのまま（道の幅は変えない）。
+            return new Vector2(fx - (float)Steal.FieldWidth / 2f,
+                ((float)_field.Height / 2f - fy) * Stretch);
+        }
+
+        /// <summary>伸ばしたあとの盤の高さ。⚠️ カメラの端も目盛りもこれで測る。</summary>
+        private float TallWorld { get { return (float)_field.Height * Stretch; } }
+
+        /// <summary>絵に属するずらし（影・印）。⚠️ **これは伸ばさない。**
+        ///
+        /// ⭐ 「体からどれだけ離すか」は絵の大きさの話であって、盤の距離ではない。
+        /// ⚠️ 伸ばしていた頃は、雑魚の影だけが本体から 2.8 倍離れて
+        /// 画面の上に取り残された（実測 2026-08-19）。</summary>
+        private Vector2 Beside(float fx, float fy, float dx, float dy)
+        {
+            var at = ToWorld(fx, fy);
+            return new Vector2(at.x + dx, at.y - dy);
         }
 
         /// <summary>目盛り。⭐ **道の外（右の余白）**に短い線と数字を置く。
-        /// ⚠️ 盤を横切る線を引かない。道の上に線があると通り道の一部に見える。</summary>
+        /// ⚠️ 盤を横切る線を引かない。道の上に線があると通り道の一部に見える。
+        ///
+        /// ⭐ **刻みは 10、数字は 50 ごと**（定規と同じ）。
+        /// ⚠️ 50 刻みだけだったときは、飛んだ先が「50 と 100 のあいだ」までしか読めなかった。
+        /// 飛距離は速度 × 3 の整数なので、10 の目があれば数えて足せる。</summary>
         private void BuildMeters()
         {
             float roadEdge = (float)Steal.FieldWidth / 2f;
             float tickFrom = roadEdge + 4f;
-            float tickTo = roadEdge + 14f;
+            // ⭐ 数字を書く目盛りだけ長くする。⚠️ 全部同じ長さだと数字がどれに付くか読めない
+            float longTo = roadEdge + 14f;
+            float shortTo = roadEdge + 9f;
             // ⚠️ 左寄せにしたら「250」が画面の右端で切れた。
             //    画面の縁から右寄せで置く（何桁でも必ず収まる）
             float textRight = ViewWidth / 2f - 3f;
@@ -248,10 +319,16 @@ namespace EggCommand.View
                 float y = (float)_field.Start.Y - d;
                 if (y < 0f) break;
                 float worldY = ToWorld(0f, y).y;
+                // ⚠️ 浮動小数で割った余りを 0 と比べない。丸めてから整数で判定する
+                bool numbered = Mathf.RoundToInt(d) % Mathf.RoundToInt(MeterLabelStep) == 0;
+                float tickTo = numbered ? longTo : shortTo;
 
-                Skinned($"Tick {d}", "pill", new Color(1f, 1f, 1f, 0.65f),
+                Skinned($"Tick {d}", "pill",
+                    new Color(1f, 1f, 1f, numbered ? 0.65f : 0.35f),
                     new Vector2((tickFrom + tickTo) / 2f, worldY),
-                    new Vector2(tickTo - tickFrom, 1.6f), 4.8f);
+                    new Vector2(tickTo - tickFrom, numbered ? 1.6f : 1.1f), 4.8f);
+
+                if (!numbered) continue;
 
                 var label = new GameObject($"Meter {d}");
                 label.transform.SetParent(transform, false);
@@ -283,35 +360,51 @@ namespace EggCommand.View
                 float width = (float)(gate.To - gate.From);
                 float height = (float)(gate.Bottom - gate.Top);
 
-                var body = Skinned($"Gate {i}", "pill", GateColor(gate.Kind),
+                // ⭐ **白い札に濃紺の字。**画面のほかの札と同じ作りにする。
+                // ⚠️ 濃い色べた塗り＋白い字にしていた頃は、この四角だけ角がシャープで
+                //    盤のトーンから浮いていた（レビュー指摘 2026-08-19）。
+                var body = Skinned($"Gate {i}", "pill", Color.white,
                     ToWorld((float)(gate.From + gate.To) / 2f, mid),
-                    new Vector2(width, height), 4.2f);
+                    new Vector2(width, height * Stretch), 4.2f);
+                // ⭐ 種類は**下の細い帯**で示す（塗り分けは残すが、字の読みやすさを取らない）
+                // ⚠️ 帯の位置は「札の下端から少し内側」＝絵の話。伸ばさない
+                Skinned($"Gate {i} 種類", "pill", GateColor(gate.Kind),
+                    Beside((float)(gate.From + gate.To) / 2f, mid,
+                        0f, height * Stretch / 2f - 5f),
+                    new Vector2(width, 8f), 4.15f);
 
                 var label = new GameObject($"Gate {i} 要求");
                 label.transform.SetParent(body.transform, false);
                 label.transform.position = new Vector3(
                     body.transform.position.x, body.transform.position.y, 4.1f);
                 var text = label.AddComponent<TextMesh>();
-                text.text = $"{Stats.LabelOf(Steal.StatOf(gate.Kind))} {gate.Requires}";
+                // ⚠️ **HP の関門だけ単位が違う。**判定は素の StatBlock.Hp で行うが、
+            //    画面に出ている HP は ×Battle.HpScale（2026-08-19 の桁上げ）。
+            //    そのまま出すと「関門 HP 213」対「この個体 HP 22,365」になり、比べようがなかった。
+            // ⭐ 攻撃力・防御力・スピードの関門は素のままで、既にステ表と揃っている。
+            var need = Steal.StatOf(gate.Kind);
+            int shown = need == StatKey.Hp ? gate.Requires * Battle.HpScale : gate.Requires;
+            text.text = $"{Stats.LabelOf(need)} {Ui.Digits(shown)}";
                 text.font = Ui.TheFont;
                 text.fontSize = 64;
                 text.characterSize = 0.44f;
                 text.anchor = TextAnchor.MiddleCenter;
-                text.color = new Color(1f, 1f, 1f, 0.95f);
+                text.color = Ui.Ink;
                 label.GetComponent<MeshRenderer>().sharedMaterial = Ui.TheFont.material;
 
                 _gates.Add(body);
             }
         }
 
-        /// <summary>関門の色。⚠️ 種類が読めればよい（塗り分けだけ）。</summary>
+        /// <summary>関門の色。⚠️ 種類が読めればよい（下の細い帯だけに使う）。
+        /// ⭐ 札そのものは白 ── 要求の数を読ませるのが主で、種類は補助。</summary>
         private static Color GateColor(GimmickKind kind)
         {
             switch (kind)
             {
-                case GimmickKind.Wall: return new Color32(0x8a, 0x6f, 0x4e, 0xdd);
-                case GimmickKind.Damage: return new Color32(0xb0, 0x53, 0x4a, 0xcc);
-                default: return new Color32(0x4a, 0x63, 0xa8, 0xcc);
+                case GimmickKind.Wall: return new Color32(0x8a, 0x6f, 0x4e, 0xff);
+                case GimmickKind.Damage: return new Color32(0xb0, 0x53, 0x4a, 0xff);
+                default: return new Color32(0x4a, 0x63, 0xa8, 0xff);
             }
         }
 
@@ -346,20 +439,26 @@ namespace EggCommand.View
                 // ⭐ 足元の影。⚠️ pill を薄く敷いていたが、この寸法では**四角い箱**に見えた。
                 //    円の絵を潰して楕円にする（縁が丸いので影として読める）
                 Ellipse($"Mob {i} 影", new Color32(0x2a, 0x1e, 0x18, 0x55),
-                    ToWorld((float)mob.At.X, (float)mob.At.Y + (float)mob.Radius * 0.9f),
+                    Beside((float)mob.At.X, (float)mob.At.Y, 0f, (float)mob.Radius * 0.9f),
                     new Vector2((float)mob.Radius * 2.0f, (float)mob.Radius * 0.6f), 2.8f);
 
                 // ⭐ **親と見分けるための印。**⚠️ 巣の種族と同じ絵が出ることがあるので、
                 //    絵だけでは「当たったら終わり（親）」か「当たると3対3（雑魚）」か読めない。
                 //    ⚠️ 離して置くと何の数字か分からない。**体の右肩に貼る**
-                float badgeX = (float)mob.At.X + (float)mob.Radius * 0.95f;
-                float badgeY = (float)mob.At.Y - (float)mob.Radius * 0.85f;
-                var disc = Ellipse($"Mob {i} 印地", new Color32(0x2b, 0x33, 0x50, 0xee),
-                    ToWorld(badgeX, badgeY),
+                float badgeX = (float)mob.Radius * 0.95f;
+                float badgeY = -(float)mob.Radius * 0.85f;
+                // ⚠️ 濃紺のままだと暗い輪郭線の上で沈んで読めない（レビュー指摘 2026-08-19）。
+                //    ⭐ 白い縁を1枚下に敷いて、体から浮かせる。
+                Ellipse($"Mob {i} 印縁", Color.white,
+                    Beside((float)mob.At.X, (float)mob.At.Y, badgeX, badgeY),
+                    new Vector2((float)mob.Radius * 1.28f, (float)mob.Radius * 1.28f), 2.5f)
+                    .transform.SetParent(go.transform, true);
+                var disc = Ellipse($"Mob {i} 印地", new Color32(0x2b, 0x33, 0x50, 0xff),
+                    Beside((float)mob.At.X, (float)mob.At.Y, badgeX, badgeY),
                     new Vector2((float)mob.Radius * 1.0f, (float)mob.Radius * 1.0f), 2.45f);
                 var badge = new GameObject($"Mob {i} 印");
                 badge.transform.SetParent(transform, false);
-                var at = ToWorld(badgeX, badgeY);
+                var at = Beside((float)mob.At.X, (float)mob.At.Y, badgeX, badgeY);
                 badge.transform.position = new Vector3(at.x, at.y, 2.4f);
                 var mark = badge.AddComponent<TextMesh>();
                 mark.text = "3";
@@ -429,30 +528,30 @@ namespace EggCommand.View
             renderer.color = new Color(color.r, color.g, color.b, alpha);
         }
 
-        /// <summary>まだ投げていない個体を出発点に並べる。</summary>
-        private void BuildWaiting()
+        /// <summary>いま投げる1体の絵を作り直す。
+        /// ⚠️ 前の絵は必ず消す。⭐ 着地した絵は <see cref="Land"/> で
+        /// <see cref="_pads"/> へ渡してから <see cref="_runner"/> を null にしてあるので、
+        /// ここで消えるのは「まだ投げていない絵」だけ。</summary>
+        private void MakeRunner()
         {
-            var left = new List<int>(_infil.Left);
-            for (int i = 0; i < left.Count; i++)
-            {
-                int member = left[i];
-                var creature = _infil.Party[member];
-                // ⚠️ 重ならないように少しずらす。⭐ 触り分けられる間隔にする
-                float offset = (i - (left.Count - 1) / 2f) * 18f;
-                var go = PixelObject($"待機 {member}",
-                    Creatures.SpeciesOf(creature).Sprite, Creatures.PaletteOf(creature),
-                    ToWorld((float)_field.Start.X + offset, (float)_field.Start.Y),
-                    (float)Steal.RunnerRadius * 2.2f, 1.2f);
-                _waiting[member] = go.transform;
-            }
+            if (_runner != null) Destroy(_runner.gameObject);
+            _runner = null;
+            if (_member < 0) return;
+
+            var creature = _infil.Party[_member];
+            var go = PixelObject($"投げる {_member}",
+                Creatures.SpeciesOf(creature).Sprite, Creatures.PaletteOf(creature),
+                ToWorld((float)_field.Start.X, (float)_field.Start.Y),
+                (float)Steal.RunnerRadius * 2.2f, 1.2f);
+            _runner = go.transform;
         }
 
-        /// <summary>投げる個体を選ぶ。⭐ 届く距離の線も引き直す（個体ごとに違う）。</summary>
+        /// <summary>投げる個体を選ぶ。⚠️ 発射台は初期位置へ戻す（前線は選び直せる）。</summary>
         private void Select(int member)
         {
             _member = member;
-            if (_member < 0) return;
             _pad = -1;
+            MakeRunner();
             PlaceRunner();
             DrawReach();
         }
@@ -460,31 +559,22 @@ namespace EggCommand.View
         /// <summary>選んだ個体を、選んだ発射台の上に立たせる。</summary>
         private void PlaceRunner()
         {
-            if (_member < 0) return;
-            Transform mark;
-            if (!_waiting.TryGetValue(_member, out mark)) return;
-            _runner = mark;
-
+            if (_member < 0 || _runner == null) return;
             var at = _pad < 0 ? _field.Start : _infil.Pads[_pad];
             _runner.position = new Vector3(
                 ToWorld((float)at.X, (float)at.Y).x, ToWorld((float)at.X, (float)at.Y).y, 1.2f);
         }
 
-        /// <summary>⭐ どこまで届くかを線で見せる（字で「飛距離 204」と書かない）。
-        /// ⚠️ **選んだ個体の速度**で決まる。誰を選ぶかで線が動くのが、この遊びの芯。</summary>
+        /// <summary>⚠️ **飛距離の目安は描かない**（2026-08-18・作者判断）。
+        ///
+        /// ⭐ 盤の右に 10m 刻みの目盛りが立つので、どこまで届くかはそちらで読む。
+        /// ⚠️ 線を引くと「そこまでは必ず届く」と読めてしまうが、実際は跳ね返りと
+        /// 関門で変わるので、線のほうが嘘に近い。
+        ///
+        /// ⚠️ 残してある理由: 選び直しのたびに呼ばれるので、消し込みだけは要る。</summary>
         private void DrawReach()
         {
             if (_reach != null) Destroy(_reach);
-            if (_member < 0) return;
-
-            double budget = Steal.DistanceFor(_infil.Party[_member]);
-            var from = _pad < 0 ? _field.Start : _infil.Pads[_pad];
-            float reachY = (float)from.Y - (float)budget;
-            if (reachY <= 0f || reachY >= (float)_field.Height) return;
-
-            _reach = Skinned("Reach", "pill", new Color32(0xff, 0xd9, 0x77, 0x88),
-                ToWorld((float)Steal.FieldWidth / 2f, reachY),
-                new Vector2((float)Steal.FieldWidth, 2.2f), 4.5f);
         }
 
         /// <summary>触った先にある「選べるもの」を拾う。⚠️ 走者そのものは掴んで引っ張る。</summary>
@@ -503,25 +593,36 @@ namespace EggCommand.View
                     return true;
                 }
             }
-            // ⭐ 待機している個体を選ぶ
-            foreach (var pair in _waiting)
-            {
-                if (pair.Key == _member) continue;
-                if (Vector2.Distance(touch, pair.Value.position) <= GrabRadius)
-                {
-                    Select(pair.Key);
-                    return true;
-                }
-            }
+            // ⚠️ **誰を投げるかは盤では選ばない。**盤の外の帯（StealScreen）が持つ。
             return false;
         }
+
+        /// <summary>盤の下を隠している帯の高さ（画面の設計単位＝<see cref="Ui.H"/> と同じ物差し）。
+        /// ⭐ 3体を選ぶ帯は uGUI なので、盤はその高さだけ上へ逃がす。</summary>
+        private float _dock;
+
+        /// <summary>帯に隠される高さを伝える。⚠️ 伝えないと、出発点が帯の下に潜る。</summary>
+        public void HideBehind(float designPixels)
+        {
+            _dock = designPixels;
+            _cameraY = ClampCamera(_cameraY);
+            ApplyCamera();
+        }
+
+        /// <summary>帯の高さを盤の単位へ。
+        /// ⭐ 画面の横幅に <see cref="ViewWidth"/> を映しているので、
+        /// 設計単位1つは必ず <c>ViewWidth / Ui.W</c> ぶん。
+        /// ⚠️ Screen.height を使わない ── 覆いの倍率は**横幅**で合わせてある
+        /// （CanvasScaler.matchWidthOrHeight = 0）ので、高さから出すと機種で狂う。</summary>
+        private float DockWorld { get { return _dock * ViewWidth / Ui.W; } }
 
         /// <summary>盤の外を見ないように挟む。
         /// ⚠️ 始まりと終わりだけは端に張り付く（ここが「その限りでない」ところ）。</summary>
         private float ClampCamera(float y)
         {
-            float half = _camera.orthographicSize;
-            float top = (float)_field.Height / 2f;
+            // ⚠️ 見えているのは帯の**上**だけ。全画面ぶんで挟むと、端で盤が帯に潜る
+            float half = _camera.orthographicSize - DockWorld / 2f;
+            float top = TallWorld / 2f;
             if (top <= half) return 0f;
             return Mathf.Clamp(y, -top + half, top - half);
         }
@@ -529,7 +630,8 @@ namespace EggCommand.View
         private void ApplyCamera()
         {
             var at = _camera.transform.position;
-            _camera.transform.position = new Vector3(0f, _cameraY, at.z);
+            // ⭐ 帯の半分だけカメラを下げる → 盤は「帯より上」の真ん中に来る
+            _camera.transform.position = new Vector3(0f, _cameraY - DockWorld / 2f, at.z);
         }
 
         // ── 引っ張る ────────────────────────────────────
@@ -590,28 +692,53 @@ namespace EggCommand.View
                 _guide.positionCount = 0;
                 Vector2 pull = _dragFrom - _dragTo;
                 // ⭐ 引っ張った向きの**逆**へ飛ぶ（パチンコと同じ）
-                // ⚠️ Screen は自前の画面 enum と名前がぶつかる。UnityEngine のほうを明示する
-                float shortSide = Mathf.Min(UnityEngine.Screen.width, UnityEngine.Screen.height);
-                if (pull.magnitude >= shortSide * MinPull) Fire(pull);
+                // ⭐ **最初に触った所へ戻せば取り消し**（作者の指示 2026-08-19）。
+                //    ⚠️ 前の下限（MinPull ＝ 短辺の4%）は狭すぎて、戻したつもりが飛んでいた。
+                if (pull.magnitude >= CancelPixels()) Fire(pull);
             }
         }
 
-        /// <summary>引っ張っている向きに、飛ぶ先を点線で見せる。</summary>
+        /// <summary>飛ぶ先を点線で見せる。⭐ **本番と同じ式で下見する**（<see cref="Steal.Preview"/>）。
+        ///
+        /// ⚠️ 前は引っ張った向きへ**まっすぐな線**を描いていた。実際には壁で跳ね返るので、
+        /// 予告と実際が食い違い「狙った角度に飛ばない」ように見えていた（作者の指摘 2026-08-19）。
+        /// ⭐ 同じ関数を通せば、予告と実際は**必ず一致する**。</summary>
         private void DrawGuide()
         {
             Vector2 pull = _dragFrom - _dragTo;
-            if (pull.sqrMagnitude < 1f) { _guide.positionCount = 0; return; }
-            Vector2 direction = pull.normalized;
+            // ⭐ 引き戻したら取り消し。⚠️ 線を消して「離しても飛ばない」と分かるようにする
+            if (pull.magnitude < CancelPixels()) { _guide.positionCount = 0; return; }
 
-            Vector3 origin = _runner.position;
-            const int Points = 12;
-            _guide.positionCount = Points;
-            for (int i = 0; i < Points; i++)
+            Vector2 direction = pull.normalized;
+            double angle = Mathf.Atan2(direction.x, direction.y);
+            var look = Steal.Preview(_infil, _member, _pad, angle);
+            var path = look.Path;
+            if (path.Count < 2) { _guide.positionCount = 0; return; }
+
+            // ⚠️ 点を全部置くと数百になる。⭐ 間引いても跳ね返りの形は残る
+            int step = Mathf.Max(1, path.Count / GuidePoints);
+            var points = new List<Vector3>();
+            for (int i = 0; i < path.Count; i += step)
             {
-                float t = i * 9f;
-                _guide.SetPosition(i, origin + new Vector3(direction.x * t, direction.y * t, 0f));
+                points.Add(ToWorld((float)path[i].X, (float)path[i].Y));
             }
+            points.Add(ToWorld((float)path[path.Count - 1].X, (float)path[path.Count - 1].Y));
+
+            _guide.positionCount = points.Count;
+            for (int i = 0; i < points.Count; i++) _guide.SetPosition(i, points[i]);
         }
+
+        /// <summary>予告線に置く点の数。⚠️ 多すぎると線が重くなる。</summary>
+        private const int GuidePoints = 40;
+
+        /// <summary>ここまで引き戻したら取り消し（画面の短辺に対する割合）。
+        /// ⭐ **最初に触った所へ指を戻せば、離しても飛ばない**（作者の指示 2026-08-19）。
+        /// ⚠️ <see cref="MinPull"/> と同じ値だと「取り消せる範囲」が狭すぎて、
+        /// 戻したつもりが飛んでいた。⭐ 広くとって、予告線が消えることで見せる。</summary>
+        private const float CancelPull = 0.10f;
+
+        private float CancelPixels() =>
+            Mathf.Min(UnityEngine.Screen.width, UnityEngine.Screen.height) * CancelPull;
 
         /// <summary>離した。⚠️ 入力は「誰を・どこから・どの角度で」の3つだけ。
         /// ⭐ 飛距離は**その個体の速度**（編成の合計ではない）。</summary>
@@ -652,9 +779,11 @@ namespace EggCommand.View
                 return;
             }
 
-            // ⭐ 走者を中心に画面が追う。⚠️ 盤の端では張り付く（始まりと終わり）
-            _cameraY = Mathf.MoveTowards(_cameraY, ClampCamera(_runner.position.y),
-                CameraCatchUp * Time.deltaTime);
+            // ⭐ **走者に直に貼り付ける。**⚠️ 盤の端では張り付く（始まりと終わり）
+            // ⚠️ MoveTowards で追わせていた頃は、走者(260)に対しカメラ(90)が遅く、
+            //    飛んだ瞬間に画面の外へ消えていた。⭐ 位置は毎フレーム決まるので、
+            //    そのまま合わせても揺れない（走者自身が滑らかに動いている）。
+            _cameraY = ClampCamera(_runner.position.y);
             ApplyCamera();
 
             var point = path[index];
@@ -682,7 +811,6 @@ namespace EggCommand.View
             if (finished.Outcome == StealOutcome.Landed || finished.Outcome == StealOutcome.Fought)
             {
                 // ⭐ 着地した個体はその場に残り、次の発射台になる
-                _waiting.Remove(_member);
                 _pads.Add(_runner);
                 _runner.localScale = new Vector3(
                     (float)Steal.RunnerRadius * 2.2f, (float)Steal.RunnerRadius * 2.2f, 1f);
@@ -706,6 +834,8 @@ namespace EggCommand.View
 
             // ⭐ 次の個体へ。⚠️ 発射台は初期位置に戻す（前線は選び直せる）
             Select(_infil.Left.Count > 0 ? _infil.Left[0] : -1);
+            // ⭐ 盤の外の帯も描き直す（投げ終わった1体を「投げた」にする）
+            if (_onChanged != null) _onChanged();
         }
 
         // ── 部品 ────────────────────────────────────────
@@ -720,7 +850,10 @@ namespace EggCommand.View
                 texture.SetPixel(0, 0, Color.white);
                 texture.Apply();
                 texture.filterMode = FilterMode.Point;
-                _white = Sprite.Create(texture, new Rect(0f, 0f, 1f, 1f), new Vector2(0.5f, 0.5f), 1f);
+                // ⚠️ **FullRect にする。**既定は Tight で、9スライス（SpriteDrawMode.Sliced）に
+                //    渡すと Unity が絵1枚ごとに警告を出す。盤は絵を何十個も置くので大量に溜まる。
+                _white = Sprite.Create(texture, new Rect(0f, 0f, 1f, 1f), new Vector2(0.5f, 0.5f),
+                    1f, 0, SpriteMeshType.FullRect);
             }
             return _white;
         }

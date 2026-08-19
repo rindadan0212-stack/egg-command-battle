@@ -17,12 +17,18 @@ namespace EggCommand.View
     /// </summary>
     public static class BattleScreen
     {
-        private static Unit _target;
+        /// <summary>狙っている敵と味方。⭐ **別々に覚える。**
+        /// ⚠️ 1つで兼ねると、敵を選んだまま強化を押したときに黙って別の相手へ飛ぶ。</summary>
+        private static Unit _targetFoe;
+        private static Unit _targetAlly;
         private static BattleDriver _driver;
         private static GameObject _prefab;
 
         public static void Leave()
         {
+            // ⚠️ 戦闘をまたいで狙い先を持ち越さない（別の体を指したままになる）
+            _targetFoe = null;
+            _targetAlly = null;
             if (_driver != null)
             {
                 Object.Destroy(_driver.gameObject);
@@ -47,23 +53,34 @@ namespace EggCommand.View
             }
 
             var view = Object.Instantiate(_prefab, body).GetComponent<BattleView>();
-            view.Bind(state, _driver.Actor, _target,
+            view.Bind(state, _driver.Actor, _targetFoe, _targetAlly,
                 onSkill: slot =>
                 {
                     var actor = _driver.Actor;
                     if (actor == null) return;
                     var skill = Core.Battle.SkillAt(actor, slot);
-                    var chosen = skill != null && Core.Battle.NeedsTarget(skill) ? _target : null;
-                    _target = null;
+                    // ⭐ 技が味方に掛かるものなら味方の狙い先、敵ならの敵の狙い先を渡す
+                    Unit chosen = null;
+                    if (skill != null && Core.Battle.NeedsTarget(skill))
+                    {
+                        chosen = Core.Battle.TargetsAlly(skill) ? _targetAlly : _targetFoe;
+                    }
                     // ⚠️ ここで計算しない。名乗り → 着弾 → 間 の3拍は Driver が持つ
                     _driver.Queue(actor, slot, chosen);
                 },
                 onFinish: () => { Leave(); app.FinishBattle(); },
-                onPick: () =>
+                // ⭐ 長押しで効果の全文。⚠️ 札には名前・Lv・CT しか載らない
+                onDetail: (skill, level) => SkillInfoPanel.Show(app, skill, level),
+                onTap: unit =>
                 {
-                    foreach (var unit in state.Units)
+                    // ⭐ もう一度押したら外す（選び直しに戻るための道を1つ残す）
+                    if (unit.Side == Side.Enemy)
                     {
-                        if (unit.Side == Side.Enemy && Core.Battle.IsAlive(unit)) { _target = unit; break; }
+                        _targetFoe = ReferenceEquals(_targetFoe, unit) ? null : unit;
+                    }
+                    else
+                    {
+                        _targetAlly = ReferenceEquals(_targetAlly, unit) ? null : unit;
                     }
                     app.Refresh();
                 });

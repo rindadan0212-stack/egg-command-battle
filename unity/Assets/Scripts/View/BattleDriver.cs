@@ -157,7 +157,17 @@ namespace EggCommand.View
                 }
             }
 
+            // ⚠️ **毒・リジェネはここで進む**（NextActor の中の TickStatus）。
+            //    ⭐ 前は PerformAction のぶんしか読んでいなかったので、
+            //    HP は減っているのに**数字が1つも出ていなかった**（作者の指摘 2026-08-19）。
+            //    「毒ダメージが入っていない」ように見えていたのはこれ。
+            int beforeTick = _state.Log.Count;
             var next = Core.Battle.NextActor(_state);
+            if (_state.Log.Count > beforeTick)
+            {
+                _app.Refresh();                 // 帯を減らしてから
+                ShowSince(_state, beforeTick);  // 数字を載せる
+            }
             if (next == null) { _app.Refresh(); return; }
 
             if (next.Side == Side.Ally)
@@ -233,12 +243,12 @@ namespace EggCommand.View
                         {
                             // ⭐ 光る → 数字 → 体が跳ねる。3つ同時に出すから「当たった」に見える
                             fx.Impact(fx.PointOf(rect, Body), Ui.Danger);
-                            fx.Number(fx.PointOf(rect, head), e.Amount.ToString(), Ui.Danger, 56f);
+                            fx.Number(fx.PointOf(rect, head), Ui.Digits(e.Amount), Ui.Danger, 56f);
                             Jolt.Play(rect, new Vector2(0f, -22f), 0.22f);
                         }
                         break;
                     case BattleEventKind.Poison:
-                        fx.Number(fx.PointOf(rect, head), e.Amount.ToString(),
+                        fx.Number(fx.PointOf(rect, head), Ui.Digits(e.Amount),
                             new Color32(0xb9, 0x8c, 0xd8, 0xff), 44f);
                         break;
                     case BattleEventKind.Heal:
@@ -246,7 +256,7 @@ namespace EggCommand.View
                         if (e.Amount > 0)
                         {
                             fx.Ring(fx.PointOf(rect, Body), Ui.Good, 100f, 300f, 0.4f);
-                            fx.Number(fx.PointOf(rect, head), "+" + e.Amount, Ui.Good, 46f);
+                            fx.Number(fx.PointOf(rect, head), "+" + Ui.Digits(e.Amount), Ui.Good, 46f);
                         }
                         break;
                     case BattleEventKind.Buff:
@@ -299,6 +309,38 @@ namespace EggCommand.View
                         break;
                     case BattleEventKind.Immune:
                         fx.Number(fx.PointOf(rect, head), "免疫", Ui.Good, 34f);
+                        break;
+
+                    // ⭐ ここから下も**盤に一度も出ていなかった**（2026-08-19 の監査）。
+                    //    ⚠️ 毒・リジェネと同じ形の取りこぼしが、まだ7種残っていた。
+                    //    ⚠️ 特に ゲージ と 強化解除 は、撃っても**完全に無音**だった。
+
+                    case BattleEventKind.Gauge:
+                        // ⭐ 増やすのも減らすのも同じ札。⚠️ 向きは色で読ませる（CT と同じ約束）
+                        fx.Number(fx.PointOf(rect, head),
+                            e.Amount >= 0 ? "ゲージ↑" : "ゲージ↓",
+                            e.Amount >= 0 ? Ui.Good : Ui.Danger, 34f);
+                        break;
+                    case BattleEventKind.Sleep:
+                        fx.Number(fx.PointOf(rect, head), "眠り", Ui.Accent, 34f);
+                        break;
+                    case BattleEventKind.Woke:
+                        // ⚠️ **殴って自分で起こした**ことが読めないと、眠りが機能していないと誤解する
+                        fx.Number(fx.PointOf(rect, head), "起きた", Ui.InkDim, 34f);
+                        break;
+                    case BattleEventKind.Block:
+                        fx.Number(fx.PointOf(rect, head), "ブロック", Ui.Accent, 34f);
+                        break;
+                    case BattleEventKind.Blunted:
+                        // ⚠️ 免疫（◇）とは別物。ブロックで弾かれた側
+                        fx.Number(fx.PointOf(rect, head), "通らない", Ui.InkDim, 38f);
+                        break;
+                    case BattleEventKind.Dispelled:
+                        fx.Number(fx.PointOf(rect, head), e.Label ?? "解除", Ui.Accent, 34f);
+                        break;
+                    case BattleEventKind.Revived:
+                        fx.Ring(fx.PointOf(rect, Body), Ui.Good, 100f, 320f, 0.5f);
+                        fx.Number(fx.PointOf(rect, head), "+" + Ui.Digits(e.Amount), Ui.Good, 46f);
                         break;
                 }
             }

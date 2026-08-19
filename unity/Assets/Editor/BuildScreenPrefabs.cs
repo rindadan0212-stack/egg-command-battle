@@ -28,15 +28,18 @@ namespace EggCommand.EditorTools
             made += One("Fanfare", BuildFanfare);
             made += One("Banner", BuildBanner);
             made += One("AppFrame", BuildFrame);
+            // ⚠️ **HomeScreen より先に作る。**ホームは孵化枠と卵の札を Prefab として
+            //    読み込むので、順が逆だと全部消して作り直した日に null で落ちる
+            made += One("IncubatorSlot", BuildIncubatorSlot);
+            made += One("EggCard", BuildEggCard);
             made += One("HomeScreen", BuildHome);
             made += One("EncounterCard", BuildEncounterCard);
             made += One("NestsScreen", BuildNests);
-            made += One("IncubatorSlot", BuildIncubatorSlot);
-            made += One("EggCard", BuildEggCard);
             made += One("CreatureCell", BuildCreatureCell);
             made += One("BoxScreen", BuildBox);
             made += One("BreedScreen", BuildBreed);
             made += One("StealResult", BuildStealResult);
+            made += One("CreaturePanel", BuildCreaturePanelPrefab);
 
             AssetDatabase.Refresh();
             Debug.Log(made == 0 ? "すべて既にある（何も書き出していない）" : $"{made} 個を書き出した: {Dir}");
@@ -372,7 +375,7 @@ namespace EggCommand.EditorTools
             Skin(ready, "circle", new Color(0.18f, 0.66f, 0.29f, 0.35f));
             ready.SetSiblingIndex(0);   // ⚠️ 絵の後ろへ。前に出すと卵が隠れる
             var stars = Add(filled.gameObject, "Stars", 0f, 118f, 187f, 34f);
-            Text(stars, "", 22, Ui.Accent, TextAnchor.UpperCenter);
+            Text(stars, "", 22, Ui.AccentInk, TextAnchor.UpperCenter);
             var track = Add(filled.gameObject, "Track", 16f, 160f, 155f, 16f);
             track.gameObject.AddComponent<Image>().color = new Color(1f, 1f, 1f, 0.85f);
             var fill = Add(track.gameObject, "Fill", 0f, 0f, 155f, 16f);
@@ -408,7 +411,7 @@ namespace EggCommand.EditorTools
             var element = Add(root, "Element", 190f, 14f, 24f, 24f);
             Skin(element, "circle", Color.white);
             var stars = Add(root, "Stars", 0f, 116f, 228f, 34f);
-            Text(stars, "", 22, Ui.Accent, TextAnchor.UpperCenter);
+            Text(stars, "", 22, Ui.AccentInk, TextAnchor.UpperCenter);
             var wild = Add(root, "Wild", 0f, 150f, 228f, 48f);
             Text(wild, "", 34, Ui.Ink, TextAnchor.UpperCenter);
             var wait = Add(root, "Wait", 0f, 202f, 228f, 34f);
@@ -437,8 +440,11 @@ namespace EggCommand.EditorTools
             var button = root.AddComponent<Button>();
             button.targetGraphic = root.GetComponent<Image>();
 
-            var mark = Add(root, "Mark", 0f, 0f, 228f, 8f);
-            mark.gameObject.AddComponent<Image>().color = Ui.Accent;
+            // ⭐ **選んでいる升は4辺で囲む。**（作者の指示「黄色く囲む」）
+            // ⚠️ 上辺の帯1本だと、隣との境目にしか見えず「囲む」になっていない。
+            // ⚠️ 四隅のカギ括弧にはしない ── 戦闘の「狙い先」がその形なので意味が混ざる。
+            var mark = Add(root, "Mark", 0f, 0f, 228f, 200f);
+            Frame(mark, 228f, 200f);
             var art = Add(root, "Art", 70f, 30f, 88f, 88f);
             art.gameObject.AddComponent<Image>().preserveAspect = true;
             var element = Add(root, "Element", 10f, 10f, 22f, 22f);
@@ -457,88 +463,53 @@ namespace EggCommand.EditorTools
             return root;
         }
 
+        /// <summary>BOX の押しどころ。⚠️ 並び順が <see cref="BoxView"/> の Repurpose の番号と対応する。</summary>
+        private static readonly string[] ActionNames =
+            { "Party", "Spend 0", "Spend 1", "Spend 2", "Spend 3", "Release" };
+
         private static GameObject BuildBox()
         {
             var root = Screen("BoxScreen");
             var cellPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Dir}/CreatureCell.prefab");
             float full = Ui.W - Ui.Margin * 2f;
 
-            var detail = Add(root, "Detail", Ui.Margin, 12f, full, 452f);
+            // ⚠️ 札(706)＋隙間(16)＋押しどころ(112)＋余白(26)。PatchScreenPrefabs の BoxDetailHeight と揃える
+            const float DetailHeight = 860f;
+            var detail = Add(root, "Detail", Ui.Margin, 12f, full, DetailHeight);
             Skin(detail, "panel", Color.white, sliced: true);
 
-            var art = Add(detail.gameObject, "Art", 20f, 20f, 132f, 132f);
-            art.gameObject.AddComponent<Image>().preserveAspect = true;
-            var element = Add(detail.gameObject, "Element", 168f, 24f, 26f, 26f);
-            Skin(element, "circle", Color.white);
-            var name = Add(detail.gameObject, "Name", 204f, 18f, 300f, 42f);
-            Text(name, "", 34, Ui.Ink, TextAnchor.UpperLeft);
-            var id = Add(detail.gameObject, "Id", 204f, 60f, 300f, 30f);
-            Text(id, "", 22, Ui.InkDim, TextAnchor.UpperLeft);
-            var point = Add(detail.gameObject, "Point", 420f, 60f, 200f, 30f);
-            Text(point, "", 26, Ui.Accent, TextAnchor.UpperLeft);
+            // ⭐ 中身は配合の親札と同じ部品。並びは BuildCreaturePanel が持つ
+            var panel = BuildCreaturePanel.Build(detail, "Panel", BuildCreaturePanel.Wide(), true);
 
-            var stats = new StatRow[4];
-            for (int i = 0; i < 4; i++)
+            // ⭐ 押しどころは札の下に1列。⚠️ 札の中に混ぜない（見る場所と押す場所を分ける）
+            var actions = new Button[6];
+            float actionW = (full - 52f - 12f * 5f) / 6f;
+            float actionTop = DetailHeight - Ui.Tap - 26f;
+            for (int i = 0; i < actions.Length; i++)
             {
-                float rowTop = 184f + i * 36f;
-                var label = Add(detail.gameObject, $"K {i}", 20f, rowTop, 96f, 32f);
-                Text(label, "", 22, Ui.InkDim, TextAnchor.UpperLeft);
-                var value = Add(detail.gameObject, $"V {i}", 120f, rowTop, 90f, 32f);
-                Text(value, "", 24, Ui.Ink, TextAnchor.UpperLeft);
-                var track = Add(detail.gameObject, $"T {i}", 216f, rowTop + 10f, 220f, 12f);
-                track.gameObject.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.12f);
-                var bar = Add(track.gameObject, $"B {i}", 0f, 0f, 220f, 12f);
-                var barImage = bar.gameObject.AddComponent<Image>();
-                barImage.color = Ui.Good;
-                // ⚠️ 幅ではなく fillAmount で伸ばす（Prefab で幅を変えても比が壊れない）
-                barImage.sprite = Ui.SkinSprite("pill");
-                barImage.type = Image.Type.Filled;
-                barImage.fillMethod = Image.FillMethod.Horizontal;
-                stats[i] = new StatRow
-                {
-                    Label = label.GetComponent<UnityEngine.UI.Text>(),
-                    Value = value.GetComponent<UnityEngine.UI.Text>(),
-                    Bar = barImage,
-                };
+                actions[i] = Tap(detail.gameObject, ActionNames[i], 26f + (actionW + 12f) * i,
+                    actionTop, actionW, Ui.Tap, i == 5 ? "button-danger" : "button", "", 0);
+                var label = Add(actions[i].gameObject, "Label", 0f, 0f, actionW, Ui.Tap);
+                Text(label, i == 5 ? "逃がす" : "", 20, Ui.OnLead, TextAnchor.MiddleCenter);
             }
+            var party = actions[0];
+            var partyLabel = party.transform.Find("Label").gameObject;
+            var release = actions[5];
+            var spend = new Button[] { actions[1], actions[2], actions[3], actions[4] };
 
-            var skills = new UnityEngine.UI.Text[3];
-            var cts = new UnityEngine.UI.Text[3];
-            for (int i = 0; i < 3; i++)
-            {
-                var s = Add(detail.gameObject, $"S {i}", 500f, 184f + i * 36f, 300f, 32f);
-                skills[i] = Text(s, "", 24, Ui.Ink, TextAnchor.UpperLeft);
-                var c = Add(detail.gameObject, $"SC {i}", 800f, 184f + i * 36f, 120f, 32f);
-                cts[i] = Text(c, "", 22, Ui.InkDim, TextAnchor.UpperRight);
-            }
-
-            var party = Tap(detail.gameObject, "Party", full - 400f, 24f, 180f, Ui.Tap, "button", "", 0);
-            var partyLabel = Add(party.gameObject, "Label", 0f, 0f, 180f, Ui.Tap);
-            Text(partyLabel, "出撃", 28, Ui.OnLead, TextAnchor.MiddleCenter);
-            var release = Tap(detail.gameObject, "Release", full - 208f, 24f, 188f, Ui.Tap,
-                "button-danger", "逃がす", 28);
-
-            var spend = new Button[4];
-            float spendW = (full - 40f - 12f * 3f) / 4f;
-            for (int i = 0; i < 4; i++)
-            {
-                spend[i] = Tap(detail.gameObject, $"Spend {i}", 20f + (spendW + 12f) * i,
-                    452f - Ui.Tap - 16f, spendW, Ui.Tap, "button", "", 24);
-                var label = Add(spend[i].gameObject, "Label", 0f, 0f, spendW, Ui.Tap);
-                Text(label, "", 24, Ui.OnLead, TextAnchor.MiddleCenter);
-            }
-
+            // ⚠️ 詳細の下端(12+DetailHeight)より下。⭐ 詳細を伸ばしたら札も下がる
+            float TabTop = 12f + DetailHeight + 24f;
             var tabs = new Button[Storages.SortKeys.Length];
             float tabW = (full - 12f * (tabs.Length - 1)) / tabs.Length;
             for (int i = 0; i < tabs.Length; i++)
             {
-                tabs[i] = Tap(root, $"Sort {i}", Ui.Margin + (tabW + 12f) * i, 476f, tabW, Ui.Tap,
+                tabs[i] = Tap(root, $"Sort {i}", Ui.Margin + (tabW + 12f) * i, TabTop, tabW, Ui.Tap,
                     "button", "", 0);
                 var label = Add(tabs[i].gameObject, "Label", 0f, 0f, tabW, Ui.Tap);
                 Text(label, "", 20, Ui.OnLead, TextAnchor.MiddleCenter);
             }
 
-            float gridTop = 476f + Ui.Tap + 12f;
+            float gridTop = TabTop + Ui.Tap + 12f;
             var grid = Scroll(root, "Grid", 0f, gridTop, Ui.W, Ui.H - Ui.TopBarHeight - gridTop,
                 new Vector2(228f, 200f), 4);
             var template = (GameObject)PrefabUtility.InstantiatePrefab(cellPrefab, root.transform);
@@ -548,22 +519,7 @@ namespace EggCommand.EditorTools
             var view = root.AddComponent<BoxView>();
             var so = new SerializedObject(view);
             so.FindProperty("_detail").objectReferenceValue = detail.gameObject;
-            so.FindProperty("_art").objectReferenceValue = art.GetComponent<Image>();
-            so.FindProperty("_element").objectReferenceValue = element.GetComponent<Image>();
-            so.FindProperty("_name").objectReferenceValue = name.GetComponent<UnityEngine.UI.Text>();
-            so.FindProperty("_id").objectReferenceValue = id.GetComponent<UnityEngine.UI.Text>();
-            so.FindProperty("_point").objectReferenceValue = point.GetComponent<UnityEngine.UI.Text>();
-            var rows = so.FindProperty("_stats");
-            rows.arraySize = 4;
-            for (int i = 0; i < 4; i++)
-            {
-                var e = rows.GetArrayElementAtIndex(i);
-                e.FindPropertyRelative("Label").objectReferenceValue = stats[i].Label;
-                e.FindPropertyRelative("Value").objectReferenceValue = stats[i].Value;
-                e.FindPropertyRelative("Bar").objectReferenceValue = stats[i].Bar;
-            }
-            Fill(so, "_skills", skills);
-            Fill(so, "_skillCts", cts);
+            so.FindProperty("_panel").objectReferenceValue = panel;
             so.FindProperty("_party").objectReferenceValue = party;
             so.FindProperty("_partyLabel").objectReferenceValue = partyLabel.GetComponent<UnityEngine.UI.Text>();
             so.FindProperty("_release").objectReferenceValue = release;
@@ -589,23 +545,20 @@ namespace EggCommand.EditorTools
                     Ui.Margin + (half + 64f) * i, 12f, half, 200f);
                 Skin(card, "panel", Color.white, sliced: true);
 
-                var empty = Add(card.gameObject, "Empty", half / 2f - 48f, 150f, 96f, 12f);
-                empty.gameObject.AddComponent<Image>().color = new Color32(0xc9, 0xa4, 0x6a, 0xff);
+                // ⭐ 空き枠は**札いっぱい**に取って、真ん中で行き先を言う。
+                // ⚠️ 茶色い帯1本だった頃は、540 の白い箱に線が1本あるだけで
+                //    何をすればいいのか読めなかった（実測 2026-08-19）。
+                var empty = Add(card.gameObject, "Empty", 0f, 0f, half, 200f);
+                var say = Add(empty.gameObject, "Say", 0f, 70f, half, 60f);
+                Text(say, "下から選ぶ", 30, Ui.InkFaint, TextAnchor.MiddleCenter);
 
                 var filled = Add(card.gameObject, "Filled", 0f, 0f, half, 200f);
-                var art = Add(filled.gameObject, "Art", half / 2f - 52f, 16f, 104f, 104f);
-                art.gameObject.AddComponent<Image>().preserveAspect = true;
-                var element = Add(filled.gameObject, "Element", 12f, 12f, 24f, 24f);
-                Skin(element, "circle", Color.white);
-                var name = Add(filled.gameObject, "Name", 8f, 126f, half - 16f, 34f);
-                var wild = Add(filled.gameObject, "Wild", 8f, 160f, half - 16f, 32f);
+                // ⭐ BOX の詳細と同じ部品。⚠️ 幅が違うので Narrow の寸法で組む
+                var panel = BuildCreaturePanel.Build(filled, "Panel", BuildCreaturePanel.Narrow(), true);
 
                 parents[i] = new ParentSlot
                 {
-                    Filled = filled.gameObject, Empty = empty.gameObject,
-                    Art = art.GetComponent<Image>(), Element = element.GetComponent<Image>(),
-                    Name = Text(name, "", 26, Ui.Ink, TextAnchor.UpperCenter),
-                    Wild = Text(wild, "", 24, Ui.InkDim, TextAnchor.UpperCenter),
+                    Filled = filled.gameObject, Empty = empty.gameObject, Panel = panel,
                 };
             }
             var plus = Add(root, "Plus", Ui.Margin + half, 12f, 64f, 200f);
@@ -638,10 +591,7 @@ namespace EggCommand.EditorTools
                 var e = slots.GetArrayElementAtIndex(i);
                 e.FindPropertyRelative("Filled").objectReferenceValue = parents[i].Filled;
                 e.FindPropertyRelative("Empty").objectReferenceValue = parents[i].Empty;
-                e.FindPropertyRelative("Art").objectReferenceValue = parents[i].Art;
-                e.FindPropertyRelative("Element").objectReferenceValue = parents[i].Element;
-                e.FindPropertyRelative("Name").objectReferenceValue = parents[i].Name;
-                e.FindPropertyRelative("Wild").objectReferenceValue = parents[i].Wild;
+                e.FindPropertyRelative("Panel").objectReferenceValue = parents[i].Panel;
             }
             so.FindProperty("_result").objectReferenceValue = result.gameObject;
             so.FindProperty("_resultEgg").objectReferenceValue = egg.GetComponent<Image>();
@@ -655,6 +605,24 @@ namespace EggCommand.EditorTools
             so.FindProperty("_cell").objectReferenceValue = template.GetComponent<CreatureCell>();
             so.ApplyModifiedPropertiesWithoutUndo();
             return root;
+        }
+
+        /// <summary>ステの札だけを単体で書き出す。⭐ **長押しの覆いが読む。**
+        ///
+        /// ⚠️ 覆いの側で並びを書き直さないため。画面ごとに組み立てを書くと、
+        /// 同じ個体が画面によって違う顔になる（配合で実際に起きた）。
+        /// ⭐ 中身は BOX の詳細とまったく同じ <see cref="BuildCreaturePanel.Wide"/>。</summary>
+        private static GameObject BuildCreaturePanelPrefab()
+        {
+            var root = new GameObject("CreaturePanel", typeof(RectTransform));
+            var panel = BuildCreaturePanel.Build(root.transform, "Panel",
+                BuildCreaturePanel.Wide(), true);
+            // ⚠️ 入れ子にしない。⭐ 読む側が Instantiate してすぐ Bind できる形にする
+            var inner = (RectTransform)panel.transform;
+            inner.SetParent(null, false);
+            Object.DestroyImmediate(root);
+            inner.gameObject.name = "CreaturePanel";
+            return inner.gameObject;
         }
 
         private static GameObject BuildStealResult()
@@ -696,6 +664,27 @@ namespace EggCommand.EditorTools
 
         /// <summary>スクロールする入れ物。⭐ 中身は GridLayoutGroup が並べる。
         /// ⚠️ Mask を使わない（透明な絵だと中身が消える）。RectMask2D にする。</summary>
+        /// <summary>中を空けた枠を4本の帯で描く。
+        /// ⚠️ 四角い輪郭の絵が素材に無い（`Resources/UI/NOTICE.md`）ので、帯で組む。
+        /// ⭐ 太さは指で触れる升に対して 8 ── 細すぎると選択が読めない。</summary>
+        private static void Frame(RectTransform box, float width, float height)
+        {
+            const float Thick = 8f;
+            Bar(box, "上", 0f, 0f, width, Thick);
+            Bar(box, "下", 0f, height - Thick, width, Thick);
+            Bar(box, "左", 0f, Thick, Thick, height - Thick * 2f);
+            Bar(box, "右", width - Thick, Thick, Thick, height - Thick * 2f);
+        }
+
+        private static void Bar(RectTransform parent, string name,
+            float left, float top, float width, float height)
+        {
+            var rect = Add(parent.gameObject, name, left, top, width, height);
+            var image = rect.gameObject.AddComponent<Image>();
+            image.color = Ui.Accent;
+            image.raycastTarget = false;
+        }
+
         private static RectTransform Scroll(GameObject parent, string name,
             float left, float top, float width, float height, Vector2 cell, int columns)
         {

@@ -5,6 +5,19 @@ using System.Collections.Generic;
 namespace EggCommand.Core
 {
     /// <summary>並べ替えの軸。⚠️ TS の <c>SORT_KEYS</c> と順を揃える。</summary>
+    /// <summary>何の数で並べるか。⭐ **育成を含めるかどうか**（作者の指示 2026-08-19）。
+    ///
+    /// ⚠️ 前は生の野生ロール（0〜40）で並べていた。種族の基礎値が入らないので、
+    /// 画面に出ている数（素質の列）とも、戦闘で使う数とも**別の順**になっていた。</summary>
+    public enum SortBasis
+    {
+        /// <summary>素質だけ。⭐ 種族の基礎値 ＋ 野生（育成前の実値）。
+        /// ⚠️ **生まれつきの良し悪しを見る**ときはこちら。育てた個体に埋もれない。</summary>
+        Born,
+        /// <summary>合計。⭐ 育成を含めた、いま戦闘で使う実値。</summary>
+        Total,
+    }
+
     public enum SortKey
     {
         WildTotal,
@@ -18,7 +31,7 @@ namespace EggCommand.Core
 
     /// <summary>保管庫。枠は有限。どれを逃がすかの整理が遊びになる。
     ///
-    /// ⭐ 50枠にしたのは、4ステぶんの専門親を数体ずつ + 世代管理の余裕が持てる下限だから。
+    /// ⭐ 50枠にしたのは、ステごとの専門親を数体ずつ + 世代管理の余裕が持てる下限だから。
     /// 20枠だと ARK 型の「専門親を複数持つ」遊びが成立せず、
     /// 100枠だと捨てる判断が生まれずリストが膨れるだけになる。
     /// </summary>
@@ -49,10 +62,11 @@ namespace EggCommand.Core
             switch (key)
             {
                 case SortKey.WildTotal: return "素質合計";
-                case SortKey.Hp: return "HP";
-                case SortKey.Atk: return "攻撃";
-                case SortKey.Def: return "防御";
-                case SortKey.Spd: return "速度";
+                // ⭐ 言葉の出所は Stats に1つ（並べ替えの札とステ表で食い違わせない）
+                case SortKey.Hp: return Stats.LabelOf(StatKey.Hp);
+                case SortKey.Atk: return Stats.LabelOf(StatKey.Atk);
+                case SortKey.Def: return Stats.LabelOf(StatKey.Def);
+                case SortKey.Spd: return Stats.LabelOf(StatKey.Spd);
                 case SortKey.Generation: return "世代";
                 case SortKey.Mutation: return "変異";
                 default: throw new ArgumentOutOfRangeException(nameof(key));
@@ -89,29 +103,47 @@ namespace EggCommand.Core
             return new Storage(storage.Slots, next);
         }
 
-        private static int SortValue(Creature creature, SortKey key)
+        /// <summary>切り替えられる基準。⚠️ 画面はこの並びをそのまま出す。</summary>
+        public static readonly SortBasis[] Bases = { SortBasis.Born, SortBasis.Total };
+
+        public static string LabelOf(SortBasis basis) =>
+            basis == SortBasis.Born ? "素質だけ" : "合計";
+
+        private static int SortValue(Creature creature, SortKey key, SortBasis basis)
         {
             switch (key)
             {
-                case SortKey.WildTotal: return Creatures.WildTotalOf(creature);
                 case SortKey.Generation: return creature.Generation;
                 case SortKey.Mutation: return creature.MutationCounter;
-                case SortKey.Hp: return creature.Wild.Hp;
-                case SortKey.Atk: return creature.Wild.Atk;
-                case SortKey.Def: return creature.Wild.Def;
-                case SortKey.Spd: return creature.Wild.Spd;
+            }
+
+            // ⭐ **素質だけ**なら育成前の実値、**合計**なら育成込みの実値。
+            // ⚠️ どちらも「画面の表に出ている数」と同じ ── 生の野生ロールでは並べない。
+            var stats = basis == SortBasis.Born
+                ? Creatures.Slanted(Creatures.BornStatsOf(creature.SpeciesId, creature.Wild),
+                    creature.Strong, creature.Weak)
+                : Creatures.StatsOf(creature);
+
+            switch (key)
+            {
+                case SortKey.WildTotal: return Stats.TotalOf(stats);
+                case SortKey.Hp: return stats.Hp;
+                case SortKey.Atk: return stats.Atk;
+                case SortKey.Def: return stats.Def;
+                case SortKey.Spd: return stats.Spd;
                 default: throw new ArgumentOutOfRangeException(nameof(key));
             }
         }
 
         /// <summary>降順。同値は id で安定させる（並びが実行ごとに変わると比較できない）。
         /// ⚠️ id は "c001" 形式なので、TS の localeCompare と序数比較の結果が一致する。</summary>
-        public static List<Creature> Sorted(Storage storage, SortKey key)
+        public static List<Creature> Sorted(Storage storage, SortKey key,
+            SortBasis basis = SortBasis.Born)
         {
             var list = new List<Creature>(storage.Creatures);
             list.Sort((a, b) =>
             {
-                int diff = SortValue(b, key) - SortValue(a, key);
+                int diff = SortValue(b, key, basis) - SortValue(a, key, basis);
                 return diff != 0 ? diff : string.CompareOrdinal(a.Id, b.Id);
             });
             return list;

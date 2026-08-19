@@ -21,8 +21,23 @@ namespace EggCommand.View
         private Incubation _slot;
         private Func<long> _clockSource;
 
-        public void Bind(Incubation slot, long nowUnix, Func<long> clockSource, Action onTap)
+        /// <summary>孵ったときの押しどころ。⚠️ **Bind のあとに孵る**ことがあるので覚えておく。</summary>
+        private Action _onCollect;
+        private bool _wasReady;
+
+        public void Bind(Incubation slot, long nowUnix, Func<long> clockSource, Action onTap) =>
+            Bind(slot, nowUnix, clockSource, onTap, null);
+
+        /// <param name="onCollect">孵ったときに押せるようにする手。
+        /// ⚠️ **Bind の時点で孵っていなくても渡すこと。**
+        /// ⭐ 前は Bind した瞬間の状態で押しどころを決めていたので、
+        /// ホームを開いたまま時間が 0 になっても押せず、
+        /// 一度ほかの画面を挟まないと孵せなかった（作者の指摘 2026-08-19）。</param>
+        public void Bind(Incubation slot, long nowUnix, Func<long> clockSource, Action onTap,
+            Action onCollect)
         {
+            _onCollect = onCollect;
+            _wasReady = slot != null && Hatchery.IsReady(slot, nowUnix);
             if (_fullWidth < 0f && _fill != null) _fullWidth = _fill.rectTransform.sizeDelta.x;
             _slot = slot;
             _clockSource = clockSource;
@@ -66,7 +81,7 @@ namespace EggCommand.View
                 // ⭐ 孵ったら「孵った」と出す。⚠️ 帯の色（橙→緑）だけでは、
                 //    取り出せるようになったことに気づけなかった
                 _clock.text = ready ? "孵った" : Rarities.Clock(Hatchery.LeftOf(_slot, nowUnix));
-                _clock.color = ready ? Ui.Good : Ui.Ink;
+                _clock.color = ready ? Ui.GoodInk : Ui.Ink;
                 _clock.gameObject.SetActive(true);
             }
             if (_ready != null) _ready.SetActive(ready);
@@ -74,7 +89,19 @@ namespace EggCommand.View
 
         private void Update()
         {
-            if (_slot != null && _clockSource != null) Retime(_clockSource());
+            if (_slot == null || _clockSource == null) return;
+            long now = _clockSource();
+            Retime(now);
+
+            // ⭐ **見ている最中に孵ったら、その場で押せるようにする。**
+            // ⚠️ 状態が変わった瞬間だけ差し替える（毎フレーム付け替えると押しどころが飛ぶ）
+            bool ready = Hatchery.IsReady(_slot, now);
+            if (ready == _wasReady) return;
+            _wasReady = ready;
+            if (_button == null || _onCollect == null) return;
+            _button.onClick.RemoveAllListeners();
+            _button.interactable = ready;
+            if (ready) _button.onClick.AddListener(() => _onCollect());
         }
     }
 }

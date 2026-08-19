@@ -29,16 +29,13 @@ namespace EggCommand.Core
         public readonly PixelSprite Sprite;
         /// <summary>0 = 通常。1以降が変異色（ARK と同じく変異は色変化として出る）。</summary>
         public readonly IReadOnlyList<Palette> Palettes;
-        /// <summary>この種族の卵から枠2・3 に出うる技。
-        ///
-        /// ⭐ **種族の行に置く。** 別表にしていたときは、種族を足すのに2か所を直す必要があり、
-        /// 片方を忘れると「遊んでいる最中に投げる」形で出た（コンパイルは通る）。
-        /// ⚠️ 種族ごとにプールを分けるのは、どこで卵を奪っても同じ技が出ると
-        /// 「必要な技を持つ親の巣へ行く」という輪の駆動力が消えるため。</summary>
-        public readonly IReadOnlyList<string> Gacha;
+        /// <summary>枠2 に出うる技。⭐ **型ごと**に決める。</summary>
+        public readonly SkillPool Slot2;
+        /// <summary>枠3 に出うる技。⚠️ 枠2 と**別の型**にする（同じ型だと分けた意味が無い）。</summary>
+        public readonly SkillPool Slot3;
 
         public Species(string id, string name, string skill1, StatBlock baseStats,
-            PixelSprite sprite, IReadOnlyList<Palette> palettes, IReadOnlyList<string> gacha)
+            PixelSprite sprite, IReadOnlyList<Palette> palettes, SkillPool slot2, SkillPool slot3)
         {
             Id = id;
             Name = name;
@@ -46,7 +43,42 @@ namespace EggCommand.Core
             Base = baseStats;
             Sprite = sprite;
             Palettes = palettes;
-            Gacha = gacha;
+            Slot2 = slot2;
+            Slot3 = slot3;
+        }
+    }
+
+    /// <summary>1つの枠に出うる技。⭐ **型と中身をセットで宣言する。**
+    ///
+    /// ⚠️ 型を書かずに一覧だけ置くと、あとから技を足したときに
+    /// 「支える枠に殴る札が混ざる」ことに気づけない。<see cref="SpeciesTable.Audit"/> が型を照合する。
+    ///
+    /// ⚠️ 種族ごとに中身を分けるのは、どこで卵を奪っても同じ技が出ると
+    /// 「必要な技を持つ親の巣へ行く」という輪の駆動力が消えるため。</summary>
+    /// <summary>1つの枠に出うる技。⭐ **その枠だけの、手で選んだ並び。**
+    ///
+    /// ⚠️ **型（アタック/サポート/…）で縛るのをやめた**（2026-08-19・作者の判断）。
+    /// 縛っていた頃の問題:
+    /// <list type="bullet">
+    /// <item>新しい技は「同じ型の枠」にしか入れられない。アタックの受け皿は **6枠**、
+    ///   ヒールに至っては **4枠**しか無く、技を10足すと1袋あたり +1.7〜2.5件も太った
+    ///   （型を外すと受け皿は22枠になり、同じ10件が **+0.45件** で収まる）</item>
+    /// <item>受け皿が足りないので**同じ技を何種族にも配る**ことになり、
+    ///   56技のうち **21件が複数の袋**に居た（`heal-ratio` は4か所）。
+    ///   ⚠️ 「この技が欲しいからこの巣へ」という動機を、型固定が自分で薄めていた</item>
+    /// <item>4型から2つ選ぶ組み合わせは **6通りしかない**。種族が増えると顔が必ず被る</item>
+    /// </list>
+    ///
+    /// ⭐ 型は**中身から読み取る注記**へ降りた（<see cref="Skills.FlavorOf"/>）。
+    /// ⚠️ 縛りが無くなったぶん、代わりに <see cref="Skills.Faults"/> が4つ数える ──
+    /// 袋の大きさ / 1技が入れる袋の数 / 枠2と枠3の重なり / 役割が1つに偏っていないか。</summary>
+    public sealed class SkillPool
+    {
+        public readonly IReadOnlyList<string> Pool;
+
+        public SkillPool(params string[] pool)
+        {
+            Pool = pool;
         }
     }
 
@@ -103,8 +135,20 @@ namespace EggCommand.Core
             }
         }
 
-        /// <summary>⚠️ 全種族で揃える基礎値の合計。ここを種族ごとに変えない。</summary>
-        public const int BaseTotal = 80;
+        /// <summary>⚠️ 全種族で揃える基礎値の合計。ここを種族ごとに変えない。
+        ///
+        /// ⭐ **80 → 120**（2026-08-19・作者の判断）。
+        /// 弱化命中・弱化耐性が全種族 0 だったので、育成の同じ ＋20 が
+        /// 他ステの倍の倍率（+115% 対 +52〜63%）で効いていた（実測）。
+        /// ⚠️ 既存の4本は**1つも触っていない** ── 触ると戦闘の較正が丸ごと動く。
+        /// 新しい 40 を弱化命中・弱化耐性へ配っただけ。
+        /// ⭐ 配分は種族の性格で決めた（攻めは命中寄り・守りは耐性寄り）。合計は必ず 40。</summary>
+        public const int BaseTotal = 120 * Stats.Scale;
+
+        /// <summary>弱化命中＋弱化耐性の合計。⭐ **全種族で同じ。**差は配分で出す。
+        /// ⚠️ 移植元は4本ぶん（80 × <see cref="Stats.Scale"/>）だけで、この2本は 2026-08-19 に足した。
+        /// ⭐ ここを揃えておけば、移植元の4本ぶんも自動的に全種族で揃う。</summary>
+        public const int DebuffBaseTotal = 40 * Stats.Scale;
 
         // ── 意匠 ───────────────────────────────────────────
         // 文字の格子で持つ。テキストのまま人が手で直せる。
@@ -128,6 +172,69 @@ namespace EggCommand.Core
             "..112222222211..",
             "...1122222211...",
             "....11111111....",
+            "................",
+        });
+
+        /// <summary>キバネ — 尖った耳と、下に覗く牙。止める側の顔。</summary>
+        private static readonly PixelSprite KibaneSprite = PixelSprite.Parse(new[]
+        {
+            "................",
+            "...11......11...",
+            "..1221....1221..",
+            "..122211112221..",
+            ".11222222222211.",
+            ".12233222222221.",
+            ".12222222222221.",
+            ".12244222244221.",
+            ".12222222222221.",
+            ".12221111112221.",
+            ".11222222222211.",
+            "..112222222211..",
+            "...1122222211...",
+            "....11111111....",
+            "................",
+            "................",
+        });
+
+        /// <summary>イワオ — 角の立った岩。丸みが無いので重く見える。</summary>
+        private static readonly PixelSprite IwaoSprite = PixelSprite.Parse(new[]
+        {
+            "................",
+            "................",
+            "..111111111111..",
+            ".11222222222211.",
+            ".12233222222221.",
+            ".12222222222221.",
+            ".12244222244221.",
+            ".12222222222221.",
+            ".12222222222221.",
+            ".12222222222221.",
+            ".11222222222211.",
+            "..111111111111..",
+            "................",
+            "................",
+            "................",
+            "................",
+        });
+
+        /// <summary>ホムラ — 上へ細る炎。速さと支えの顔。</summary>
+        private static readonly PixelSprite HomuraSprite = PixelSprite.Parse(new[]
+        {
+            "................",
+            ".......11.......",
+            "......1221......",
+            ".....122221.....",
+            "....12233221....",
+            "...1222222221...",
+            "..122222222221..",
+            ".12244222244221.",
+            ".12222222222221.",
+            ".12222222222221.",
+            ".11222222222211.",
+            "..112222222211..",
+            "...1122222211...",
+            "....11111111....",
+            "................",
             "................",
         });
 
@@ -293,6 +400,30 @@ namespace EggCommand.Core
             new Palette("#2e2a18", "#c9bd6e", "#eae0a8", "#1a1810"), // 変異・金
         };
 
+        private static readonly Palette[] KibanePalettes =
+        {
+            new Palette("#241a2e", "#9a7ec9", "#c6b0ea", "#140f1a"), // 通常
+            new Palette("#1c2436", "#6e9ec9", "#a8cbea", "#101418"), // 変異・蒼
+            new Palette("#361c22", "#c96e7f", "#eaa8b4", "#181012"), // 変異・紅
+            new Palette("#2e2a18", "#c9bd6e", "#eae0a8", "#1a1810"), // 変異・金
+        };
+
+        private static readonly Palette[] IwaoPalettes =
+        {
+            new Palette("#22201c", "#8f8a7e", "#c2bdb0", "#141310"), // 通常
+            new Palette("#1c2436", "#6e9ec9", "#a8cbea", "#101418"), // 変異・蒼
+            new Palette("#361c22", "#c96e7f", "#eaa8b4", "#181012"), // 変異・紅
+            new Palette("#2e2a18", "#c9bd6e", "#eae0a8", "#1a1810"), // 変異・金
+        };
+
+        private static readonly Palette[] HomuraPalettes =
+        {
+            new Palette("#2e1a14", "#e08a4e", "#f5c48c", "#1a0f0a"), // 通常
+            new Palette("#1c2436", "#6e9ec9", "#a8cbea", "#101418"), // 変異・蒼
+            new Palette("#361c22", "#c96e7f", "#eaa8b4", "#181012"), // 変異・紅
+            new Palette("#2e2a18", "#c9bd6e", "#eae0a8", "#1a1810"), // 変異・金
+        };
+
         private static readonly Palette[] TsunogaPalettes =
         {
             new Palette("#2a1a14", "#c97a52", "#eab48c", "#160e0a"), // 通常
@@ -350,72 +481,93 @@ namespace EggCommand.Core
         /// 全種族が同じステでスケールすると、そのステだけが二重に得になる。</summary>
         private static readonly Species[] List =
         {
+            // ⭐ **枠2 と枠3 は別の型から引く**（2026-08-18）。
+            // ⚠️ 同じプールから2つ取っていた頃は、狙った組み合わせが 2.8〜4.8% でしか出ず、
+            //    しかも「この巣からは何が来るか」が読めなかった。
+            // ⭐ 型を種族の看板にすると、巣を選ぶ理由が「どの型が欲しいか」になる。
+            // ⚠️ 型は技に手で書かない（Skills.TypeOf が効果から導く）。ここで嘘を書くと Audit が落とす。
+
             new Species("tamaru", "タマル", "attack-def", // 防御スケール
-                new StatBlock(24, 18, 22, 16), TamaruSprite, TamaruPalettes,
-                // 守りの系統
-                new[] { "def-up", "taunt", "shield", "heal-ratio", "guts", "attack", "ct-long" }),
+                new StatBlock(120, 90, 110, 80, 90, 110), TamaruSprite, TamaruPalettes,
+                // 守り ── 固めて、癒す
+                new SkillPool("shield", "guts", "harden"),
+                new SkillPool("regen", "heal-big")),
 
             new Species("tsunoga", "ツノガ", "attack", // 攻撃スケール・単体
-                new StatBlock(22, 24, 18, 16), TsunogaSprite, TsunogaPalettes,
-                // 攻めの系統
-                new[] { "atk-up", "def-down", "attack-heavy", "ct-short", "poison", "attack-def", "stun" }),
+                new StatBlock(110, 120, 90, 80, 120, 80), TsunogaSprite, TsunogaPalettes,
+                // 攻め ── 殴って、崩す
+                new SkillPool("attack-heavy", "attack-def", "attack-def-twice", "attack-all"),
+                new SkillPool("def-down", "poison", "stun", "atk-down")),
 
             // ⚠️ 枠1 は "attack-all" だった。⭐ **枠1＝通常攻撃**と定めたので差し替えた（2026-08-17）。
             //    全体攻撃が CT 0 で毎手番飛ぶのは通常攻撃ではないし、実害も出た
             //    （「手数」の特性が対象数ぶん効いて、毎行動 CT が3ずつ減っていた）。
-            //    ⭐ 全体攻撃はガチャのプールへ移したので、枠2・3 では今までどおり手に入る。
-            // ⚠️ 枠1 を素の「攻撃」にしたら**総合 16.8%** まで落ちた（実測）。
-            //    全体攻撃を取り上げたぶんの埋め合わせが無く、攻撃18・防御16 の低さだけが残った。
-            // ⭐ 速い種族の通常攻撃として「連撃」に寄せる。多段なので盾にも強く、
-            //    速さと噛み合う。⚠️ 枠1 は他種族と重複してよい（nobiru と同じ技）。
             new Species("haneru", "ハネル", "attack-twice", // 速さで手数を稼ぐ
-                new StatBlock(20, 18, 16, 26), HaneruSprite, HaneruPalettes,
-                // 撹乱の系統
-                // ⚠️ **ここには足さない。**既にある4種のプールは凍結（乱数で引く対象なので、
-                //    足すと卵の技の列がずれて照合が落ちる）。⭐ 全体攻撃は marumi のプールへ移した
-                new[] { "spd-up", "spd-down", "atk-down", "stun", "regen", "ct-long", "immune" }),
+                new StatBlock(100, 90, 80, 130, 120, 80), HaneruSprite, HaneruPalettes,
+                // 撹乱 ── 止めて、逃げる
+                new SkillPool("spd-down", "atk-down", "ct-long", "taunt", "bulwark"),
+                new SkillPool("spd-up", "immune", "ct-short", "dash")),
 
             // ── 増やしたぶん（2026-08-17）。⚠️ 絵は仮 ─────────────
-            // ⭐ 基礎値の合計は全種族 80 で揃える（差は配分だけ）。
-            // ⭐ 枠1のスケール元を散らす。防御スケールが増えすぎると防御が二重に得になる
-            //    （実測で「防御に寄せる型」が突出していた）。新しい4種は攻撃寄りにしてある。
-            // ⚠️ 新しい技は**新しい種族のプールへ**入れる。既にある4種のプールは凍結
-            //    （乱数で引く対象なので、足すと卵の技がずれて照合が落ちる）。
+            // ⭐ 基礎値の合計は全種族 120 で揃える（差は配分だけ）。
 
             new Species("nobiru", "ノビル", "attack-twice", // 多段・攻撃スケール
-                new StatBlock(18, 22, 16, 24), NobiruSprite, NobiruPalettes,
-                new[] { "dash", "curse", "attack-thrice", "spd-up", "venom-fang", "ct-lock" }),
+                new StatBlock(90, 110, 80, 120, 110, 90), NobiruSprite, NobiruPalettes,
+                // 削り ── 手数で押して、自分を速くする
+                new SkillPool("attack-thrice", "pierce-strike", "venom-fang"),
+                new SkillPool("dash", "spd-up", "gauge-boost", "atk-up")),
 
             // ⚠️ 最初は枠1を防御スケールにしていたら、総合勝率 81.1% で突出した。
-            //    防御寄りの配分と防御スケールが重なって**防御を二重に得**にしていた
-            //    （この罠は上の注意書きどおり）。攻撃スケールに変え、低い攻撃を弱点として効かせる。
+            //    防御寄りの配分と防御スケールが重なって**防御を二重に得**にしていた。
             new Species("hirabe", "ヒラベ", "attack", // 攻撃スケール。硬いが攻めは細い
-                new StatBlock(26, 14, 26, 14), HirabeSprite, HirabePalettes,
-                new[] { "harden", "bulwark", "attack-def-twice", "heal-big", "shield-wall", "guts-deep" }),
+                new StatBlock(130, 70, 130, 70, 70, 130), HirabeSprite, HirabePalettes,
+                // 壁 ── 立て直して、耐える
+                new SkillPool("heal-big", "revive"),
+                new SkillPool("shield-wall", "guts-deep", "immune-long")),
 
-            // ⚠️ 枠1 は "venom-fang" だった。⭐ haneru と同じ理由で差し替え。
-            //    ダメージ＋高確率の毒が CT 0 で毎手番入るのは通常攻撃ではない。
-            new Species("togeru", "トゲル", "attack", // 削って待つ（毒は枠2・3 で）
-                new StatBlock(20, 24, 20, 16), TogeruSprite, TogeruPalettes,
-                new[] { "venom-heavy", "crush", "attack-twice", "curse", "stun-heavy", "atk-up",
-                    "venom-fang" }),
+            new Species("togeru", "トゲル", "attack", // 削って待つ
+                new StatBlock(100, 120, 100, 80, 130, 70), TogeruSprite, TogeruPalettes,
+                // 毒 ── 弱らせて、抜く
+                new SkillPool("venom-heavy", "curse", "sleep", "stun-heavy", "gauge-drain"),
+                new SkillPool("attack-twice", "crush", "venom-fang")),
 
-            // ⭐ 全体に効かせる系（鎮めの風・全体攻撃）はここが持つ。
-            //    ⚠️ haneru の枠1 から外した全体攻撃の受け皿（あちらのプールは凍結されている）
             new Species("marumi", "マルミ", "attack", // 素直。支える側
-                new StatBlock(24, 16, 18, 22), MarumiSprite, MarumiPalettes,
-                new[] { "heal-big", "heal-miracle", "slow-all", "immune-long", "dash", "shield",
-                    "attack-all" }),
+                new StatBlock(120, 80, 90, 110, 80, 120), MarumiSprite, MarumiPalettes,
+                // 支え ── 癒して、剥がす
+                new SkillPool("heal-ratio", "heal-miracle", "regen"),
+                new SkillPool("slow-all", "dispel", "block", "ct-lock", "buff-steal")),
+
+            // ── 特性が14件になったので、顔ぶれを3つ足した（2026-08-19・作者の指示）──
+            // ⭐ **足した3種族が、それまで配れていなかった技10件の行き先**にもなっている。
+            //    ⚠️ 既存7種族のプールは1文字も触っていない（既に較正済みのため）。
+            // ⭐ それぞれ、盤面を見る新しい特性のどれかと噛み合う顔にしてある:
+            //    キバネ＝止める（不意打ち）/ イワオ＝崩れてから（遺志）/ ホムラ＝速さを配る
+
+            new Species("kibane", "キバネ", "attack-twice", // 手数で通す
+                new StatBlock(90, 110, 80, 120, 130, 70), KibaneSprite, KibanePalettes,
+                // 止める ── 眠らせ、痺れさせ、縛る
+                new SkillPool("stun-strike", "taunt-long", "poison-all", "stun", "sleep"),
+                new SkillPool("strip-strike", "pierce-strike")),
+
+            new Species("iwao", "イワオ", "attack-def", // 硬さがそのまま火力
+                new StatBlock(140, 85, 115, 60, 90, 110), IwaoSprite, IwaoPalettes,
+                // 重い ── 一撃が遠く、代わりに深い
+                new SkillPool("pierce-strike-heavy", "attack-all-twice", "attack-heavy", "crush"),
+                new SkillPool("guts", "harden", "def-up", "shield")),
+
+            new Species("homura", "ホムラ", "attack", // 素直に速い
+                new StatBlock(110, 95, 80, 115, 95, 105), HomuraSprite, HomuraPalettes,
+                // 配る ── 速さとゲージを味方へ
+                new SkillPool("tailwind", "gauge-boost-heavy", "def-up"),
+                new SkillPool("regen-heavy", "revive-heavy", "heal-ratio")),
 
             // ⚠️ ボス専用。巣は持たないので卵からは出ない
-            // ⚠️ 3すくみは 炎 → 木 → 水 → 炎。水に有利を取るのは木（ハネル）。
-            //    ここを読み違えて検証編成を組み、測り損ねたことがある。
             // ⚠️ 枠1は CT が無いので、大技を置くと毎回撃ててしまう。
             //    震撼（CT7 の全体大技）は枠2へ回し、ここは中程度に留める。
             new Species("nushi", "ヌシ", "attack-def",
-                new StatBlock(26, 20, 24, 10), NushiSprite, NushiPalettes,
-                // ⚠️ 卵は落とさないが、数える検査が「プールが無い」で落ちるので置く
-                new[] { "def-up", "spd-down", "taunt", "guts", "immune", "attack-all-heavy" }),
+                new StatBlock(130, 100, 120, 50, 100, 100), NushiSprite, NushiPalettes,
+                new SkillPool("attack-all-heavy"),
+                new SkillPool("spd-down", "taunt")),
         };
 
         public static IReadOnlyList<Species> All => List;
@@ -449,16 +601,48 @@ namespace EggCommand.Core
 
         /// <summary>全部を覆うつもりの表は、数える検査を持つ。
         /// 起動時に1回走らせ、種族を足した日に黙って壊れないようにする。</summary>
+        /// <summary>表の不備を投げる。⚠️ 起動時に呼ぶ。</summary>
         public static void Audit()
+        {
+            var problems = Faults();
+            if (problems.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    "種族表の不備:\n  " + string.Join("\n  ", problems));
+            }
+        }
+
+        /// <summary>不備を**投げずに数える**。⭐ 帳面が貼る前に言うための口。</summary>
+        /// <summary>いまの表の不備。⭐ 起動時の <see cref="Audit"/> が使う。</summary>
+        public static List<string> Faults() => Faults(List, Skills.All);
+
+        /// <summary>**渡された表**の不備。
+        ///
+        /// ⭐ **帳面が「貼ったらどうなるか」を先に言うための口**（2026-08-19）。
+        /// ⚠️ **規則をここ以外に書き写さない。**写した瞬間から片方が古くなる
+        /// ── この道具は同じ形の食い違いを何度も踏んでいる。
+        /// ⭐ 世界の状態は触らない（表を引数で受けるので、検査中に遊びが影響を受けない）。</summary>
+        public static List<string> Faults(IReadOnlyList<Species> table, IReadOnlyList<Skill> skillTable)
         {
             var problems = new List<string>();
 
-            foreach (var species in List)
+            foreach (var species in table)
             {
                 int total = Stats.TotalOf(species.Base);
                 if (total != BaseTotal)
                 {
                     problems.Add($"{species.Id}: 基礎値の合計が {total}（{BaseTotal} に揃える）");
+                }
+
+                // ⚠️ **弱化2本の合計も全種族でそろえる。**⭐ 差は配分で出す。
+                //    ⚠️ ここを数えていなかったので、あとから足した2種族（イワオ 220 / ホムラ 175）が
+                //    黙って揃っていなかった（2026-08-19 の監査で発覚）。
+                //    合計 600 だけを見ていると、移植元の4本ぶんが種族ごとに違ってしまう。
+                int pair = species.Base.Acc + species.Base.Res;
+                if (pair != DebuffBaseTotal)
+                {
+                    problems.Add(
+                        $"{species.Id}: 弱化命中＋弱化耐性が {pair}（{DebuffBaseTotal} に揃える）");
                 }
                 foreach (var key in Stats.Keys)
                 {
@@ -479,7 +663,14 @@ namespace EggCommand.Core
 
                 // ⚠️ 枠1は CT が無いので毎回撃てる。大技を置くと壊れる。
                 //    実際にヌシの枠1へ震撼（全体・大）を置いてしまい、決着が8行動になった。
-                var first = Skills.ById(species.Skill1);
+                // ⚠️ 技は渡された表から引く。⭐ 帳面で足したばかりの技も見つかるように
+                Skill? first = null;
+                foreach (var cand in skillTable) if (cand.Id == species.Skill1) { first = cand; break; }
+                if (first == null)
+                {
+                    problems.Add($"{species.Id}: 枠1 の {species.Skill1} が技表に無い");
+                    continue;
+                }
                 foreach (var effect in first.Effects)
                 {
                     if (effect.Kind != EffectKind.Damage) continue;
@@ -493,17 +684,13 @@ namespace EggCommand.Core
             }
 
             var ids = new HashSet<string>();
-            foreach (var species in List) ids.Add(species.Id);
+            foreach (var species in table) ids.Add(species.Id);
             if (ids.Count != List.Length) problems.Add("種族 id が重複している");
 
             // ⚠️ 「属性が3すくみを覆えているか」はもう数えない。
             //    属性は種族ではなく個体が持つので、どの種族からも3属性すべてが生まれる。
 
-            if (problems.Count > 0)
-            {
-                throw new InvalidOperationException(
-                    "種族表の不備:\n  " + string.Join("\n  ", problems));
-            }
+            return problems;
         }
     }
 }

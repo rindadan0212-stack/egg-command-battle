@@ -134,18 +134,26 @@ namespace EggCommand.Core
         public readonly double Traveled;
         /// <summary>止まった場所。⭐ 次の発射台になる。</summary>
         public readonly Point Landing;
-        /// <summary>通れずに止められた関門の添字。⚠️ 無ければ -1。</summary>
+        /// <summary>通れずに止められた関門の添字。
+        /// ⚠️ **常に -1。**2026-08-19 に「関門では止まらず弾く」に変えたので、
+        /// ここに入る場面が無くなった。⭐ 弾かれたかは <see cref="Bounced"/> を見ること。
+        /// 🚧 読み手が居ないまま欄だけ残っている（次に触るときに消す）。</summary>
         public readonly int StoppedBy;
         /// <summary>この一投で壊した壁の添字。⭐ 以降は誰でも通れる。</summary>
         public readonly IReadOnlyList<int> Broke;
         /// <summary>当たった雑魚の添字。⚠️ 無ければ -1。</summary>
         public readonly int Mob;
+        /// <summary>関門に弾かれたか。⭐ 画面が「通れなかった」と描くための印。
+        /// ⚠️ 弾かれても飛び続けるので、着地点は関門の場所とは限らない。</summary>
+        public readonly bool Bounced;
 
         private static readonly int[] Nothing = new int[0];
 
         public StealRun(StealOutcome outcome, List<Point> path, double traveled,
-            int stoppedBy = -1, IReadOnlyList<int>? broke = null, int mob = -1)
+            int stoppedBy = -1, IReadOnlyList<int>? broke = null, int mob = -1,
+            bool bounced = false)
         {
+            Bounced = bounced;
             Mob = mob;
             Outcome = outcome;
             Path = path;
@@ -202,10 +210,21 @@ namespace EggCommand.Core
 
         /// <summary>スピード合計1につき飛べる距離。
         /// ⚠️ 値は `npm run sim -- --steal` の走査で決めた。</summary>
-        public const double SpeedToDistance = 3;
+        /// ⚠️ **盤の広さは実値の桁と無関係**（盤は 0〜1 の座標）。
+        /// 桁を上げたぶんはここで割り戻す（2026-08-19）。置き去りにすると
+        /// スピード合計が5倍になって、誰でも一投で親まで届いてしまう。
+        public const double SpeedToDistance = 3.0 / Stats.Scale;
 
         /// <summary>進みの刻み。⚠️ 整数で刻んで決定論を保つ。</summary>
         private const double Step = 1;
+
+        /// <summary>卵の位置（上端から）。⚠️ 盤を作る所と揃える。</summary>
+        public const double EggY = 26;
+
+        /// <summary>卵から親までの間合い。⭐ **50m 以内**（作者の指示 2026-08-19）。
+        /// ⚠️ 縮めるほど「帯を抜けたら即・卵」になり、抜ける角度の精度が要る。
+        /// ⭐ 44 は卵の半径（13）と帯の厚み（{@link BandThickness}）を差し引いても隙間が残る値。</summary>
+        public const double ParentGap = 44;
 
         public const double EggRadius = 13;
         public const double RunnerRadius = 7;
@@ -213,6 +232,13 @@ namespace EggCommand.Core
         /// <summary>親が塞ぐ帯の厚み。位置は奥行きに合わせて動く。
         /// ⚠️ 卵との縦の余裕が要る。帯を卵に近づけすぎると、
         /// 隙間を抜けた後に横へ寄せきれず、どんな飛距離でも不能になる（走査で発覚）。</summary>
+        /// ⚠️ **絵の高さ（56）とは一致していない。**親の絵は塞ぐ幅まで大きくしてあるので、
+        /// 実測（2026-08-19）で 絵 y73〜129 に対し判定は y86〜116。
+        /// **絵の上下 13 ずつは「描いてあるのに当たらない」。**
+        /// ⭐ 作者の指示（「見えない判定を作るな／絵で道を塞げ」）は満たしている
+        /// ── 逆向きのずれなので、**当たるのに見えない場所は無い**。
+        /// ⚠️ ここを 56 にすると通路が 26 短くなり、段2 の関門が 2枚 → 1枚に落ちた（実測）。
+        /// 釣り合いが動くので、直すなら [釣り合い] で決めてから。
         private const double BandThickness = 30;
 
         /// <summary>隙間の幅。⚠️ 狙いは寛容にする。難しさは距離で作る。
@@ -255,7 +281,10 @@ namespace EggCommand.Core
         /// **2〜5度**しかなかった。「難しい」ではなく「遊べない」。
         /// ⭐ 潜れるあいだは通れる幅を保ち、**塞ぐときは一気に塞ぐ**。
         /// 難易度の上がりぶんは関門の数が持つ（仕様が言う「ギミックが増える」ほう）。</summary>
-        public const double GapFloor = 32;
+        /// ⚠️ **42 に上げた**（2026-08-19）。親を卵の近く（<see cref="ParentGap"/>）へ動かしたぶん、
+        /// 始点から隙間までの距離が伸び、同じ幅でも**見込む角度が狭くなった**
+        /// （段5・raids3 で 5度＝出荷の検査が落ちた）。⭐ 幅で戻す。
+        public const double GapFloor = 42;
 
         public static double GapWidthFor(int raids)
         {
@@ -294,8 +323,16 @@ namespace EggCommand.Core
             double lean = LeanFor(gap);
             // 親が右へ寄る＝隙間は左寄り
             double center = side == FieldSide.Right ? FieldWidth / 2 - lean : FieldWidth / 2 + lean;
-            double bandTop = JsRound(height * 0.36);
+            // ⚠️ **親は卵のすぐ手前に置く**（作者の指示 2026-08-19）。
+            //    前は盤の高さの 36% に置いていたので、奥が深い段ほど親が卵から離れ、
+            //    段5では **114m** も空いていた（卵 Y26 に対し帯が Y140）。
+            //    ⭐ 卵を守っているように見えないうえ、帯を抜けたあと惰性で届いてしまう。
+            double bandTop = JsRound(EggY + ParentGap);
             var start = new Point(FieldWidth / 2, height - 14);
+            // ⚠️ **関門は1度だけ作って両方に渡す。**雑魚用にもう1度（しかも rng を渡さずに）
+            //    呼んでいた頃は、雑魚が**実在しない配置**を見て隙間を測っていたので、
+            //    塞がった巣（検査を飛ばす経路）で関門の帯に重なり、要求値の字が読めなくなった。
+            var gates = MakeGimmicks(tier, raids, side, bandTop + BandThickness, start.Y, rng);
             return new StealField(
                 height,
                 side,
@@ -303,11 +340,10 @@ namespace EggCommand.Core
                 Math.Min(FieldWidth, center + gap / 2),
                 bandTop,
                 bandTop + BandThickness,
-                new Point(FieldWidth / 2, 26),
+                new Point(FieldWidth / 2, EggY),
                 start,
-                MakeGimmicks(tier, raids, side, bandTop + BandThickness, start.Y, rng),
-                MakeMobs(tier, MakeGimmicks(tier, raids, side, bandTop + BandThickness, start.Y, null),
-                    bandTop + BandThickness, start.Y, rng));
+                gates,
+                MakeMobs(tier, gates, bandTop + BandThickness, start.Y, rng));
         }
 
         /// <summary>関門の帯の厚み。
@@ -324,6 +360,17 @@ namespace EggCommand.Core
         /// 帯を越えるのに 32 ぶん上がる必要があり、留まれる角度の幅が 0.1度になる。
         /// しかも外へ寄せすぎると壁で跳ね返って関門へ戻る。⭐ **走査で決めた値。**</summary>
         public const double GimmickSpan = 0.5;
+
+        /// <summary>出発点から最初の関門までの、最低限の間合い。
+        ///
+        /// ⭐ **出てすぐに判定を始めない。**誰を投げるか・どこから投げるかを
+        /// 決めるための助走がここ。
+        ///
+        /// ⚠️ 通路を等分するだけだと、段3 raids0 で 47.3 まで寄り、
+        /// 揺らぎが乗ると 33 まで来た（実測）。段2 raids2 のような
+        /// 「浅いのに関門が多い」盤では、さらに詰まる。
+        /// ⭐ 等分する区間そのものを、この間合いのぶん手前で打ち切る。</summary>
+        public const double FirstGimmickClearance = 50;
 
         /// <summary>関門が要求する値。⭐ **想定編成から導く。手で置かない。**
         ///
@@ -409,28 +456,60 @@ namespace EggCommand.Core
             double span = FieldWidth * GimmickSpan;
             double lane = FieldWidth - span;          // 空けておく車線の幅
             double swap = FieldWidth - lane;          // 車線を乗り換えるのに要る横移動
-            double slot = (corridorBottom - corridorTop) / (count + 1.0);
+
+            // ⭐ **間合いを空けるのは、梯子ごと押し上げることで作る。**
+            // ⚠️ 等分する区間そのものを縮めると、空いたぶんが丸ごと
+            //    雑魚の置き場から消えた（実測: 段2 の雑魚が 1 → 0、段5 が 3 → 1.9）。
+            //    ⭐ 間隔は元のまま。出発点との間に空く区間が雑魚の置き場になる。
+            double corridor = corridorBottom - corridorTop;
+            // 梯子と、上下に要る余白（親の帯ぶん＋間合い）が収まるか
+            double room = corridor - FirstGimmickClearance;
+            if (room <= GimmickThickness * 1.5) return list;
+
+            // ⚠️ **入らない数を詰め込まない。**⭐ 減らすほうを選ぶ
+            //    （重ねて出すより、少ないほうが嘘が無い）。
+            while (count > 1
+                && (count - 1) * (corridor / (count + 1.0)) + GimmickThickness * 1.5 > room)
+            {
+                count--;
+            }
+
+            double slot = corridor / (count + 1.0);
 
             var kinds = PickKinds(count, rng);
 
             // ── 縦の位置。⭐ 枠の中で揺らす（同じ段でも盤の顔つきが変わる）
             // ⚠️ 揺らすと隣り合う関門の間隔が変わる。**その実測値で**車線の乗り換えを決める
             //    （名目の間隔で決めると、詰まった箇所で乗り換えを要求してしまう）
+            //
+            // ⚠️ **揺らぎ幅は間隔から出す。**割合（JitterShare）だけで振ると、
+            //    詰まった盤では隣と重なった。⭐ どれだけ振っても帯1枚ぶんは必ず空ける。
+            double swing = Math.Min(slot * JitterShare, Math.Max(0, slot - GimmickThickness));
             var ys = new double[count];
             for (int i = 0; i < count; i++)
             {
                 double t = (i + 1.0) / (count + 1.0);
-                double y = corridorBottom - (corridorBottom - corridorTop) * t;
-                if (rng != null)
-                {
-                    // ⚠️ 枠の 1/3 まで。これ以上振ると隣と重なるか、親や出発点に食い込む
-                    y += (rng.Float() - 0.5) * slot * JitterShare;
-                }
-                double top = corridorTop + GimmickThickness;
-                double bottom = corridorBottom - GimmickThickness;
-                if (y < top) y = top;
-                if (y > bottom) y = bottom;
+                double y = corridorBottom - corridor * t;
+                if (rng != null) y += (rng.Float() - 0.5) * swing;
                 ys[i] = y;
+            }
+
+            // ⭐ **一番手前の1枚が間合いに入っていたら、梯子ごと同じだけ上げる。**
+            // ⚠️ 1枚だけ上げない ── 間隔が詰まって、隣と重なるか乗り換えられなくなる。
+            double nearestBottom = double.MinValue;
+            for (int i = 0; i < count; i++)
+            {
+                double bottom = ys[i] + GimmickThickness / 2;
+                if (bottom > nearestBottom) nearestBottom = bottom;
+            }
+            double over = nearestBottom - (corridorBottom - FirstGimmickClearance);
+            if (over > 0) for (int i = 0; i < count; i++) ys[i] -= over;
+
+            // ⚠️ 親の帯へ食い込ませない。⭐ 上の押し上げで足りることは room の検査が保証する
+            for (int i = 0; i < count; i++)
+            {
+                double top = corridorTop + GimmickThickness;
+                if (ys[i] < top) ys[i] = top;
             }
 
             // ⭐ **出口から逆算する。**親が右へ寄っている＝隙間は左なので、
@@ -489,6 +568,12 @@ namespace EggCommand.Core
             var list = new List<Mob>();
             int count = MobCountFor(tier);
             if (count == 0 || rng == null) return list;
+
+            // ⭐ **雑魚も出発点から離す。**関門と同じ間合い（FirstGimmickClearance）。
+            // ⚠️ 当たると戦闘が始まるので、遊ぶ側から見れば関門より重い障害物。
+            //    関門だけ離して雑魚を残すと、「出てすぐ判定」が雑魚の側から戻ってくる。
+            corridorBottom -= FirstGimmickClearance;
+            if (corridorBottom <= corridorTop) return list;
 
             // ⭐ **関門の間に空いている縦の区間を測ってから置く。**
             // ⚠️ 以前は「関門の数で割った位置」に置いていたが、浅い巣は通路が短く、
@@ -610,16 +695,19 @@ namespace EggCommand.Core
         public static List<Creature> ReferenceParty(int tier)
         {
             int total = Nests.WildTotalForTier(tier);
-            int high = total * 3 / 8;
-            int low = total / 8;
+            // ⭐ 得意3・薄い3。⚠️ 素質の上限が「1ステ上限×3」になったので、
+            //    2つ振りの形で測ると、実際に来る編成より遅い相手で盤を検査することになる。
+            int high = total * 4 / 15;
+            int low = total / 15;
             var species = SpeciesTable.Fallback.Id;
             // ⚠️ 得意を明示する。⭐ 育てた分は得意へ自動で乗るので、
             //    ここを省くと「速」役の伸びが防御へ流れて、想定編成が届かなくなる
             var shapes = new[]
             {
-                new StatBlock(low, high, low, high),    // 攻め
-                new StatBlock(high, low, high, low),    // 壁
-                new StatBlock(low, low, high, high),    // 速
+                //          HP    攻    防    速    命中  抵抗
+                new StatBlock(low,  high, low,  high, high, low),   // 攻め（弱化を通す側）
+                new StatBlock(high, low,  high, low,  low,  high),  // 壁（弱化を受けない側）
+                new StatBlock(low,  low,  high, high, low,  high),  // 速（先に動いて耐える）
             };
             var strong = new[] { StatKey.Atk, StatKey.Hp, StatKey.Spd };
             var weak = new[] { StatKey.Def, StatKey.Spd, StatKey.Atk };
@@ -774,6 +862,7 @@ namespace EggCommand.Core
             double dx = Math.Sin(angle);
             double dy = -Math.Cos(angle);
             double traveled = 0;
+            bool bounced = false;
             List<int>? broke = null;
             // ⚠️ ステは1度だけ引く。⭐ 以前は関門の判定で**1歩ごとに引き直して**いた
             //    （種族表引き＋StatBlock 生成＋得意不得意を1飛行あたり200〜380回）
@@ -831,20 +920,37 @@ namespace EggCommand.Core
                 int blockedBy = StepThrough(field, here, runnerStats, broken, ref broke);
                 if (blockedBy >= 0)
                 {
-                    // ⚠️ **関門の手前まで下がって**止まる。⭐ 使用済みになるだけで、台にはなる。
-                    // ⚠️ 関門の中で止めると、そこを発射台にした次の個体が一歩目で
-                    //    同じ関門に捕まり、**その台が必ず詰む**（実測で発覚）
+                    // ⭐ **関門では止まらず跳ね返る**（作者の指示 2026-08-19）。
+                    // ⚠️ 前は関門の手前まで下がって**その場で止まって**いた。
+                    //    「力尽きた」のか「弾かれた」のかが見た目で区別できず、
+                    //    ビタ止まりで何が起きたか読めなかった。
+                    // ⭐ 弾いて距離が尽きるまで飛ばせば、通れなかったことが動きで分かる。
+                    // ⚠️ 関門は横帯なので**上下向き**を反転する。
+                    //    ⚠️ 帯の外へ押し戻してから反転しないと、次の刻みでまた同じ帯に入って
+                    //    その場で振動する（無限には回らないが、見た目が止まって見える）。
+                    // ⚠️ **押し戻したぶんを `traveled` から引いてはいけない。**
+                    //    引くと 1周あたりの進みが 0 以下になりうる ── 帯の中をほぼ水平に
+                    //    飛んでいる（dy≈0）と、上下を反転しても帯から出られず、
+                    //    押し戻し→再突入を**永久に**繰り返して終わらない
+                    //    （2026-08-19 に実際に引いてみて、テストのホストごと落ちた）。
+                    // ⭐ `traveled` は距離ではなく**燃料**だと考える。弾かれるのも燃料を使う。
+                    //    これで毎周きっかり `Step` ずつ減り、必ず終わる。
                     var gate = field.Gimmicks[blockedBy];
+                    path.RemoveAt(path.Count - 1);
                     while (path.Count > 1 && Inside(gate, path[path.Count - 1]))
-                    {
                         path.RemoveAt(path.Count - 1);
-                        traveled -= Step;
-                    }
-                    return new StealRun(StealOutcome.Landed, path, traveled, blockedBy, broke);
+                    var back = path[path.Count - 1];
+                    x = back.X;
+                    y = back.Y;
+                    dy = -dy;
+                    bounced = true;
+                    continue;
                 }
             }
+            // ⚠️ 弾かれた関門の添字は返さない（もう「そこで止まった」わけではない）。
+            //    ⭐ 代わりに「弾かれたか」だけを持ち帰る
             return new StealRun(runner == null ? StealOutcome.Stalled : StealOutcome.Landed,
-                path, traveled, -1, broke);
+                path, traveled, -1, broke, -1, bounced);
         }
 
         /// <summary>いま居る点の関門をさばく。
@@ -982,6 +1088,30 @@ namespace EggCommand.Core
             else if (run.Left.Count == 0) run.Result = StealOutcome.Stalled;
 
             return flight;
+        }
+
+        /// <summary>投げる前に**同じ式で**飛ばしてみる。⭐ 画面の予告線はこれを描く。
+        ///
+        /// ⚠️ 予告を画面側で「まっすぐな線」として描いていた頃は、
+        /// **狙った角度に飛ばない**という話になっていた ── 実際には壁で跳ね返っていて、
+        /// 予告だけが嘘をついていた（作者の指摘 2026-08-19）。
+        /// ⭐ ここを通せば、予告と実際が**必ず一致する**（同じ関数だから）。
+        ///
+        /// ⚠️ **状態を1つも変えない。**投げた扱いにも、壁を壊した扱いにもしない。</summary>
+        public static StealRun Preview(Infiltration run, int member, int pad, double angle)
+        {
+            // ⚠️ **発射台も見る。**`Hop` は範囲を確かめているのに、ここだけ確かめずに
+            //    `run.Pads[pad]` を引いていた ── 着地で発射台が増減した直後に、
+            //    予告線を描くだけで**例外で落ちる**（毎フレーム通る道なので即クラッシュ）。
+            //    ⭐ 下見は投げる前に何度でも呼ばれるので、外れていたら黙って空を返す。
+            if (member < 0 || member >= run.Party.Count
+                || pad < -1 || pad >= run.Pads.Count) return new StealRun(
+                StealOutcome.Stalled, new List<Point>(), 0, -1, null);
+            var from = pad < 0 ? run.Field.Start : run.Pads[pad];
+            var runner = run.Party[member];
+            // ⚠️ 壊した壁の集合は**複製**して渡す。そのまま渡すと下見で盤が開通してしまう
+            return Fly(run.Field, from, angle, DistanceFor(runner), runner,
+                new HashSet<int>(run.Broken), new HashSet<int>(run.Cleared));
         }
 
         /// <summary>1つの巣に置ける雑魚の数。⚠️ 増やすと潜入が戦闘の連続になる。</summary>

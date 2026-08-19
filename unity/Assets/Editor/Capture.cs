@@ -17,7 +17,10 @@ namespace EggCommand.EditorTools
         private const int Width = 1080;
         private const int Height = 1920;
 
-        [MenuItem("Egg Command/画面を1枚撮る %#s")]
+        // ⚠️ %#s（Ctrl+Shift+S）は Unity 標準の「名前を付けて保存」。奪うと、
+        //    保存のつもりで押した人が撮影＋エクスプローラ起動を食らう。
+        //    ⭐ 近い打ち方のまま1つずらす（Ctrl+Alt+Shift+S）
+        [MenuItem("Egg Command/画面を1枚撮る %#&s")]
         public static void Shot()
         {
             string path = Save(null);

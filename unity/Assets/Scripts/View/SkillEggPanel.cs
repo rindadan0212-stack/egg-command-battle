@@ -166,25 +166,21 @@ namespace EggCommand.View
                 float left = (i % EggPerRow) * EggCellW;
                 float top = (i / EggPerRow) * EggCellH;
 
-                Ui.Tappable(content, $"Egg {i}", "",
-                    fits ? new Action(() =>
+                // ⭐ **どの画面でも同じ卵の升**（絵・★・一言）
+                var box = Ui.EggCell(content, $"Egg {i}", egg, "＋" + points, Ui.Ink,
+                    left + 6f, top + 6f, EggCellW - 12f, EggCellH - 12f, dim: !fits);
+                var tap = box.gameObject.AddComponent<Button>();
+                tap.targetGraphic = box.GetComponent<Image>();
+                tap.interactable = fits;
+                if (fits)
+                {
+                    tap.onClick.AddListener(() =>
                     {
                         Games.FeedEggToSkill(app.Game, creatureId, _slot, eggId);
                         app.Refresh();              // 後ろの BOX も新しいレベルにする
                         Rebuild(app, creatureId);   // ⭐ 続けて入れられるよう開いたまま
-                    }) : null,
-                    left + 6f, top + 6f, EggCellW - 12f, EggCellH - 12f, enabled: fits);
-
-                var box = (RectTransform)content.Find($"Egg {i}");
-                var stale = box.Find("Label");
-                if (stale != null) UnityEngine.Object.Destroy(stale.gameObject);
-
-                var ink = fits ? Ui.Ink : Ui.InkFaint;
-                Ui.Label(box, "Stars", Rarities.StarsOf(egg.Rarity), 28, ink,
-                    TextAnchor.UpperCenter, 0f, 16f, EggCellW - 12f, 40f);
-                // ⭐ 入る数が主役。★は「どれくらい育つか」の言い換えでしかない
-                Ui.Label(box, "Points", "＋" + points, 44, fits ? Ui.Accent : Ui.InkFaint,
-                    TextAnchor.UpperCenter, 0f, 60f, EggCellW - 12f, 60f);
+                    });
+                }
             }
         }
 

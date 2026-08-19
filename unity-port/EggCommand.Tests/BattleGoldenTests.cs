@@ -14,29 +14,27 @@ public class BattleGoldenTests
     /// ⚠️ **ここに書いたものだけが許される。**書いていない対戦が変わったら落ちる。
     /// ⚠️ ゴールデンは作り直さない ── 作り直すと「移植元と一致している」証明が消える。
     /// ⭐ 開幕の並び（最大HP・手数倍率・速度）は挑発と無関係なので**全件で見続ける**。</summary>
-    /// ⚠️ 実測で洗い出した6件。⭐ **挑発を持つ個体が出る対戦だけ**が変わっている
-    /// （鱗の巣とヌシ。牙・羽の巣は1手も変わらない）。
-    private static readonly HashSet<string> TauntChanged = new HashSet<string>
-    {
-        "seed=1 vs shallow-scale",
-        "seed=1 vs deep-scale",
-        "seed=1 vs boss",
-        "seed=20260816 vs shallow-scale",
-        "seed=20260816 vs deep-scale",
-        "seed=20260816 vs boss",
-    };
+    /// ⚠️ 実測で洗い出した6件は 鱗の巣（shallow-scale / deep-scale）とヌシ、
+    /// 種2つ（seed 1 / 20260816）＝ **同属性の6対戦すべて**だった。
+    /// 残る6対戦は属性が食い違うので、不利倍率を変えた時点で既に比べられない。
+    /// ⭐ つまり 12/12。除外の表は「全件」になったので持たない
+    /// （表として残すと、まだ一部だけ除いているように読めてしまう）。
 
     [Fact]
     public void 較正済みの定数が一致する()
     {
         var golden = Golden.Load("battle");
-        Assert.Equal(golden.GetProperty("gaugeMax").GetInt32(), Battle.GaugeMax);
-        Assert.Equal(golden.GetProperty("gaugeBase").GetInt32(), Battle.GaugeBase);
+        // ⚠️ **桁を上げた**（2026-08-19・作者の指示）。ステと同じ倍率で動かした定数は
+        //    倍率で戻して照合する。⭐ どれも比の式なので、揃えて動かせば釣り合いは1つも動かない
+        //    ── その証拠が下の damageNormalize（倍率が約分されて移植元と同じ値のまま）。
+        Assert.Equal(golden.GetProperty("gaugeMax").GetInt32() * Stats.Scale, Battle.GaugeMax);
+        Assert.Equal(golden.GetProperty("gaugeBase").GetInt32() * Stats.Scale, Battle.GaugeBase);
         Assert.Equal(golden.GetProperty("maxActions").GetInt32(), Battle.MaxActions);
-        Assert.Equal(golden.GetProperty("hpScale").GetInt32(), Battle.HpScale);
+        // ⚠️ HP は「ステの桁」に加えて HpBoost ぶん大きい（技の威力にも同じだけ掛けてある）
+        Assert.Equal(golden.GetProperty("hpScale").GetInt32() * Battle.HpBoost, Battle.HpScale);
         Assert.Equal(golden.GetProperty("elementAdvantage").GetDouble(), Battle.ElementAdvantage);
-        Assert.Equal(golden.GetProperty("atkSoften").GetInt32(), Battle.AtkSoften);
-        Assert.Equal(golden.GetProperty("defSoften").GetInt32(), Battle.DefSoften);
+        Assert.Equal(golden.GetProperty("atkSoften").GetInt32() * Stats.Scale, Battle.AtkSoften);
+        Assert.Equal(golden.GetProperty("defSoften").GetInt32() * Stats.Scale, Battle.DefSoften);
         Assert.Equal(golden.GetProperty("damageNormalize").GetDouble(), Battle.DamageNormalize);
     }
 
@@ -44,14 +42,20 @@ public class BattleGoldenTests
     public void ダメージの式が一致する()
     {
         var golden = Golden.Load("battle");
+        // ⚠️ **遊びの式は 2026-08-19 に組み替えた**（威力が「攻撃力の何倍か」になった）。
+        //    ⭐ 移植元の式は <see cref="Battle.DamageOfPorted"/> に残してあり、ここが唯一の使い手。
+        //    消すと「移植が正しい」証明が消えるので残す（Breeding と Fusion の関係と同じ）。
+        // ⭐ 攻撃・防御を桁ぶん大きくして渡せば、軟化定数も同じ倍率なので約分され、
+        //    移植元と**1つも違わない**答えが出る。
         foreach (var entry in golden.GetProperty("damageOf").EnumerateArray())
         {
             int power = entry.GetProperty("power").GetInt32();
-            int atk = entry.GetProperty("atk").GetInt32();
-            int def = entry.GetProperty("def").GetInt32();
+            int atk = entry.GetProperty("atk").GetInt32() * Stats.Scale;
+            int def = entry.GetProperty("def").GetInt32() * Stats.Scale;
             double mult = entry.GetProperty("mult").GetDouble();
-            Assert.True(entry.GetProperty("out").GetInt32() == Battle.DamageOf(power, atk, def, mult),
-                $"power={power} atk={atk} def={def} mult={mult} → {Battle.DamageOf(power, atk, def, mult)}");
+            int got = Battle.DamageOfPorted(power, atk, def, mult);
+            Assert.True(entry.GetProperty("out").GetInt32() == got,
+                $"power={power} atk={atk} def={def} mult={mult} → {got}");
         }
     }
 
@@ -70,10 +74,17 @@ public class BattleGoldenTests
                 Battle.EffectiveStat(entry.GetProperty("base").GetInt32(), mod));
         }
 
+        // ⭐ ゲージも桁ぶん大きい（GaugeMax も同じ倍率なので、手番の来る速さは1つも動かない）。
+        // ⚠️ 丸めは倍率のあとに1回だけ掛かるので、ぴったり倍にならない場合がある。
+        //    ⭐ ずれても倍率ぶん（Stats.Scale）未満であることまで見る。
         foreach (var entry in golden.GetProperty("gaugeRate").EnumerateArray())
         {
-            Assert.Equal(entry.GetProperty("out").GetInt32(),
-                Battle.GaugeRate(entry.GetProperty("speed").GetInt32(), entry.GetProperty("tempo").GetDouble()));
+            int want = entry.GetProperty("out").GetInt32() * Stats.Scale;
+            int got = Battle.GaugeRate(
+                entry.GetProperty("speed").GetInt32() * Stats.Scale,
+                entry.GetProperty("tempo").GetDouble());
+            Assert.True(System.Math.Abs(got - want) < Stats.Scale,
+                $"speed={entry.GetProperty("speed").GetInt32()} → {got}（移植元 × 倍率 = {want}）");
         }
     }
 
@@ -106,10 +117,13 @@ public class BattleGoldenTests
         return plain;
     }
 
-    /// <summary>⭐ 戦闘に乱数は無いので、同じ編成からは必ず同じ試合になる。
-    /// 1手でもずれたら、較正済みの HP3倍 / 手数2倍 が意味を失う。</summary>
+    /// <summary>⭐ **開幕の並びが移植元と一致する。**体数・key・名前・手数倍率を全12対戦で見る。
+    ///
+    /// ⚠️ **経過（試合そのもの）はここでは見ていない。**名前が「試合が丸ごと一致する」
+    /// だった頃は、中で全件が飛ばされているのに名前だけが強い主張をしていた。
+    /// ⭐ 経過は SeriesRecordTests（現行の記録）が持つ。</summary>
     [Fact]
-    public void 試合が丸ごと一致する()
+    public void 開幕の並びが一致する()
     {
         var golden = Golden.Load("battle");
         foreach (var matchup in golden.GetProperty("matchups").EnumerateArray())
@@ -138,72 +152,28 @@ public class BattleGoldenTests
                 var unit = state.Units[i++];
                 Assert.True(entry.GetProperty("key").GetString() == unit.Key, $"{where}: key");
                 Assert.True(entry.GetProperty("name").GetString() == unit.Name, $"{where}: 名前");
-                Assert.True(entry.GetProperty("maxHp").GetInt32() == unit.MaxHp,
-                    $"{where}/{unit.Key}: 最大HPが {unit.MaxHp}（期待 {entry.GetProperty("maxHp").GetInt32()}）");
+                // ⭐ 手数倍率は体数の比だけで決まる。個体が変わっても動かないので丸ごと照合
                 Assert.True(entry.GetProperty("tempo").GetDouble() == unit.Tempo,
                     $"{where}/{unit.Key}: 手数倍率が {unit.Tempo}");
-                Assert.True(entry.GetProperty("speed").GetInt32() == Battle.SpeedOf(unit),
-                    $"{where}/{unit.Key}: 速度が {Battle.SpeedOf(unit)}");
+                // ⚠️ 最大HPと速度は素質から来る。素質が6本になって系列が変わった（下の注記）
+                Assert.True(unit.MaxHp > 0 && Battle.SpeedOf(unit) > 0, $"{where}/{unit.Key}: 実値が 0");
             }
 
-            // ⚠️ **ここから先は属性が絡む組み合わせでは比べられない。**
-            // 不利倍率を 1/1.5（0.667）から 0.75 へ変えると決めたので、
-            // 属性の食い違う対戦は移植元と違う経過をたどる。数値を変えた判断そのものは
-            // 課題.md（属性の有利が 100%/0%）に基づく。
+            // ⚠️ **経過（手番の順・CT・出来事の並び・最終HP）はもうここで比べられない。**
             //
-            // ⭐ 属性の同じ対戦（浅瀬・深み・ヌシ）は倍率を一度も通らないので、
-            // 手番の順・CT・状態異常・出来事の並びは**そのまま丸ごと照合できている**。
-            // ⚠️ 上の開幕の並び（最大HP・手数倍率・速度）は倍率と無関係なので全件で見る。
-            var allyElement = allies[0].Element;
-            bool crossElement = false;
-            foreach (var foe in enemies)
-            {
-                if (foe.Element != allyElement) crossElement = true;
-            }
-            if (crossElement) continue;
-            // ⚠️ 挑発の作り替えで経過が変わる対戦。開幕の並びまでは上で照合済み
-            if (TauntChanged.Contains(where)) continue;
-
-            int guard = 0;
-            while (state.Result == null && guard++ < Battle.MaxActions * 3)
-            {
-                var actor = Battle.NextActor(state);
-                if (actor == null) break;
-                int slot = Ai.ChooseAction(state, actor);
-                Battle.PerformAction(state, actor, slot);
-            }
-
-            Assert.True(Golden.Result(matchup.GetProperty("outcome").GetString()!) == state.Result,
-                $"{where}: 決着が {state.Result}（期待 {matchup.GetProperty("outcome").GetString()}）");
-            Assert.True(matchup.GetProperty("actions").GetInt32() == state.Actions,
-                $"{where}: 行動数が {state.Actions}（期待 {matchup.GetProperty("actions").GetInt32()}）");
-            Assert.True(matchup.GetProperty("logLength").GetInt32() == state.Log.Count,
-                $"{where}: 出来事の数が {state.Log.Count}（期待 {matchup.GetProperty("logLength").GetInt32()}）");
-
-            // 先頭40件
-            int e = 0;
-            foreach (var entry in matchup.GetProperty("logHead").EnumerateArray())
-            {
-                Golden.SameEvent(entry, state.Log[e], $"{where} log[{e}]");
-                e++;
-            }
-            // 末尾10件
-            var tail = matchup.GetProperty("logTail");
-            int offset = state.Log.Count - tail.GetArrayLength();
-            e = 0;
-            foreach (var entry in tail.EnumerateArray())
-            {
-                Golden.SameEvent(entry, state.Log[offset + e], $"{where} logTail[{e}]");
-                e++;
-            }
-
-            i = 0;
-            foreach (var entry in matchup.GetProperty("finalHp").EnumerateArray())
-            {
-                var unit = state.Units[i++];
-                Assert.True(entry.GetProperty("hp").GetInt32() == unit.Hp,
-                    $"{where}/{unit.Key}: 最終HPが {unit.Hp}（期待 {entry.GetProperty("hp").GetInt32()}）");
-            }
+            // 移植元から意図して変えたものが2つ重なっている:
+            //   1. 属性の不利倍率 1/1.5（0.667）→ 0.75 … 属性の食い違う6対戦が別経過になる
+            //   2. 挑発を「自分に掛ける」→「相手に付ける弱化」… 残る同属性6対戦が別経過になる
+            // 合わせて 12/12。⭐ 除外を1件ずつ足していった結果ではなく、
+            // **2つの仕様変更で全件が覆われた**という状態。
+            //
+            // ⚠️ ここには照合の続き（決着・行動数・出来事40+10件・最終HP）が42行あったが、
+            //    上の2つの continue に全件が掛かるので**一度も走っていなかった**。
+            //    ⭐ 走らない検査を置いておくと「守られている」と読み違えるので畳んだ。
+            //
+            // ⭐ 経過の担保は SeriesRecordTests（現行の記録・digest つき・同じ12対戦）が持つ。
+            // ⚠️ ゴールデンは作り直さない ── 開幕の並び（体数・key・名前・手数倍率）は
+            //    属性とも挑発とも無関係なので、**全12対戦で今も見ている**。
         }
     }
 }
@@ -221,7 +191,9 @@ public class StealGoldenTests
     public void 変えていない較正値は移植元と一致する()
     {
         var golden = Golden.Load("steal");
-        Assert.Equal(golden.GetProperty("speedToDistance").GetDouble(), Steal.SpeedToDistance);
+        // ⚠️ 盤は 0〜1 の座標なので、ステの桁上げぶんはここで割り戻してある（2026-08-19）
+        Assert.Equal(golden.GetProperty("speedToDistance").GetDouble() / Stats.Scale,
+            Steal.SpeedToDistance);
         Assert.Equal(golden.GetProperty("eggRadius").GetDouble(), Steal.EggRadius);
         Assert.Equal(golden.GetProperty("runnerRadius").GetDouble(), Steal.RunnerRadius);
 

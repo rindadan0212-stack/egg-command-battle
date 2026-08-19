@@ -36,17 +36,18 @@ public class IdleTests
     }
 
     [Fact]
-    public void 時間が進むと素材が溜まる()
+    public void 時間が進むとEXPが溜まる()
     {
         var run = Started();
         int gained = Idle.Advance(run, Party(20, 20, 20, 20), T0 + 60);
-        Assert.True(gained > 0, "1分で素材が1つも入らない");
-        Assert.Equal(gained, run.Materials);
-        Assert.Equal(gained, run.Defeated);
+        Assert.True(gained > 0, "1分で EXP が1つも入らない");
+        Assert.Equal(gained, run.Exp);
+        // ⚠️ 1体倒すと EXP は ExpPerKill 入る（1体 ＝ 1EXP ではない）
+        Assert.Equal(gained / Idle.ExpPerKill, run.Defeated);
     }
 
     [Fact]
-    public void 十分でおよそ一体ぶんの素材が溜まる()
+    public void 十分でおよそ一体ぶんのEXPが溜まる()
     {
         // ⭐ 「10分回せば最初の個体は MAX」が狙い。GrowMax ぶんの素材が要る
         // ⚠️ 手で作った編成ではなく**遊び始めの実物**で測る。
@@ -57,9 +58,11 @@ public class IdleTests
         Idle.Advance(run, real, T0);
         Idle.Advance(run, real, T0 + 600);
         Assert.Empty(run.DownUntil);
-        int levels = run.Materials / Idle.MaterialPerLevel;
+        // ⚠️ 1レベルの値段は**その個体の Lv**で変わるので、割り算では出ない。
+        //    ⭐ 実物の1体で「この EXP なら何段上がるか」を数える
+        int levels = Levels.LevelsFor(real[0], run.Exp);
         Assert.True(levels >= Levels.GrowMax * 0.7 && levels <= Levels.GrowMax * 1.6,
-            $"10分で {run.Materials} 素材 = {levels}Lv（狙いは {Levels.GrowMax}Lv 前後）");
+            $"10分で {run.Exp} EXP = {levels}Lv（狙いは {Levels.GrowMax}Lv 前後）");
     }
 
     [Fact]
@@ -69,8 +72,8 @@ public class IdleTests
         Idle.Advance(weak, Party(10, 8, 8, 8), T0 + 300);
         var strong = Started();
         Idle.Advance(strong, Party(30, 30, 30, 30), T0 + 300);
-        Assert.True(strong.Materials > weak.Materials,
-            $"弱 {weak.Materials} / 強 {strong.Materials}");
+        Assert.True(strong.Exp > weak.Exp,
+            $"弱 {weak.Exp} / 強 {strong.Exp}");
     }
 
     [Fact]
@@ -128,48 +131,71 @@ public class IdleTests
         Idle.Advance(capped, Party(24, 22, 18, 20), T0 + Idle.CatchUpMax * 10);
         var exact = Started();
         Idle.Advance(exact, Party(24, 22, 18, 20), T0 + Idle.CatchUpMax);
-        Assert.Equal(exact.Materials, capped.Materials);
+        Assert.Equal(exact.Exp, capped.Exp);
     }
 
     [Fact]
-    public void 巻き戻しても素材は増えない()
+    public void 巻き戻してもEXPは増えない()
     {
         var run = Started();
         Assert.Equal(0, Idle.Advance(run, Party(20, 20, 20, 20), T0 - 100));
-        Assert.Equal(0, run.Materials);
+        Assert.Equal(0, run.Exp);
     }
 
-    // ── 素材を使う ──────────────────────────────────
+    // ── EXP を使う ──────────────────────────────────
 
     [Fact]
-    public void 素材は一度に一レベルだけ入る()
+    public void EXPは一度に一レベルだけ入る()
     {
         // ⭐ 一気に上限まで入れない。どこで上げ止めるかは持ち主が決める
-        var run = new IdleRun { Materials = Levels.GrowMax * Idle.MaterialPerLevel };
         var creature = Party(20, 20, 20, 20, 1)[0];
+        int cost = Levels.ExpToNext(creature);
+        var run = new IdleRun { Exp = cost * 10 };
         Assert.Equal(1, Idle.Spend(run, creature));
         Assert.Equal(1, creature.Earned);
-        Assert.Equal((Levels.GrowMax - 1) * Idle.MaterialPerLevel, run.Materials);
+        Assert.Equal(cost * 10 - cost, run.Exp);
+    }
+
+    /// <summary>⭐ **値段はレベルが高いほど上がる。**（作者の指示 2026-08-19）</summary>
+    [Fact]
+    public void 高いレベルほど一レベルが高くつく()
+    {
+        var creature = Party(20, 20, 20, 20, 1)[0];
+        var run = new IdleRun
+        {
+            Exp = Levels.ExpBetween(Levels.Of(creature), Levels.Of(creature) + Levels.GrowMax),
+        };
+        int first = run.Exp;
+        Idle.Spend(run, creature);
+        int firstCost = first - run.Exp;
+
+        // ⚠️ 上限手前まで上げてから、もう1段の値段を測る
+        while (creature.Earned < Levels.GrowMax - 1) Idle.Spend(run, creature);
+        int before = run.Exp;
+        Idle.Spend(run, creature);
+        int lastCost = before - run.Exp;
+
+        Assert.True(lastCost > firstCost, $"最初 {firstCost} / 最後 {lastCost}");
     }
 
     [Fact]
-    public void 素材が一レベルぶんに満たなければ入らない()
+    public void EXPが一レベルぶんに満たなければ入らない()
     {
-        var run = new IdleRun { Materials = Idle.MaterialPerLevel - 1 };
         var creature = Party(20, 20, 20, 20, 1)[0];
+        var run = new IdleRun { Exp = Levels.ExpToNext(creature) - 1 };
         Assert.Equal(0, Idle.Spend(run, creature));
-        Assert.Equal(Idle.MaterialPerLevel - 1, run.Materials);   // ⚠️ 端数は捨てない
+        Assert.Equal(Levels.ExpToNext(creature) - 1, run.Exp);   // ⚠️ 端数は捨てない
         Assert.Equal(0, creature.Earned);
     }
 
     [Fact]
-    public void 上限に達していたら素材を使わない()
+    public void 上限に達していたらEXPを使わない()
     {
-        var run = new IdleRun { Materials = 999 };
+        var run = new IdleRun { Exp = 999 };
         var creature = Party(20, 20, 20, 20, 1)[0];
         Creatures.Grow(creature, Levels.GrowMax);
         Assert.Equal(0, Idle.Spend(run, creature));
-        Assert.Equal(999, run.Materials);
+        Assert.Equal(999, run.Exp);
     }
 
     [Fact]
@@ -181,7 +207,7 @@ public class IdleTests
         Idle.Advance(a, Party(24, 22, 18, 20), T0 + 500);
         var b = Started();
         Idle.Advance(b, Party(24, 22, 18, 20), T0 + 500);
-        Assert.Equal(a.Materials, b.Materials);
+        Assert.Equal(a.Exp, b.Exp);
         Assert.Equal(a.Defeated, b.Defeated);
     }
 }

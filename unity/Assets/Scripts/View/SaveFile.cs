@@ -48,9 +48,16 @@ namespace EggCommand.View
             }
         }
 
+        /// <summary>読めなかった保存の退避先。⭐ 上書きする前にここへ写す。</summary>
+        public static string BrokenPath => Path + ".broken";
+
         /// <summary>読み込む。⚠️ 無い・壊れている・版が違うなら null（新しく始める）。</summary>
-        public static Game Read()
+        /// <param name="broken">⚠️ **ファイルは在るのに読めなかった**とき true。
+        /// ⭐ 「保存が無い」（＝初回）と区別が付かないと、呼び側が新しいゲームを
+        /// その上に書き戻してしまう。⚠️ 受け取ったら**書き込みを止める**こと。</param>
+        public static Game Read(out bool broken)
         {
+            broken = false;
             try
             {
                 if (!File.Exists(Path)) return null;
@@ -59,14 +66,41 @@ namespace EggCommand.View
                 // ⭐ 置き換えが起きたら残る。⚠️ 黙って別の種族になっているのが一番困る
                 var notes = new System.Collections.Generic.List<string>();
                 var game = Snapshots.Load(save, notes);
-                if (game == null) Debug.LogWarning("保存の版が新しすぎる。作り直して始める");
+                if (game == null)
+                {
+                    // ⚠️ **壊れてはいない。**版が新しすぎるだけ（アプリを古い版に戻した等）。
+                    //    ここで捨てて上書きすると、直せたはずの保存が消える
+                    Debug.LogError("保存の版が新しすぎる。⚠️ 上書きしない（新しい版で開き直せば戻る）");
+                    broken = true;
+                    Keep();
+                    return null;
+                }
                 foreach (string note in notes) Debug.LogWarning($"保存の読み替え: {note}");
                 return game;
             }
             catch (Exception error)
             {
-                Debug.LogWarning($"保存が読めない（作り直して始める）: {error.Message}");
+                Debug.LogError($"保存が読めない: {error.Message}  ⚠️ 上書きしない");
+                broken = true;
+                Keep();
                 return null;
+            }
+        }
+
+        /// <summary>読めない保存を1度だけ写しておく。
+        /// ⚠️ 既に控えが在るなら**上書きしない** ── 最初の失敗のほうが値打ちがある
+        /// （2回目以降は、こちらが作り直した中身で潰してしまう）。</summary>
+        private static void Keep()
+        {
+            try
+            {
+                if (File.Exists(BrokenPath)) return;
+                File.Copy(Path, BrokenPath);
+                Debug.LogError($"読めなかった保存を写した: {BrokenPath}");
+            }
+            catch (Exception error)
+            {
+                Debug.LogError($"退避にも失敗した: {error.Message}");
             }
         }
 

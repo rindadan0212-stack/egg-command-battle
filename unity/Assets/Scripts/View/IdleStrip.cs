@@ -54,7 +54,7 @@ namespace EggCommand.View
             if (_ground != null && _groundWidth <= 0f) _groundWidth = _ground.rect.width * 0.5f;
 
             _home.Clear();
-            var party = Games.PartyOf(game);
+            var party = Games.PartyOf(game, PartyKind.Idle);
             for (int i = 0; i < _walkers.Length; i++)
             {
                 if (_walkers[i] == null) continue;
@@ -82,7 +82,7 @@ namespace EggCommand.View
         {
             if (_game == null || _clock == null) return;
 
-            var party = Games.PartyOf(_game);
+            var party = Games.PartyOf(_game, PartyKind.Idle);
             long now = _clock();
             if (Core.Idle.Advance(_game.Idle, party, now) > 0 && _onGain != null) _onGain();
 

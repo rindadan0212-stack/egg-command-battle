@@ -174,8 +174,10 @@ public class SkillLevelTests
     public void 威力は上がるが段位の表は動かない()
     {
         var boost = new SkillBoost { PowerPercent = Skills.GainPowerPercent };
-        Assert.Equal(20, Skills.DamagePowerOf(PowerTier.Medium));   // 表は不変
-        Assert.Equal(22, Skills.BoostedPower(PowerTier.Medium, boost));
+        // ⚠️ 威力は「攻撃力の何倍か」（千分率）。⭐ 中 ＝ 1.5倍
+        Assert.Equal(1500, Skills.DamagePowerOf(PowerTier.Medium));
+        // ⭐ スキルレベル1段で +10% ── 倍率になっても伸び方は同じ
+        Assert.Equal(1650, Skills.BoostedPower(PowerTier.Medium, boost));
     }
 
     /// <summary>⚠️ 枠1 は CT が元から 0 なので、CT の成長は効かない。</summary>

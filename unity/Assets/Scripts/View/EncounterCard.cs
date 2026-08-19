@@ -58,7 +58,7 @@ namespace EggCommand.View
                 // ⭐ 4回盗むと親が道を塞ぐ ＝ 入れば必ず戦闘（巣の寿命）
                 bool sealed_ = Steal.IsSealed(raids);
                 _raids.text = sealed_ ? "戦闘" : raids <= 0 ? "" : new string('●', raids);
-                _raids.color = sealed_ ? Ui.Danger : Ui.Accent;
+                _raids.color = sealed_ ? Ui.DangerInk : Ui.AccentInk;
             }
             if (_button != null)
             {
@@ -96,7 +96,7 @@ namespace EggCommand.View
             if (_left != null)
             {
                 _left.text = Rarities.Clock(left);
-                _left.color = hurry ? Ui.Danger : Ui.InkDim;
+                _left.color = hurry ? Ui.DangerInk : Ui.InkDim;
             }
             if (_drain != null)
             {
