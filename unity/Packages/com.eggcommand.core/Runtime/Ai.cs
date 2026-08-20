@@ -64,8 +64,10 @@ namespace EggCommand.Core
         private static int EstimateDamage(Unit actor, Unit target, PowerTier tier, DamageScale scale,
             bool pierce = false)
         {
-            var a = Creatures.StatsOf(actor.Creature);
-            var t = Creatures.StatsOf(target.Creature);
+            // ⚠️ **パッシブ込みの素のステを使う。**個体から引き直すと乗らず、
+            //    AI から見た強さと実際の一撃がずれる
+            var a = actor.Innate;
+            var t = target.Innate;
             int attackStat = Battle.AttackStatOf(a, actor.Status, scale);
             // ⚠️ 防御無視をここで数えないと、AI から見て「防御無視攻撃」が素の攻撃と同じ値になり、
             //    CT の短い技に必ず負けて**一度も選ばれない**（実測 0.00 だった）

@@ -161,65 +161,81 @@ public class VocabularyTests
         Assert.Equal(0, hurt);
     }
 
-    // ── ③ 切れない持続 ──────────────────────────
+    // ── ③ パッシブ（枠を潰して買う常時の底上げ）──────────────
 
-    /// <summary>⭐ 何手番たっても切れないこと。⚠️ 普通の強化なら 3T で消える。</summary>
+    /// <summary>⭐ 押せないこと。⚠️ 選べてしまうと、CT 0 の何もしない技になる。</summary>
     [Fact]
-    public void 構えは切れない()
+    public void パッシブは選べない()
     {
-        var state = Field("stance");
+        var state = Field("vigor");
         var actor = Ally(state, 0);
-
-        Battle.PerformAction(state, actor, 1);
-        Assert.True(Battle.IsOn(actor.Status.Def));
-        int lifted = actor.Status.Def.Percent;
-
-        for (int turn = 0; turn < 12; turn++) Battle.PerformAction(state, actor, 0);
-
-        Assert.True(Battle.IsOn(actor.Status.Def), "12手番で切れている");
-        Assert.Equal(lifted, actor.Status.Def.Percent);
+        Assert.False(Battle.IsUsable(actor, 1), "パッシブが選べてしまう");
+        Assert.NotEqual(1, Ai.ChooseAction(state, actor));
     }
 
-    /// <summary>⚠️ **剥がせること。**剥がせないと「先に掛けた者勝ち」で読み合いが消える。</summary>
+    /// <summary>⭐ 枠に入れただけで効いていること（最大HP に乗る）。
+    /// ⚠️ 強化の修正枠は HP を持たないので、これは生まれつきだけができる。</summary>
     [Fact]
-    public void 切れない持続も剥がせる()
+    public void 生命力は最大HPを上げる()
     {
-        var state = Field();
-        var actor = Ally(state, 0);
-        Battle.ApplyOne(state, actor, actor, Effect.Buff(StatKey.Def, 1, Skills.Lasting));
-        Assert.True(Battle.IsOn(actor.Status.Def));
+        int plain = Battle.CreateBattle(
+            new List<Creature> { Make("a0") }, new List<Creature> { Make("e0") })
+            .Units.Find(u => u.Side == Side.Ally)!.MaxHp;
+        int grown = Battle.CreateBattle(
+            new List<Creature> { Make("a0", "vigor") }, new List<Creature> { Make("e0") })
+            .Units.Find(u => u.Side == Side.Ally)!.MaxHp;
 
-        Battle.ApplyOne(state, Foe(state, 0), actor, Effect.Dispel(1));
-
-        Assert.False(Battle.IsOn(actor.Status.Def), "永続が剥がせない");
+        Assert.True(grown > plain, $"最大HP が上がっていない（{plain} → {grown}）");
     }
 
-    /// <summary>⚠️ スキルレベルの「持続+1」を足して**普通の強化に戻さない**こと。
-    /// ⭐ -1 に +2 すると +1 ＝ 1手番で切れる強化になる。</summary>
+    /// <summary>⚠️ **剥がせないこと。**枠1つを永久に払っているので、
+    /// 1回の強化解除で無かったことにされると、パッシブを選ぶ理由が消える。</summary>
     [Fact]
-    public void 切れない持続に持続の上乗せを足さない()
+    public void 生まれつきは剥がせない()
     {
-        var state = Field();
+        var state = Field("sturdy");
         var actor = Ally(state, 0);
-        Battle.ApplyOne(state, actor, actor, Effect.Buff(StatKey.Def, 1, Skills.Lasting),
-            new SkillBoost { ExtraTurns = 2 });
+        int before = Battle.EffectiveStat(actor.Innate.Def, actor.Status.Def);
 
-        Assert.True(actor.Status.Def.Turns < 0, $"永続でなくなっている（{actor.Status.Def.Turns}）");
+        Battle.ApplyOne(state, Foe(state, 0), actor, Effect.Dispel(3));
+
+        Assert.Equal(before, Battle.EffectiveStat(actor.Innate.Def, actor.Status.Def));
     }
 
-    /// <summary>⭐ 奪ったときも「切れないほうが強い」と判じること。</summary>
+    /// <summary>⭐ 強化と**重なる**こと。⚠️ 上書きになると、パッシブ持ちに強化を掛ける意味が消える。</summary>
     [Fact]
-    public void 強奪は切れない持続を短い持続で上書きしない()
+    public void 生まれつきの上に強化が乗る()
     {
-        var state = Field();
-        var thief = Ally(state, 0);
-        var victim = Foe(state, 0);
-        Battle.ApplyOne(state, thief, thief, Effect.Buff(StatKey.Atk, 1, 2));
-        Battle.ApplyOne(state, victim, victim, Effect.Buff(StatKey.Atk, 1, Skills.Lasting));
+        var state = Field("sturdy");
+        var actor = Ally(state, 0);
+        int innate = Battle.EffectiveStat(actor.Innate.Def, actor.Status.Def);
 
-        Battle.ApplyOne(state, thief, victim, Effect.Steal(1));
+        Battle.ApplyOne(state, actor, actor, Effect.Buff(StatKey.Def, 1, 3));
 
-        Assert.True(thief.Status.Atk.Turns < 0, "奪ったのに短いほうが残っている");
+        int both = Battle.EffectiveStat(actor.Innate.Def, actor.Status.Def);
+        Assert.True(both > innate, "強化が乗っていない");
+    }
+
+    /// <summary>⚠️ 効き目は普通の強化より**小さい**こと。
+    /// ⭐ 手番を1回も払わないぶんの値段。ここが同じだと強化を掛ける技が要らなくなる。</summary>
+    [Fact]
+    public void 生まれつきは強化より効き目が小さい()
+    {
+        Assert.True(Skills.InnatePercent < Skills.BuffPercent,
+            $"生まれつき {Skills.InnatePercent}% が強化 {Skills.BuffPercent}% 以上ある");
+    }
+
+    /// <summary>⭐ レベルを上げると効き目が伸びること。
+    /// ⚠️ CT が無いので、これが伸びないとパッシブは育てても何も変わらない。</summary>
+    [Fact]
+    public void パッシブはレベルを上げると効き目が伸びる()
+    {
+        var plain = Make("a0", "sturdy");
+        var grown = Make("a1", "sturdy");
+        grown.SkillPoints[1] = SkillCosts.TotalFor(Skills.MaxLevel);
+
+        Assert.True(Battle.InnateStatsOf(grown).Def > Battle.InnateStatsOf(plain).Def,
+            "レベルを上げても効き目が変わらない");
     }
 
     // ── 表に出る形 ──────────────────────────────
@@ -227,7 +243,7 @@ public class VocabularyTests
     /// <summary>⭐ 説明文が読める形になること。⚠️ 「-1T」「-2個」と出さない。</summary>
     [Theory]
     [InlineData("cleanse", "弱化を2個")]
-    [InlineData("stance", "戦闘の間ずっと")]
+    [InlineData("vigor", "常にHP")]
     [InlineData("drain-all", "さらに自分")]
     public void 新しい語彙の説明文が読める(string id, string wanted)
     {

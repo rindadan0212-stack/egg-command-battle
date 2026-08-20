@@ -180,10 +180,22 @@ namespace EggCommand.Core
         ///    同じ回に混ぜると乱数の引き順が変わり、移植した21技の照合が死ぬ。</summary>
         public readonly Target? Own;
 
+        /// <summary>⭐ **生まれつき。**パッシブ技だけが持てる。
+        ///
+        /// ⭐ 素のステそのものに畳み込むので、次の2つで普通の強化と違う:
+        /// <list type="bullet">
+        ///   <item>⚠️ **剥がせない**（強化解除・強化強奪の的にならない）</item>
+        ///   <item>⭐ **HP にも乗る**（修正枠が無い HP を動かせる唯一の道）</item>
+        /// </list>
+        /// ⚠️ 効き目は普通の強化より小さい（<see cref="Skills.InnatePercent"/> 対
+        /// <see cref="Skills.BuffPercent"/>）── **手番を1回も払わない**ぶんの値段。</summary>
+        public readonly bool Innate;
+
         private Effect(EffectKind kind, PowerTier power, DamageScale scale, StatKey stat, int sign,
             int turns, int stacks, int percent, int count, int delta, int hits, int repeat = 1,
-            int chance = 100, bool pierce = false, Target? own = null)
+            int chance = 100, bool pierce = false, Target? own = null, bool innate = false)
         {
+            Innate = innate;
             Own = own;
             Pierce = pierce;
             Repeat = repeat < 1 ? 1 : repeat;
@@ -318,7 +330,23 @@ namespace EggCommand.Core
         /// ⚠️ 元の効果は書き換えない（新しい1つを返す）。</summary>
         public Effect To(Target target) =>
             new Effect(Kind, Power, Scale, Stat, Sign, Turns, Stacks, Percent, Count, Delta, Hits,
-                Repeat, Chance, Pierce, target);
+                Repeat, Chance, Pierce, target, Innate);
+
+        /// <summary>⭐ **生まれつきのステ上昇・下降。**パッシブ技だけが持てる。
+        ///
+        /// ⚠️ <see cref="Buff"/> と違って **HP も動かせる**
+        /// （素のステに畳み込むので、修正枠が要らない）。
+        /// ⚠️ 確率は無い ── 生まれつきなので外れようがない。</summary>
+        public static Effect Always(StatKey stat, int sign)
+        {
+            if (stat != StatKey.Hp && stat != StatKey.Atk && stat != StatKey.Def
+                && stat != StatKey.Spd)
+                throw new ArgumentException($"生まれつきは hp/atk/def/spd のみ（{stat} が渡された）");
+            if (sign != 1 && sign != -1)
+                throw new ArgumentException($"生まれつきの sign は ±1（{sign} が渡された）");
+            return new Effect(EffectKind.Buff, default, default, stat, sign, Skills.Lasting, 0, 0,
+                0, 0, 0, 1, 100, false, null, innate: true);
+        }
     }
 
     /// <summary>スキルレベルが1つ上がったときに伸びるもの。
@@ -348,6 +376,9 @@ namespace EggCommand.Core
         /// <summary>CT を動かす技の動かし幅 +1 / 引き受ける回数 +1。
         /// ⭐ 「その技が持っている数」を伸ばす最後の受け皿。</summary>
         Amount,
+        /// <summary>生まれつきの効き目 +<see cref="Skills.GainInnatePoints"/>pt。
+        /// ⭐ パッシブ技だけが持つ軸（⚠️ CT が無いので他に伸ばす先が無い）。</summary>
+        Innate,
     }
 
     /// <summary>スキルレベルぶんの上乗せ。⭐ Lv1 なら全部 0 ＝ **1ビットも変わらない**。</summary>
@@ -361,10 +392,12 @@ namespace EggCommand.Core
         public int ExtraPercent;
         public int ExtraCount;
         public int ExtraAmount;
+        /// <summary>生まれつきの効き目に足す %ポイント。</summary>
+        public int ExtraInnate;
 
         public bool IsNone => PowerPercent == 0 && CtCut == 0 && ChancePoints == 0
             && ExtraTurns == 0 && ExtraRepeat == 0 && ExtraPercent == 0 && ExtraCount == 0
-            && ExtraAmount == 0;
+            && ExtraAmount == 0 && ExtraInnate == 0;
     }
 
     /// <summary>技の型。⭐ **卵の枠2・枠3 は、種族ごとに決めた型から引く。**
@@ -401,9 +434,34 @@ namespace EggCommand.Core
         /// ⭐ どちらの枠から出したいかは作り手が決めることなので、宣言する。</summary>
         public readonly SkillType Type;
 
+        /// <summary>⭐ **押せない技。**枠は普通に1つ使うが、選ぶ対象には出てこない。
+        ///
+        /// ⭐ これがある理由（2026-08-20・作者の指示「まもダンにそろえて」）:
+        /// 「常に防御が高い」を**手番1回で買う**形にしていたが、参考作品は
+        /// **枠を1つ潰しっぱなしにして**買っている。⭐ そちらに合わせた。
+        /// ⚠️ 値段の払い方が違う ── 手番ではなく**枠**で払う。
+        /// だから効き目は小さく（<see cref="Skills.InnatePercent"/>）、代わりに永久で剥がせない。
+        ///
+        /// ⚠️ パッシブが持てるのは<see cref="Effect.Always"/>（生まれつき）だけ。
+        /// ⭐ 「攻撃するたび〜」のような**引き金つき**は特性（<see cref="Trait"/>）の仕事で、
+        /// ここには入れない（同じことを2か所で表せるようにしない）。</summary>
+        public readonly bool Passive;
+
         public Skill(string id, string name, string gist, SkillType type, int ct, Target target,
             params Effect[] effects)
+            : this(id, name, gist, type, ct, target, false, effects)
         {
+        }
+
+        /// <summary>パッシブを作る。⚠️ CT は必ず 0（押せないので待ちようが無い）。</summary>
+        public static Skill Always(string id, string name, string gist, SkillType type,
+            params Effect[] effects) =>
+            new Skill(id, name, gist, type, 0, Target.Self, true, effects);
+
+        private Skill(string id, string name, string gist, SkillType type, int ct, Target target,
+            bool passive, Effect[] effects)
+        {
+            Passive = passive;
             Id = id;
             Name = name;
             Gist = gist;
@@ -477,6 +535,7 @@ namespace EggCommand.Core
                 case SkillGain.Percent: return "割合";
                 case SkillGain.Count: return "個数";
                 case SkillGain.Amount: return "量";
+                case SkillGain.Innate: return "生まれつき";
                 default: throw new ArgumentOutOfRangeException(nameof(gain), gain, "名前の無い軸");
             }
         }
@@ -540,6 +599,16 @@ namespace EggCommand.Core
         /// ⚠️ スキルレベルの「持続が伸びる」は乗らない（既に切れないので伸びしろが無い）。</summary>
         public const int Lasting = -1;
 
+        /// <summary>生まれつきのステ上昇・下降が動かす割合（%）。
+        ///
+        /// ⚠️ <see cref="BuffPercent"/> より**小さい**。⭐ 払い方が違うから:
+        /// 強化は**手番1回**で買って数手で切れる。生まれつきは**枠1つ**で買って永久に続く。
+        /// ⚠️ ここを強化と同じにすると、強化を掛ける技を選ぶ理由が消える。</summary>
+        public const int InnatePercent = 10;
+
+        /// <summary>スキルレベル1段で、生まれつきの効き目に足す %ポイント。</summary>
+        public const int GainInnatePoints = 2;
+
         // ── スキルレベル ─────────────────────────────────
         // ⭐ 伸び幅は語彙ごとに1つだけ。技ごとの数値は置かない。
 
@@ -582,6 +651,8 @@ namespace EggCommand.Core
             if (HasPercent(skill)) axes.Add(SkillGain.Percent);
             if (HasCount(skill)) axes.Add(SkillGain.Count);
             if (HasAmount(skill)) axes.Add(SkillGain.Amount);
+            // ⚠️ パッシブは CT が無いので、これが無いと**伸ばす軸が1つも無くなる**
+            if (HasInnate(skill)) axes.Add(SkillGain.Innate);
             if (skill.Ct > 0) axes.Add(SkillGain.Ct);
 
             // ⚠️ 枠1 では CT が効かないので、軸から外してから割り当てる
@@ -635,6 +706,7 @@ namespace EggCommand.Core
                     case SkillGain.Percent: boost.ExtraPercent += GainHealPoints; break;
                     case SkillGain.Count: boost.ExtraCount += 1; break;
                     case SkillGain.Amount: boost.ExtraAmount += 1; break;
+                    case SkillGain.Innate: boost.ExtraInnate += GainInnatePoints; break;
                 }
             }
             return boost;
@@ -653,6 +725,7 @@ namespace EggCommand.Core
                 case SkillGain.Count: return HasCount(skill) ? null : "枚数で効くものが無い";
                 case SkillGain.Amount: return HasAmount(skill) ? null : "回数で効くものが無い";
                 case SkillGain.Ct: return skill.Ct > 0 ? null : "CT が元から 0";
+                case SkillGain.Innate: return HasInnate(skill) ? null : "生まれつきの効果が無い";
                 default: return "知らない成長";
             }
         }
@@ -672,6 +745,13 @@ namespace EggCommand.Core
         private static bool HasChance(Skill skill)
         {
             foreach (var e in skill.Effects) if (e.Chance < 100) return true;
+            return false;
+        }
+
+        /// <summary>生まれつきの効き目を持つか。⭐ パッシブ技だけが持つ。</summary>
+        private static bool HasInnate(Skill skill)
+        {
+            foreach (var e in skill.Effects) if (e.Innate) return true;
             return false;
         }
 
@@ -1079,15 +1159,18 @@ namespace EggCommand.Core
                 Effect.Buff(StatKey.Atk, -1, 3, chance: 60),
                 Effect.Buff(StatKey.Atk, 1, 3).To(Target.AllyAll)),
 
-            // ⭐ **切れない持続。**⚠️ あちらは技枠を1つ潰しっぱなしにして買っている（パッシブ）。
-            //    本作に枠を潰す形は無いので、**手番1回**で買う形に置き換えた。
-            //    ⭐ 剥がせる（強化解除・強奪の的）ので、「先に掛けた者勝ち」にはならない。
-            new Skill("stance", "不動の構え", "自分の防御が戦闘の間ずっと上がり、盾も1枚張る", SkillType.Support, 5, Target.Self,
-                Effect.Buff(StatKey.Def, 1, Lasting),
-                Effect.Shield(1)),
-            new Skill("resolve", "決意", "味方1体の攻撃が戦闘の間ずっと上がり、少しずつ回復する", SkillType.Support, 5, Target.AllyOne,
-                Effect.Buff(StatKey.Atk, 1, Lasting),
-                Effect.Regen(1, 3)),
+            // ⭐ **パッシブ（押せない技）。**枠を1つ潰しっぱなしにして、常時の底上げを買う。
+            //    ⚠️ 2026-08-20 の初版では「手番1回で買う切れない強化」にしていたが、
+            //    作者の指示「まもダンにそろえて」でパッシブに直した。
+            //    ⭐ 払い方が手番ではなく**枠**なので、効き目は小さく（InnatePercent）、
+            //    代わりに永久で**剥がせない**。
+            //    ⭐ HP に乗せられるのはこの形だけ（強化の修正枠が HP を持っていないため）。
+            Skill.Always("vigor", "生命力", "常にHPが上がっている", SkillType.Support,
+                Effect.Always(StatKey.Hp, 1)),
+            Skill.Always("sturdy", "頑丈", "常に防御力が上がっている", SkillType.Support,
+                Effect.Always(StatKey.Def, 1)),
+            Skill.Always("nimble", "身軽", "常にスピードが上がっている", SkillType.Support,
+                Effect.Always(StatKey.Spd, 1)),
         };
 
         public static IReadOnlyList<Skill> All => List;
@@ -1205,7 +1288,7 @@ namespace EggCommand.Core
             // ⚠️ どの種族のプールにも入れていない（作者指示 2026-08-19「あてはめはまだいらない」）。
             "cleanse", "cleanse-all",
             "drain-all", "reckless", "warcry",
-            "stance", "resolve",
+            "vigor", "sturdy", "nimble",
         };
 
         /// <summary>技表とガチャプールの整合を数える。
@@ -1381,8 +1464,37 @@ namespace EggCommand.Core
             // ⚠️ **狙い先と中身の食い違いは、表でも数える。**
             //    ⭐ 帳面だけが見ていた頃、C# に直接書いた「味方全体に毒」が素通りし、
             //    説明文まで作られていた（2026-08-19 の監査）。
+            // ⚠️ **パッシブの決まり。**押せない技なので、普通の技の検査が素通りしてしまう
+            //    （狙い先も CT も意味を持たないため）。ここで別に数える。
             foreach (var skill in table)
             {
+                if (skill.Passive)
+                {
+                    if (skill.Ct != 0)
+                        problems.Add($"{skill.Id}: パッシブなのに CT {skill.Ct}（押せないので待てない）");
+                    if (skill.Target != Target.Self)
+                        problems.Add($"{skill.Id}: パッシブの狙いが「{SkillText.TargetOf(skill.Target)}」"
+                            + "（自分にしか効かない）");
+                    foreach (var e in skill.Effects)
+                    {
+                        if (!e.Innate)
+                            problems.Add($"{skill.Id}: パッシブが「生まれつき」以外の効果を持っている"
+                                + "（引き金つきの働きは特性の仕事）");
+                    }
+                }
+                else
+                {
+                    foreach (var e in skill.Effects)
+                    {
+                        if (e.Innate)
+                            problems.Add($"{skill.Id}: パッシブでないのに「生まれつき」を持っている");
+                    }
+                }
+            }
+
+            foreach (var skill in table)
+            {
+                if (skill.Passive) continue;   // ⚠️ 狙い先の検査は押せる技だけ
                 bool mainAtFoe = AtFoe(skill.Target);
 
                 // ⭐ **技の狙い先へ飛ぶぶん**（飛び先を持たない効果）は、これまでどおり束で見る。

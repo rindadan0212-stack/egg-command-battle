@@ -72,7 +72,13 @@ namespace EggCommand.Sim
             ("解除", EffectKind.Dispel),
             ("強化強奪", EffectKind.Steal),
             ("蘇生", EffectKind.Revive),
+            // ⭐ 生まれつき（パッシブ専用）。⚠️ 語を強化・弱化と分ける ──
+            //    同じ語で書けると、パッシブでない技に紛れ込む
+            (KindInnate, EffectKind.Buff),
         };
+
+        /// <summary>帳面での「生まれつき」の語。</summary>
+        private const string KindInnate = "生まれつき";
 
         /// <summary>前に使っていた語 → いまの語。⭐ **書いたものを壊さないための表。**
         ///
@@ -304,6 +310,8 @@ namespace EggCommand.Sim
             md.Append($"# 技 {s.Id}\n名前 = {s.Name}\n説明 = {s.Gist}\n");
             md.Append($"型 = {Skills.LabelOf(s.Type)}\nCT = {s.Ct}\n");
             md.Append($"狙い = {SkillText.TargetOf(s.Target)}\n");
+            // ⭐ 押せない技。⚠️ 書き落とすと、読み返したとき普通の技になる
+            if (s.Passive) md.Append("パッシブ = はい\n");
             foreach (var e in s.Effects) md.Append($"効果 = {EffectLine(e)}\n");
             return md.ToString();
         }
@@ -407,6 +415,10 @@ namespace EggCommand.Sim
                     if (e.Repeat > 1) sb.Append(" 発数:").Append(e.Repeat);
                     if (e.Pierce) sb.Append(" 防御無視");
                     return sb.ToString();
+                case EffectKind.Buff when e.Innate:
+                    // ⭐ 生まれつきは持続も確率も無い（⚠️ 書いても読み返せない）
+                    return KindInnate + " ステ:" + Stats.LabelOf(e.Stat)
+                        + " 向き:" + (e.Sign > 0 ? "上" : "下");
                 case EffectKind.Buff:
                     sb.Append(e.Sign > 0 ? KindBuffUp : KindBuffDown)
                       .Append(" ステ:").Append(Stats.LabelOf(e.Stat))
@@ -764,7 +776,10 @@ namespace EggCommand.Sim
                     continue;
                 }
 
-                var skill = new Skill(b.Id, name, gist, type, ct, target, effects.ToArray());
+                // ⭐ パッシブは別の作り方（CT と狙い先は Skill.Always が決める）
+                var skill = b.One("パッシブ") == "はい"
+                    ? Skill.Always(b.Id, name, gist, type, effects.ToArray())
+                    : new Skill(b.Id, name, gist, type, ct, target, effects.ToArray());
 
                 // ⚠️ **CT では止めない**（作者の指示 2026-08-19）。理由を添えて言うだけ。
                 if (ct < 0) problems.Add($"{at}: CT が負（{ct}）");
@@ -1058,6 +1073,16 @@ namespace EggCommand.Sim
                     made = Effect.Damage(tier, scale, Num("発数", 1), pierce);
                     return true;
                 }
+                case EffectKind.Buff when word == KindInnate:
+                {
+                    if (!TryStat(tags.TryGetValue("ステ", out var i) ? i : null, out var innateStat))
+                    { problems.Add($"{at}: ステが読めない（{i}）"); return false; }
+                    tags.TryGetValue("向き", out var way);
+                    if (way != "上" && way != "下")
+                    { problems.Add($"{at}: 向きは 上/下（{way}）"); return false; }
+                    made = Effect.Always(innateStat, way == "上" ? 1 : -1);
+                    return true;
+                }
                 case EffectKind.Buff:
                 {
                     if (!TryStat(tags.TryGetValue("ステ", out var s) ? s : null, out var stat))
@@ -1329,6 +1354,11 @@ namespace EggCommand.Sim
                 effects.Add(e);
             }
             if (effects.Count == 0 || note.Stop.Count > 0) return null;
+            if (b.One("パッシブ") == "はい")
+            {
+                return Skill.Always(b.Id, b.One("名前") ?? "", b.One("説明") ?? "",
+                    type, effects.ToArray());
+            }
             return new Skill(b.Id, b.One("名前") ?? "", b.One("説明") ?? "",
                 type, ct, target, effects.ToArray());
         }
@@ -1496,8 +1526,17 @@ namespace EggCommand.Sim
         private static string CodeOf(Skill s)
         {
             var sb = new StringBuilder();
-            sb.Append($"new Skill(\"{s.Id}\", \"{Quote(s.Name)}\", \"{Quote(s.Gist)}\", SkillType.{s.Type}, ")
-              .Append($"{s.Ct}, Target.{s.Target},\n    ");
+            // ⭐ パッシブは CT も狙い先も持たない（Skill.Always が決める）
+            if (s.Passive)
+            {
+                sb.Append($"Skill.Always(\"{s.Id}\", \"{Quote(s.Name)}\", \"{Quote(s.Gist)}\", ")
+                  .Append($"SkillType.{s.Type},\n    ");
+            }
+            else
+            {
+                sb.Append($"new Skill(\"{s.Id}\", \"{Quote(s.Name)}\", \"{Quote(s.Gist)}\", SkillType.{s.Type}, ")
+                  .Append($"{s.Ct}, Target.{s.Target},\n    ");
+            }
             for (int i = 0; i < s.Effects.Count; i++)
             {
                 if (i > 0) sb.Append(",\n    ");
@@ -1537,6 +1576,8 @@ namespace EggCommand.Sim
                     if (e.Pierce) sb.Append(", pierce: true");
                     return sb.Append(')').ToString();
                 }
+                case EffectKind.Buff when e.Innate:
+                    return $"Effect.Always(StatKey.{e.Stat}, {e.Sign})";
                 case EffectKind.Buff:
                     return $"Effect.Buff(StatKey.{e.Stat}, {e.Sign}, {e.Turns}{chance})";
                 case EffectKind.Poison: return $"Effect.Poison({e.Stacks}, {e.Turns}{chance})";

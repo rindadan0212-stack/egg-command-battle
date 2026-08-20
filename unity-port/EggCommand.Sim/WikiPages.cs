@@ -220,7 +220,9 @@ namespace EggCommand.Sim
             md.Append("| **効果** | 何が起きるか。⭐ 狙い先・確率・持続をすべて書いています |\n");
             md.Append("| **T** | **その個体の行動回数**。⚠️ 実時間でも全体のターン数でもありません |\n");
             md.Append("| **上昇量** | レベルが1つ上がるたびに伸びる軸（Lv2→Lv5 の順）|\n");
-            md.Append("| **CT** | 使ったあと、自分が何回行動するまで再使用できないか |\n\n");
+            md.Append("| **CT** | 使ったあと、自分が何回行動するまで再使用できないか |\n");
+            md.Append("| **⭐パッシブ** | ⚠️ **押せません。**枠は1つ使いますが、選ぶ対象に出てきません。");
+            md.Append("戦闘が始まる前から効いています |\n\n");
 
             md.Append("## 一覧\n\n");
             md.Append("| スキル名 | 型 | 威力 | 効果 | レベルごとの上昇量 | CT |\n");
@@ -231,11 +233,17 @@ namespace EggCommand.Sim
                 // ⚠️ 未配布の技も同じく持てない（実装済みだが、まだどの種族にも配っていない）
                 string only = Skills.BossOnly.Contains(skill.Id) ? " ⚠️ボス専用"
                     : Skills.Undistributed.Contains(skill.Id) ? " 🚧未配布" : "";
+                // ⚠️ **パッシブは CT 欄に 0 が並ぶ。**印が無いと「いつでも押せる技」と読まれる
+                if (skill.Passive) only += " ⭐パッシブ";
+                string ct = skill.Passive ? "─" : skill.Ct.ToString();
                 md.Append($"| {skill.Name}{only} | {Skills.LabelOf(skill.Type)} | {SkillText.PowerOf(skill)} | ")
-                  .Append($"{SkillText.Describe(skill)} | {SkillText.GrowthOf(skill)} | {skill.Ct} |\n");
+                  .Append($"{SkillText.Describe(skill)} | {SkillText.GrowthOf(skill)} | {ct} |\n");
             }
 
             md.Append("\n⚠️ **ボス専用の技は手に入りません。**どの種族の卵ガチャにも入っていません（相手が使うのを見るだけです）。\n");
+            md.Append("\n⭐ **パッシブは押す技ではありません。**枠を1つ使ったまま、");
+            md.Append("戦闘の間ずっと効いています（⚠️ 効き目は強化より小さい代わりに、");
+            md.Append("**手番を1回も使わず、強化解除でも剥がれません**）。\n");
             md.Append("\n🚧 **未配布の技はまだ手に入りません。**実装は済んでいますが、");
             md.Append("どの種族の卵ガチャにもまだ入っていません（配る枠は今後決めます）。\n");
             md.Append("\n## 型\n\n");

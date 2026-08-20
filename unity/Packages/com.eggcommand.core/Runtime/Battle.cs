@@ -93,8 +93,17 @@ namespace EggCommand.Core
         /// <summary>スキル枠3つぶん。0 なら使える。</summary>
         public readonly int[] Cooldowns = new int[3];
 
-        public Unit(Creature creature, Side side, int slot, string name, int maxHp, double tempo)
+        /// <summary>⭐ **パッシブを畳み込んだ素のステ。唯一の出所。**
+        ///
+        /// ⚠️ 戦闘中に <c>Creatures.StatsOf(unit.Creature)</c> を直に呼ばないこと
+        /// ── パッシブが乗らず、AI の見積もりと実際の一撃がずれる。
+        /// ⭐ 1回だけ計算して持つ（毎回足すと、どこかで足し忘れる）。</summary>
+        public readonly StatBlock Innate;
+
+        public Unit(Creature creature, Side side, int slot, string name, int maxHp, double tempo,
+            StatBlock innate)
         {
+            Innate = innate;
             Creature = creature;
             Side = side;
             Slot = slot;
@@ -556,8 +565,37 @@ namespace EggCommand.Core
         public static Unit MakeUnit(Creature creature, Side side, int slot,
             double hpScale = 1.0, double tempo = 1.0)
         {
-            int maxHp = JsRound(Creatures.StatsOf(creature).Hp * HpScale * hpScale);
-            return new Unit(creature, side, slot, Creatures.SpeciesOf(creature).Name, maxHp, tempo);
+            // ⚠️ **HP を出す前に畳み込む。**あとから足すと最大HP にパッシブが乗らない
+            var innate = InnateStatsOf(creature);
+            int maxHp = JsRound(innate.Hp * HpScale * hpScale);
+            return new Unit(creature, side, slot, Creatures.SpeciesOf(creature).Name, maxHp, tempo,
+                innate);
+        }
+
+        /// <summary>パッシブ技の「生まれつき」を素のステへ畳み込む。
+        ///
+        /// ⭐ **押せない技のぶんはここで一度だけ効かせる。**戦闘中は何も起きない
+        /// （⚠️ 毎手番に足す作りにすると、剥がれたか掛かったかを追う欄が増える）。
+        /// ⚠️ 剥がせない ── 素のステそのものなので、強化解除の的にならない。</summary>
+        public static StatBlock InnateStatsOf(Creature creature)
+        {
+            var stats = Creatures.StatsOf(creature);
+            var list = Creatures.SkillsOf(creature);
+            for (int slot = 0; slot < list.Length; slot++)
+            {
+                var skill = list[slot];
+                if (skill == null || !skill.Passive) continue;
+                var boost = Creatures.SkillBoostOf(creature, slot);
+                foreach (var effect in skill.Effects)
+                {
+                    if (!effect.Innate) continue;
+                    int percent = (Skills.InnatePercent + boost.ExtraInnate) * effect.Sign;
+                    int was = stats[effect.Stat];
+                    int now = (int)Math.Floor((double)(was * (100 + percent)) / 100);
+                    stats = stats.With(effect.Stat, now < 1 ? 1 : now);
+                }
+            }
+            return stats;
         }
 
         /// <summary>⭐ 少数側の1体が「何人分」を背負うか（体数の比）。
@@ -755,7 +793,7 @@ namespace EggCommand.Core
         }
 
         public static int SpeedOf(Unit unit) =>
-            EffectiveStat(Creatures.StatsOf(unit.Creature).Spd, unit.Status.Spd);
+            EffectiveStat(unit.Innate.Spd, unit.Status.Spd);
 
         public static Skill? SkillAt(Unit unit, int slot)
         {
@@ -766,7 +804,10 @@ namespace EggCommand.Core
         /// <summary>⭐ 枠1は CT 0 なので常に使える。これが「たたかう」の代わり。</summary>
         public static bool IsUsable(Unit unit, int slot)
         {
-            if (SkillAt(unit, slot) == null) return false;
+            var skill = SkillAt(unit, slot);
+            if (skill == null) return false;
+            // ⚠️ **パッシブは選べない。**効き目は戦闘が始まる前に済んでいる
+            if (skill.Passive) return false;
             return unit.Cooldowns[slot] == 0;
         }
 
@@ -1019,7 +1060,7 @@ namespace EggCommand.Core
             int top = -1;
             foreach (var unit in friends)
             {
-                int value = Creatures.StatsOf(unit.Creature)[lift.Value];
+                int value = unit.Innate[lift.Value];
                 if (value > top) { top = value; best = unit; }
             }
             return best;
@@ -1262,8 +1303,8 @@ namespace EggCommand.Core
             //    ⭐ それでは弱化で弱化の通る率を操れてしまい、Stats.cs の
             //    「先に弱化を通したほうが勝つ、の一手勝負に戻る」という懸念そのものになる。
             //    ⭐ ここは**育てて決める軸**（BuffKeys に Acc/Res を入れていないのと同じ理由）。
-            int acc = Creatures.StatsOf(actor.Creature).Acc;
-            int res = Creatures.StatsOf(target.Creature).Res;
+            int acc = actor.Innate.Acc;
+            int res = target.Innate.Res;
             int gap = (acc - res) / LandStatDivisor;
 
             // ⭐ **属性の有利・不利も通る率を動かす。**
@@ -1341,8 +1382,8 @@ namespace EggCommand.Core
             {
                 case EffectKind.Damage:
                 {
-                    var actorStats = Creatures.StatsOf(actor.Creature);
-                    var targetStats = Creatures.StatsOf(target.Creature);
+                    var actorStats = actor.Innate;
+                    var targetStats = target.Innate;
                     int attackStat = AttackStatOf(actorStats, actor.Status, effect.Scale);
                     // ⭐ 防御無視。⚠️ 0 にせず「無いもの」として扱う（式の分母は定数が残る）
                     int defenseStat = effect.Pierce

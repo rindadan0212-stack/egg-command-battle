@@ -159,6 +159,19 @@ namespace EggCommand.Core
         /// <summary>技が何をするかの1文。⭐ 狙い先・確率・持続をすべて含める。</summary>
         public static string Describe(Skill skill)
         {
+            // ⭐ パッシブは「押して起きること」ではなく「ずっとそうであること」を書く。
+            // ⚠️ 普通の技と同じ言い回しにすると、押せる技だと読まれる。
+            if (skill.Passive)
+            {
+                var said = new List<string>();
+                foreach (var effect in skill.Effects)
+                {
+                    said.Add($"{Stats.LabelOf(effect.Stat)}が{Skills.InnatePercent}%"
+                        + (effect.Sign > 0 ? "高い" : "低い"));
+                }
+                return "常に" + string.Join("、", said.ToArray());
+            }
+
             var main = new List<Effect>();
             foreach (var effect in skill.Effects)
             {
