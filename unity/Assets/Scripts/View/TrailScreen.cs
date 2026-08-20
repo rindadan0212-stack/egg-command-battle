@@ -32,13 +32,16 @@ namespace EggCommand.View
         //    「マスの大きさを2倍にしてもっと余白を少なく」）。
         // ⚠️ あいだ（RowStep − CellH）は 26 のまま据え置き ── マスだけ大きくすることで、
         //    見た目の余白の割合が半分以下になる。
-        private const float CellW = 352f;
+        // ⚠️ **横は 4列ぶんで割る。**⭐ マスを縦に2倍のまま、横は 4×248 + 隙間 で
+        //    画面の幅（1080）に収める（2026-08-20 の4列化）。
+        //    ⚠️ 352（縦と同じ2倍）だと 4列で 1408 になり、入らない。
+        private const float CellW = 248f;
         private const float CellH = 192f;
         /// <summary>段の高さ（マス＋あいだ）。⚠️ あいだは 26 のまま。</summary>
         private const float RowStep = 218f;
-        /// <summary>左右に膨らむ幅。⭐ マスが2倍になったぶん広げて、画面の幅を使い切る。
-        /// ⚠️ <see cref="CellW"/> より狭いと、左右の道が重なる。</summary>
-        private const float Bulge = 460f;
+        /// <summary>車線1つぶんの横のずれ。⭐ 車線は外から -3 / -1 / +1 / +3。
+        /// ⚠️ <see cref="CellW"/> の半分より狭いと、隣の車線と重なる。</summary>
+        private const float LaneStep = 264f;
         /// <summary>関門の札の高さ。⭐ マスの上端に帯として重ねる。</summary>
         private const float GateHigh = 64f;
         private const float GoalHeight = 176f;
@@ -248,7 +251,8 @@ namespace EggCommand.View
                 var sq = trail.Squares[i];
                 spots[i] = new Spot
                 {
-                    X = mid + sq.Lane * (Bulge / 2f),
+                    // ⭐ 車線は -3 / -2 / -1 / 0 / +1 / +2 / +3。⚠️ 1つぶんは半分
+                    X = mid + sq.Lane * (LaneStep / 2f),
                     Y = GoalHeight + 28f + (deep - sq.Row) * RowStep,
                 };
             }
@@ -292,10 +296,12 @@ namespace EggCommand.View
                     bool up = sq.Kind == SquareKind.Boon;
                     var ink = behind ? Ui.InkFaint : up ? Ui.GoodInk : Ui.DangerInk;
                     // ⭐ 矢印＋ステの絵＋数。⚠️ 「▲防+60%」の記号を字で書かない
-                    Ui.Icon(cell, "A", "arrow", ink, 28f, midY - 34f, 68f, up ? 90f : -90f);
-                    Ui.Icon(cell, "S", IconOf(sq.Stat), ink, 104f, midY - 34f, 68f);
-                    Ui.Label(cell, "N", $"{(sq.Percent < 0 ? -sq.Percent : sq.Percent)}%", 52, ink,
-                        TextAnchor.MiddleLeft, 184f, pad, CellW - 192f, high);
+                    // ⚠️ 数の枠は**要る幅より広く**取る。⭐ 「30%」で 109 要るのに 102 しか
+                    //    無く、字が枠からはみ出していた（2026-08-20 に実測）
+                    Ui.Icon(cell, "A", "arrow", ink, 10f, midY - 26f, 52f, up ? 90f : -90f);
+                    Ui.Icon(cell, "S", IconOf(sq.Stat), ink, 66f, midY - 26f, 52f);
+                    Ui.Label(cell, "N", $"{(sq.Percent < 0 ? -sq.Percent : sq.Percent)}%", 44, ink,
+                        TextAnchor.MiddleLeft, 124f, pad, CellW - 132f, high);
                     break;
 
                 default:
@@ -351,10 +357,10 @@ namespace EggCommand.View
             var tag = Ui.Plate(cell, "Gate", "pill", open ? Ui.Accent : Dark,
                 0f, 0f, CellW, GateHigh);
             var ink = open ? Ui.OnLead : new Color(1f, 1f, 1f, 0.62f);
-            Ui.Icon(tag, "I", IconOf(way.Gate), ink, 20f, 8f, 48f);
-            Ui.Label(tag, "N", Ui.Digits(way.Requires), 40, ink,
-                TextAnchor.MiddleLeft, 84f, 0f, CellW - 156f, GateHigh);
-            if (!open) Ui.Icon(tag, "L", "locked", ink, CellW - 60f, 8f, 48f);
+            Ui.Icon(tag, "I", IconOf(way.Gate), ink, 12f, 10f, 44f);
+            Ui.Label(tag, "N", Ui.Digits(way.Requires), 34, ink,
+                TextAnchor.MiddleLeft, 64f, 0f, CellW - 118f, GateHigh);
+            if (!open) Ui.Icon(tag, "L", "locked", ink, CellW - 54f, 10f, 44f);
         }
 
         /// <summary>いま居るマスに置く駒。⭐ **編成ぜんぶで1つ**（作者の決定）。</summary>

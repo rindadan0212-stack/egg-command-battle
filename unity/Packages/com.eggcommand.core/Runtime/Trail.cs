@@ -167,16 +167,30 @@ namespace EggCommand.Core
         /// という遊びの芯が消える。⭐ 代わりに**親が早く帰ってくる**ようにする。</summary>
         public const int RollsLostPerRaid = 1;
 
-        /// <summary>分かれ道の数。⭐ **3 + 段** → 4／5／6／7／8。
-        /// ⚠️ 1回の潜入で**その数だけ**「どっちの道か」を選ぶことになる。</summary>
-        public static int JunctionsFor(int tier) => 3 + tier;
+        /// <summary>ひと区切りの数。⭐ **2 + 段** → 3／4／5／6／7。
+        ///
+        /// ⚠️ **短くしすぎない。**4列にした当初は「2 + 段の半分」にしていたが、
+        /// 段5の最短路が 39 → 18 マスに縮み、**どの指し手でも 97% 届く**盤になった
+        /// （2026-08-20 に実測）。⭐ 振れる回数（段5で 8回・平均 3.5 で 28 マスぶん）に対して
+        /// 最短路が短すぎると、道を選ぶ意味そのものが消える。</summary>
+        public static int SectionsFor(int tier) => 2 + tier;
 
-        /// <summary>近い道の長さ。⭐ 合流まで <see cref="ShortMin"/>〜<see cref="ShortMax"/> マス。</summary>
-        public const int ShortMin = 1;
-        public const int ShortMax = 2;
-        /// <summary>遠い道の長さ。⚠️ 近い道より必ず長い。</summary>
-        public const int LongMin = 3;
-        public const int LongMax = 5;
+        /// <summary>分かれ道の数。⭐ ひと区切りに 3 つ。</summary>
+        public static int JunctionsFor(int tier) => SectionsFor(tier) * 3;
+
+        /// <summary>ひと筋の長さ（小さい分かれ道から合流点まで）。
+        ///
+        /// ⚠️ **4本とも同じ長さにする。**⭐ そうしないと 1マス＝1段 が崩れ、
+        /// 「出目のぶん進んでいない」と見える（2026-08-20・作者の指摘）。
+        /// ⚠️ 以前は近い道 1〜2 マス／遠い道 3〜5 マスで、近い道の1マスが**2段ぶん**動いていた。
+        /// ⭐ 長さの差でつけていた重みは、**関門の重さと道の中身**へ移した。</summary>
+        public const int LaneMin = 2;
+        public const int LaneMax = 3;
+
+        /// <summary>小さい分かれ道の、内側（穏やかなほう）の関門の重さ。
+        /// ⚠️ 大きい分かれ道（<see cref="ShortShare"/>）ほど重くしない ──
+        /// 2段つづけて重い関門が来ると、通れる道が一気に消える。</summary>
+        public const int MidShare = 60;
 
         /// <summary>その段の参照編成が、そのステに持っている量。⚠️ `sim trail` の実測（2026-08-20）。
         /// ⭐ 関門の重さはここからの割合で決める。</summary>
@@ -388,60 +402,94 @@ namespace EggCommand.Core
             var junctions = new List<int>();
             var kinds = new[] { GimmickKind.Wall, GimmickKind.Damage, GimmickKind.Pressure };
 
-            int sections = Trail.JunctionsFor(tier);
+            int sections = Trail.SectionsFor(tier);
             int hub = 0;
             squares.Add(new Square());                     // 入口
 
             for (int s = 0; s < sections; s++)
             {
-                junctions.Add(hub);
+                // ⭐ **ひと区切りは2段の分かれ道。**大きく左右に分かれ、その先でさらに分かれる
+                //    ＝ 一番深いところで**4本**の道が並ぶ（2026-08-20・作者の指示）。
+                //
+                //        ┌─ 小分かれ ─┬─ 車線 -3
+                //   大分かれ ┤            └─ 車線 -1
+                //        └─ 小分かれ ─┬─ 車線 +1
+                //                     └─ 車線 +3
+                //
+                // ⚠️ **4本とも同じマス数**にする。長さが違うと 1マス＝1段 が崩れ、
+                //    「出目のぶん進んでいない」と見える。⭐ 重みは関門と中身で付ける。
+                int lane = rng.Int(Trail.LaneMin, Trail.LaneMax + 1);
+                int root = squares[hub].Row;
 
-                // ⭐ 2本の道は**必ず違うステ**を要求する。
-                //    ⚠️ 同じステだと「どっちが安いか」だけになり、種類を比べる場面が消える
+                // ⚠️ 大きい分かれ道の2本は**必ず違うステ**を要求する
                 int a = rng.Int(0, kinds.Length);
                 int b = (a + 1 + rng.Int(0, kinds.Length - 1)) % kinds.Length;
 
-                int shortLen = rng.Int(Trail.ShortMin, Trail.ShortMax + 1);
-                int longLen = rng.Int(Trail.LongMin, Trail.LongMax + 1);
-                int shortCost = Jitter(rng, Trail.PriceFor(kinds[a], tier, Trail.ShortShare));
-                int longCost = Jitter(rng, Trail.PriceFor(kinds[b], tier, Trail.LongShare));
+                junctions.Add(hub);
 
-                // ⚠️ **近い道のマスは、合流点までのあいだに散らす。**
-                //    先頭から詰めると、最後の1マスから合流点まで長い斜線が伸びて
-                //    ひし形に見えなかった（実機で確認 2026-08-20）。
-                int span = longLen + 1;                     // 分かれ道から合流点までの段数
-                int shortHead = squares.Count;
-                for (int i = 0; i < shortLen; i++)
+                // ── 小さい分かれ道（左右に1つずつ）─────────────────
+                int leftHub = squares.Count;
+                var leftSq = new Square { Row = root + 1, Lane = -2 };
+                squares.Add(leftSq);
+                int rightHub = squares.Count;
+                var rightSq = new Square { Row = root + 1, Lane = 2 };
+                squares.Add(rightSq);
+                junctions.Add(leftHub);
+                junctions.Add(rightHub);
+
+                // ── 4本の筋 ────────────────────────────────
+                // ⚠️ 車線は外から -3 / -1 / +1 / +3
+                var lanes = new[] { -3, -1, 1, 3 };
+                var heads = new int[4];
+                for (int k = 0; k < 4; k++)
                 {
-                    var sq = Filler(rng, false);
-                    sq.Row = squares[hub].Row + (i + 1) * span / (shortLen + 1);
-                    sq.Lane = -1;                            // ⭐ 近い道は左
-                    squares.Add(sq);
+                    heads[k] = squares.Count;
+                    // ⭐ **外側ほど険しい。**⚠️ 内側と同じ中身だと、外へ行く理由が無い
+                    bool harsh = k == 0 || k == 3;
+                    for (int i = 0; i < lane; i++)
+                    {
+                        var sq = Filler(rng, harsh);
+                        sq.Row = root + 2 + i;
+                        sq.Lane = lanes[k];
+                        squares.Add(sq);
+                    }
                 }
-                int longHead = squares.Count;
-                for (int i = 0; i < longLen; i++)
-                {
-                    var sq = Filler(rng, true);
-                    sq.Row = squares[hub].Row + 1 + i;
-                    sq.Lane = 1;                            // ⭐ 遠い道は右
-                    squares.Add(sq);
-                }
+
                 int next = squares.Count;
-                var join = new Square();                    // 合流点（次の分かれ道 or 卵）
-                // ⚠️ 合流点は**遠い道の先**。⭐ 近い道は途中に散らしてあるので、
-                //    どちらの道も同じ段で合流し、ひし形になる
-                join.Row = squares[hub].Row + span;
-                join.Lane = 0;
-                squares.Add(join);
+                squares.Add(new Square { Row = root + 2 + lane, Lane = 0 });
 
-                squares[hub].Ways.Add(new Way(shortHead, kinds[a], shortCost, shortLen + 1));
-                squares[hub].Ways.Add(new Way(longHead, kinds[b], longCost, longLen + 1));
-                for (int i = 0; i < shortLen; i++)
-                    squares[shortHead + i].Ways.Add(new Way(
-                        i + 1 < shortLen ? shortHead + i + 1 : next));
-                for (int i = 0; i < longLen; i++)
-                    squares[longHead + i].Ways.Add(new Way(
-                        i + 1 < longLen ? longHead + i + 1 : next));
+                // ── 道を繋ぐ ────────────────────────────────
+                // ⚠️ **どの分かれ道にも、必ず軽いほうを1本置く。**
+                //    ⭐ 両方を重くすると、薄い編成がその場で詰む（実測で落ちた 2026-08-20）。
+                //    どの分かれ道でも「重いが安全 ／ 軽いが険しい」の形にそろえる。
+                squares[hub].Ways.Add(new Way(leftHub, kinds[a],
+                    Jitter(rng, Trail.PriceFor(kinds[a], tier, Trail.ShortShare)), lane + 2));
+                squares[hub].Ways.Add(new Way(rightHub, kinds[b],
+                    Jitter(rng, Trail.PriceFor(kinds[b], tier, Trail.LongShare)), lane + 2));
+
+                for (int side = 0; side < 2; side++)
+                {
+                    int from = side == 0 ? leftHub : rightHub;
+                    int c = rng.Int(0, kinds.Length);
+                    int d = (c + 1 + rng.Int(0, kinds.Length - 1)) % kinds.Length;
+                    // ⭐ **内側は「重い関門・穏やかな中身」／外側は「軽い関門・険しい中身」。**
+                    //    ⚠️ 内外で中身を変えないと、外へ出る理由が無い。
+                    int inner = side == 0 ? heads[1] : heads[2];
+                    int outer = side == 0 ? heads[0] : heads[3];
+                    squares[from].Ways.Add(new Way(inner, kinds[c],
+                        Jitter(rng, Trail.PriceFor(kinds[c], tier, Trail.MidShare)), lane + 1));
+                    squares[from].Ways.Add(new Way(outer, kinds[d],
+                        Jitter(rng, Trail.PriceFor(kinds[d], tier, Trail.LongShare)), lane + 1));
+                }
+
+                for (int k = 0; k < 4; k++)
+                {
+                    for (int i = 0; i < lane; i++)
+                    {
+                        squares[heads[k] + i].Ways.Add(new Way(
+                            i + 1 < lane ? heads[k] + i + 1 : next));
+                    }
+                }
 
                 hub = next;
             }
@@ -537,14 +585,15 @@ namespace EggCommand.Core
             var chosen = ways[way];
             if (!CanPass(raid, chosen)) throw new InvalidOperationException("この道は通れない");
 
-            // ⚠️ **通ってもステは減らない。**代価は道の長さ（振れる回数）のほう
+            // ⚠️ **通ってもステは減らない。**代価は道の中身（敵と ▲▼）のほう
             raid.Took[raid.At] = way;
 
+            // ⚠️ **選んだだけでは動かない。**⭐ 動くのは残っている出目のぶんだけ
+            //    （道へ入る1マスも、下の Advance が出目を1つ使って進む）。
+            //    ⚠️ ここで先に1マス動かしていた頃、出目 0 でも1マス進んでいた。
             int pips = raid.Pending;
             raid.Pending = 0;
-            raid.At = chosen.To;
-            // ⭐ 道へ入るのが1マスぶん。残りはそのまま歩く
-            return Arrive(raid, pips > 0 ? pips - 1 : 0);
+            return Arrive(raid, pips);
         }
 
         /// <summary>雑魚に勝った。⭐ **振れる回数が戻る。**</summary>
@@ -571,12 +620,19 @@ namespace EggCommand.Core
             {
                 var here = raid.Trail.Squares[raid.At];
                 if (here.IsGoal) break;
+                int way = 0;
                 if (here.IsJunction)
                 {
-                    raid.Pending = steps - n;
-                    return Settle(raid);
+                    // ⚠️ **まだ選んでいないなら、そこで止まる。**⭐ 選び済みならその道をたどる。
+                    //    ⚠️ 選び済みを見ずに毎回止めていた頃、出目 0 で道を選んでも
+                    //    1マス進んでしまい、**出目より多く動いて**いた（2026-08-20）。
+                    if (!raid.Took.TryGetValue(raid.At, out way))
+                    {
+                        raid.Pending = steps - n;
+                        return Settle(raid);
+                    }
                 }
-                raid.At = here.Ways[0].To;
+                raid.At = here.Ways[way].To;
             }
             return Arrive(raid, 0);
         }
@@ -606,7 +662,9 @@ namespace EggCommand.Core
             if (here.Kind == SquareKind.Mob && !raid.Beaten.Contains(raid.At))
                 return raid.Step = RaidStep.Met;
 
-            if (here.IsJunction)
+            // ⚠️ **選び済みの分かれ道では、もう選ばせない。**
+            //    ⭐ 出目を使い切って分かれ道の上で止まったときは、道だけ決めて次を振る
+            if (here.IsJunction && !raid.Took.ContainsKey(raid.At))
             {
                 // ⚠️ **どの道も通れなければ、そこで終わり。**
                 //    ⭐ 「編成が足りていない」という負け方をはっきり出す
