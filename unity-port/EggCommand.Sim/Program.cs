@@ -78,6 +78,8 @@ namespace EggCommand.Sim
                 }
                 case "pace": Pace(seed); break;
                 case "landprobe": LandProbe(); break;
+                case "flight": FlightProbe(seed); break;
+                case "trail": TrailProbe(seed); break;
                 // ⭐ 技と種族を手で書くための帳面（Sheet.cs）
                 case "sheet": Sheet.Run(args.Length > 1 ? args[1] : ""); break;
                 case "slant": SlantProbe(seed); break;
@@ -741,6 +743,417 @@ namespace EggCommand.Sim
 
         /// <summary>弱化の通る率が、実際にどれだけ動くか。
         /// ⚠️ 定数だけ見ても効き目が読めないので、現実のステ域で測る。</summary>
+        /// <summary>投げた1回が**何をして終わっているか**。
+        ///
+        /// ⭐ 「モンストの部分が機能していない」という作者の指摘を、
+        /// 推測でなく数で見るための道具（2026-08-20）。
+        /// ⚠️ 見るのは勝ち負けではなく**跳ね返りの回数と、終わり方の内訳**。</summary>
+        private static void FlightProbe(int seed)
+        {
+            Console.WriteLine();
+            Console.WriteLine("■ 投げた1回はどう終わっているか（段ごと・角度を1度刻みで全部試す）");
+            Console.WriteLine($"  {"段",4}{"投数",7}{"壁で跳ねた回数",16}{"関門で跳ねた",14}"
+                + $"{"卵",6}{"親",6}{"雑魚",7}{"力尽き",8}");
+
+            var rng = new Rng(seed);
+            for (int tier = 1; tier <= 5; tier++)
+            {
+                var party = Steal.ReferenceParty(tier);
+                int shots = 0, wall = 0, gate = 0, egg = 0, parent = 0, mob = 0, spent = 0;
+                double pathSum = 0;
+
+                for (int n = 0; n < 12; n++)
+                {
+                    var field = Steal.MakeField(tier, FieldSide.Right, 0, rng);
+                    foreach (var who in party)
+                    {
+                        for (int deg = 0; deg < 360; deg += 1)
+                        {
+                            var run = Steal.Preview(
+                                new Steal.Infiltration(field, party), 0, -1, deg * Math.PI / 180.0);
+                            if (run.Path.Count < 2) continue;
+                            shots++;
+                            pathSum += run.Path.Count;
+                            // ⭐ 壁の跳ね返りは経路の折れで数える
+                            wall += Turns(run.Path);
+                            if (run.Bounced) gate++;
+                            switch (run.Outcome)
+                            {
+                                case StealOutcome.Success: egg++; break;
+                                case StealOutcome.Blocked: parent++; break;
+                                case StealOutcome.Fought: mob++; break;
+                                default: spent++; break;
+                            }
+                        }
+                        break;   // 1体ぶんで足りる
+                    }
+                }
+                Console.WriteLine($"  {tier,4}{shots,7}{(double)wall / shots,16:0.00}"
+                    + $"{100.0 * gate / shots,13:0}%{100.0 * egg / shots,5:0}%"
+                    + $"{100.0 * parent / shots,5:0}%{100.0 * mob / shots,6:0}%"
+                    + $"{100.0 * spent / shots,7:0}%");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("  ⚠️ 「力尽き」＝何にも当たらず飛距離を使い切った投");
+
+            // ══ 捨てている接触を数える ══════════════════
+            // ⭐ いまは**最初に当たった1つで飛行が終わる**。
+            //    もし終わらなかったら、その1投は何回ぶつかっていたか？
+            Console.WriteLine();
+            Console.WriteLine("■ 1投が「当たれたはずの数」（飛行を止めずに最後まで飛ばした場合）");
+            Console.WriteLine($"  {"段",4}{"いま当たる数",14}{"止めなければ",14}{"捨てている割合",16}");
+
+            for (int tier = 1; tier <= 5; tier++)
+            {
+                var party = Steal.ReferenceParty(tier);
+                int shots = 0, now = 0, could = 0;
+                for (int n = 0; n < 12; n++)
+                {
+                    var field = Steal.MakeField(tier, FieldSide.Right, 0, rng);
+                    var infil = new Steal.Infiltration(field, party);
+                    for (int deg = 0; deg < 360; deg += 1)
+                    {
+                        var run = Steal.Preview(infil, 0, -1, deg * Math.PI / 180.0);
+                        if (run.Path.Count < 2) continue;
+                        shots++;
+                        if (run.Outcome != StealOutcome.Landed && run.Outcome != StealOutcome.Stalled)
+                            now++;
+                        could += FreeFlight(field, field.Start,
+                            deg * Math.PI / 180.0, Steal.DistanceFor(party[0]));
+                    }
+                }
+                Console.WriteLine($"  {tier,4}{(double)now / shots,14:0.00}{(double)could / shots,14:0.00}"
+                    + $"{100.0 * (could - now) / Math.Max(1, could),15:0}%");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("  ⭐ モンストは「当たって跳ねて**また当たる**」が本体。");
+            Console.WriteLine("  ⚠️ いまは最初の1つで飛行が終わるので、上の差ぶんが丸ごと消えている。");
+
+            // ══ 盤の埋まり具合 ═══════════════════════════
+            Console.WriteLine();
+            Console.WriteLine("■ 盤に的がどれだけ在るか");
+            Console.WriteLine($"  {"段",4}{"盤の広さ",12}{"的の数",8}{"的が覆う割合",14}");
+            for (int tier = 1; tier <= 5; tier++)
+            {
+                double area = 0, targets = 0, boards = 0;
+                for (int n = 0; n < 12; n++)
+                {
+                    var field = Steal.MakeField(tier, FieldSide.Right, 0, rng);
+                    double a2 = Steal.FieldWidth * field.Height;
+                    double t = Math.PI * Steal.EggRadius * Steal.EggRadius
+                        + Steal.ParentWidth * 18.0
+                        + field.Mobs.Count * Math.PI * Steal.MobRadius * Steal.MobRadius;
+                    area += a2; targets += t; boards++;
+                    if (n == 0) Console.Write($"  {tier,4}{a2,12:N0}{field.Mobs.Count + 2,8}");
+                }
+                Console.WriteLine($"{100.0 * targets / area,13:0.0}%");
+            }
+            Console.WriteLine();
+            Console.WriteLine("  ⚠️ モンストの盤は的で埋まっている。ここは**ほぼ空き地**。");
+        }
+
+        /// <summary>**止まらずに**飛ばしたら何回ぶつかったか。
+        ///
+        /// ⚠️ `Steal.Preview` は最初の接触で止まった経路を返すので、
+        /// そこから「止めなかったら」は測れない。⭐ ここでは壁と関門だけで跳ね返し、
+        /// 的に当たっても**止めずに**飛距離を使い切るまで進める。
+        /// ⚠️ 本番の式（Fly）の写しなので、刻みと跳ね返りは同じにしてある。</summary>
+        /// <summary>経路の折れ（＝跡ね返り）の回数。</summary>
+        private static int Turns(IReadOnlyList<Point> path)
+        {
+            int n = 0;
+            for (int i = 2; i < path.Count; i++)
+            {
+                double ax = path[i - 1].X - path[i - 2].X, ay = path[i - 1].Y - path[i - 2].Y;
+                double bx = path[i].X - path[i - 1].X, by = path[i].Y - path[i - 1].Y;
+                if (Math.Abs(ax - bx) > 1e-9 || Math.Abs(ay - by) > 1e-9) n++;
+            }
+            return n;
+        }
+
+        private const double STEP = 1;   // ⚠️ Steal.Step の写し（private なので見えない）
+
+        private static int FreeFlight(StealField field, Point from, double angle, double budget)
+        {
+            double x = from.X, y = from.Y;
+            double dx = Math.Sin(angle), dy = -Math.Cos(angle);
+            double traveled = 0;
+            int hits = 0, lastMob = -2;
+            bool inEgg = false, inParent = false;
+
+            while (traveled < budget)
+            {
+                x += dx * STEP;
+                y += dy * STEP;
+                traveled += STEP;
+
+                if (x < Steal.RunnerRadius) { x = Steal.RunnerRadius; dx = -dx; }
+                else if (x > Steal.FieldWidth - Steal.RunnerRadius)
+                { x = Steal.FieldWidth - Steal.RunnerRadius; dx = -dx; }
+                if (y < Steal.RunnerRadius) { y = Steal.RunnerRadius; dy = -dy; }
+                else if (y > field.Height - Steal.RunnerRadius)
+                { y = field.Height - Steal.RunnerRadius; dy = -dy; }
+
+                int mob = -1;
+                for (int i = 0; i < field.Mobs.Count; i++)
+                {
+                    double mx = field.Mobs[i].At.X - x, my = field.Mobs[i].At.Y - y;
+                    double r = field.Mobs[i].Radius + Steal.RunnerRadius;
+                    if (mx * mx + my * my <= r * r) { mob = i; break; }
+                }
+                if (mob >= 0 && mob != lastMob) hits++;
+                lastMob = mob;
+
+                double ex = field.Egg.X - x, ey = field.Egg.Y - y;
+                double er = Steal.EggRadius + Steal.RunnerRadius;
+                bool egg = ex * ex + ey * ey <= er * er;
+                if (egg && !inEgg) hits++;
+                inEgg = egg;
+
+                bool par = y >= field.BandTop && y <= field.BandBottom
+                    && (x < field.GapFrom || x > field.GapTo);
+                if (par && !inParent) hits++;
+                inParent = par;
+            }
+            return hits;
+        }
+
+        /// <summary>すごろくの数字が成立するか。⭐ **実際の編成で回して測る。**
+        ///
+        /// ⚠️ 机上の分布（さいころの合計）だけでは、分かれ道・雑魚・増減が入った後の
+        /// 実際の届く率は出ない。ここでは本番と同じ <see cref="Trails"/> を回す。</summary>
+        private static void TrailProbe(int seed)
+        {
+            Console.WriteLine();
+            Console.WriteLine("■ 編成は何回振れて、いくら払えるか");
+            Console.WriteLine($"  {"段",4}{"道の長さ",10}{"分かれ道",10}{"速度合計",10}"
+                + $"{"振れる回数",12}{"攻撃",8}{"HP",8}{"防御",8}");
+            for (int tier = 1; tier <= 5; tier++)
+            {
+                var party = Steal.ReferenceParty(tier);
+                int spd = 0;
+                foreach (var c in party) spd += Creatures.StatsOf(c).Spd;
+                var pool = Trails.PoolOf(party);
+                int len = Trail.LengthFor(tier);
+                Console.WriteLine($"  {tier,4}{len,10}{Trail.ForksFor(len),10}{spd,10}"
+                    + $"{Trails.RollsFor(party),12}{pool.Atk,8}{pool.Hp,8}{pool.Def,8}");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("■ 財布の大きさと相場（5マス飛ぶ1本）");
+            Console.WriteLine($"  {"段",4}{"財布",10}{"相場",10}{"何本ぶん",12}");
+            for (int tier = 1; tier <= 5; tier++)
+            {
+                var pool = Trails.PoolOf(Steal.ReferenceParty(tier));
+                int purse = pool.Atk + pool.Hp + pool.Def;
+                Console.WriteLine($"  {tier,4}{purse,10}{Trail.PriceFor(tier),10}"
+                    + $"{(double)purse / Trail.PriceFor(tier),12:0.0}");
+            }
+
+            // ⭐ 指し手。⚠️ 「壊せるだけ」を他が上回らないなら、選ぶ意味が無い
+            var moves = new (string Name, Func<Raid, bool> Take)[]
+            {
+                ("歩くだけ", _ => false),
+                ("壊せるだけ", _ => true),
+                ("割安だけ", r => Bargain(r) <= 100),
+                ("割安＋出目", r => Bargain(r) * 100
+                    <= 100 * 100 * Square(r).Saves / Math.Max(1, Square(r).Saves - r.Pending)),
+                ("追い込まれたら", r => Trails.Odds(r) < 60 || Bargain(r) <= 85),
+                // ⭐ 盤は巣ごとに固定＝**下見できる**ので、先の分かれ道まで見て決める
+                ("先を見比べる", r => !BetterAhead(r)),
+                ("見比べ＋出目", r => !BetterAhead(r) || r.Pending == 0),
+            };
+
+            Console.WriteLine();
+            Console.WriteLine("■ 指し手を変えて回す（段5・8000回・雑魚には必ず勝つ想定）");
+            Console.WriteLine($"  {"指し手",-16}{"卵",8}{"壊した",9}{"見送り",9}{"判断",8}");
+            foreach (var move in moves)
+                Console.WriteLine("  " + RunTrail(seed, 5, move.Name, move.Take, 8000));
+
+            Console.WriteLine();
+            Console.WriteLine("■ 段ごと（指し手は『割安＋出目』・3000回）");
+            Console.WriteLine($"  {"段",4}{"歩くだけ",12}{"割安＋出目",14}{"差",8}");
+            for (int tier = 1; tier <= 5; tier++)
+            {
+                double bare = WinRate(seed, tier, _ => false, 3000);
+                double smart = WinRate(seed, tier, moves[3].Take, 3000);
+                Console.WriteLine($"  {tier,4}{bare,11:0%}{smart,13:0%}{smart - bare,8:+0%;-0%}");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("■ 巣ごとに道が固定されるか（同じ巣を2回作って突き合わせる）");
+            {
+                var world = Nests.All;
+                int same = 0, total = 0;
+                foreach (var nest in world)
+                {
+                    var a = Trails.OfNest(nest);
+                    var b = Trails.OfNest(nest);
+                    total++;
+                    bool eq = a.Length == b.Length;
+                    for (int i = 0; eq && i < a.Length; i++)
+                        eq = a.Squares[i].Kind == b.Squares[i].Kind
+                            && a.Squares[i].Requires == b.Squares[i].Requires
+                            && a.Squares[i].Saves == b.Squares[i].Saves;
+                    if (eq) same++;
+                }
+                Console.WriteLine($"  {same}/{total} の巣で同じ道が出た");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("■ ⭐ 寄せた編成は、噛み合う巣でなら強いか（段5の巣を関門の偏りで分ける）");
+            Console.WriteLine($"  {"巣の顔つき",-14}{"ならし",10}{"攻に寄せ",11}{"防に寄せ",11}");
+            {
+                var flat = Trails.PoolOf(Steal.ReferenceParty(5));
+                var pools = new (string Name, StatBlock Pool)[]
+                {
+                    ("ならし", flat),
+                    ("攻に寄せ", flat.With(StatKey.Atk, flat.Atk * 3 / 2)
+                        .With(StatKey.Def, flat.Def / 2).With(StatKey.Hp, flat.Hp / 2)),
+                    ("防に寄せ", flat.With(StatKey.Def, flat.Def * 3 / 2)
+                        .With(StatKey.Atk, flat.Atk / 2).With(StatKey.Hp, flat.Hp / 2)),
+                };
+                foreach (var face in new[] { GimmickKind.Wall, GimmickKind.Pressure })
+                {
+                    var picked = new List<Trail>();
+                    var made = new Rng(seed).Stream("faces");
+                    while (picked.Count < 400)
+                    {
+                        var t = Trails.Make(made, 5);
+                        int mine = 0, all = 0;
+                        foreach (var sp in t.Squares)
+                            if (sp.Kind == SquareKind.Fork) { all++; if (sp.Gate == face) mine++; }
+                        if (all > 0 && mine * 2 > all) picked.Add(t);   // ⭐ その関門が過半
+                    }
+                    var row = $"  {(face == GimmickKind.Wall ? "壁が多い巣" : "重圧が多い巣"),-14}";
+                    foreach (var p in pools)
+                    {
+                        int win = 0;
+                        var play = new Rng(seed).Stream("play");
+                        foreach (var t in picked)
+                            for (int rep = 0; rep < 12; rep++)
+                            {
+                                var raid = Trails.Begin(t, Steal.ReferenceParty(5));
+                                raid.Pool = p.Pool;
+                        raid.Power = p.Pool.Atk + p.Pool.Hp + p.Pool.Def;
+                                Play(play, raid, moves[3].Take);
+                                if (raid.Result == StealOutcome.Success) win++;
+                            }
+                        row += $"{100.0 * win / (picked.Count * 12),10:0}%";
+                    }
+                    Console.WriteLine(row);
+                }
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("  ⭐ 寄せた編成が『噛み合う巣』でならしを上回れば、寄せる意味がある");
+
+            Console.WriteLine();
+            Console.WriteLine("■ 盗むほど苦しくなるか（段5・3000回・指し手は『割安＋出目』）");
+            Console.WriteLine($"  {"盗んだ回数",12}{"振れる回数",12}{"卵に届く",10}");
+            {
+                var party = Steal.ReferenceParty(5);
+                for (int raids = 0; raids < Steal.RaidsToSeal; raids++)
+                {
+                    var rng = new Rng(seed).Stream("trail:raids");
+                    int win = 0;
+                    const int runs = 3000;
+                    for (int n = 0; n < runs; n++)
+                    {
+                        var raid = Trails.Begin(Trails.Make(rng, 5), party, raids);
+                        Play(rng, raid, moves[3].Take);
+                        if (raid.Result == StealOutcome.Success) win++;
+                    }
+                    Console.WriteLine($"  {raids,12}{Trails.RollsFor(party, raids),12}"
+                        + $"{100.0 * win / runs,9:0}%");
+                }
+                Console.WriteLine($"  {Steal.RaidsToSeal,12}{"—",12}{"必ず戦闘",10}");
+            }
+        }
+
+        /// <summary>いま止まっている分かれ道。</summary>
+        private static Square Square(Raid raid) => raid.Trail.Squares[raid.At];
+
+        /// <summary>同じ種類で、**この先にもっと得な分かれ道**があり、しかも今の持ち分で払えるか。
+        ///
+        /// ⭐ 道は巣ごとに固定なので、遊ぶ側も同じことが見える。
+        /// ⚠️ これが「壊せるだけ壊す」を上回らないなら、選ぶ余地は無い。</summary>
+        private static bool BetterAhead(Raid raid)
+        {
+            var here = Square(raid);
+            int have = raid.Power;
+            // ⭐ 得の測り方 = 1 払って何マス飛べるか
+            double mine = (double)here.Saves / Trails.CostOf(raid, here);
+            for (int i = raid.At + 1; i < raid.Trail.Length; i++)
+            {
+                var sp = raid.Trail.Squares[i];
+                if (sp.Kind != SquareKind.Fork) continue;
+                int cost = Trails.CostOf(raid, sp);
+                if (cost > have) continue;                        // ⚠️ 届かない物は待つ意味が無い
+                if ((double)sp.Saves / cost > mine) return true;
+            }
+            return false;
+        }
+
+        /// <summary>相場に対する割高さ（100 が相場、小さいほど割安）。</summary>
+        private static int Bargain(Raid raid)
+        {
+            var space = Square(raid);
+            int fair = Trail.FairPrice(raid.Trail.Tier, space.Saves);
+            return fair <= 0 ? 999 : Trails.CostOf(raid, space) * 100 / fair;
+        }
+
+        /// <summary>1回の潜入を最後まで回す。</summary>
+        private static void Play(Rng rng, Raid raid, Func<Raid, bool> take)
+        {
+            while (raid.Result == null)
+            {
+                switch (raid.Step)
+                {
+                    case RaidStep.AtFork:
+                        if (Trails.CanBreak(raid) && take(raid)) Trails.Break(raid);
+                        else Trails.Walk(raid);
+                        break;
+                    case RaidStep.Met: Trails.Beat(raid); break;
+                    default: Trails.Roll(rng, raid); break;
+                }
+            }
+        }
+
+        private static double WinRate(int seed, int tier, Func<Raid, bool> take, int runs)
+        {
+            var rng = new Rng(seed).Stream($"trail:{tier}");
+            var party = Steal.ReferenceParty(tier);
+            int win = 0;
+            for (int n = 0; n < runs; n++)
+            {
+                var raid = Trails.Begin(Trails.Make(rng, tier), party);
+                Play(rng, raid, take);
+                if (raid.Result == StealOutcome.Success) win++;
+            }
+            return (double)win / runs;
+        }
+
+        private static string RunTrail(int seed, int tier, string name,
+            Func<Raid, bool> take, int runs)
+        {
+            var rng = new Rng(seed).Stream($"trail:{tier}");
+            var party = Steal.ReferenceParty(tier);
+            int win = 0, broke = 0, walked = 0;
+            for (int n = 0; n < runs; n++)
+            {
+                var raid = Trails.Begin(Trails.Make(rng, tier), party);
+                Play(rng, raid, take);
+                if (raid.Result == StealOutcome.Success) win++;
+                broke += raid.Broken.Count;
+                walked += raid.Passed.Count;
+            }
+            return $"{name,-16}{100.0 * win / runs,7:0}%{(double)broke / runs,9:0.00}"
+                + $"{(double)walked / runs,9:0.00}{(double)(broke + walked) / runs,8:0.00}";
+        }
+
         private static void LandProbe()
         {
             Console.WriteLine();

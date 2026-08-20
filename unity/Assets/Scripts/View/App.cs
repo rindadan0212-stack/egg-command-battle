@@ -10,6 +10,7 @@ namespace EggCommand.View
         Home,
         Nests,
         Steal,
+        Trail,
         Battle,
         Breed,
         Box,
@@ -49,6 +50,13 @@ namespace EggCommand.View
         /// **戦って戻った瞬間に、着地した個体も壊した壁も消える**。</summary>
         public Steal.Infiltration Infiltration;
 
+        /// <summary>進行中のすごろく潜入。⚠️ <see cref="Infiltration"/> とは別物。
+        /// ⭐ 遊びの経路はこちら（<see cref="TrailScreen"/>）。あちらは移植の証拠として残してある。</summary>
+        public Raid Raid;
+
+        /// <summary>雑魚と戦っているマス。⚠️ -1 は「戦っていない」。</summary>
+        public int CurrentSpace = -1;
+
         /// <summary>いま戦っている雑魚の番号。⚠️ **-1 は親／ボス戦**。</summary>
         public int CurrentMob = -1;
 
@@ -66,6 +74,10 @@ namespace EggCommand.View
         /// <summary>演出を載せる場所。⚠️ App 本体ではなく Canvas。
         /// 本体に載せると RectTransform の親が無く、画面のどこにも出ない。</summary>
         public RectTransform Overlay => _root;
+
+        /// <summary>いま出ている画面。⚠️ 告知の後始末が
+        /// 「まだその画面に居るか」を確かめるために要る（レビュー指摘 2026-08-20）。</summary>
+        public Screen Showing => _screen;
 
         private void Start()
         {
@@ -194,7 +206,9 @@ namespace EggCommand.View
                 Game = Games.NewGame(Seed, Now());
                 Battle = null;
                 Infiltration = null;
+                Raid = null;
                 CurrentMob = -1;
+                CurrentSpace = -1;
             }
             if (_frame == null) return;
 
@@ -213,9 +227,12 @@ namespace EggCommand.View
                 : _sky.sprite != null ? Color.white : Ui.SkyOf(sky);
             _sky.raycastTarget = screen != Screen.Steal;
 
-            // ⚠️ **戦闘中は戻れない。**戻れると、
+            // ⚠️ **戦闘中と潜入中は戻れない。**戻れると、
             //    不利な盤面をいつでも無かったことにできてしまう。
-            bool canBack = screen != Screen.Battle;
+            // ⚠️ 潜入も同じ ── ‹ で抜けられると、親と戦う羽目になる前に何度でも
+            //    やり直せてしまう（出目は状態から決まるので、選び方を変えて総当たりできた。
+            //    レビューで発覚 2026-08-20）。
+            bool canBack = screen != Screen.Battle && screen != Screen.Trail;
             _frame.Bind(home, TitleOf(screen), BadgeOf(screen),
                 canBack ? (System.Action)(() => Show(Screen.Home)) : null, canBack);
             // ⚠️ 孵化はホームへ移したのでドックから外した。札は3枚
@@ -250,6 +267,7 @@ namespace EggCommand.View
                 case Screen.Home: HomeScreen.Build(this, body); break;
                 case Screen.Nests: NestsScreen.Build(this, body); break;
                 case Screen.Steal: StealScreen.Build(this, body); break;
+                case Screen.Trail: TrailScreen.Build(this, body); break;
                 case Screen.Battle: BattleScreen.Build(this, body); break;
                 case Screen.Breed: BreedScreen.Build(this, body); break;
                 case Screen.Box: BoxScreen.Build(this, body); break;
@@ -282,7 +300,8 @@ namespace EggCommand.View
             {
                 case Screen.Home: return Sky.Home;
                 case Screen.Nests:
-                case Screen.Steal: return Sky.Nest;
+                case Screen.Steal:
+                case Screen.Trail: return Sky.Nest;
                 case Screen.Battle: return Sky.Battle;
                 case Screen.Breed: return Sky.Breed;
                 default: return Sky.Box;
@@ -295,7 +314,8 @@ namespace EggCommand.View
             {
                 case Screen.Home: return "EGG COMMAND";
                 case Screen.Nests: return "探索";
-                case Screen.Steal: return CurrentNest != null ? CurrentNest.Name : "強奪";
+                case Screen.Steal:
+                case Screen.Trail: return CurrentNest != null ? CurrentNest.Name : "強奪";
                 case Screen.Battle: return CurrentIsBoss ? Nests.BossName : "戦闘";
                 case Screen.Breed: return "配合";
                 default: return "BOX";
@@ -326,9 +346,39 @@ namespace EggCommand.View
             CurrentNest = nest;
             CurrentIsBoss = boss;
             CurrentMob = -1;
+            CurrentSpace = -1;
             PendingOrigin = EggOrigin.Defeated;
             var enemies = boss ? Nests.MakeBossParty() : Games.DefendersOf(Game, nest);
-            StartBattle(enemies, carry);
+            StartBattle(enemies, carry?.Hp, carry?.Cooldowns);
+        }
+
+        /// <summary>すごろく潜入から親戦へ。⭐ 負った傷と CT をそのまま持ち込む。</summary>
+        public void EnterBattle(Nest nest, bool boss,
+            System.Collections.Generic.List<int> hp,
+            System.Collections.Generic.List<int[]> cooldowns)
+        {
+            CurrentNest = nest;
+            CurrentIsBoss = boss;
+            CurrentMob = -1;
+            CurrentSpace = -1;
+            PendingOrigin = EggOrigin.Defeated;
+            var enemies = boss ? Nests.MakeBossParty() : Games.DefendersOf(Game, nest);
+            StartBattle(enemies, hp, cooldowns);
+        }
+
+        /// <summary>すごろくの道中の雑魚と戦う。⭐ **3対3**。
+        ///
+        /// ⚠️ 相手は巣とマスの番号だけで決まる。その場で引くと、
+        /// 画面を出入りするだけで顔ぶれを選び直せてしまう。</summary>
+        public void EnterTrailMobBattle(Nest nest, int space)
+        {
+            CurrentNest = nest;
+            CurrentIsBoss = false;
+            CurrentMob = -1;
+            CurrentSpace = space;
+            PendingOrigin = EggOrigin.Defeated;
+            var enemies = Steal.MobPartyOf(nest, Games.RaidsOn(Game, nest), space);
+            StartBattle(enemies, Raid?.Hp, Raid?.Cooldowns);
         }
 
         /// <summary>道中の雑魚と戦う。⭐ **3対3**。
@@ -341,16 +391,19 @@ namespace EggCommand.View
             CurrentNest = nest;
             CurrentIsBoss = false;
             CurrentMob = mob;
+            CurrentSpace = -1;
             PendingOrigin = EggOrigin.Defeated;
-            StartBattle(Steal.MobPartyOf(nest, Games.RaidsOn(Game, nest), mob), Infiltration);
+            StartBattle(Steal.MobPartyOf(nest, Games.RaidsOn(Game, nest), mob),
+                Infiltration?.Hp, Infiltration?.Cooldowns);
         }
 
         private void StartBattle(System.Collections.Generic.List<Creature> enemies,
-            Steal.Infiltration carry)
+            System.Collections.Generic.List<int> hp,
+            System.Collections.Generic.List<int[]> cooldowns)
         {
             Battle = Core.Battle.CreateBattle(Games.PartyOf(Game), enemies);
             // ⭐ 潜入で負った傷と CT をそのまま持ち込む
-            if (carry != null) Core.Battle.CarryIn(Battle, carry.Hp, carry.Cooldowns);
+            if (hp != null && cooldowns != null) Core.Battle.CarryIn(Battle, hp, cooldowns);
             // ⚠️ 前の戦闘の帯を忘れる。残ると初手から満タンに見える
             UnitStand.ForgetGauges();
             Show(Screen.Battle);
@@ -367,6 +420,7 @@ namespace EggCommand.View
             Battle = null;
 
             // ⭐ 雑魚戦は潜入の途中。⚠️ 卵も巣の差し替えもここでは起きない
+            if (CurrentSpace >= 0) { FinishTrailMobBattle(state, nest, won); return; }
             if (CurrentMob >= 0) { FinishMobBattle(state, nest, won); return; }
 
             if (won)
@@ -384,6 +438,33 @@ namespace EggCommand.View
             // ⚠️ 負けた巣も引き直す。同じ相手を叩き続ける形にしない
             if (!CurrentIsBoss && nest != null) Encounters.Replace(Game, nest, Now());
             Show(Screen.Nests);
+        }
+
+        /// <summary>すごろくの雑魚戦の決着。⭐ 勝てば**振れる回数が戻って**続きへ。
+        ///
+        /// ⚠️ 傷と CT を潜入へ書き戻してから <see cref="Trails.Beat"/> を呼ぶ。
+        /// 書き戻しを飛ばすと、次の戦いが毎回満タンから始まり、
+        /// 「戦うほど苦しくなる」という雑魚の対価が丸ごと消える。</summary>
+        private void FinishTrailMobBattle(BattleState state, Nest nest, bool won)
+        {
+            var raid = Raid;
+            CurrentSpace = -1;
+            if (raid == null) { Show(Screen.Nests); return; }
+
+            if (!won)
+            {
+                Trails.Lost(raid);
+                Raid = null;
+                // ⚠️ 負けた巣は引き直す（親に見つかって負けたときと同じ）
+                if (nest != null) Encounters.Replace(Game, nest, Now());
+                Show(Screen.Nests);
+                return;
+            }
+
+            Core.Battle.CarryOut(state, raid.Hp, raid.Cooldowns);
+            Trails.Beat(raid);
+            Games.GrowParty(Games.PartyOf(Game), Steal.MobReward);
+            Show(Screen.Trail);
         }
 
         /// <summary>雑魚戦の決着。⭐ 勝てば**潜入の続き**へ戻る。

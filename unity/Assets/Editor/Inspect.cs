@@ -46,8 +46,11 @@ namespace EggCommand.EditorTools
                 var self = new Vector3[4];
                 rect.GetWorldCorners(self);
 
-                if (self[0].x < frame[0].x - 1f || self[2].x > frame[2].x + 1f
-                    || self[0].y < frame[0].y - 1f || self[2].y > frame[2].y + 1f)
+                // ⚠️ 遊びは**設計座標の1**。ワールドの 1f だと、この Canvas では
+                //    設計座標 192 ぶんになり、検査が事実上効かない（2026-08-20 に踏んだ）
+                float slack = Slack(rect);
+                if (self[0].x < frame[0].x - slack || self[2].x > frame[2].x + slack
+                    || self[0].y < frame[0].y - slack || self[2].y > frame[2].y + slack)
                 {
                     offScreen++;
                     if (offScreen <= 5) sb.Append("  画面外: ").Append(Where(rect)).Append('\n');
@@ -60,8 +63,8 @@ namespace EggCommand.EditorTools
                 {
                     var box = new Vector3[4];
                     parent.GetWorldCorners(box);
-                    if (self[0].y < box[0].y - 1f || self[2].y > box[2].y + 1f
-                        || self[0].x < box[0].x - 1f || self[2].x > box[2].x + 1f)
+                    if (self[0].y < box[0].y - slack || self[2].y > box[2].y + slack
+                        || self[0].x < box[0].x - slack || self[2].x > box[2].x + slack)
                     {
                         offParent++;
                         if (offParent <= 5)
@@ -93,15 +96,15 @@ namespace EggCommand.EditorTools
                 {
                     for (int j = i + 1; j < group.Count; j++)
                     {
-                        var a = new Vector3[4]; group[i].GetWorldCorners(a);
-                        var b = new Vector3[4]; group[j].GetWorldCorners(b);
-                        // ⚠️ 枠いっぱいの器（中央寄せの見出しなど）は重なって当然なので、
-                        //    どちらかが相手を丸ごと含むときは数えない
-                        bool contains = a[0].x <= b[0].x && a[2].x >= b[2].x && a[0].y <= b[0].y && a[2].y >= b[2].y;
-                        bool contained = b[0].x <= a[0].x && b[2].x >= a[2].x && b[0].y <= a[0].y && b[2].y >= a[2].y;
-                        if (contains || contained) continue;
-                        bool hit = !(a[2].x <= b[0].x + 1f || b[2].x <= a[0].x + 1f
-                                  || a[2].y <= b[0].y + 1f || b[2].y <= a[0].y + 1f);
+                        // ⚠️ **箱ではなく「字が乗っている範囲」で比べる。**
+                        //    箱で比べていた頃、66pt の数字の箱がその下の小さい行を丸ごと含み、
+                        //    「含むときは数えない」の除外に当たって 0件 と報告した
+                        //    ── 画面では完全に被っていた（2026-08-20）。
+                        var a = Ink(group[i]);
+                        var b = Ink(group[j]);
+                        float gap = Mathf.Max(Slack(group[i]), Slack(group[j]));
+                        bool hit = !(a.xMax <= b.xMin + gap || b.xMax <= a.xMin + gap
+                                  || a.yMax <= b.yMin + gap || b.yMax <= a.yMin + gap);
                         if (hit)
                         {
                             textOverlaps++;
@@ -168,6 +171,70 @@ namespace EggCommand.EditorTools
 
         /// <summary>面で区切ったパネルか。⚠️ 名前でしか見分けられないので、
         /// 画面側がパネルに付ける名前の付け方をここが知っている（増えたら足す）。</summary>
+        /// <summary>判定の遊び。⭐ **設計座標の 1 ぶん**をワールド単位で返す。
+        ///
+        /// ⚠️ 判定はワールド座標で書くのに、遊びだけ生の `1f` を書いてはいけない。
+        /// この Canvas は ScreenSpaceCamera で倍率が 0.0052 なので、
+        /// `1f` は設計座標の **約192** ── 検査が丸ごと効かなくなる（2026-08-20 に踏んだ）。</summary>
+        private static float Slack(RectTransform rect)
+        {
+            float scale = Mathf.Max(Mathf.Abs(rect.lossyScale.x), Mathf.Abs(rect.lossyScale.y));
+            return scale <= 0f ? 1f : scale;
+        }
+
+        /// <summary>字が実際に乗っている範囲（ワールド座標）。
+        ///
+        /// ⚠️ <see cref="Text"/> の矩形は器の大きさで、字の大きさではない。
+        /// 中央寄せの見出しは器いっぱいの矩形を持つので、矩形で重なりを見ると
+        /// **同じ器に入っている物すべてと重なって見える** ── だから昔は
+        /// 「丸ごと含むときは数えない」で逃げていた。⚠️ その除外が本物の被りも隠した。
+        /// ⭐ 寄せ（<see cref="Text.alignment"/>）と preferred 寸法から、
+        /// 器の中のどこに字が乗るかを出す。</summary>
+        private static Rect Ink(RectTransform rect)
+        {
+            var corners = new Vector3[4];
+            rect.GetWorldCorners(corners);
+            float left = corners[0].x, bottom = corners[0].y;
+            float width = corners[2].x - left, height = corners[2].y - bottom;
+
+            var text = rect.GetComponent<Text>();
+            if (text == null) return new Rect(left, bottom, width, height);
+
+            // ⚠️ **先にワールド単位へ直してから器に収める。**
+            //    preferred は器のローカル単位、width/height はワールド単位。
+            //    順を逆にすると Min がローカルとワールドを比べてしまい、
+            //    字の範囲が器いっぱいに膨らんで**重なりを見逃す**（2026-08-20 に踏んだ）。
+            float sx = rect.lossyScale.x <= 0f ? 1f : rect.lossyScale.x;
+            float sy = rect.lossyScale.y <= 0f ? 1f : rect.lossyScale.y;
+            // ⚠️ 横は器で切ってよい（折り返す設定なので、器より広くは描かれない）。
+            // ⚠️ **縦は切らない。**Ui.Label は verticalOverflow = Overflow なので、
+            //    器より高い字は**器の外に描かれる**。切ると、はみ出したぶんが
+            //    検査から消えて被りを見逃す（2026-08-20 に踏んだ）。
+            float w = Mathf.Min(text.preferredWidth * sx, width);
+            float h = text.preferredHeight * sy;
+
+            float x = left, y = bottom;
+            switch (text.alignment)
+            {
+                case TextAnchor.UpperLeft: case TextAnchor.MiddleLeft: case TextAnchor.LowerLeft:
+                    break;
+                case TextAnchor.UpperRight: case TextAnchor.MiddleRight: case TextAnchor.LowerRight:
+                    x = left + width - w; break;
+                default:
+                    x = left + (width - w) / 2f; break;
+            }
+            switch (text.alignment)
+            {
+                case TextAnchor.UpperLeft: case TextAnchor.UpperCenter: case TextAnchor.UpperRight:
+                    y = bottom + height - h; break;
+                case TextAnchor.LowerLeft: case TextAnchor.LowerCenter: case TextAnchor.LowerRight:
+                    break;
+                default:
+                    y = bottom + (height - h) / 2f; break;
+            }
+            return new Rect(x, y, w, h);
+        }
+
         private static bool IsPanel(RectTransform rect)
         {
             string name = rect.name;

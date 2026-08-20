@@ -71,7 +71,8 @@ namespace EggCommand.View
             //    どこに置いても重なる（実測）。⭐ 画面の外（上の帯）へ出す。
             app.ShowExtra("パーティ編成", () => PartyPanel.Show(app, PartyKind.Nest));
             view.Bind(app,
-                encounter => StealScreen.Enter(app, encounter.Nest),
+                // ⭐ 潜入は**すごろく**（2026-08-20）。⚠️ 弾いて飛ばす StealScreen は残してあるが繋がない
+                encounter => TrailScreen.Enter(app, encounter.Nest),
                 () => app.EnterBattle(null, true));
         }
     }
