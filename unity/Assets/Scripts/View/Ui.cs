@@ -342,6 +342,8 @@ namespace EggCommand.View
         {
             var cell = Rect(name, parent);
             Place(cell, left, top, width, height);
+            // ⭐ ★の枠を**升の後ろ**に敷く（縁だけが色で出る）
+            RarityFrame(cell, "Rarity", egg.Rarity, width, height);
             var plate = cell.gameObject.AddComponent<Image>();
             plate.sprite = SkinOf("panel");
             plate.type = Image.Type.Sliced;
@@ -429,6 +431,63 @@ namespace EggCommand.View
         {
             var label = button.transform.Find("Label");
             if (label != null) label.GetComponent<Text>().fontSize = size;
+        }
+
+        // ── ★の色 ──────────────────────────────────
+
+        /// <summary>★の色。⭐ **ソシャゲの約束**（下から 灰→緑→青→紫→金）に合わせる。
+        ///
+        /// ⚠️ ★5 の金は <see cref="Accent"/>（主導線の黄）と近い。
+        /// ⭐ 別の水路として扱う ── **差し色は押しどころ、★は升の縁**。
+        /// 押しどころに★の色を塗らない限り、混ざらない。</summary>
+        public static Color RarityInk(int rarity)
+        {
+            switch (Core.Rarities.Clamp(rarity))
+            {
+                case 1: return new Color32(0x9a, 0xa3, 0xb2, 0xff);   // 灰
+                case 2: return new Color32(0x3f, 0xb1, 0x59, 0xff);   // 緑
+                case 3: return new Color32(0x3b, 0x82, 0xf6, 0xff);   // 青
+                case 4: return new Color32(0xa2, 0x55, 0xf0, 0xff);   // 紫
+                default: return new Color32(0xf0, 0xa5, 0x00, 0xff);  // 金
+            }
+        }
+
+        /// <summary>★の縁の太さ。⭐ **上ほど太い。**
+        /// ⚠️ 色だけだと、並んだときに序列が読みにくい（色覚の差もある）。
+        /// 太さを足すと**色を見なくても順が分かる**。</summary>
+        public static float RarityEdge(int rarity) => Core.Rarities.Clamp(rarity) >= 4 ? 10f : 6f;
+
+        /// <summary>★の枠。⭐ **升より一回り大きい輪**。
+        ///
+        /// ⚠️ 升の「後ろ」には置けない ── 升の面は親自身の <see cref="Image"/> で、
+        /// 子はどう並べても**その上**に描かれる。⭐ だから枠自身が
+        /// 「色の外側 ＋ 白の内側」の2枚組（<see cref="Ring"/> と同じ手）になっている。
+        /// ⚠️ 内側を省くと、升が色で塗り潰されて絵が消える（実機で確認 2026-08-20）。</summary>
+        public static RectTransform RarityFrame(Transform cell, string name, int rarity,
+            float width, float height)
+        {
+            float edge = RarityEdge(rarity);
+            var rect = Rect(name, cell);
+            Place(rect, -edge, -edge, width + edge * 2f, height + edge * 2f);
+            var outer = rect.gameObject.AddComponent<Image>();
+            outer.sprite = SkinSprite("panel");
+            outer.type = Image.Type.Sliced;
+            outer.pixelsPerUnitMultiplier = 1f;
+            outer.color = RarityInk(rarity);
+            outer.raycastTarget = false;
+
+            var inner = Rect("Inner", rect);
+            Place(inner, edge * 2f, edge * 2f,
+                width + edge * 2f - edge * 4f, height + edge * 2f - edge * 4f);
+            var face = inner.gameObject.AddComponent<Image>();
+            face.sprite = SkinSprite("panel");
+            face.type = Image.Type.Sliced;
+            face.pixelsPerUnitMultiplier = 1f;
+            face.color = Color.white;
+            face.raycastTarget = false;
+
+            rect.SetAsFirstSibling();
+            return rect;
         }
 
         /// <summary>9スライスの面を1枚置く。⭐ **素材の器をそのまま使うための入口。**

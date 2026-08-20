@@ -15,7 +15,10 @@ namespace EggCommand.View
 
     /// <summary>上段のバーと下段のドック。
     /// ⭐ 配置は Assets/Resources/Prefabs/AppFrame.prefab が持つ。ここに座標は無い。
-    /// ⚠️ ドックはホームだけに出す（常時タブにしない）。</summary>
+    ///
+    /// ⭐ ドックは**常設のタブバー**（2026-08-20・作者の指示）。
+    /// ⚠️ ただし戦闘と潜入では出さない ── そこから抜けられると、
+    /// 不利な盤面をいつでも無かったことにできてしまう。</summary>
     public sealed class FrameView : MonoBehaviour
     {
         [SerializeField] private Button _back;
@@ -31,9 +34,13 @@ namespace EggCommand.View
 
         public RectTransform Body => _body;
 
-        /// <param name="canBack">戻れる画面か。⚠️ 戦闘中だけは false
+        /// <param name="canBack">戻れる画面か。⚠️ 戦闘中と潜入中だけは false
         /// （途中で戻れると、不利な盤面を無かったことにできる）。</param>
-        public void Bind(bool home, string title, string badge, Action onBack, bool canBack = true)
+        /// <param name="showDock">タブバーを出すか。⭐ 既定で出す（常設）。
+        /// ⚠️ 戻れない画面では出さない ── タブも「戻る道」なので、
+        /// <paramref name="canBack"/> と食い違わせない。</param>
+        public void Bind(bool home, string title, string badge, Action onBack,
+            bool canBack = true, bool showDock = true)
         {
             if (_back != null)
             {
@@ -48,7 +55,7 @@ namespace EggCommand.View
                 _badge.gameObject.SetActive(badge.Length > 0);
                 Ui.Knockout(_badge, 3);
             }
-            if (_dock != null) _dock.SetActive(home);
+            if (_dock != null) _dock.SetActive(showDock);
             // ⚠️ **押せる状態を毎回消す。**残すと、別の画面へ移ったあとも
             //    右肩の数字が押せてしまい、前の画面の札が開く。
             if (_badge != null)
@@ -100,7 +107,13 @@ namespace EggCommand.View
             }
         }
 
-        public void BindPanel(int index, string name, string count, Action onGo)
+        /// <param name="current">いま見ている画面のタブか。⭐ 上辺に差し色の帯を出す。
+        ///
+        /// ⚠️ 札そのものを黄色にしない ── 黄は「1画面に1つの主導線」の色で、
+        /// タブに使うと画面の中の主役とぶつかる。
+        /// ⭐ 区切りと同じ約束で**一辺だけ**（この作りの意匠の決めごと）。</param>
+        public void BindPanel(int index, string name, string count, Action onGo,
+            bool current = false)
         {
             if (index < 0 || index >= _panels.Length) return;
             var panel = _panels[index];
@@ -111,8 +124,30 @@ namespace EggCommand.View
             if (panel.Button != null)
             {
                 panel.Button.onClick.RemoveAllListeners();
-                if (onGo != null) panel.Button.onClick.AddListener(() => onGo());
+                // ⚠️ いま見ている画面のタブは押させない（押しても何も起きない札を作らない）
+                if (onGo != null && !current) panel.Button.onClick.AddListener(() => onGo());
+                Here(panel.Button, current);
             }
+        }
+
+        /// <summary>いま居る場所の印。⭐ 札の**上辺**に差し色の帯を1本。
+        /// ⚠️ Prefab には無いので、要るときに1度だけ作って使い回す。</summary>
+        private static void Here(Button button, bool current)
+        {
+            var rect = (RectTransform)button.transform;
+            var mark = rect.Find("Here") as RectTransform;
+            if (mark == null)
+            {
+                mark = Ui.Rect("Here", rect);
+                var image = mark.gameObject.AddComponent<Image>();
+                image.sprite = Ui.SkinSprite("pill");
+                image.type = Image.Type.Sliced;
+                image.pixelsPerUnitMultiplier = 1f;
+                image.color = Ui.Accent;
+                image.raycastTarget = false;
+            }
+            Ui.Place(mark, 18f, -6f, rect.rect.width - 36f, 12f);
+            mark.gameObject.SetActive(current);
         }
     }
 }

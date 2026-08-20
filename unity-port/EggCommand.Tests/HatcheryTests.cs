@@ -287,4 +287,36 @@ public class HatcheryTests
         Encounters.Replace(game, nest);
         Assert.Empty(game.Raids);
     }
+
+    /// <summary>⭐ 素質の合計から★を逆に引ける（升の枠を色分けするのに使う）。
+    ///
+    /// ⚠️ 卵は ★ごとの目標値 ±<see cref="Nests.EggWildJitter"/> で作られるので、
+    /// **作った卵は必ず元の★に戻る**こと。ここが狂うと、枠が実力と違う色になる。</summary>
+    [Fact]
+    public void 素質の合計から星を逆に引ける()
+    {
+        for (int rarity = 1; rarity <= Rarities.Max; rarity++)
+        {
+            int target = Nests.WildTotalForRarity(rarity);
+            for (int slip = -Nests.EggWildJitter; slip <= Nests.EggWildJitter; slip++)
+                Assert.Equal(rarity, Nests.RarityOfWildTotal(target + slip));
+        }
+
+        // ⚠️ 目標に届かない個体（配合で生まれたもの）は**下の★へ丸める**
+        int fourth = Nests.WildTotalForRarity(4);
+        Assert.Equal(3, Nests.RarityOfWildTotal(fourth - Nests.EggWildJitter - 1));
+
+        // ⚠️ 端。0 でも上限超えでも壊れない
+        Assert.Equal(1, Nests.RarityOfWildTotal(0));
+        Assert.Equal(Rarities.Max, Nests.RarityOfWildTotal(Stats.WildTotalMax * 2));
+
+        // ⭐ 単調（素質が増えて★が下がることはない）
+        int last = 0;
+        for (int total = 0; total <= Stats.WildTotalMax; total++)
+        {
+            int now = Nests.RarityOfWildTotal(total);
+            Assert.True(now >= last, $"素質 {total} で★が下がった: {last} → {now}");
+            last = now;
+        }
+    }
 }

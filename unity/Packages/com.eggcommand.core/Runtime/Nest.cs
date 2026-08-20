@@ -283,6 +283,22 @@ namespace EggCommand.Core
         /// ⚠️ **素材の出口が入るまでは、この選択は成立していない。**先に消すと元の問題が戻る。</summary>
         public static int WildTotalForRarity(int rarity) => WildTotalForTier(Rarities.Clamp(rarity));
 
+        /// <summary>素質の合計から★を逆に引く。⭐ **升の枠を色分けするため。**
+        ///
+        /// ⭐ 卵は ★ごとの目標値 ±3 で作られる（<see cref="MakeEggOfRarity"/>）ので、
+        /// 目標値をそのまま閾値に使えば元の★に戻る。
+        /// ⚠️ 配合で生まれた個体は目標値の上に乗らないので、**下の★へ丸める**
+        /// （★4の目標に3足りない個体を★4と呼ぶと、枠が実力より良く見える）。</summary>
+        public static int RarityOfWildTotal(int total)
+        {
+            for (int rarity = Rarities.Max; rarity > 1; rarity--)
+                if (total >= WildTotalForRarity(rarity) - EggWildJitter) return rarity;
+            return 1;
+        }
+
+        /// <summary>卵の素質が目標値からぶれる幅。⚠️ <see cref="MakeEggOfRarity"/> と対で動かす。</summary>
+        public const int EggWildJitter = 3;
+
         /// <summary>親から卵を作る（**遊びで使うほう**）。⭐ 素質は★だけで決まる。
         ///
         /// ⚠️ <see cref="MakeEgg"/> は移植元の規則で、較正済みの照合が踏んでいるので残してある。
@@ -293,7 +309,7 @@ namespace EggCommand.Core
         public static Egg MakeEggOfRarity(Rng rng, Nest nest, EggOrigin how, int serial, int rarity,
             Element? element = null)
         {
-            int total = WildTotalForRarity(rarity) + rng.Int(-3, 4);
+            int total = WildTotalForRarity(rarity) + rng.Int(-EggWildJitter, EggWildJitter + 1);
             if (total < 4) total = 4;
             if (total > Stats.WildTotalMax) total = Stats.WildTotalMax;
 

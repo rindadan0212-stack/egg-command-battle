@@ -233,14 +233,26 @@ namespace EggCommand.View
             //    やり直せてしまう（出目は状態から決まるので、選び方を変えて総当たりできた。
             //    レビューで発覚 2026-08-20）。
             bool canBack = screen != Screen.Battle && screen != Screen.Trail;
+            // ⚠️ タブのある画面に ‹ を出さない。⭐ タブが行き先を全部持っているので、
+            //    ‹ は「ホームへ戻る」だけの重複した道になる（2026-08-20）
+            bool showBack = false;
+            // ⭐ タブバーは**常設**（作者の指示 2026-08-20）。
+            // ⚠️ 戻れない画面では出さない ── タブも「戻る道」なので、
+            //    ‹ を隠しておいてタブから抜けられては意味がない
             _frame.Bind(home, TitleOf(screen), BadgeOf(screen),
-                canBack ? (System.Action)(() => Show(Screen.Home)) : null, canBack);
-            // ⚠️ 孵化はホームへ移したのでドックから外した。札は3枚
-            _frame.BindPanel(0, "探索", $"{Game.Encounters.Count}", () => Show(Screen.Nests));
-            _frame.BindPanel(1, "配合", $"{Game.Storage.Creatures.Count}体", () => Show(Screen.Breed));
-            _frame.BindPanel(2, "BOX", $"{Game.Storage.Creatures.Count}/{Game.Storage.Slots}",
-                () => Show(Screen.Box));
-            _frame.HidePanelsFrom(3);
+                showBack ? (System.Action)(() => Show(Screen.Home)) : null, showBack, canBack);
+            // ⚠️ 孵化はホームへ移したのでドックから外した。⭐ 札は4枚（ホームもタブ）
+            // ⚠️ 0 を出さない。⭐ 数が無いことは**書かない**ことで伝わる
+            _frame.BindPanel(0, "ホーム",
+                Game.Incubating.Count > 0 ? $"{Game.Incubating.Count}" : "",
+                () => Show(Screen.Home), screen == Screen.Home);
+            _frame.BindPanel(1, "探索", $"{Game.Encounters.Count}",
+                () => Show(Screen.Nests), screen == Screen.Nests);
+            _frame.BindPanel(2, "配合", $"{Game.Storage.Creatures.Count}体",
+                () => Show(Screen.Breed), screen == Screen.Breed);
+            _frame.BindPanel(3, "BOX", $"{Game.Storage.Creatures.Count}/{Game.Storage.Slots}",
+                () => Show(Screen.Box), screen == Screen.Box);
+            _frame.HidePanelsFrom(4);
 
             var body = _frame.Body;
             // ⚠️ View で唯一ここだけ素通しだった。AppFrame から Body を消すと
@@ -271,6 +283,30 @@ namespace EggCommand.View
                 case Screen.Battle: BattleScreen.Build(this, body); break;
                 case Screen.Breed: BreedScreen.Build(this, body); break;
                 case Screen.Box: BoxScreen.Build(this, body); break;
+            }
+
+            // ⚠️ **タブバーは本体の下 232px を覆う。**Body は縮まないので、
+            //    下端まで中身がある画面だけが隠れる。
+            // ⭐ 実測（2026-08-20）で食い込むのは**スクロールする層だけ**だったので、
+            //    そこだけ縮める。⚠️ 固定配置の部品には触らない（動かすと配置の出所が2つになる）
+            if (canBack) ReserveDock(body);
+        }
+
+        /// <summary>タブバーのぶん、スクロールする層を縮める。
+        ///
+        /// ⚠️ 中身を動かさない ── **窓を小さくするだけ**。
+        /// ⭐ こうすると、下端の1行がタブバーの下へ潜らず、最後まで送れる。</summary>
+        private static void ReserveDock(RectTransform body)
+        {
+            foreach (var scroll in body.GetComponentsInChildren<ScrollRect>(true))
+            {
+                var view = scroll.viewport != null ? scroll.viewport : (RectTransform)scroll.transform;
+                // ⚠️ 親の座標での下端。Body の下端より下なら、そのぶん詰める
+                float bottom = -view.anchoredPosition.y + view.sizeDelta.y;
+                float room = body.rect.height - Ui.DockHeight;
+                if (bottom <= room) continue;
+                view.sizeDelta = new Vector2(view.sizeDelta.x,
+                    Mathf.Max(120f, view.sizeDelta.y - (bottom - room)));
             }
         }
 

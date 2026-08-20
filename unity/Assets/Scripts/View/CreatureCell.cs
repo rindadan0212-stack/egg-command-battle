@@ -18,6 +18,12 @@ namespace EggCommand.View
         [SerializeField] private GameObject _trait;
         [SerializeField] private Button _button;
 
+        /// <summary>★の枠。⭐ **Prefab には無い。**要るときに1度だけ作って使い回す。
+        ///
+        /// ⚠️ Prefab を作り直すと手で置いた物が消えるので、後から足す物はここで作る。
+        /// ⚠️ Bind のたびに作らない（升は毎フレーム敷き直されるので、積み上がる）。</summary>
+        private RectTransform _rarity;
+
         public void Bind(Creature creature, bool picked, Action onTap) =>
             Bind(creature, picked, onTap, null, Ui.InkDim);
 
@@ -43,6 +49,8 @@ namespace EggCommand.View
                 _wild.gameObject.SetActive(say);
                 if (say) { _wild.text = note; _wild.color = noteInk; }
             }
+            // ⭐ ★の枠。素質の合計から引く（生まれつきの良し悪しがそのまま縁に出る）
+            ShowRarity(Nests.RarityOfWildTotal(Stats.TotalOf(creature.Wild)));
             if (_mark != null) _mark.SetActive(picked);
             if (_trait != null) _trait.SetActive(creature.TraitId != null);
             if (_button != null)
@@ -50,6 +58,23 @@ namespace EggCommand.View
                 _button.onClick.RemoveAllListeners();
                 if (onTap != null) _button.onClick.AddListener(() => onTap());
             }
+        }
+
+        /// <summary>★の枠を出す。⭐ 升より一回り大きく、**升の後ろ**に敷いて縁だけ見せる。</summary>
+        private void ShowRarity(int rarity)
+        {
+            var self = (RectTransform)transform;
+            float w = self.rect.width, h = self.rect.height;
+            // ⚠️ 格子が並べ終わる前は寸法が 0。そのときは出さない（次の Bind で付く）
+            if (w <= 1f || h <= 1f) { if (_rarity != null) _rarity.gameObject.SetActive(false); return; }
+
+            if (_rarity == null) _rarity = Ui.RarityFrame(transform, "Rarity", rarity, w, h);
+            _rarity.gameObject.SetActive(true);
+            float edge = Ui.RarityEdge(rarity);
+            Ui.Place(_rarity, -edge, -edge, w + edge * 2f, h + edge * 2f);
+            var image = _rarity.GetComponent<Image>();
+            if (image != null) image.color = Ui.RarityInk(rarity);
+            _rarity.SetAsFirstSibling();
         }
     }
 
