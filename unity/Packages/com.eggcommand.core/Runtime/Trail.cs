@@ -43,12 +43,23 @@ namespace EggCommand.Core
         /// <summary>この道を選ぶと、合流まで何マスか。⭐ 選ぶ前に見せる。</summary>
         public readonly int Length;
 
-        public Way(int to, GimmickKind gate = GimmickKind.Wall, int requires = 0, int length = 1)
+        /// <summary>⭐ **関門の段。**1〜<see cref="Trail.GateGrades"/>、0 なら関門なし。
+        ///
+        /// ⭐ これがある理由（2026-08-20・作者の指示
+        /// 「関門は数値を細かくいじらず固定値にして段をつけたら」）:
+        /// ⚠️ 以前は参照編成に対する割合（115% / 60% / 25%）に**さらに ±20% の揺らぎ**を
+        /// 掛けていたので、盤に「2,185」「1,351」「279」と**読めない数**が並んでいた。
+        /// ⭐ 段にすると、画面で「★★★の壁」と読めて、道どうしを見比べられる。</summary>
+        public readonly int Grade;
+
+        public Way(int to, GimmickKind gate = GimmickKind.Wall, int requires = 0, int length = 1,
+            int grade = 0)
         {
             To = to;
             Gate = gate;
             Requires = requires;
             Length = length;
+            Grade = grade;
         }
 
         public bool IsGated => Requires > 0;
@@ -175,8 +186,14 @@ namespace EggCommand.Core
         /// 最短路が短すぎると、道を選ぶ意味そのものが消える。</summary>
         public static int SectionsFor(int tier) => 2 + tier;
 
-        /// <summary>分かれ道の数。⭐ ひと区切りに 3 つ。</summary>
-        public static int JunctionsFor(int tier) => SectionsFor(tier) * 3;
+        /// <summary>分かれ道の数の**下限**。⭐ ひと区切りに、大きいのが1つ ＋ 枝分かれが1つ以上。
+        ///
+        /// ⚠️ **ぴったりの数にならない**（2026-08-20）── 大きい分かれ道が2本なら
+        /// その先が2つとも枝分かれし、3本なら1つだけ枝分かれするので、区切りごとに 2 か 3。</summary>
+        public static int JunctionsAtLeast(int tier) => SectionsFor(tier) * 2;
+
+        /// <summary>分かれ道の数の上限。</summary>
+        public static int JunctionsAtMost(int tier) => SectionsFor(tier) * 3;
 
         /// <summary>ひと筋の長さ（小さい分かれ道から合流点まで）。
         ///
@@ -187,10 +204,27 @@ namespace EggCommand.Core
         public const int LaneMin = 2;
         public const int LaneMax = 3;
 
-        /// <summary>小さい分かれ道の、内側（穏やかなほう）の関門の重さ。
-        /// ⚠️ 大きい分かれ道（<see cref="ShortShare"/>）ほど重くしない ──
+        /// <summary>⭐ **関門の段の数。**1〜5。0 は「関門なし」。</summary>
+        public const int GateGrades = 5;
+
+        /// <summary>段1つぶんの重さ（参照編成の持ち分に対する %）。
+        /// ⭐ 段1 = 25% … 段5 = 125%。⚠️ 揺らぎは掛けない（読めなくなる）。</summary>
+        public const int GradeShare = 25;
+
+        /// <summary>⭐ 出す数の丸め。⚠️ 参照編成の持ち分は 1,141 のような半端な数なので、
+        /// そのまま割ると読めない。**この単位に丸める**。</summary>
+        public const int PriceRound = 50;
+
+        /// <summary>⚠️ 一番外の道に許す段の上限。⭐ **0 なので関門は付かない。**
+        /// ここが「遠回りの道には関門を少なく」（作者の指示 2026-08-20）の要。</summary>
+        public const int GradeStep = 0;
+
+        /// <summary>大きい分かれ道の、一番内側の段。⭐ ここが一番重い。</summary>
+        public const int GradeTop = 5;
+
+        /// <summary>小さい分かれ道の、一番内側の段。⚠️ 大きいほうより軽くする ──
         /// 2段つづけて重い関門が来ると、通れる道が一気に消える。</summary>
-        public const int MidShare = 60;
+        public const int GradeSub = 3;
 
         /// <summary>その段の参照編成が、そのステに持っている量。⚠️ `sim trail` の実測（2026-08-20）。
         /// ⭐ 関門の重さはここからの割合で決める。</summary>
@@ -233,6 +267,8 @@ namespace EggCommand.Core
         /// <item>**2本に寄せた編成**（1.25倍）… **7割 × 2/3 ＝ ほぼ半分**</item>
         /// </list>
         /// ⚠️ つまり**2本に寄せるのが一番強い**。1本全振りは尖りすぎ、ならしは通れない。</summary>
+        /// <summary>⚠️ 使わなくなった（2026-08-20 に段へ移した）。
+        /// ⭐ 参照編成の持ち分を出す <see cref="Trails.RefStat"/> は残っている。</summary>
         public const int ShortShare = 115;
 
         /// <summary>遠い道の関門。⭐ **25%**。
@@ -247,6 +283,20 @@ namespace EggCommand.Core
 
         public static int PriceFor(GimmickKind gate, int tier, int share) =>
             RefStat(gate, tier) * share / 100;
+
+        /// <summary>⭐ **段から出す、関門の要る量。**段 0 なら 0（関門なし）。
+        ///
+        /// ⚠️ 揺らぎを掛けない・丸める ── 盤に並ぶ数が読めることを優先する
+        /// （2026-08-20・作者の指示「固定値にして段をつけたら」）。</summary>
+        public static int PriceOfGrade(GimmickKind gate, int tier, int grade)
+        {
+            if (grade <= 0) return 0;
+            int raw = RefStat(gate, tier) * grade * Trail.GradeShare / 100;
+            // ⭐ 読める単位に丸める。⚠️ 0 にはしない（関門なしと混ざる）
+            int step = Trail.PriceRound;
+            int rounded = (raw + step / 2) / step * step;
+            return rounded < step ? step : rounded;
+        }
     }
 
     /// <summary>1回振ったあと、いま何を待っているか。</summary>
@@ -400,7 +450,6 @@ namespace EggCommand.Core
         {
             var squares = new List<Square>();
             var junctions = new List<int>();
-            var kinds = new[] { GimmickKind.Wall, GimmickKind.Damage, GimmickKind.Pressure };
 
             int sections = Trail.SectionsFor(tier);
             int hub = 0;
@@ -408,37 +457,30 @@ namespace EggCommand.Core
 
             for (int s = 0; s < sections; s++)
             {
-                // ⭐ **ひと区切りは2段の分かれ道。**大きく左右に分かれ、その先でさらに分かれる
-                //    ＝ 一番深いところで**4本**の道が並ぶ（2026-08-20・作者の指示）。
-                //
-                //        ┌─ 小分かれ ─┬─ 車線 -3
-                //   大分かれ ┤            └─ 車線 -1
-                //        └─ 小分かれ ─┬─ 車線 +1
-                //                     └─ 車線 +3
-                //
-                // ⚠️ **4本とも同じマス数**にする。長さが違うと 1マス＝1段 が崩れ、
-                //    「出目のぶん進んでいない」と見える。⭐ 重みは関門と中身で付ける。
-                int lane = rng.Int(Trail.LaneMin, Trail.LaneMax + 1);
+                // ⭐ **分かれ道は 2本 か 3本**（2026-08-20・作者の指示）。
+                //    ⚠️ その先の枝分かれと合わせて、**並ぶ車線は最大4本**に収める
+                //    （4本を超えると 1080 の幅に入らない）。
+                //      2本 → 両方が枝分かれ → 4車線
+                //      3本 → 1本だけ枝分かれ → 4車線
+                int top = 2 + rng.Int(0, 2);
                 int root = squares[hub].Row;
-
-                // ⚠️ 大きい分かれ道の2本は**必ず違うステ**を要求する
-                int a = rng.Int(0, kinds.Length);
-                int b = (a + 1 + rng.Int(0, kinds.Length - 1)) % kinds.Length;
-
+                int lane = rng.Int(Trail.LaneMin, Trail.LaneMax + 1);
                 junctions.Add(hub);
 
-                // ── 小さい分かれ道（左右に1つずつ）─────────────────
-                int leftHub = squares.Count;
-                var leftSq = new Square { Row = root + 1, Lane = -2 };
-                squares.Add(leftSq);
-                int rightHub = squares.Count;
-                var rightSq = new Square { Row = root + 1, Lane = 2 };
-                squares.Add(rightSq);
-                junctions.Add(leftHub);
-                junctions.Add(rightHub);
+                // ⭐ どの枝を further に割るか。⚠️ 3本のときは真ん中以外を選ばない
+                //    （真ん中を割ると左右の車線が入れ替わって読めなくなる）
+                int splits = top == 2 ? 2 : 1;
+                int splitAt = top == 2 ? -1 : rng.Int(0, 2) * 2;   // 0 か 2（両端）
 
-                // ── 4本の筋 ────────────────────────────────
-                // ⚠️ 車線は外から -3 / -1 / +1 / +3
+                // ── 中段（大きい分かれ道の行き先）────────────────
+                var mids = new int[top];
+                for (int k = 0; k < top; k++)
+                {
+                    mids[k] = squares.Count;
+                    squares.Add(new Square { Row = root + 1, Lane = MidLane(k, top) });
+                }
+
+                // ── 車線（4本）────────────────────────────
                 var lanes = new[] { -3, -1, 1, 3 };
                 var heads = new int[4];
                 for (int k = 0; k < 4; k++)
@@ -458,28 +500,33 @@ namespace EggCommand.Core
                 int next = squares.Count;
                 squares.Add(new Square { Row = root + 2 + lane, Lane = 0 });
 
-                // ── 道を繋ぐ ────────────────────────────────
-                // ⚠️ **どの分かれ道にも、必ず軽いほうを1本置く。**
-                //    ⭐ 両方を重くすると、薄い編成がその場で詰む（実測で落ちた 2026-08-20）。
-                //    どの分かれ道でも「重いが安全 ／ 軽いが険しい」の形にそろえる。
-                squares[hub].Ways.Add(new Way(leftHub, kinds[a],
-                    Jitter(rng, Trail.PriceFor(kinds[a], tier, Trail.ShortShare)), lane + 2));
-                squares[hub].Ways.Add(new Way(rightHub, kinds[b],
-                    Jitter(rng, Trail.PriceFor(kinds[b], tier, Trail.LongShare)), lane + 2));
+                // ── 大きい分かれ道 ────────────────────────
+                // ⭐ **内から外へ、段が下がる。**⚠️ 0 まで下がった道には関門が無い
+                //    ── これが「遠回りの道には関門を少なく」（作者の指示）の形。
+                // ⭐ 大きい分かれ道から合流まで: 中段1 ＋ 車線 lane ＋ 合流1
+                Gates(rng, squares[hub], mids, tier, Trail.GradeTop, lane + 2);
 
-                for (int side = 0; side < 2; side++)
+                // ── 中段から車線へ ────────────────────────
+                for (int k = 0; k < top; k++)
                 {
-                    int from = side == 0 ? leftHub : rightHub;
-                    int c = rng.Int(0, kinds.Length);
-                    int d = (c + 1 + rng.Int(0, kinds.Length - 1)) % kinds.Length;
-                    // ⭐ **内側は「重い関門・穏やかな中身」／外側は「軽い関門・険しい中身」。**
-                    //    ⚠️ 内外で中身を変えないと、外へ出る理由が無い。
-                    int inner = side == 0 ? heads[1] : heads[2];
-                    int outer = side == 0 ? heads[0] : heads[3];
-                    squares[from].Ways.Add(new Way(inner, kinds[c],
-                        Jitter(rng, Trail.PriceFor(kinds[c], tier, Trail.MidShare)), lane + 1));
-                    squares[from].Ways.Add(new Way(outer, kinds[d],
-                        Jitter(rng, Trail.PriceFor(kinds[d], tier, Trail.LongShare)), lane + 1));
+                    bool split = top == 2 || k == splitAt;
+                    if (split)
+                    {
+                        // ⭐ 2本に割る。⚠️ 割った先は隣り合う2車線
+                        //    ⚠️ **この中段も分かれ道**なので、忘れずに数える
+                        junctions.Add(mids[k]);
+                        int first = top == 2 ? k * 2 : (k == 0 ? 0 : 2);
+                        // ⭐ 中段から合流まで: 車線 lane ＋ 合流1
+                        Gates(rng, squares[mids[k]],
+                            new[] { heads[first + 1], heads[first] }, tier, Trail.GradeSub,
+                            lane + 1);
+                    }
+                    else
+                    {
+                        // ⚠️ 割らない枝は、そのまま1本の車線へ（関門は無い）
+                        int only = k == 0 ? 0 : (k == top - 1 ? 3 : 1 + k - 1);
+                        squares[mids[k]].Ways.Add(new Way(heads[only], length: lane + 1));
+                    }
                 }
 
                 for (int k = 0; k < 4; k++)
@@ -494,6 +541,37 @@ namespace EggCommand.Core
                 hub = next;
             }
             return new Trail(squares, tier, junctions);
+        }
+
+        /// <summary>中段のマスをどの車線に置くか。⭐ 内から外へ均等に散らす。</summary>
+        private static int MidLane(int k, int many) =>
+            many <= 1 ? 0 : -2 + k * 4 / (many - 1);
+
+        /// <summary>分かれ道に関門を付ける。
+        ///
+        /// ⭐ **内から外へ、段が <see cref="Trail.GradeStep"/> ずつ下がる。**
+        /// ⚠️ 0 まで下がった道には関門を付けない ── これが
+        /// 「遠回りの道には関門を少なく」（作者の指示 2026-08-20）の形。
+        /// ⭐ 段の数だけで決まるので、道の本数が 2本でも 3本でも同じ規則で通る。
+        /// ⚠️ ステは道ごとに変える（同じだと「どっちが安いか」だけになる）。</summary>
+        /// <param name="steps">その道を選ぶと合流まで何マスか。⚠️ 画面が「あと何マス」と出す。</param>
+        private static void Gates(Rng rng, Square from, IReadOnlyList<int> to, int tier,
+            int topGrade, int steps)
+        {
+            var kinds = new[] { GimmickKind.Wall, GimmickKind.Damage, GimmickKind.Pressure };
+            int pick = rng.Int(0, kinds.Length);
+            for (int k = 0; k < to.Count; k++)
+            {
+                // ⭐ **内が一番重く、外は 0（関門なし）。**あいだは均等に割る。
+                // ⚠️ 「一定ずつ下げる」にしていた頃、2本のときの外側が段3（75%）に残り、
+                //    薄い編成がその場で詰んだ（2026-08-20 に検査が落ちた）。
+                //    ⭐ 本数が変わっても**外は必ず 0**になる形にする。
+                int grade = to.Count <= 1 ? topGrade
+                    : topGrade * (to.Count - 1 - k) / (to.Count - 1);
+                var gate = kinds[(pick + k) % kinds.Length];
+                from.Ways.Add(new Way(to[k], gate,
+                    Trail.PriceOfGrade(gate, tier, grade), steps, grade));
+            }
         }
 
         private static int Jitter(Rng rng, int price) =>

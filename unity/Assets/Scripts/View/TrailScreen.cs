@@ -350,16 +350,34 @@ namespace EggCommand.View
             image.raycastTarget = false;
         }
 
-        /// <summary>関門の札。⭐ **ステの絵＋数。通れないなら錠前。**
-        /// ⚠️ 「壁」「通れない」と書かない ── 絵が同じなら結び付けは説明が要らない。</summary>
+        /// <summary>関門の札。⭐ **段の粒＋ステの絵＋数。通れないなら錠前。**
+        /// ⚠️ 「壁」「通れない」と書かない ── 絵が同じなら結び付けは説明が要らない。
+        ///
+        /// ⭐ **段を粒で出す**（2026-08-20・作者の指示「固定値にして段をつけたら」）。
+        /// ⚠️ 数だけだと道どうしを見比べにくい ── 粒なら**一目で重い軽いが分かる**。</summary>
         private static void Gate(RectTransform cell, Way way, bool open)
         {
             var tag = Ui.Plate(cell, "Gate", "pill", open ? Ui.Accent : Dark,
                 0f, 0f, CellW, GateHigh);
             var ink = open ? Ui.OnLead : new Color(1f, 1f, 1f, 0.62f);
-            Ui.Icon(tag, "I", IconOf(way.Gate), ink, 12f, 10f, 44f);
-            Ui.Label(tag, "N", Ui.Digits(way.Requires), 34, ink,
-                TextAnchor.MiddleLeft, 64f, 0f, CellW - 118f, GateHigh);
+            Ui.Icon(tag, "I", IconOf(way.Gate), ink, 8f, 12f, 40f);
+
+            // ⭐ 段の粒。⚠️ 満たない段は薄い粒で残す（何段中いくつかが読める）
+            // ⚠️ **数の枠を先に確保してから置く。**粒を大きくしすぎて数が 48px に痩せ、
+            //    「2,050」が枠からはみ出した（2026-08-20 に実測）
+            const float Pip = 9f, PipGap = 3f;
+            float pips = Trail.GateGrades * (Pip + PipGap);
+            float pipsLeft = CellW - 8f - pips;
+            for (int g = 0; g < Trail.GateGrades; g++)
+            {
+                var dot = Ui.Round(tag, $"G{g}", pipsLeft + g * (Pip + PipGap),
+                    GateHigh / 2f - Pip / 2f, Pip,
+                    g < way.Grade ? ink : new Color(ink.r, ink.g, ink.b, 0.22f));
+                dot.gameObject.name = $"Grade {g}";
+            }
+
+            Ui.Label(tag, "N", Ui.Digits(way.Requires), 30, ink,
+                TextAnchor.MiddleLeft, 54f, 0f, pipsLeft - 62f, GateHigh);
             if (!open) Ui.Icon(tag, "L", "locked", ink, CellW - 54f, 10f, 44f);
         }
 
