@@ -5,7 +5,7 @@ using EggCommand.Core;
 
 namespace EggCommand.View
 {
-    /// <summary>パーティ編成。⭐ **放置と巣で、別の3体を選ぶ。**
+    /// <summary>パーティ編成。⭐ **放置と巣で、別の編成を選ぶ。**
     ///
     /// ⚠️ 編成が1本しか無かった頃は、巣に合わせて組み替えると
     /// 放置で溜めていた側も入れ替わり、放置が止まっていた。
@@ -14,7 +14,7 @@ namespace EggCommand.View
     /// 潜るたびに組み直すのではなく、作っておいたものを選ぶ。
     ///
     /// ⚠️ 入口はホームと、巣を選ぶ前の2か所。BOX からは開かない
-    /// （BOX は「1体を見る」画面で、編成は「3体を並べる」画面なので混ぜない）。
+    /// （BOX は「1体を見る」画面で、編成は「並べる」画面なので混ぜない）。
     /// </summary>
     public static class PartyPanel
     {
@@ -81,8 +81,8 @@ namespace EggCommand.View
                 Pad, Pad, Inner, 56f);
             Ui.Label(panel, "Note",
                 _kind == PartyKind.Idle
-                    ? "放置で戦い続ける3体です。巣へ潜る編成とは別です。"
-                    : "巣へ潜る3体です。3つまで登録できます。",
+                    ? $"放置で戦い続ける{Games.PartySize}体です。巣へ潜る編成とは別です。"
+                    : $"巣へ潜る{Games.PartySize}体です。3つまで登録できます。",
                 24, Ui.InkDim, TextAnchor.UpperLeft, Pad, 84f, Inner, 40f);
 
             Kinds(app, panel);
@@ -101,8 +101,9 @@ namespace EggCommand.View
         private static void Kinds(App app, RectTransform panel)
         {
             float half = (Inner - 12f) / 2f;
-            Kind(app, panel, "KindIdle", "放置の3体", PartyKind.Idle, Pad, half);
-            Kind(app, panel, "KindNest", "巣へ潜る3体", PartyKind.Nest, Pad + half + 12f, half);
+            Kind(app, panel, "KindIdle", $"放置の{Games.PartySize}体", PartyKind.Idle, Pad, half);
+            Kind(app, panel, "KindNest", $"巣へ潜る{Games.PartySize}体", PartyKind.Nest,
+                Pad + half + 12f, half);
         }
 
         private static void Kind(App app, RectTransform panel, string name, string label,
@@ -117,19 +118,19 @@ namespace EggCommand.View
             if (ink != null) ink.color = _kind == kind ? Ui.OnLead : Ui.Ink;
         }
 
-        /// <summary>巣の編成 3つ。⭐ 押すと、その番号の3体に切り替わる。</summary>
+        /// <summary>巣の編成 3つ。⭐ 押すと、その番号の編成に切り替わる。</summary>
         private static void Slots(App app, RectTransform panel)
         {
             // ⭐ **上段より小さく組む。**⚠️ 同じ大きさ・同じ塗りだと、
             //    どちらが上位の切り替えか読めなかった（レビュー指摘 2026-08-19）。
-            float w = (Inner - 24f) / Games.NestPartySlots;
+            float w = Wide(Games.NestPartySlots);
             for (int i = 0; i < Games.NestPartySlots; i++)
             {
                 int slot = i;
                 int count = app.Game.NestParties[i].Count;
                 bool on = Games.Slot(app.Game) == i;
                 var box = Ui.Rect($"Set {i}", panel);
-                Ui.Place(box, Pad + (w + 12f) * i, SlotTop, w, SlotH);
+                Ui.Place(box, Pad + (w + Gap) * i, SlotTop, w, SlotH);
                 var plate = box.gameObject.AddComponent<Image>();
                 plate.sprite = Ui.SkinSprite("panel");
                 plate.type = Image.Type.Sliced;
@@ -142,8 +143,19 @@ namespace EggCommand.View
             }
         }
 
-        /// <summary>いま選んでいる3体。⭐ **押すと外れる。**</summary>
+        /// <summary>いま選んでいる編成。⭐ **押すと外れる。**</summary>
         /// <returns>使い終わった下端。⭐ 次の塊はここから置く。</returns>
+        /// <summary>横に <paramref name="many"/> 個並べるときの1つぶんの幅。
+        ///
+        /// ⚠️ **隙間の数は「個数−1」。**`(Inner - 24) / 個数` と書いてあった頃は
+        /// 3個（隙間2つ）でだけ正しく、4個にすると **12px はみ出していた**
+        /// （2026-08-20 の4体化で発覚）。⭐ 個数から隙間の数を出す。</summary>
+        private static float Wide(int many) =>
+            many <= 0 ? Inner : (Inner - Gap * (many - 1)) / many;
+
+        /// <summary>横に並べるときの隙間。</summary>
+        private const float Gap = 12f;
+
         private static float Picked(App app, RectTransform panel, float top)
         {
             var roster = Games.RosterOf(app.Game, _kind);
@@ -152,11 +164,11 @@ namespace EggCommand.View
             Ui.Label(panel, "Head", $"選んでいる {roster.Count}/{Games.PartySize} 体",
                 26, Ui.Ink, TextAnchor.UpperLeft, Pad, HeadTop, Inner, 32f);
 
-            float w = (Inner - 24f) / Games.PartySize;
+            float w = Wide(Games.PartySize);
             for (int i = 0; i < Games.PartySize; i++)
             {
                 var box = Ui.Rect($"Picked {i}", panel);
-                Ui.Place(box, Pad + (w + 12f) * i, PickedTop, w, PickedH);
+                Ui.Place(box, Pad + (w + Gap) * i, PickedTop, w, PickedH);
                 var plate = box.gameObject.AddComponent<Image>();
                 plate.sprite = Ui.SkinSprite("panel");
                 plate.type = Image.Type.Sliced;

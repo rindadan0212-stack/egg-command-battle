@@ -232,9 +232,10 @@ namespace EggCommand.Core
         {
             var pool = Encounters.PoolFor(nest.Tier);
             int total = JsRound(WildTotalForTier(nest.Tier) * MobWildShare);
-            var party = new List<Creature>(3);
+            // ⚠️ 雑魚もプレイヤーと同じ体数にする（片側だけ多いと LoneScale が働く）
+            var party = new List<Creature>(Games.PartySize);
 
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < Games.PartySize; i++)
             {
                 string speciesId = rng.Pick(pool);
                 var species = SpeciesTable.ById(speciesId);

@@ -126,6 +126,45 @@ namespace EggCommand.View
             }
         }
 
+        /// <summary>器が足りなければ、最後の1つを写して増やす。
+        ///
+        /// ⭐ **占有する幅と高さは変えない。**⚠️ 間隔をそのままにして足すと、
+        /// 4体目が画面の外（設計 1920 に対し下端 1650 超）へ出る。
+        /// ⭐ だから**間隔を詰め、そのぶん縮める** ── 器どうしの隙間の比は元のまま保たれる。
+        /// ⚠️ 器が1つしか無いときは間隔が測れないので何もしない（1体戦は元から専用の器）。
+        /// ⚠️ 縦並びでも横並びでも効く（位置の差をそのまま使う）。</summary>
+        private static UnitStand[] Fit(UnitStand[] slots, int want)
+        {
+            if (slots == null || slots.Length < 2 || want <= slots.Length) return slots;
+            // ⚠️ 空きの入った配列（prefab で枠だけ残した形）では測れない
+            if (slots[0] == null || slots[slots.Length - 1] == null) return slots;
+
+            var first = (RectTransform)slots[0].transform;
+            var last = (RectTransform)slots[slots.Length - 1].transform;
+            Vector2 span = last.anchoredPosition - first.anchoredPosition;
+            Vector2 was = span / (slots.Length - 1);
+            Vector2 now = span / (want - 1);
+            // ⭐ 詰めた比のぶんだけ縮める。⚠️ 縮めないと器どうしが重なる
+            float shrink = was.sqrMagnitude > 0.01f
+                ? Mathf.Sqrt(now.sqrMagnitude / was.sqrMagnitude) : 1f;
+
+            var grown = new UnitStand[want];
+            for (int i = 0; i < slots.Length; i++) grown[i] = slots[i];
+            for (int i = slots.Length; i < want; i++)
+            {
+                var made = Instantiate(slots[slots.Length - 1], last.parent);
+                made.name = $"{slots[0].name} +{i}";
+                grown[i] = made;
+            }
+            for (int i = 0; i < want; i++)
+            {
+                var rect = (RectTransform)grown[i].transform;
+                rect.anchoredPosition = first.anchoredPosition + now * i;
+                rect.localScale = Vector3.one * shrink;
+            }
+            return grown;
+        }
+
         private static void Stretch(Image image, float ratio, float fullWidth)
         {
             var size = image.rectTransform.sizeDelta;
@@ -154,6 +193,17 @@ namespace EggCommand.View
         {
             _byKey.Clear();
             bool done = state.Result != null;
+
+            // ⭐ **器を体数に合わせる。**⚠️ prefab には3つしか置いていない ──
+            //    体数を変えるたびに prefab を手で触るのをやめるため、足りなければ写して増やす
+            //    （2026-08-20 の4体化）。⚠️ 増えたぶんは**元の占有範囲の中**に詰める。
+            int allies = 0, enemies = 0;
+            foreach (var unit in state.Units)
+            {
+                if (unit.Side == Side.Ally) allies++; else enemies++;
+            }
+            _allies = Fit(_allies, allies);
+            _foes = Fit(_foes, enemies);
 
             // ── 味方 ────────────────────────────────────
             int i = 0;

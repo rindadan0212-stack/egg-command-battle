@@ -147,7 +147,12 @@ namespace EggCommand.Core
         /// ⚠️ 参照編成の速度合計は段1〜5で 759／911／1047／1199／1359。
         /// 140 で割ると **5／6／7／8／9** と1段ずつきれいに増える
         /// （150 だと 5,6,6,7,9 と段3で足踏みする）。2026-08-20 の実測。</summary>
-        public const int SpeedPerRoll = 140;
+        public static int SpeedPerRoll => SpeedPerRollEach * Games.PartySize;
+
+        /// <summary>⭐ **1体あたり**の、さいころ1回ぶんの速度。
+        /// ⚠️ 3体で 140 と較正した値を3で割ってある（2026-08-20 の4体化）。
+        /// ⭐ 体数に連動させたのは、増やしたときに**さいころが勝手に増える**のを防ぐため。</summary>
+        public const int SpeedPerRollEach = 47;
 
         /// <summary>さいころの目。⭐ 1〜<see cref="Pips"/>。</summary>
         public const int Pips = 6;
@@ -175,13 +180,31 @@ namespace EggCommand.Core
 
         /// <summary>その段の参照編成が、そのステに持っている量。⚠️ `sim trail` の実測（2026-08-20）。
         /// ⭐ 関門の重さはここからの割合で決める。</summary>
+        // ⚠️ 参照編成を作るのは重い（個体を作って育てる）。⭐ 段ごとに1度だけ数える
+        private static readonly Dictionary<int, StatBlock> Pools = new Dictionary<int, StatBlock>();
+
+        /// <summary>その段の参照編成が払える量。⭐ **関門の重さの元。**</summary>
+        private static StatBlock PoolFor(int tier)
+        {
+            StatBlock pool;
+            if (Pools.TryGetValue(tier, out pool)) return pool;
+            pool = Trails.PoolOf(Steal.ReferenceParty(tier));
+            Pools[tier] = pool;
+            return pool;
+        }
+
         public static int RefStat(GimmickKind gate, int tier)
         {
             switch (gate)
             {
-                case GimmickKind.Wall: return 817 + 113 * (tier - 1);
-                case GimmickKind.Damage: return 899 + 96 * (tier - 1);
-                case GimmickKind.Pressure: return 1154 + 179 * (tier - 1);
+                // ⭐ **参照編成が実際に払える量そのもの。**
+                // ⚠️ 以前は 817 / 899 / 1154 … と数を書いていたが、あれは
+                //    「3体の参照編成の持ち分」を書き写しただけだった。
+                //    ⭐ 書き写しをやめて元から引く ── 体数を変えても釣り合いが崩れない
+                //    （2026-08-20 の4体化で、書き写した数が置き去りになりかけた）。
+                case GimmickKind.Wall: return PoolFor(tier).Atk;
+                case GimmickKind.Damage: return PoolFor(tier).Hp;
+                case GimmickKind.Pressure: return PoolFor(tier).Def;
                 default: throw new ArgumentOutOfRangeException(nameof(gate), gate, "知らない関門");
             }
         }

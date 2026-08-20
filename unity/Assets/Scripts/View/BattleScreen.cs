@@ -3,7 +3,7 @@ using EggCommand.Core;
 
 namespace EggCommand.View
 {
-    /// <summary>戦闘。3体同時・スピードゲージ制・スキルごとの CT。
+    /// <summary>戦闘。編成ぶん同時・スピードゲージ制・スキルごとの CT。
     ///
     /// ⭐ **この画面に座標は1つも無い。**
     /// 並び・大きさ・色は Assets/Resources/Prefabs/BattleScreen.prefab が持つ。

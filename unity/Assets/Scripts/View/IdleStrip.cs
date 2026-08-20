@@ -14,10 +14,43 @@ namespace EggCommand.View
     public sealed class IdleStrip : MonoBehaviour
     {
         [SerializeField] private RectTransform _ground;   // 左へ流す地面（2枚を繋いで送る）
-        [SerializeField] private Image[] _walkers;        // 編成3体
+        [SerializeField] private Image[] _walkers;        // 編成ぶん（⚠️ 足りなければ写して増やす）
         [SerializeField] private Image _enemy;
         [SerializeField] private Image _enemyHp;
         [SerializeField] private RectTransform _enemySlot;
+
+        /// <summary>器が足りなければ、最後の1つを写して増やす。
+        /// ⭐ **占有する幅は変えない** ── 間隔を詰め、そのぶん縮める。
+        /// ⚠️ 1つしか無いときは間隔が測れないので何もしない。</summary>
+        private static Image[] Fit(Image[] slots, int want)
+        {
+            if (slots == null || slots.Length < 2 || want <= slots.Length) return slots;
+            // ⚠️ 空きの入った配列（prefab で枠だけ残した形）では測れない
+            if (slots[0] == null || slots[slots.Length - 1] == null) return slots;
+
+            var first = slots[0].rectTransform;
+            var last = slots[slots.Length - 1].rectTransform;
+            Vector2 span = last.anchoredPosition - first.anchoredPosition;
+            Vector2 was = span / (slots.Length - 1);
+            Vector2 now = span / (want - 1);
+            float shrink = was.sqrMagnitude > 0.01f
+                ? Mathf.Sqrt(now.sqrMagnitude / was.sqrMagnitude) : 1f;
+
+            var grown = new Image[want];
+            for (int i = 0; i < slots.Length; i++) grown[i] = slots[i];
+            for (int i = slots.Length; i < want; i++)
+            {
+                var made = Instantiate(slots[slots.Length - 1], last.parent);
+                made.name = $"{slots[0].name} +{i}";
+                grown[i] = made;
+            }
+            for (int i = 0; i < want; i++)
+            {
+                grown[i].rectTransform.anchoredPosition = first.anchoredPosition + now * i;
+                grown[i].rectTransform.localScale = Vector3.one * shrink;
+            }
+            return grown;
+        }
 
         /// <summary>地面が1秒に流れる幅。⭐ 進んでいる速さの見た目。</summary>
         private const float Scroll = 90f;
@@ -55,6 +88,9 @@ namespace EggCommand.View
 
             _home.Clear();
             var party = Games.PartyOf(game, PartyKind.Idle);
+            // ⭐ **器を体数に合わせる。**⚠️ prefab には3つしか置いていないので、
+            //    4体目が黙って居ないことになる（2026-08-20 の4体化）。
+            _walkers = Fit(_walkers, Games.PartySize);
             for (int i = 0; i < _walkers.Length; i++)
             {
                 if (_walkers[i] == null) continue;

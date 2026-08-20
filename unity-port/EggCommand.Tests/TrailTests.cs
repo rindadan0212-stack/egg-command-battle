@@ -15,10 +15,17 @@ public class TrailTests
         new Creature(id, "tamaru", new StatBlock(hp, atk, def, spd),
             new StatBlock(0, 0, 0, 0), 0, 0, null, null, 0, null, null, 1);
 
-    private static List<Creature> Party(int spd = 20) => new()
+    /// <summary>検査用の編成。⚠️ **体数は決め打ちしない**
+    /// （2026-08-20 に 3 → 4。<see cref="Games.PartySize"/> が唯一の出所）。</summary>
+    private static List<Creature> Party(int spd = 20)
     {
-        Make("a", 20, 20, 20, spd), Make("b", 20, 20, 20, spd), Make("c", 20, 20, 20, spd),
-    };
+        var party = new List<Creature>();
+        for (int i = 0; i < Games.PartySize; i++)
+        {
+            party.Add(Make($"p{i}", 20, 20, 20, spd));
+        }
+        return party;
+    }
 
     /// <summary>その出目だけを返す <see cref="Rng"/>。
     ///
@@ -75,12 +82,19 @@ public class TrailTests
     {
         Assert.True(Trails.RollsFor(Party(30)) > Trails.RollsFor(Party(0)));
 
-        // ⚠️ 誰が速いかは効かない（3体で1つの駒なので）
-        var lopsided = new List<Creature>
-        {
-            Make("x", 20, 20, 20, 45), Make("y", 20, 20, 20, 15), Make("z", 20, 20, 20, 0),
-        };
-        Assert.Equal(Trails.RollsFor(Party(20)), Trails.RollsFor(lopsided));
+        // ⚠️ 誰が速いかは効かない（編成ぜんぶで1つの駒なので）。
+        // ⭐ 合計だけを揃える ── ⚠️ 体数を決め打ちすると 4体化で落ちる
+        var lopsided = Party(20);
+        int sum = 0;
+        foreach (var c in lopsided) sum += Creatures.StatsOf(c).Spd;
+        var skewed = new List<Creature> { Make("x", 20, 20, 20, 0) };
+        for (int i = 1; i < lopsided.Count; i++) skewed.Add(Make($"y{i}", 20, 20, 20, 0));
+        // ⚠️ 先頭1体に合計を全部背負わせる（素質の上限を超えないよう、素の速度で積む）
+        skewed[0] = Make("x", 20, 20, 20, 20 * lopsided.Count);
+        int skew = 0;
+        foreach (var c in skewed) skew += Creatures.StatsOf(c).Spd;
+        Assert.True(skew >= sum, $"合計がそろっていない（{skew} 対 {sum}）");
+        Assert.Equal(Trails.RollsFor(lopsided), Trails.RollsFor(skewed));
 
         // ⚠️ 速度 0 でも 1回は振れる（何もできない潜入を作らない）
         Assert.True(Trails.RollsFor(new List<Creature> { Make("a", 0, 0, 0, 0) }) >= 1);

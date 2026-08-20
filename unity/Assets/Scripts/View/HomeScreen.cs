@@ -15,7 +15,7 @@ namespace EggCommand.View
             var view = app.Put<HomeView>(body, "HomeScreen");
             if (view == null) return;
 
-            // ⭐ **パーティ編成の入口。**放置の3体をここで決める。
+            // ⭐ **パーティ編成の入口。**放置の編成をここで決める。
             // ⚠️ BOX から「出撃」を消したので、ここが唯一の入口になる。
             Ui.Tappable(body, "Party", "パーティ編成",
                 () => PartyPanel.Show(app, PartyKind.Idle),

@@ -64,7 +64,7 @@ public class SeriesRecordTests
     public void 卵と孵化の系列が変わっていない() => Same("eggs", SeriesRecord.EggRows());
 
     [Fact]
-    public void 始めたときの3体が変わっていない() => Same("games", SeriesRecord.GameRows());
+    public void 始めたときの編成が変わっていない() => Same("games", SeriesRecord.GameRows());
 
     [Fact]
     public void 配合の系列が変わっていない() => Same("breeds", SeriesRecord.BreedRows());

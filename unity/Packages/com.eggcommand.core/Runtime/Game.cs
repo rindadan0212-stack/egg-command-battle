@@ -84,17 +84,37 @@ namespace EggCommand.Core
 
     public static class Games
     {
-        public const int PartySize = 3;
+        /// <summary>1つの編成に並ぶ体数。⭐ **戦闘・潜入・放置のすべてがこれを見る。**
+        ///
+        /// ⚠️ 2026-08-20 に 3 → 4（作者の判断）。
+        /// ⭐ 戦闘の式は体数を決め打ちしていない（<see cref="Battle.LoneScale"/> が体数の**比**で
+        /// 効く）ので、戦闘そのものは変えていない。
+        /// ⚠️ **較正した数は連動させること。**体数に比例して動くもの:
+        /// <see cref="Trail.SpeedPerRoll"/>（3体の速度合計で較正）・
+        /// <see cref="Trails.RefStat"/>（3体のステ合計で較正）・雑魚の頭数。
+        /// ⚠️ 測定で「4対4 は奥行きを増やさず、上下の開きが広がる」と出ている
+        /// （速攻 +14 / 役割分担 −16・[釣り合い](../../../../wiki/開発/釣り合い.md)）。
+        /// 作者の判断で進めた変更なので、**釣り合いは測り直して別に扱う**。</summary>
+        public const int PartySize = 4;
+
+        /// <summary>⚠️ **較正した数がどの体数で測られたか。**
+        /// ⭐ 体数を変えたとき、比例して動かすための分母。</summary>
+        public const int CalibratedParty = 3;
 
         /// <param name="nowUnix">いまの時刻。⚠️ **渡さないと開幕の3件が永久に消えません**
         /// （期限 0 ＝「期限を持たない」扱いになるため）。⭐ 既定 0 は較正済みの照合のため。</param>
-        public static Game NewGame(int seed, long nowUnix = 0)
+        /// <param name="startWith">最初に持つ体数。⚠️ **0 なら <see cref="PartySize"/>。**
+        /// ⭐ 渡せるようにしてあるのは、移植の照合（ゴールデン）が
+        /// **較正した当時の体数**で遊びを再生するため（<paramref name="nowUnix"/> と同じ理由）。
+        /// ⚠️ 遊びの中からは渡さない。</param>
+        public static Game NewGame(int seed, long nowUnix = 0, int startWith = 0)
         {
             var game = new Game(seed);
 
-            // 最初の3体。一番浅い巣の卵を孵したところから始める
+            // 最初の編成ぶん。一番浅い巣の卵を孵したところから始める
             var first = Nests.ById("shallow-scale");
-            for (int i = 0; i < 3; i++)
+            int start = startWith > 0 ? startWith : PartySize;
+            for (int i = 0; i < start; i++)
             {
                 var egg = Nests.MakeEgg(game.RngEgg, first, EggOrigin.Defeated, ++game.Serial,
                     element: SpeciesTable.Roll(game.RngElement));

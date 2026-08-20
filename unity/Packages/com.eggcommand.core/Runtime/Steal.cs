@@ -708,16 +708,23 @@ namespace EggCommand.Core
                 new StatBlock(low,  high, low,  high, high, low),   // 攻め（弱化を通す側）
                 new StatBlock(high, low,  high, low,  low,  high),  // 壁（弱化を受けない側）
                 new StatBlock(low,  low,  high, high, low,  high),  // 速（先に動いて耐える）
+                // ⭐ 4体目（2026-08-20 の4体化）。前衛 ── HP・攻・防に寄せる。
+                // ⚠️ 3つの関門（壁＝攻 / 床＝HP / 重圧＝防）に**均等に効く**形を選んだ。
+                //    片寄った形を足すと、その関門だけが相対的に緩くなる。
+                new StatBlock(high, high, high, low,  low,  low),   // 前衛（3つの関門に均等）
             };
-            var strong = new[] { StatKey.Atk, StatKey.Hp, StatKey.Spd };
-            var weak = new[] { StatKey.Def, StatKey.Spd, StatKey.Atk };
+            var strong = new[] { StatKey.Atk, StatKey.Hp, StatKey.Spd, StatKey.Def };
+            var weak = new[] { StatKey.Def, StatKey.Spd, StatKey.Atk, StatKey.Res };
 
+            // ⚠️ **体数は編成の決まりから引く。**⭐ 形が足りなければ最初から繰り返す
+            //    （体数を増やしたのに参照編成だけ3体のまま、という取り残しを防ぐ）。
             var party = new List<Creature>();
-            for (int i = 0; i < shapes.Length; i++)
+            for (int i = 0; i < Games.PartySize; i++)
             {
-                var creature = new Creature($"ref{i}", species, Stats.ApplyTotalCap(shapes[i]),
+                int shape = i % shapes.Length;
+                var creature = new Creature($"ref{i}", species, Stats.ApplyTotalCap(shapes[shape]),
                     new StatBlock(0, 0, 0, 0), 0, 0, null, null, 0, null, null, 1,
-                    strong[i], weak[i]);
+                    strong[shape], weak[shape]);
                 // ⭐ 育てた分も持たせる。⚠️ 素の孵化直後で検査すると、想定より弱い相手で測ることになる
                 //    （段1 は速度合計 69 に対し必要 65 で、通る角度が 1度しか無かった）
                 Creatures.Grow(creature, Creatures.TrainMax);

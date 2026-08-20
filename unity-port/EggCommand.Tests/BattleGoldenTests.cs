@@ -132,7 +132,9 @@ public class BattleGoldenTests
             string name = matchup.GetProperty("name").GetString()!;
             string where = $"seed={seed} vs {name}";
 
-            var game = Games.NewGame(seed);
+            // ⚠️ **較正した当時の体数で再生する。**⭐ この検査が見ているのは開幕の**並び順**で、
+            //    体数はその対象ではない（2026-08-20 に 3 → 4）。
+            var game = Games.NewGame(seed, startWith: Games.CalibratedParty);
             // ⚠️ 得意・不得意は移植元に無い概念。ここは**戦闘そのもの**が移植元と
             //    一致することの検査なので、入力を移植元と同じ形に戻してから渡す。
             //    （得意を付けたまま比べると、engine ではなく個体の違いで落ちる）

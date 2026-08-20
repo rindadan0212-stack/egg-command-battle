@@ -960,7 +960,8 @@ public class InfiltrationTests
         var once = Steal.MobPartyOf(nest, 1, 0);
         var again = Steal.MobPartyOf(nest, 1, 0);
 
-        Assert.Equal(3, once.Count);
+        // ⚠️ 雑魚もプレイヤーと同じ体数（2026-08-20 に 3 → 4）
+        Assert.Equal(Games.PartySize, once.Count);
         for (int i = 0; i < once.Count; i++)
         {
             Assert.Equal(once[i].SpeciesId, again[i].SpeciesId);

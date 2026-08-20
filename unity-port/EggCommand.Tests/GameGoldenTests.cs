@@ -164,7 +164,9 @@ public class BreedingGoldenTests
     public void 配合の結果が一致する()
     {
         var golden = Golden.Load("breeding");
-        var game = Games.NewGame(20260816);
+        // ⚠️ **較正した当時の体数で再生する。**⭐ ここが見ているのは配合そのもので、
+        //    体数はその対象ではない（2026-08-20 に 3 → 4）。
+        var game = Games.NewGame(20260816, startWith: Games.CalibratedParty);
         var pool = new List<Creature>(game.Storage.Creatures);
 
         // 親が golden と同じであることを先に確かめる（違えば以降は比べる意味が無い）
@@ -217,7 +219,11 @@ public class GameGoldenTests
     public void 定数が一致する()
     {
         var golden = Golden.Load("game");
-        Assert.Equal(golden.GetProperty("partySize").GetInt32(), Games.PartySize);
+        // ⚠️ **編成の体数は 3 → 4 にした**（2026-08-20・作者の判断）。
+        // ⭐ ゴールデンは作り直さない ── 移植元と一致している証明が消えるため。
+        //    意図した食い違いとして、ここに1行だけ書く（CtRepriced と同じ流儀）。
+        Assert.Equal(3, golden.GetProperty("partySize").GetInt32());
+        Assert.Equal(4, Games.PartySize);
         Assert.Equal(golden.GetProperty("storageSlots").GetInt32(), Storages.StorageSlots);
         Assert.Equal(golden.GetProperty("trainMax").GetInt32(), Creatures.TrainMax);
     }
@@ -232,7 +238,9 @@ public class GameGoldenTests
         foreach (var run in golden.GetProperty("runs").EnumerateArray())
         {
             int seed = run.GetProperty("seed").GetInt32();
-            var game = Games.NewGame(seed);
+            // ⚠️ **較正した当時の体数で再生する。**⭐ この検査が見ているのは
+            //    「系統ごとの乱数が取り違えられていないか」で、体数はその対象ではない。
+            var game = Games.NewGame(seed, startWith: Games.CalibratedParty);
             var steps = run.GetProperty("steps");
             int index = 0;
 
@@ -282,6 +290,10 @@ public class GameGoldenTests
         Assert.True(expected.GetProperty("serial").GetInt32() == game.Serial,
             $"{where}: 通し番号が {game.Serial}");
 
+        // ⚠️ 枠が1つ増えたので、移植元では出撃していなかった個体にも育成点が入る（2026-08-20）。
+        //    ⭐ **移植元で出撃していた個体は、いまも同じ点**であることを見続ける。
+        var wasOut = new HashSet<string>(Golden.Strings(expected.GetProperty("partyOf")));
+
         var creatures = expected.GetProperty("creatures");
         Assert.True(creatures.GetArrayLength() == game.Storage.Creatures.Count,
             $"{where}: 保管数が {game.Storage.Creatures.Count}（期待 {creatures.GetArrayLength()}）");
@@ -293,7 +305,17 @@ public class GameGoldenTests
             Assert.True(entry.GetProperty("id").GetString() == creature.Id, $"{spot}: id");
             Assert.True(entry.GetProperty("speciesId").GetString() == creature.SpeciesId, $"{spot}: 種族");
             Assert.True(entry.GetProperty("generation").GetInt32() == creature.Generation, $"{spot}: 世代");
-            Assert.True(entry.GetProperty("earned").GetInt32() == creature.Earned, $"{spot}: 育成点");
+            int wasEarned = entry.GetProperty("earned").GetInt32();
+            if (wasOut.Contains(creature.Id))
+            {
+                Assert.True(wasEarned == creature.Earned, $"{spot}: 育成点");
+            }
+            else
+            {
+                // ⚠️ 減ってはいけない（増えるのは枠が増えたぶんだけ）
+                Assert.True(creature.Earned >= wasEarned,
+                    $"{spot}: 育成点が減っている（{wasEarned} → {creature.Earned}）");
+            }
             Assert.True(Stats.TotalOf(creature.Wild) <= Stats.WildTotalMaxFor(creature.MutationCounter),
                 $"{spot}: 素質合計が {Stats.TotalOf(creature.Wild)}");
         }
@@ -318,10 +340,14 @@ public class GameGoldenTests
 
         // ⚠️ 空き枠は「素質の高い順」で埋まるので、素質が別系列になれば並びも変わる。
         // ⭐ 見続けるのは「選んだ枠が必ず先頭に来る」「保管にある個体だけで埋まる」の2つ。
+        // ⚠️ 体数を 3 → 4 にしたので、**枠の数そのものは移植元と一致しない**（2026-08-20）。
+        //    ⭐ 見続けるのは「保管にある個体だけで埋まる」「上限を超えない」の2つ。
         var partyOf = new List<string>();
         foreach (var c in Games.PartyOf(game)) partyOf.Add(c.Id);
-        Assert.True(Golden.Strings(expected.GetProperty("partyOf")).Count == partyOf.Count,
-            $"{where}: 出撃数が {partyOf.Count}");
+        Assert.True(partyOf.Count <= Games.PartySize,
+            $"{where}: 出撃数が {partyOf.Count}（上限 {Games.PartySize}）");
+        Assert.True(partyOf.Count <= game.Storage.Creatures.Count,
+            $"{where}: 保管 {game.Storage.Creatures.Count} 体より多い {partyOf.Count} 体が出撃している");
         for (int k = 0; k < roster.Count && k < partyOf.Count; k++)
         {
             Assert.True(roster[k] == partyOf[k], $"{where}: 選んだ枠が先頭に来ていない");
