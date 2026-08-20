@@ -45,6 +45,10 @@ namespace EggCommand.View
         //    色はモック（参考/モック_タマゴハンター/）の濃紺に合わせてある。
         public static readonly Color Ink = new Color32(0x2b, 0x33, 0x50, 0xff);
 
+        /// <summary>器の地の色。⭐ **白い札**（画面の器がこの色）。
+        /// ⚠️ 立体のさいころの面もこれで塗る ── 平面の札と同じ地でないと浮く。</summary>
+        public static readonly Color Paper = new Color32(0xf7, 0xf7, 0xf9, 0xff);
+
         // ⚠️ **淡い2色は読めていなかった**（2026-08-18・実測して差し替え）。
         //    コントラスト比（白い札 / 空の水色）:
         //      直す前   InkDim 3.0 / 2.3     InkFaint 1.9 / 1.4   ← 目安 4.5 を大きく割る
