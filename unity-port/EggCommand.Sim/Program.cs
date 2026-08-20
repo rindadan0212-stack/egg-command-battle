@@ -80,6 +80,7 @@ namespace EggCommand.Sim
                 case "landprobe": LandProbe(); break;
                 case "flight": FlightProbe(seed); break;
                 case "trail": TrailProbe(seed); break;
+                case "strategy": StrategyProbe(seed); break;
                 // ⭐ 技と種族を手で書くための帳面（Sheet.cs）
                 case "sheet": Sheet.Run(args.Length > 1 ? args[1] : ""); break;
                 case "slant": SlantProbe(seed); break;
@@ -1272,6 +1273,218 @@ namespace EggCommand.Sim
             return $"{name,-20}{100.0 * win / runs,6:0}%{100.0 * stuck / runs,7:0}%"
                 + $"{100.0 * killed / runs,8:0}%{100.0 * spent / runs,8:0}%"
                 + $"{(double)near / runs,8:0.0}{(double)far / runs,8:0.0}{(double)mobs / runs,7:0.0}";
+        }
+
+        /// <summary>1つの編成案。⭐ **ステの寄せ方と技を、狙いを持って組んだもの。**</summary>
+        private sealed class Plan
+        {
+            public readonly string Name;
+            public readonly string Aim;
+            public readonly StatBlock[] Wild;
+            public readonly string[] Skill2;
+            public readonly string[] Skill3;
+
+            public Plan(string name, string aim, StatBlock[] wild, string[] s2, string[] s3)
+            {
+                Name = name; Aim = aim; Wild = wild; Skill2 = s2; Skill3 = s3;
+            }
+        }
+
+        /// <summary>⭐ **戦略編成は均等ステに勝てるか。**
+        ///
+        /// ⚠️ ここが「役割が死んでいる」の本丸。台帳の `sim roles` は
+        /// **ステの寄せ方**だけを比べているが、この作品の技はもう十分に豊かなので、
+        /// 「寄せたステ＋それを活かす技」を**狙って組んだ編成**が
+        /// 均等に勝てるかどうかで測り直す。
+        ///
+        /// ⚠️ 交絡を全部止めてある:
+        /// <list type="bullet">
+        /// <item>種族を3体とも固定（枠1の技が編成ごとに変わらない）</item>
+        /// <item>属性を枠ごとに固定し、**両側同じ**（3すくみが勝敗に入らない）</item>
+        /// <item>得意・不得意と特性を外す（技とステだけを見る）</item>
+        /// <item>素質は全編成とも1体120・1ステ40まで（総量が同じ）</item>
+        /// <item>⭐ **`land` 乱数を毎回渡す** ── 渡さないと確率つき効果が1標本しか引かれない</item>
+        /// </list></summary>
+        private static void StrategyProbe(int seed)
+        {
+            // ⚠️ 1体120・1ステ40 まで。どの案も総量は同じ
+            StatBlock W(int hp, int atk, int def, int spd, int acc, int res) =>
+                new StatBlock(hp, atk, def, spd, acc, res);
+
+            var plans = new[]
+            {
+                new Plan("均等", "寄せない。台帳がいう最強",
+                    new[] { W(20,20,20,20,20,20), W(20,20,20,20,20,20), W(20,20,20,20,20,20) },
+                    new[] { "attack", "attack", "attack" },
+                    new[] { "def-up", "def-up", "def-up" }),
+
+                new Plan("止め", "行動させない。仕留めは1体に任せる",
+                    new[] { W(40,0,0,40,40,0), W(40,0,0,40,40,0), W(40,40,0,40,0,0) },
+                    new[] { "stun-heavy", "gauge-drain", "attack-heavy" },
+                    new[] { "ct-lock", "block", "pierce-strike" }),
+
+                new Plan("壁と挑発", "受け皿を1体に固定して、後ろから殴る",
+                    new[] { W(40,0,40,0,0,40), W(40,0,40,0,0,40), W(40,40,0,40,0,0) },
+                    new[] { "taunt-long", "bulwark", "attack-heavy" },
+                    new[] { "shield-wall", "guts-deep", "atk-up" }),
+
+                new Plan("毒と持久", "削って粘る。倒しきらない",
+                    new[] { W(40,0,0,0,40,40), W(40,0,40,0,0,40), W(40,0,0,40,40,0) },
+                    new[] { "venom-heavy", "regen-heavy", "curse" },
+                    new[] { "poison-all", "heal-miracle", "slow-all" }),
+
+                new Plan("速攻", "相手が動く前に終わらせる",
+                    new[] { W(40,40,0,40,0,0), W(40,40,0,40,0,0), W(40,40,0,40,0,0) },
+                    new[] { "dash", "ct-short", "attack-all-heavy" },
+                    new[] { "attack-heavy", "pierce-strike", "atk-up" }),
+
+                new Plan("剥がし", "相手の強化を消して殴る",
+                    new[] { W(40,40,0,0,40,0), W(40,40,0,0,40,0), W(40,40,0,40,0,0) },
+                    new[] { "strip-strike", "buff-steal", "attack-twice" },
+                    new[] { "dispel", "attack", "atk-down" }),
+
+                // ⭐ 台帳の `sim roles` が測っている形（攻撃役・壁役・弱化役）。
+                // ⚠️ ただし素質は法内（1ステ40まで）にし、交絡は全部そろえてある
+                new Plan("役割分担", "攻撃役・壁役・弱化役の3点セット",
+                    new[] { W(40,40,0,40,0,0), W(40,0,40,0,0,40), W(40,0,0,40,40,0) },
+                    new[] { "attack-heavy", "bulwark", "curse" },
+                    new[] { "attack-twice", "harden", "slow-all" }),
+
+                // ⭐ 速攻から**速度だけ**抜いた版。⚠️ 速攻の強さが速度か攻撃かを分ける
+                new Plan("速攻-速度抜", "同じ技のまま、速度を防御に振り替えた",
+                    new[] { W(40,40,40,0,0,0), W(40,40,40,0,0,0), W(40,40,40,0,0,0) },
+                    new[] { "dash", "ct-short", "attack-all-heavy" },
+                    new[] { "attack-heavy", "pierce-strike", "atk-up" }),
+            };
+
+            const int Bouts = 240;
+
+            Console.WriteLine();
+            Console.WriteLine("■ 組んだ編成");
+            foreach (var plan in plans)
+                Console.WriteLine($"  {plan.Name,-8} {plan.Aim}");
+
+            Console.WriteLine();
+            Console.WriteLine($"■ 総当たり（1組 {Bouts} 戦・属性と種族と特性は両側そろえてある）");
+            Console.Write($"  {"",-10}");
+            foreach (var plan in plans) Console.Write($"{plan.Name,8}");
+            Console.WriteLine($"{"総合",8}");
+
+            var overall = new double[plans.Length];
+            for (int a = 0; a < plans.Length; a++)
+            {
+                Console.Write($"  {plans[a].Name,-10}");
+                int won = 0, played = 0;
+                for (int b = 0; b < plans.Length; b++)
+                {
+                    if (a == b) { Console.Write($"{"—",8}"); continue; }
+                    int wins = Duel(seed, plans[a], plans[b], Bouts);
+                    won += wins; played += Bouts;
+                    Console.Write($"{100.0 * wins / Bouts,7:0}%");
+                }
+                overall[a] = 100.0 * won / played;
+                Console.Write($"{overall[a],7:0}%");
+                Console.WriteLine();
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("■ ⭐ 均等ステに勝てるか（ここが本題）");
+            Console.WriteLine($"  {"編成",-10}{"対 均等",10}{"総合",8}");
+            for (int a = 1; a < plans.Length; a++)
+                Console.WriteLine($"  {plans[a].Name,-10}"
+                    + $"{100.0 * Duel(seed, plans[a], plans[0], Bouts) / Bouts,9:0}%"
+                    + $"{overall[a],7:0}%");
+
+            Console.WriteLine();
+            Console.WriteLine("  ⚠️ どれも 50% を超えないなら、**技をどう組んでも寄せる意味が無い**");
+            Console.WriteLine("  ⭐ 超えるものが在るなら、役割は死んでいるのではなく「作り方」の問題");
+
+            // ══ 台帳の「役割が死んだ」を、同じ管理下で測り直す ══════
+            // ⚠️ `sim roles` は (a) land 乱数を渡さない (b) 種族と属性を毎回引く
+            //    (c) 特性と得意・不得意も引く (d) 素質が1ステ40の上限を超えている
+            //    ⭐ ここでは全部そろえて、**役を1つ均等に置き換える**という同じ問いだけを測る
+            Console.WriteLine();
+            Console.WriteLine($"■ ⭐ 役を1つ均等に置き換えると弱くなるか（1組 {Bouts} 戦）");
+            {
+                var full = plans[6];                       // 役割分担
+                var flat = W(20, 20, 20, 20, 20, 20);
+                var names = new[] { "攻撃役", "壁役", "弱化役" };
+                Console.WriteLine($"  {"抜いた役",-12}{"対 3役（land有）",16}{"落ち込み",10}{"land無し",12}{"落ち込み",10}");
+                for (int drop = 0; drop < 3; drop++)
+                {
+                    var wild = (StatBlock[])full.Wild.Clone();
+                    var s2 = (string[])full.Skill2.Clone();
+                    var s3 = (string[])full.Skill3.Clone();
+                    wild[drop] = flat; s2[drop] = "attack"; s3[drop] = "def-up";
+                    var missing = new Plan("欠け", "", wild, s2, s3);
+                    double won = 100.0 * Duel(seed, missing, full, Bouts) / Bouts;
+                    // ⚠️ 同じ測定を「land を渡さない」で並べる（既存 probe と同じ条件）
+                    double blind = 100.0 * Duel(seed, missing, full, Bouts, land: false) / Bouts;
+                    Console.WriteLine($"  {names[drop],-12}{won,13:0}%{won - 50.0,9:+0;-0}pt"
+                        + $"{blind,12:0}%{blind - 50.0,9:+0;-0}pt");
+                }
+                Console.WriteLine();
+                Console.WriteLine("  ⚠️ 50% を下回るほど、その役は**居ないと困る** ＝ 生きている");
+                Console.WriteLine("  ⭐ 台帳は「抜いたほうが強い（＋側）」と記録している。ここで符号が逆なら測り方の問題");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("■ 決着の付き方（均等どうしと比べる）");
+            Console.WriteLine($"  {"組み合わせ",-20}{"行動数",9}{"引き分け",10}");
+            foreach (var a in new[] { 0, 1, 2, 3, 4, 5 })
+            {
+                double acts = 0; int draws = 0;
+                for (int i = 0; i < Bouts; i++)
+                {
+                    var fight = Bout(seed, i, plans[a], plans[0]);
+                    acts += fight.Actions;
+                    if (fight.Result == null) draws++;
+                }
+                Console.WriteLine($"  {plans[a].Name + " 対 均等",-20}{acts / Bouts,8:0.0}"
+                    + $"{100.0 * draws / Bouts,9:0}%");
+            }
+        }
+
+        /// <summary>2つの案を戦わせて、先の案が勝った回数。</summary>
+        private static int Duel(int seed, Plan mine, Plan yours, int bouts, bool land = true)
+        {
+            int won = 0;
+            for (int i = 0; i < bouts; i++)
+                if (Bout(seed, i, mine, yours, land).Result == Outcome.Ally) won++;
+            return won;
+        }
+
+        /// <param name="land">確率つき効果の乱数を毎回変えるか。
+        /// ⚠️ false にすると、既にある probe（roles / species）と同じ条件になる ──
+        /// **全戦闘で同じ目**が出るので、確率つきの技は1標本しか引かれない。</param>
+        private static Fight Bout(int seed, int round, Plan mine, Plan yours, bool land = true)
+        {
+            var rng = new Rng(seed + round).Stream("plan");
+            int serial = 0;
+            var draw = land ? new Rng(seed * 7919 + round).Stream("land") : null;
+            return Run(Cast(rng, mine, ref serial), Cast(rng, yours, ref serial), draw);
+        }
+
+        /// <summary>案どおりの3体を作る。⚠️ 交絡になるものは全部そろえる。</summary>
+        private static List<Creature> Cast(Rng rng, Plan plan, ref int serial)
+        {
+            // ⚠️ 種族を固定 ＝ 枠1の技を固定（attack / attack-def / attack-twice）
+            var species = new[] { "tsunoga", "tamaru", "haneru" };
+            // ⚠️ 属性を枠ごとに固定。両側同じ並びなので 3すくみは勝敗に入らない
+            var elements = new[] { Element.Fire, Element.Water, Element.Wood };
+
+            var party = new List<Creature>();
+            for (int i = 0; i < 3; i++)
+            {
+                var born = Born(rng, species[i], 5, ref serial, elements[i]);
+                party.Add(new Creature(
+                    born.Id, born.SpeciesId, plan.Wild[i], born.Trained, born.Earned,
+                    born.MutationCounter, plan.Skill2[i], plan.Skill3[i], born.PaletteIndex,
+                    born.ParentA, born.ParentB, born.Generation,
+                    // ⚠️ 得意・不得意と特性は外す（技とステだけを見る）
+                    null, null, elements[i], null));
+            }
+            return party;
         }
 
         private static void LandProbe()
