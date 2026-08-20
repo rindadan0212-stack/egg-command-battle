@@ -499,10 +499,16 @@ namespace EggCommand.Core
         public static Raid Begin(Trail trail, IReadOnlyList<Creature> party, int raids = 0)
         {
             var raid = new Raid(trail, party, RollsFor(party, raids), PoolOf(party));
-            // ⚠️ 入口がいきなり分かれ道。⭐ 振る前に道を選ばせる
-            if (trail.Squares[0].IsJunction)
-                raid.Step = OpenWays(raid) > 0 ? RaidStep.AtJunction : RaidStep.Caught;
-            if (raid.Step == RaidStep.Caught) raid.Result = StealOutcome.Blocked;
+            // ⚠️ **振る前に道を選ばせない**（2026-08-20・作者の指示
+            //    「さいころを回した後に分岐を選ぶようにして」）。
+            // ⭐ 入口が分かれ道でも、まず振る ── <see cref="Advance"/> が
+            //    分かれ道で止めて、出た目をそのまま持ち越してくれる。
+            // ⚠️ ただし**どの道にも入れない**なら、振っても仕方がないのでここで終わる。
+            if (trail.Squares[0].IsJunction && OpenWays(raid) <= 0)
+            {
+                raid.Step = RaidStep.Caught;
+                raid.Result = StealOutcome.Blocked;
+            }
             return raid;
         }
 

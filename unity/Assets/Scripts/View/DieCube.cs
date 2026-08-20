@@ -14,8 +14,11 @@ namespace EggCommand.View
     /// 「その面が正面に来る向き」へ回すだけ（決めると出所が2つになる）。</summary>
     public sealed class DieCube : MonoBehaviour
     {
-        /// <summary>焼く絵の一辺。⚠️ ドットが溶けないよう、面の絵（128）の倍数にする。</summary>
-        private const int Pixels = 256;
+        /// <summary>焼く絵の一辺。⚠️ ドットが溶けないよう、面の絵（128）の倍数にする。
+        /// ⭐ **画面に出す大きさ（<see cref="TrailDice"/>）の整数分の1**にすること。
+        /// ⚠️ 半端な倍率で引き伸ばすと、Point で拡大してもドットの大きさが揃わない
+        /// （256 を 660 に伸ばして 2.58倍になっていた・2026-08-20）。</summary>
+        public const int Pixels = 384;
 
         /// <summary>撮る箱の大きさ。⭐ 立方体の対角（√3）が入るだけの余白を取る。</summary>
         private const float Framing = 1.15f;

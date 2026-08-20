@@ -28,15 +28,20 @@ namespace EggCommand.View
         /// <summary>下の操作帯。⭐ **状態が変わっても高さを変えない。**</summary>
         private const float DockHeight = 392f;
 
-        private const float CellW = 176f;
-        private const float CellH = 96f;
-        /// <summary>段の高さ（マス＋あいだ）。</summary>
-        private const float RowStep = 122f;
-        /// <summary>左右に膨らむ幅。</summary>
-        private const float Bulge = 252f;
+        // ⭐ **マスを2倍にして、あいだを詰めた**（2026-08-20・作者の指示
+        //    「マスの大きさを2倍にしてもっと余白を少なく」）。
+        // ⚠️ あいだ（RowStep − CellH）は 26 のまま据え置き ── マスだけ大きくすることで、
+        //    見た目の余白の割合が半分以下になる。
+        private const float CellW = 352f;
+        private const float CellH = 192f;
+        /// <summary>段の高さ（マス＋あいだ）。⚠️ あいだは 26 のまま。</summary>
+        private const float RowStep = 218f;
+        /// <summary>左右に膨らむ幅。⭐ マスが2倍になったぶん広げて、画面の幅を使い切る。
+        /// ⚠️ <see cref="CellW"/> より狭いと、左右の道が重なる。</summary>
+        private const float Bulge = 460f;
         /// <summary>関門の札の高さ。⭐ マスの上端に帯として重ねる。</summary>
-        private const float GateHigh = 36f;
-        private const float GoalHeight = 104f;
+        private const float GateHigh = 64f;
+        private const float GoalHeight = 176f;
 
         private static readonly Color Board = new Color(0.04f, 0.06f, 0.10f, 0.55f);
         private static readonly Color Plate = new Color(1f, 1f, 1f, 0.88f);
@@ -183,7 +188,7 @@ namespace EggCommand.View
             var goal = Ui.Plate(view, "Goal", "panel", Ui.Accent,
                 Ui.Margin, 8f, Ui.W - Ui.Margin * 2f, GoalHeight);
             Ui.Icon(goal, "I", "goal", Ui.OnLead,
-                (Ui.W - Ui.Margin * 2f - 62f) / 2f, (GoalHeight - 62f) / 2f, 62f);
+                (Ui.W - Ui.Margin * 2f - 110f) / 2f, (GoalHeight - 110f) / 2f, 110f);
 
             // ── 道の線（マスより先に敷く） ────────────
             for (int i = 0; i < trail.Count; i++)
@@ -279,7 +284,7 @@ namespace EggCommand.View
                     face.color = beaten ? PlateGone : Dark;
                     Ui.Icon(cell, "I", "mob",
                         beaten ? new Color(1f, 1f, 1f, 0.30f) : Color.white,
-                        CellW / 2f - 24f, midY - 24f, 48f);
+                        CellW / 2f - 48f, midY - 48f, 96f);
                     break;
 
                 case SquareKind.Boon:
@@ -287,23 +292,23 @@ namespace EggCommand.View
                     bool up = sq.Kind == SquareKind.Boon;
                     var ink = behind ? Ui.InkFaint : up ? Ui.GoodInk : Ui.DangerInk;
                     // ⭐ 矢印＋ステの絵＋数。⚠️ 「▲防+60%」の記号を字で書かない
-                    Ui.Icon(cell, "A", "arrow", ink, 14f, midY - 17f, 34f, up ? 90f : -90f);
-                    Ui.Icon(cell, "S", IconOf(sq.Stat), ink, 52f, midY - 17f, 34f);
-                    Ui.Label(cell, "N", $"{(sq.Percent < 0 ? -sq.Percent : sq.Percent)}%", 26, ink,
-                        TextAnchor.MiddleLeft, 92f, pad, CellW - 96f, high);
+                    Ui.Icon(cell, "A", "arrow", ink, 28f, midY - 34f, 68f, up ? 90f : -90f);
+                    Ui.Icon(cell, "S", IconOf(sq.Stat), ink, 104f, midY - 34f, 68f);
+                    Ui.Label(cell, "N", $"{(sq.Percent < 0 ? -sq.Percent : sq.Percent)}%", 52, ink,
+                        TextAnchor.MiddleLeft, 184f, pad, CellW - 192f, high);
                     break;
 
                 default:
                     if (sq.IsJunction)
                     {
                         // ⭐ 分かれ道は丸い節。⚠️ 何も書かない
-                        Ui.Round(cell, "Hub", CellW / 2f - 22f, midY - 22f, 44f,
+                        Ui.Round(cell, "Hub", CellW / 2f - 44f, midY - 44f, 88f,
                             behind ? Ui.InkFaint : Ui.Ink);
                         break;
                     }
                     Ui.Icon(cell, "I", "plain",
                         new Color(0f, 0f, 0f, behind ? 0.12f : 0.26f),
-                        CellW / 2f - 16f, midY - 16f, 32f);
+                        CellW / 2f - 32f, midY - 32f, 64f);
                     break;
             }
             return cell;
@@ -346,18 +351,18 @@ namespace EggCommand.View
             var tag = Ui.Plate(cell, "Gate", "pill", open ? Ui.Accent : Dark,
                 0f, 0f, CellW, GateHigh);
             var ink = open ? Ui.OnLead : new Color(1f, 1f, 1f, 0.62f);
-            Ui.Icon(tag, "I", IconOf(way.Gate), ink, 10f, 4f, 28f);
-            Ui.Label(tag, "N", Ui.Digits(way.Requires), 22, ink,
-                TextAnchor.MiddleLeft, 44f, 0f, CellW - 84f, GateHigh);
-            if (!open) Ui.Icon(tag, "L", "locked", ink, CellW - 34f, 4f, 28f);
+            Ui.Icon(tag, "I", IconOf(way.Gate), ink, 20f, 8f, 48f);
+            Ui.Label(tag, "N", Ui.Digits(way.Requires), 40, ink,
+                TextAnchor.MiddleLeft, 84f, 0f, CellW - 156f, GateHigh);
+            if (!open) Ui.Icon(tag, "L", "locked", ink, CellW - 60f, 8f, 48f);
         }
 
-        /// <summary>いま居るマスに置く駒。⭐ **3体で1つ**（作者の決定）。</summary>
+        /// <summary>いま居るマスに置く駒。⭐ **編成ぜんぶで1つ**（作者の決定）。</summary>
         private static void Piece(RectTransform cell, Raid raid)
         {
             if (cell == null) return;
-            const float Size = 56f;
-            var disc = Ui.Round(cell, "Piece", 4f, CellH - Size - 4f, Size, Ui.Accent);
+            const float Size = 112f;   // ⚠️ マスが2倍になったので駒も2倍
+            var disc = Ui.Round(cell, "Piece", 8f, CellH - Size - 8f, Size, Ui.Accent);
             if (raid.Party.Count > 0)
                 Ui.PixelOf(disc, "Art", raid.Party[0], Size * 0.14f, Size * 0.14f, Size * 0.72f);
             Jolt.Play(disc, new Vector2(0f, 14f), 0.20f);
@@ -366,7 +371,7 @@ namespace EggCommand.View
         /// <summary>行き先の印。⚠️ マスより一回り大きく、後ろに敷いて縁だけ見せる。</summary>
         private static void Ring(RectTransform ground, Spot at)
         {
-            const float Halo = 6f;
+            const float Halo = 12f;
             var ring = Ui.Ring(ground, "Landing",
                 at.X - Halo, at.Y - Halo, CellW + Halo * 2f, CellH + Halo * 2f);
             ring.SetAsFirstSibling();

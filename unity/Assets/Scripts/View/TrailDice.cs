@@ -20,8 +20,10 @@ namespace EggCommand.View
     {
         /// <summary>回している時間。⭐ 短く。⚠️ 長いと、振る回数ぶん待たされる。</summary>
         private const float Spin = 0.42f;
-        /// <summary>出目を出したまま止めておく時間。</summary>
-        private const float Hold = 0.30f;
+        /// <summary>出目を出したまま止めておく時間。
+        /// ⭐ **目を読み切るための間。**⚠️ 短いと「何が出たか分からないまま次へ行く」
+        /// （2026-08-20・作者の指示「少しの間停止して出目を正確に目視できるように」）。</summary>
+        private const float Hold = 0.95f;
         /// <summary>目が切り替わる間隔。</summary>
         private const float Flick = 0.055f;
         /// <summary>回り終わってから、出目の面が正面へ収まるまでの時間。
@@ -69,18 +71,19 @@ namespace EggCommand.View
             veil.color = new Color(0f, 0f, 0f, 0.34f);
             veil.raycastTarget = true;
 
-            const float size = 260f;
+            // ⭐ **器に入れない。**画面の真ん中でそのまま転がす
+            //    （2026-08-20・作者の指示「枠の中で回るんじゃなくて画面にそのまま」）。
+            // ⚠️ 札の上に乗せていた頃は、さいころが**札の中の小物**に見えて、
+            //    「いま運が決まっている」という場面にならなかった。
+            // ⚠️ **焼いた絵の整数倍**にする（いまは 2倍）。半端だとドットが不揃いになる
+            const float size = DieCube.Pixels * 2f;
             var box = Ui.Rect("Box", root);
             box.anchorMin = box.anchorMax = new Vector2(0.5f, 0.5f);
             box.pivot = new Vector2(0.5f, 0.5f);
             box.sizeDelta = new Vector2(size, size);
             box.anchoredPosition = Vector2.zero;
-            var plate = box.gameObject.AddComponent<Image>();
-            plate.sprite = Ui.SkinSprite("panel");
-            plate.type = Image.Type.Sliced;
-            plate.raycastTarget = false;
 
-            const float art = 190f;
+            const float art = size;
             dice._cube = DieCube.Make();
             if (dice._cube != null)
             {

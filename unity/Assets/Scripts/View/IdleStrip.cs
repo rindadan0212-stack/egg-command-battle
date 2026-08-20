@@ -44,9 +44,18 @@ namespace EggCommand.View
                 made.name = $"{slots[0].name} +{i}";
                 grown[i] = made;
             }
+
+            // ⚠️ **並びの中心を動かさない。**先頭の位置だけ合わせて縮めると、
+            //    器が細くなったぶん全体が左（上）へ寄る（2026-08-20 に実測して 27px ずれていた）。
+            // ⭐ 元の並びの中心と、詰めた並びの中心を合わせる。
+            Vector2 size = first.rect.size;
+            Vector2 wasMid = first.anchoredPosition + (span + size) * 0.5f;
+            Vector2 nowSpan = now * (want - 1);
+            Vector2 head = wasMid - (nowSpan + size * shrink) * 0.5f;
+
             for (int i = 0; i < want; i++)
             {
-                grown[i].rectTransform.anchoredPosition = first.anchoredPosition + now * i;
+                grown[i].rectTransform.anchoredPosition = head + now * i;
                 grown[i].rectTransform.localScale = Vector3.one * shrink;
             }
             return grown;

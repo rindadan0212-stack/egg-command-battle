@@ -126,44 +126,87 @@ namespace EggCommand.View
             }
         }
 
-        /// <summary>器が足りなければ、最後の1つを写して増やす。
+        /// <summary>器を体数ぶん並べ直す。⭐ **足りなければ写して増やし、収まるだけ大きく置く。**
         ///
-        /// ⭐ **占有する幅と高さは変えない。**⚠️ 間隔をそのままにして足すと、
-        /// 4体目が画面の外（設計 1920 に対し下端 1650 超）へ出る。
-        /// ⭐ だから**間隔を詰め、そのぶん縮める** ── 器どうしの隙間の比は元のまま保たれる。
-        /// ⚠️ 器が1つしか無いときは間隔が測れないので何もしない（1体戦は元から専用の器）。
-        /// ⚠️ 縦並びでも横並びでも効く（位置の差をそのまま使う）。</summary>
-        private static UnitStand[] Fit(UnitStand[] slots, int want)
+        /// ⚠️ prefab には3つしか置いていない（体数を変えるたびに手で触らないため）。
+        /// ⚠️ **元の並びをそのまま詰めない。**最初そうしたら、使える縦 1290 に対して
+        /// 元の 1080 の中へ押し込み、必要以上に小さくなった（2026-08-20 に実測して直した）。
+        /// ⭐ 使える高さから、詰まらない最大の大きさを**逆算**する。
+        ///
+        /// ⚠️ **横は自分で中央に置く。**prefab の x（60 と 600）は左右で非対称で、
+        /// 縮めると左上に張り付いたまま残るので、**全体が左へ寄る**（実測で中心 437／画面は 540）。
+        /// ⭐ 味方は幅の 1/4、相手は 3/4 を**中心**にする。</summary>
+        /// <param name="at">列の中心を、親の幅のどこに置くか（0〜1）。</param>
+        private static UnitStand[] Lay(UnitStand[] slots, int want, float at)
         {
-            if (slots == null || slots.Length < 2 || want <= slots.Length) return slots;
-            // ⚠️ 空きの入った配列（prefab で枠だけ残した形）では測れない
+            if (slots == null || slots.Length < 2 || want <= 0) return slots;
             if (slots[0] == null || slots[slots.Length - 1] == null) return slots;
 
             var first = (RectTransform)slots[0].transform;
             var last = (RectTransform)slots[slots.Length - 1].transform;
-            Vector2 span = last.anchoredPosition - first.anchoredPosition;
-            Vector2 was = span / (slots.Length - 1);
-            Vector2 now = span / (want - 1);
-            // ⭐ 詰めた比のぶんだけ縮める。⚠️ 縮めないと器どうしが重なる
-            float shrink = was.sqrMagnitude > 0.01f
-                ? Mathf.Sqrt(now.sqrMagnitude / was.sqrMagnitude) : 1f;
+            var parent = first.parent as RectTransform;
+            if (parent == null) return slots;
+
+            float was = Mathf.Abs(last.anchoredPosition.y - first.anchoredPosition.y)
+                / (slots.Length - 1);
+            float high = first.rect.height;
+            if (was <= 0.01f || high <= 0.01f) return slots;
+
+            // ⭐ 器の詰まり具合（高さ ÷ 間隔）は元のまま保つ
+            float density = high / was;
+            // ⚠️ **1つ目の上端から、床までの長さ。**足し算にしていた頃は
+            //    使える長さを2倍近く見積もり、技の札の下まではみ出していた（2026-08-20）
+            float room = Room(parent) - Mathf.Abs(first.anchoredPosition.y);
+            if (room <= 0f) return slots;
+            // ⭐ N 個が収まる最大の間隔。⚠️ 元より大きくはしない
+            float step = Mathf.Min(was, room / ((want - 1) + density));
+            float shrink = step / was;
+            float top = first.anchoredPosition.y;
 
             var grown = new UnitStand[want];
-            for (int i = 0; i < slots.Length; i++) grown[i] = slots[i];
+            for (int i = 0; i < want && i < slots.Length; i++) grown[i] = slots[i];
             for (int i = slots.Length; i < want; i++)
             {
                 var made = Instantiate(slots[slots.Length - 1], last.parent);
                 made.name = $"{slots[0].name} +{i}";
                 grown[i] = made;
             }
+            // ⚠️ 余った器は隠す（体数が減ったとき）
+            for (int i = want; i < slots.Length; i++)
+            {
+                if (slots[i] != null) slots[i].gameObject.SetActive(false);
+            }
+
+            float wide = first.rect.width * shrink;
+            float x = parent.rect.width * at - wide / 2f;
             for (int i = 0; i < want; i++)
             {
                 var rect = (RectTransform)grown[i].transform;
-                rect.anchoredPosition = first.anchoredPosition + now * i;
+                rect.anchoredPosition = new Vector2(x, top - step * i);
                 rect.localScale = Vector3.one * shrink;
             }
             return grown;
         }
+
+        /// <summary>立ち位置に使ってよい縦の長さ。⚠️ 技の札の上まで。</summary>
+        private static float Room(RectTransform parent)
+        {
+            float floor = parent.rect.height;
+            // ⚠️ **隠れている札も数える。**自分の手番でないと技の札は出ないが、
+            //    場所は変わらない。false（表示中だけ）にしていた頃は、
+            //    相手の手番に組むと札の下まで並びが伸びていた（2026-08-20）
+            foreach (var rect in parent.GetComponentsInChildren<RectTransform>(true))
+            {
+                if (!rect.name.StartsWith("Skill ")) continue;
+                float top = Mathf.Abs(rect.anchoredPosition.y);
+                if (top < floor) floor = top;
+            }
+            // ⚠️ 札にぴったり付けない。⭐ 一息ぶん空ける
+            return Mathf.Max(0f, floor - Breath);
+        }
+
+        /// <summary>並びと技の札のあいだ。</summary>
+        private const float Breath = 24f;
 
         private static void Stretch(Image image, float ratio, float fullWidth)
         {
@@ -202,8 +245,8 @@ namespace EggCommand.View
             {
                 if (unit.Side == Side.Ally) allies++; else enemies++;
             }
-            _allies = Fit(_allies, allies);
-            _foes = Fit(_foes, enemies);
+            _allies = Lay(_allies, allies, 0.25f);
+            _foes = Lay(_foes, enemies, 0.75f);
 
             // ── 味方 ────────────────────────────────────
             int i = 0;
