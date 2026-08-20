@@ -60,6 +60,18 @@ namespace EggCommand.View
         private static bool _rolling;
         private static Raid _flagged;
 
+        /// <summary>⭐ **いま駒を描く場所。**-1 なら本当の居場所（<c>raid.At</c>）。
+        /// ⚠️ 振ったあと、タップされるまで**前のマス**に留めておくために要る。</summary>
+        private static int _shownAt = -1;
+
+        /// <summary>⭐ 振って決まった行き先。-1 なら待っていない。
+        /// ⚠️ ここを光らせて、**タップされたら**歩き出す
+        /// （2026-08-20・作者の指示「止まるマスを光らせてそこをタップして移動」）。</summary>
+        private static int _landing = -1;
+
+        /// <summary>歩いている最中。⚠️ この間は押させない。</summary>
+        private static bool _walking;
+
         /// <summary>巣を選んで潜入へ。⚠️ 道は <see cref="Trails.OfNest"/> ＝ **巣ごとに固定**。</summary>
         public static void Enter(App app, Nest nest)
         {
@@ -68,6 +80,9 @@ namespace EggCommand.View
             _handing = false;
             _rolling = false;
             _flagged = null;
+            _shownAt = -1;
+            _landing = -1;
+            _walking = false;
 
             int raids = Games.RaidsOn(app.Game, nest);
             // ⚠️ 守りが最大の巣は**入れないのではなく、入れば戦闘**（[巣の寿命]）
@@ -91,16 +106,22 @@ namespace EggCommand.View
         {
             var raid = app.Raid;
             if (raid == null) { app.Show(Screen.Nests); return; }
-            if (!ReferenceEquals(_flagged, raid)) { _handing = false; _rolling = false; }
+            if (!ReferenceEquals(_flagged, raid))
+            {
+                _handing = false; _rolling = false; _walking = false;
+                _shownAt = -1; _landing = -1;
+            }
 
             float boardTop = HeaderHeight + GroupGap;
             float boardHeight = Ui.H - Ui.TopBarHeight - boardTop - DockHeight;
 
             Header(body, raid);
-            BoardOf(body, raid, boardTop, boardHeight);
+            BoardOf(app, body, raid, boardTop, boardHeight);
             Dock(app, body, raid);
 
-            if (_handing || _rolling) return;
+            // ⚠️ 歩いている間・行き先を待っている間は、次の場面へ進めない
+            //    （雑魚の戦闘が駒の到着前に始まってしまう）
+            if (_handing || _rolling || _walking || _landing >= 0) return;
             if (raid.Step == RaidStep.Met) { Meet(app, raid); return; }
             if (raid.Result != null) Finish(app, raid);
         }
@@ -177,7 +198,7 @@ namespace EggCommand.View
 
         /// <summary>マスを縦に並べる。⭐ **入口が下、卵が上。分かれ道で左右に膨らむ。**
         /// ⚠️ 1画面に収めない（作者の指示）。縦にスクロールし、駒が見える所へ寄せる。</summary>
-        private static void BoardOf(RectTransform body, Raid raid, float top, float height)
+        private static void BoardOf(App app, RectTransform body, Raid raid, float top, float height)
         {
             var trail = raid.Trail;
             var spots = Layout(trail, out float tall);
@@ -221,20 +242,33 @@ namespace EggCommand.View
             }
 
             // ⭐ 分かれ道に立っているなら、行ける先を光らせる
-            if (raid.Step == RaidStep.AtJunction)
+            if (raid.Step == RaidStep.AtJunction && _landing < 0)
             {
                 var ways = trail.Squares[raid.At].Ways;
                 foreach (var way in ways)
                     if (Trails.CanPass(raid, way)) Ring(view, spots[way.To]);
             }
 
-            Piece(cells[raid.At], raid);
+            // ⭐ **止まるマスを光らせ、そこを押させる。**
+            // ⚠️ 押しどころはマスそのもの ── 別に釦を出すと、どこへ行くのか分からない
+            int here = _shownAt >= 0 ? _shownAt : raid.At;
+            if (_landing >= 0 && cells[_landing] != null)
+            {
+                Ring(view, spots[_landing]);
+                var go = cells[_landing].gameObject.AddComponent<Button>();
+                go.transition = Selectable.Transition.None;
+                var raidNow = raid;
+                go.onClick.AddListener(() => Walk(app, raidNow, here, _landing));
+                Throb.On(cells[_landing], 0.06f);
+            }
+
+            Piece(cells[here], raid);
 
             // ⭐ 駒が見える所へ寄せる
             var scroll = view.GetComponentInParent<ScrollRect>();
             if (scroll != null)
                 scroll.verticalNormalizedPosition = Mathf.Clamp01(
-                    1f - (spots[raid.At].Y - height * 0.45f)
+                    1f - (spots[here].Y - height * 0.45f)
                     / Mathf.Max(1f, content - height));
         }
 
@@ -427,46 +461,81 @@ namespace EggCommand.View
         private static void Fork(App app, RectTransform dock, Raid raid, float w)
         {
             var ways = raid.Trail.Squares[raid.At].Ways;
-            float half = (w - 20f) / 2f;
+            // ⚠️ **本数を決め打ちしない。**⭐ 分かれ道は 2〜4本ある（2026-08-20）。
+            //    `i < 2` にしていた頃、3本目・4本目が**画面に出ず選べなかった**
+            //    （作者の報告「進めるはずの道が進めない」）。
+            int many = ways.Count;
+            const float Gap = 12f;
+            float half = (w - Gap * (many - 1)) / many;
+            // ⭐ 札が細くなるので、中の字も詰める
+            bool tight = many >= 3;
 
-            for (int i = 0; i < ways.Count && i < 2; i++)
+            for (int i = 0; i < many; i++)
             {
                 int pick = i;
                 var way = ways[i];
                 bool open = Trails.CanPass(raid, way);
                 var key = Trails.StatOf(way.Gate);
-                float left = Ui.Margin + (half + 20f) * i;
+                float left = Ui.Margin + (half + Gap) * i;
 
                 // ── 押しどころ ── 何マスか（数だけ）
-                var button = Ui.Tappable(dock, i == 0 ? "Near" : "Far", "",
-                    () => { Trails.Take(raid, pick); app.Refresh(); },
+                var button = Ui.Tappable(dock, $"Way{i}", "",
+                    () =>
+                    {
+                        // ⚠️ 選んだあとも**歩かせる**（飛ばすと何マス進んだか分からない）
+                        int start = raid.At;
+                        Trails.Take(raid, pick);
+                        Walk(app, raid, start, raid.At);
+                    },
                     left, 24f, half, 132f, lead: i == 0, enabled: open);
                 var ink = !open ? Ui.InkFaint : i == 0 ? Ui.OnLead : Ui.Ink;
-                Ui.Label(button.transform, "Steps", way.Length.ToString(), 56, ink,
-                    TextAnchor.MiddleCenter, 0f, 0f, half, 132f);
+                // ⭐ **「この道はあと何マス」**。⚠️ 出目とは別物なので、単位を添える。
+                // ⚠️ **上下の帯を分ける。**同じ枠に重ねて置いたら、字が重なった
+                //    （2026-08-20 に検査が拾った）
+                Ui.Label(button.transform, "Steps", way.Length.ToString(), tight ? 44 : 56, ink,
+                    TextAnchor.LowerCenter, 0f, 8f, half, 76f);
+                Ui.Label(button.transform, "Unit", "マス", tight ? 18 : 22,
+                    new Color(ink.r, ink.g, ink.b, 0.72f),
+                    TextAnchor.UpperCenter, 0f, 88f, half, 38f);
 
                 // ── 要るもの ── ステの絵＋数（＋通れないなら錠前）
-                var need = Ui.Plate(dock, $"Need{i}", "pill", open ? Ui.Accent : Dark,
-                    left + 12f, 168f, half - 24f, 48f);
+                // ⚠️ 関門の無い道は札を出さない（⭐ 「何も要らない」が一番強い読み）
                 var needInk = open ? Ui.OnLead : new Color(1f, 1f, 1f, 0.62f);
-                Ui.Icon(need, "I", IconOf(way.Gate), needInk, 12f, 8f, 32f);
-                Ui.Label(need, "N", Ui.Digits(way.Requires), 24, needInk,
-                    TextAnchor.MiddleLeft, 52f, 0f, half - 100f, 48f);
-                if (!open) Ui.Icon(need, "L", "locked", needInk, half - 60f, 8f, 32f);
+                if (way.IsGated)
+                {
+                    var need = Ui.Plate(dock, $"Need{i}", "pill", open ? Ui.Accent : Dark,
+                        left + 8f, 168f, half - 16f, 48f);
+                    Ui.Icon(need, "I", IconOf(way.Gate), needInk, 8f, 8f, 32f);
+                    Ui.Label(need, "N", Ui.Digits(way.Requires), tight ? 20 : 24, needInk,
+                        TextAnchor.MiddleLeft, 44f, 0f, half - (open ? 60f : 96f), 48f);
+                    if (!open) Ui.Icon(need, "L", "locked", needInk, half - 52f, 8f, 32f);
+                }
+                else
+                {
+                    var free = Ui.Plate(dock, $"Free{i}", "pill", Ui.Good,
+                        left + 8f, 168f, half - 16f, 48f);
+                    Ui.Label(free, "N", "関門なし", tight ? 20 : 24, Color.white,
+                        TextAnchor.MiddleCenter, 0f, 0f, half - 16f, 48f);
+                }
 
                 // ── いま持っている量（同じ絵で並べる） ──
-                Ui.Icon(dock, $"HaveI{i}", IconOf(way.Gate), Faint, left + 12f, 228f, 28f);
-                Ui.Label(dock, $"HaveN{i}", Ui.Digits(Trails.Usable(raid, key)), 24,
-                    open ? Color.white : new Color(1f, 1f, 1f, 0.45f),
-                    TextAnchor.MiddleLeft, left + 48f, 228f, half - 60f, 28f);
+                if (way.IsGated)
+                {
+                    Ui.Icon(dock, $"HaveI{i}", IconOf(way.Gate), Faint, left + 8f, 228f, 28f);
+                    Ui.Label(dock, $"HaveN{i}", Ui.Digits(Trails.Usable(raid, key)),
+                        tight ? 20 : 24,
+                        open ? Color.white : new Color(1f, 1f, 1f, 0.45f),
+                        TextAnchor.MiddleLeft, left + 44f, 228f, half - 52f, 28f);
+                }
 
                 // ── その道に何が乗っているか（絵を並べるだけ） ──
-                Contents(dock, raid, way, left + 12f, 272f, half - 24f, open);
+                Contents(dock, raid, way, left + 8f, 272f, half - 16f, open);
 
                 // ── 届く見込み ──
-                Ui.Label(dock, $"Odds{i}", open ? $"{Trails.OddsIfTake(raid, i)}%" : "—", 30,
+                Ui.Label(dock, $"Odds{i}", open ? $"{Trails.OddsIfTake(raid, i)}%" : "—",
+                    tight ? 26 : 30,
                     open ? Color.white : new Color(1f, 1f, 1f, 0.40f),
-                    TextAnchor.MiddleLeft, left + 12f, 320f, half - 24f, 40f);
+                    TextAnchor.MiddleLeft, left + 8f, 320f, half - 16f, 40f);
             }
         }
 
@@ -503,6 +572,36 @@ namespace EggCommand.View
 
         // ── 進行 ────────────────────────────────────
 
+        /// <summary>駒を1マスずつ歩かせる。⭐ **行き先は既に決まっている**（Core が動かした）。
+        ///
+        /// ⚠️ 前は振った瞬間に飛んでいたので、何マス進んだのか目で追えなかった
+        /// （2026-08-20・作者の指示）。</summary>
+        private static void Walk(App app, Raid raid, int from, int to)
+        {
+            if (_walking) return;
+            _landing = -1;
+            _walking = true;
+            _shownAt = from;
+            _flagged = raid;
+
+            var path = TrailWalk.PathOf(raid, from, to);
+            TrailWalk.Show(app.Overlay, path,
+                at =>
+                {
+                    // ⚠️ 別の潜入に切り替わっていたら触らない
+                    if (!ReferenceEquals(app.Raid, raid) || app.Showing != Screen.Trail) return;
+                    _shownAt = at;
+                    app.Refresh();
+                },
+                () =>
+                {
+                    _walking = false;
+                    _shownAt = -1;
+                    if (!ReferenceEquals(app.Raid, raid) || app.Showing != Screen.Trail) return;
+                    app.Refresh();
+                });
+        }
+
         private static void RollNow(App app, Raid raid)
         {
             if (_rolling || raid.Rolls <= 0) return;
@@ -515,10 +614,24 @@ namespace EggCommand.View
             var rng = new Rng(0).Stream(
                 $"trail:{nest.Id}:{Games.RaidsOn(app.Game, nest)}"
                 + $":{raid.Rolls}:{raid.At}:{raid.Took.Count}:{raid.Beaten.Count}");
+            // ⚠️ **先に居場所を覚える。**Core は振った時点で駒を動かすので、
+            //    覚えておかないと「どこから来たか」が消える
+            int from = raid.At;
             Trails.Roll(rng, raid);
             int face = raid.LastRoll;
+            int to = raid.At;
             _flagged = raid;
-            TrailDice.Show(app.Overlay, face, () => { _rolling = false; app.Refresh(); });
+            _shownAt = from;
+            TrailDice.Show(app.Overlay, face, () =>
+            {
+                _rolling = false;
+                if (!ReferenceEquals(app.Raid, raid) || app.Showing != Screen.Trail) return;
+                // ⭐ **動かないなら待たせない**（分かれ道に立ったまま等）
+                if (from == to) { _shownAt = -1; app.Refresh(); return; }
+                // ⭐ 止まるマスを光らせて、押されるのを待つ
+                _landing = to;
+                app.Refresh();
+            });
         }
 
         private static void Meet(App app, Raid raid)
