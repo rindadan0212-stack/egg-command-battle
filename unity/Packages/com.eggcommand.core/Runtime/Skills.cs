@@ -170,10 +170,21 @@ namespace EggCommand.Core
         /// 1手も変わらず、較正済みの照合がそのまま生きる。</summary>
         public readonly int Chance;
 
+        /// <summary>⭐ **この効果だけの狙い先。**null なら技の狙い先（<see cref="Skill.Target"/>）に従う。
+        ///
+        /// ⭐ これがある理由: 技は狙い先を1つしか持てないので、
+        /// 「敵全体を殴りながら**自分を回復する**」という**1手2役**が丸ごと書けなかった
+        /// （2026-08-20・参考作品の R帯に3技あった）。
+        /// ⚠️ 効果の種類は1つも増やしていない ── 既にある効果の**飛び先を変える**だけ。
+        /// ⚠️ 付いている効果は本体とは**別の回**で撃つ（<see cref="Battle.PerformAction"/>）。
+        ///    同じ回に混ぜると乱数の引き順が変わり、移植した21技の照合が死ぬ。</summary>
+        public readonly Target? Own;
+
         private Effect(EffectKind kind, PowerTier power, DamageScale scale, StatKey stat, int sign,
             int turns, int stacks, int percent, int count, int delta, int hits, int repeat = 1,
-            int chance = 100, bool pierce = false)
+            int chance = 100, bool pierce = false, Target? own = null)
         {
+            Own = own;
             Pierce = pierce;
             Repeat = repeat < 1 ? 1 : repeat;
             Chance = chance < MinChance ? MinChance : chance > 100 ? 100 : chance;
@@ -291,6 +302,23 @@ namespace EggCommand.Core
         public static Effect Revive(int percent, int chance = 100) =>
             new Effect(EffectKind.Revive, default, default, default, 0, 0, 0, percent, 0, 0, 0,
                 1, chance);
+
+        /// <summary>弱化解除。⭐ 乗っている**弱化**を <paramref name="count"/> 個落とす。
+        ///
+        /// ⚠️ 効果の種類は増やしていない ── <see cref="Dispel"/> の**負の側**そのもの。
+        /// ⭐ 「符号で向きが変わるものは種類を分けない」流儀（CT・ゲージ・割合と同じ）。
+        /// 名前を付けたのは、技表に <c>Dispel(-2)</c> と書くと**読めない**から。
+        /// ⚠️ 落ちる順は「重いものから」（<see cref="Battle.StripBanes"/>）。
+        /// スタンや毒を残して弱化だけ消えると、治した手応えにならない。</summary>
+        public static Effect Cleanse(int count, int chance = 100) => Dispel(-count, chance);
+
+        /// <summary>⭐ **この効果だけを別の相手へ飛ばす。**技の狙い先は変えない。
+        ///
+        /// ⭐ 使いどころ: 「敵全体<c>.To(Self)</c> で自分だけ回復」のような1手2役。
+        /// ⚠️ 元の効果は書き換えない（新しい1つを返す）。</summary>
+        public Effect To(Target target) =>
+            new Effect(Kind, Power, Scale, Stat, Sign, Turns, Stacks, Percent, Count, Delta, Hits,
+                Repeat, Chance, Pierce, target);
     }
 
     /// <summary>スキルレベルが1つ上がったときに伸びるもの。
@@ -497,6 +525,20 @@ namespace EggCommand.Core
         /// <summary>ステータス系が動かす割合（%）。⭐ ステータスの数値そのものに掛かる。
         /// ⚠️ 段位を使わない。威力とは別の軸なので揃えない。UP も DOWN も一律この値。</summary>
         public const int BuffPercent = 30;
+
+        /// <summary>⭐ **切れない持続。**<see cref="Effect.Buff"/> の残り回数にこれを渡すと、
+        /// 戦闘が終わるまで残る強化／弱化になる。
+        ///
+        /// ⭐ これがある理由: 参考作品には「常に防御が上がっている」型の札があるが、
+        /// あちらは**技枠を1つ潰しっぱなし**にして買っている（パッシブ）。
+        /// 本作に枠を潰す形は無いので、**手番1回**で買う形に置き換えた（2026-08-20）。
+        /// ⚠️ 剥がせる（<see cref="EffectKind.Dispel"/>・<see cref="EffectKind.Steal"/> の対象）。
+        /// 剥がせないと「先に掛けた者勝ち」になって読み合いが消える。
+        /// ⚠️ 負の値なのは、残り回数を数える側（<see cref="Battle"/>）が
+        /// **0 かどうかだけ**を見て「掛かっているか」を判じているから。
+        /// 大きな正の数で代用すると、数え続けていつか切れる ── それは永続ではない。
+        /// ⚠️ スキルレベルの「持続が伸びる」は乗らない（既に切れないので伸びしろが無い）。</summary>
+        public const int Lasting = -1;
 
         // ── スキルレベル ─────────────────────────────────
         // ⭐ 伸び幅は語彙ごとに1つだけ。技ごとの数値は置かない。
@@ -1002,6 +1044,50 @@ namespace EggCommand.Core
             new Skill("tailwind", "追い風", "味方1体のスピードを上げ、ゲージも進める", SkillType.Support, 5, Target.AllyOne,
                 Effect.Buff(StatKey.Spd, 1, 3),
                 Effect.Gauge(25)),
+
+            // ── 返す手・1手2役・構えの層（2026-08-20・🚧 まだ配っていない）──────
+            // ⭐ 参考作品の R帯60体を突き合わせて、**本作の語彙で書けなかった3つ**を足した層。
+            //    ⚠️ 足りなかったのは効果の種類ではなく、次の3つの**形**だった:
+            //      ・弱化を**落とす**（Dispel の負の側。プリミティブは在ったのに技が1本も無かった）
+            //      ・**1手2役**（技が狙い先を1つしか持てず「殴りながら支える」が書けなかった）
+            //      ・**切れない持続**（あちらはパッシブで持つ「常に防御が高い」型）
+            // ⭐ 効果の種類は1つも増やしていない。増えたのは Effect の欄が2つだけ（飛び先・永続）。
+
+            // ⭐ **弱化に返す手。**⚠️ これが無いと、弱化は掛けた側の一方通行だった
+            //    ── 速度DOWN を通されたら、こちらに打つ手が1つも無い（⭐ 読み合いが片道）。
+            // ⚠️ 落ちる順は「重いものから」（スタン → 睡眠 → 毒 …）。
+            //    軽いものから落ちると「治したのに手応えが無い」になる。
+            new Skill("cleanse", "弱化解除", "味方1体に乗った弱化を2つ落とす", SkillType.Heal, 4, Target.AllyOne,
+                Effect.Cleanse(2)),
+            // ⚠️ 全体なので1段下げる: 単体2個・確実 に対し 1個・確実
+            new Skill("cleanse-all", "弱化解除・全体", "味方全体の弱化を1つずつ落とす", SkillType.Heal, 5, Target.AllyAll,
+                Effect.Cleanse(1)),
+
+            // ⭐ **1手2役。**狙い先の違う効果を1つの技に載せる形。
+            //    ⚠️ どれも「得だけ」にしない ── 得だけなら他の技を選ぶ理由が消える。
+
+            // ⭐ 殴った手で自分を立て直す。回復役を1枠空けられる代わりに、一撃は小さい
+            new Skill("drain-all", "吸い上げ", "敵全体に小さな一撃。自分のHPが少し戻る", SkillType.Attack, 5, Target.EnemyAll,
+                Effect.Damage(PowerTier.Small, DamageScale.Atk),
+                Effect.HealRatio(15).To(Target.Self)),
+            // ⭐ 大きく踏み込む代わりに、自分の守りが薄くなる
+            new Skill("reckless", "捨て身の突き", "大きな一撃。そのあと自分の防御が下がる", SkillType.Attack, 5, Target.EnemyOne,
+                Effect.Damage(PowerTier.Large, DamageScale.Atk),
+                Effect.Buff(StatKey.Def, -1, 3).To(Target.Self)),
+            // ⭐ 相手を下げながら味方を上げる。⚠️ 下げる側だけ外れる（上げる側は自分たちに掛かる）
+            new Skill("warcry", "鬨の声", "敵全体の攻撃を下げ、味方全体の攻撃を上げる", SkillType.Debuff, 5, Target.EnemyAll,
+                Effect.Buff(StatKey.Atk, -1, 3, chance: 60),
+                Effect.Buff(StatKey.Atk, 1, 3).To(Target.AllyAll)),
+
+            // ⭐ **切れない持続。**⚠️ あちらは技枠を1つ潰しっぱなしにして買っている（パッシブ）。
+            //    本作に枠を潰す形は無いので、**手番1回**で買う形に置き換えた。
+            //    ⭐ 剥がせる（強化解除・強奪の的）ので、「先に掛けた者勝ち」にはならない。
+            new Skill("stance", "不動の構え", "自分の防御が戦闘の間ずっと上がり、盾も1枚張る", SkillType.Support, 5, Target.Self,
+                Effect.Buff(StatKey.Def, 1, Lasting),
+                Effect.Shield(1)),
+            new Skill("resolve", "決意", "味方1体の攻撃が戦闘の間ずっと上がり、少しずつ回復する", SkillType.Support, 5, Target.AllyOne,
+                Effect.Buff(StatKey.Atk, 1, Lasting),
+                Effect.Regen(1, 3)),
         };
 
         public static IReadOnlyList<Skill> All => List;
@@ -1113,7 +1199,14 @@ namespace EggCommand.Core
         /// ⚠️ public なのは Wiki と図鑑が「未配布」と書き添えるため（BossOnly と同じ理由）。</summary>
         /// ⭐ 2026-08-19 に**全件が配られた**（キバネ・イワオ・ホムラの3種族へ）ので空。
         /// ⚠️ 空でも消さない ── 次に技を足したとき、配る前でも `Audit` を通せる置き場が要る。
-        public static readonly HashSet<string> Undistributed = new HashSet<string>();
+        public static readonly HashSet<string> Undistributed = new HashSet<string>
+        {
+            // ⭐ 2026-08-20 に足した「返す手・1手2役・構え」の7本。
+            // ⚠️ どの種族のプールにも入れていない（作者指示 2026-08-19「あてはめはまだいらない」）。
+            "cleanse", "cleanse-all",
+            "drain-all", "reckless", "warcry",
+            "stance", "resolve",
+        };
 
         /// <summary>技表とガチャプールの整合を数える。
         ///
@@ -1149,6 +1242,10 @@ namespace EggCommand.Core
         /// ⚠️ **規則をここ以外に書き写さない。**写した瞬間から片方が古くなる
         /// ── この道具は同じ形の食い違いを何度も踏んでいる。
         /// ⭐ 世界の状態は触らない（表を引数で受けるので、検査中に遊びが影響を受けない）。</summary>
+        /// <summary>その狙い先が敵側か。⭐ **唯一の出所**（狙い先を足したとき数え落とさないため）。</summary>
+        private static bool AtFoe(Target target) =>
+            target == Target.EnemyOne || target == Target.EnemyAll || target == Target.EnemyRandom;
+
         public static List<string> Faults(IReadOnlyList<Skill> table, IReadOnlyList<Species> speciesTable)
         {
             var problems = new List<string>();
@@ -1286,18 +1383,38 @@ namespace EggCommand.Core
             //    説明文まで作られていた（2026-08-19 の監査）。
             foreach (var skill in table)
             {
+                bool mainAtFoe = AtFoe(skill.Target);
+
+                // ⭐ **技の狙い先へ飛ぶぶん**（飛び先を持たない効果）は、これまでどおり束で見る。
                 bool harmful = false, kindly = false;
                 foreach (var e in skill.Effects)
                 {
+                    if (e.Own != null) continue;
                     if (IsHarmful(e)) harmful = true;
                     else if (e.Kind != EffectKind.Damage) kindly = true;
                 }
-                bool atFoe = skill.Target == Target.EnemyOne || skill.Target == Target.EnemyAll
-                    || skill.Target == Target.EnemyRandom;
-                if (harmful && !atFoe)
+                if (harmful && !mainAtFoe)
                     problems.Add($"{skill.Id}: 弱化を持つのに狙いが「{SkillText.TargetOf(skill.Target)}」");
-                if (kindly && !harmful && atFoe)
+                if (kindly && !harmful && mainAtFoe)
                     problems.Add($"{skill.Id}: 味方に効くものを「{SkillText.TargetOf(skill.Target)}」へ向けている");
+
+                // ⭐ **飛び先を持つぶん（1手2役）は1つずつ見る。**
+                // ⚠️ 束で見ると、代償として自分に掛ける弱化まで「狙いが敵でない」と落ちる
+                //    ── それは事故ではなく、その技の値段そのもの。
+                foreach (var e in skill.Effects)
+                {
+                    if (e.Own == null) continue;
+                    var aside = e.Own.Value;
+                    // ⚠️ **敵へ飛ばすなら害でなければならない。**
+                    //    ここが無いと「敵全体を回復する」書き間違いが黙って通る。
+                    if (AtFoe(aside) && !IsHarmful(e) && e.Kind != EffectKind.Damage)
+                        problems.Add($"{skill.Id}: 味方に効くものを飛び先「{SkillText.TargetOf(aside)}」へ向けている");
+                    // ⚠️ **同じ側へ飛ばすなら、飛ばす意味が無い。**
+                    //    普通の効果として書けるので、書き間違いのほうを疑う。
+                    if (AtFoe(aside) == mainAtFoe)
+                        problems.Add($"{skill.Id}: 飛び先「{SkillText.TargetOf(aside)}」が狙いと同じ側"
+                            + "（飛ばさずに書ける）");
+                }
             }
 
             // ⚠️ **1つの技をあちこちの袋に入れない。**入れると「どこで奪っても同じ」に戻り、

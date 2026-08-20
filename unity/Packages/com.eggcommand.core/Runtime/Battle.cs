@@ -433,9 +433,9 @@ namespace EggCommand.Core
         private static bool HasWeakness(Unit unit)
         {
             var s = unit.Status;
-            if (s.Atk.Turns > 0 && s.Atk.Percent < 0) return true;
-            if (s.Def.Turns > 0 && s.Def.Percent < 0) return true;
-            if (s.Spd.Turns > 0 && s.Spd.Percent < 0) return true;
+            if (IsOn(s.Atk) && s.Atk.Percent < 0) return true;
+            if (IsOn(s.Def) && s.Def.Percent < 0) return true;
+            if (IsOn(s.Spd) && s.Spd.Percent < 0) return true;
             return s.Poison.Turns > 0 || s.Stun > 0 || s.Sleep > 0
                 || s.Block > 0 || s.Taunt > 0;
         }
@@ -452,10 +452,22 @@ namespace EggCommand.Core
 
         // ── 唯一の出所となる計算 ──────────────────────────────
 
+        /// <summary>その修正が今かかっているか。⭐ **唯一の出所。**
+        ///
+        /// ⚠️ 残りが**負**のものは <see cref="Skills.Lasting"/>（切れない持続）。
+        /// ⭐ だから見るのは「0 でないか」であって「正か」ではない。
+        /// ⚠️ ここを `> 0` に戻すと、永続の強化が**掛かった瞬間から無かったこと**になる。</summary>
+        public static bool IsOn(Modifier mod) => mod.Turns != 0;
+
+        /// <summary>持続の長さ比べ（強奪が「強いほうを残す」ために使う）。
+        /// ⭐ **切れないものが常に勝つ。**</summary>
+        private static bool Outlasts(Modifier mine, Modifier yours) =>
+            mine.Turns < 0 || (yours.Turns >= 0 && mine.Turns > yours.Turns);
+
         /// <summary>修正を掛けた実効値。⚠️ 1 未満に落とさない（速度0は割り算で壊れる）。</summary>
         public static int EffectiveStat(int baseValue, Modifier mod)
         {
-            int percent = mod.Turns > 0 ? mod.Percent : 0;
+            int percent = IsOn(mod) ? mod.Percent : 0;
             int value = (int)Math.Floor((double)(baseValue * (100 + percent)) / 100);
             return value < 1 ? 1 : value;
         }
@@ -661,7 +673,7 @@ namespace EggCommand.Core
             {
                 if (gone >= count) break;
                 ref var mod = ref s.ModOf(key);
-                if (mod.Turns <= 0 || mod.Percent >= 0) continue;
+                if (!IsOn(mod) || mod.Percent >= 0) continue;
                 mod.Percent = 0;
                 mod.Turns = 0;
                 gone++;
@@ -686,14 +698,14 @@ namespace EggCommand.Core
             {
                 if (gone >= count) break;
                 ref var mod = ref s.ModOf(key);
-                if (mod.Turns <= 0 || mod.Percent <= 0) continue;
+                if (!IsOn(mod) || mod.Percent <= 0) continue;
                 if (into != null)
                 {
                     // ⚠️ **強いほうを残す。**盾・ガッツ・免疫・リジェネには下で入れてあるのに、
                     //    攻撃/防御/速度の修正枠だけ**無条件の上書き**が残っていた
                     //    ── +30%/5T の個体が +30%/1T を奪うと 5T→1T に減っていた（2026-08-19 の監査）。
                     ref var to = ref into.Status.ModOf(key);
-                    if (mod.Turns > to.Turns)
+                    if (Outlasts(mod, to))
                     {
                         to.Percent = mod.Percent;
                         to.Turns = mod.Turns;
@@ -948,6 +960,11 @@ namespace EggCommand.Core
         /// ⚠️ 遊びからは使わない（技を通さない行動は存在しない）。検査と測定のためだけ。</summary>
         public static void ApplyOne(BattleState state, Unit actor, Unit target, Effect effect) =>
             ApplyEffect(state, actor, target, effect, new SkillBoost());
+
+        /// <summary>スキルレベルの上乗せを乗せて1つだけ撃つ。
+        /// ⭐ 「育てたときに効き目がどう変わるか」を検査から直に確かめるための入口。</summary>
+        public static void ApplyOne(BattleState state, Unit actor, Unit target, Effect effect,
+            SkillBoost boost) => ApplyEffect(state, actor, target, effect, boost);
 
         /// <summary>狙い先を引く。⭐ 検査から狙いの規則（挑発など）を直に確かめるための入口。
         /// ⚠️ **これは下見。**挑発の残り回数は減らない
@@ -1369,7 +1386,8 @@ namespace EggCommand.Core
                     int percent = Skills.BuffPercent * effect.Sign;
                     ref var mod = ref target.Status.ModOf(effect.Stat);
                     mod.Percent = percent;
-                    mod.Turns = effect.Turns + boost.ExtraTurns;
+                    // ⚠️ 永続には持続の上乗せを足さない。足すと負が正に化けて**普通の強化に戻る**
+                    mod.Turns = effect.Turns < 0 ? effect.Turns : effect.Turns + boost.ExtraTurns;
                     state.Log.Add(new BattleEvent(BattleEventKind.Buff, target.Key,
                         stat: effect.Stat, percent: percent, turns: effect.Turns));
                     break;
@@ -1514,7 +1532,11 @@ namespace EggCommand.Core
                 {
                     // ⭐ **個数が負なら弱化のほうを剥がす。**⚠️ 効果の種類は増やさない
                     //    （CT・ゲージ・割合と同じ「符号で向きが変わる」流儀）。
-                    int want = effect.Count + boost.ExtraCount;
+                    // ⚠️ **符号のぶん向きが変わるので、そのまま足さない。**
+                    //    足すと弱化解除（個数が負）は Lv が上がるほど **落とす数が減り**、
+                    //    Lv5 で 2個 → 1個 になっていた（⭐ 育てるほど弱くなる技）。
+                    int extra = boost.ExtraCount;
+                    int want = effect.Count < 0 ? effect.Count - extra : effect.Count + extra;
                     int gone = want < 0
                         ? StripBanes(target, -want)
                         : StripBoons(target, want, null);
@@ -1579,12 +1601,34 @@ namespace EggCommand.Core
                 int onTarget = 0;
                 foreach (var effect in skill.Effects)
                 {
+                    // ⭐ 別の飛び先を持つ効果は**ここでは撃たない**（下でまとめて撃つ）
+                    if (effect.Own != null) continue;
                     // ⚠️ 返し身で行動者が倒れたら、同じ技の残りの効果も撃たない
                     //    （打ち崩しの「ダメージ→防御DOWN」の後半を死体が撃っていた）
                     if (!IsAlive(actor)) break;
                     onTarget += ApplyEffect(state, actor, target, effect, boost);
                 }
                 if (onTarget > hits) hits = onTarget;
+            }
+
+            // ⭐ **1手2役の後半。**技の狙い先と違う先を持つ効果だけを、あらためて撃つ。
+            //
+            // ⚠️ **本体の「あと」でなければならない。**先に撃つと、飛び先を1つも持たない
+            //    移植済みの技でも乱数の引き順が変わりうる書き方になり、照合が壊れる。
+            //    ⭐ いまの形なら、飛び先を持つ効果が無い技は**1ビットも変わらない**。
+            // ⚠️ 狙い先の指定（chosen）は渡さない。プレイヤーが選んだのは
+            //    **技の狙い先**であって、付いてきた効果の飛び先ではない。
+            // ⚠️ 手数（hits）に数えない。数えるのは「相手1体に何発当てたか」で、
+            //    自分への回復や味方への配りは手数ではない。
+            foreach (var effect in skill.Effects)
+            {
+                if (effect.Own == null) continue;
+                if (!IsAlive(actor)) break;
+                foreach (var aside in TargetsOf(state, actor, effect.Own.Value, null, consume: true))
+                {
+                    if (!IsAlive(actor)) break;
+                    ApplyEffect(state, actor, aside, effect, boost);
+                }
             }
 
             // ⚠️ CT は「本人の行動回数」で減る。何をしたかに関わらず1回ぶん進む
@@ -1620,9 +1664,9 @@ namespace EggCommand.Core
         {
             var s = unit.Status;
             var output = new List<string>();
-            if (s.Atk.Turns > 0) output.Add($"攻撃{Sign(s.Atk.Percent)}%");
-            if (s.Def.Turns > 0) output.Add($"防御{Sign(s.Def.Percent)}%");
-            if (s.Spd.Turns > 0) output.Add($"速度{Sign(s.Spd.Percent)}%");
+            if (IsOn(s.Atk)) output.Add($"攻撃{Sign(s.Atk.Percent)}%{Ever(s.Atk)}");
+            if (IsOn(s.Def)) output.Add($"防御{Sign(s.Def.Percent)}%{Ever(s.Def)}");
+            if (IsOn(s.Spd)) output.Add($"速度{Sign(s.Spd.Percent)}%{Ever(s.Spd)}");
             if (s.Poison.Turns > 0) output.Add($"毒×{s.Poison.Stacks}({s.Poison.Turns})");
             if (s.Regen.Turns > 0) output.Add($"リジェネ×{s.Regen.Stacks}({s.Regen.Turns})");
             // ⭐ 枚数。1回の攻撃につき1枚
@@ -1638,5 +1682,9 @@ namespace EggCommand.Core
         }
 
         private static string Sign(int n) => n > 0 ? $"+{n}" : n.ToString();
+
+        /// <summary>⭐ 切れない持続には印を付ける。⚠️ 残り回数を出せないので、
+        /// 付けないと「あと1回」と見分けが付かない。</summary>
+        private static string Ever(Modifier mod) => mod.Turns < 0 ? "(永)" : "";
     }
 }

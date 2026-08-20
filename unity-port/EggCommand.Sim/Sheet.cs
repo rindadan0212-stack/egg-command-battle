@@ -410,7 +410,8 @@ namespace EggCommand.Sim
                 case EffectKind.Buff:
                     sb.Append(e.Sign > 0 ? KindBuffUp : KindBuffDown)
                       .Append(" ステ:").Append(Stats.LabelOf(e.Stat))
-                      .Append(" ターン:").Append(e.Turns);
+                      // ⭐ 切れない持続は数で書かない（「ターン:-1」では読めない）
+                      .Append(" ターン:").Append(e.Turns < 0 ? Everlasting : e.Turns.ToString());
                     break;
                 case EffectKind.Poison:
                 case EffectKind.Regen:
@@ -455,8 +456,13 @@ namespace EggCommand.Sim
                 default: throw new ArgumentOutOfRangeException(nameof(e), e.Kind, "帳面に書けない効果");
             }
             if (e.Chance < 100) sb.Append(" 確率:").Append(e.Chance);
+            // ⭐ 1手2役。⚠️ 書き落とすと、読み返したとき飛び先が消えて別の技になる
+            if (e.Own != null) sb.Append(" 飛び先:").Append(SkillText.TargetOf(e.Own.Value));
             return sb.ToString();
         }
+
+        /// <summary>帳面での「切れない持続」の書き方。⚠️ 書く側と読む側で同じ語を使う。</summary>
+        private const string Everlasting = "永続";
 
         private static string WordOf(EffectKind kind)
         {
@@ -931,6 +937,25 @@ namespace EggCommand.Sim
 
         private static bool ParseEffect(string line, string at, List<string> problems, out Effect made)
         {
+            if (!ParseEffectCore(line, at, problems, out made)) return false;
+
+            // ⭐ **1手2役。**この効果だけ、技の狙い先と違う相手へ飛ばす。
+            // ⚠️ ここを飛ばすと、書いた飛び先が黙って消えて別の技になる。
+            const string mark = "飛び先:";
+            int found = line.IndexOf(mark, StringComparison.Ordinal);
+            if (found < 0) return true;
+            string word = line.Substring(found + mark.Length).Split(' ')[0];
+            if (!TryTarget(word, out var aside))
+            {
+                problems.Add($"{at}: 飛び先が読めない（{word}）");
+                return false;
+            }
+            made = made.To(aside);
+            return true;
+        }
+
+        private static bool ParseEffectCore(string line, string at, List<string> problems, out Effect made)
+        {
             made = default;
             var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 0) { problems.Add($"{at}: 空の効果行"); return false; }
@@ -982,6 +1007,32 @@ namespace EggCommand.Sim
                 return n;
             }
 
+            /// ⭐ 符号が意味を持つ札（解除の個数）。⚠️ 「1以上」の縛りを掛けない。
+            int Signed(string tag, int fallback)
+            {
+                if (!tags.TryGetValue(tag, out var v)) return fallback;
+                if (!int.TryParse(v, NumberStyles.Integer | NumberStyles.AllowLeadingSign,
+                        CultureInfo.InvariantCulture, out int n))
+                {
+                    problems.Add($"{at}: {tag}:{v} が数でない");
+                    return fallback;
+                }
+                if (n > 9999 || n < -9999)
+                {
+                    problems.Add($"{at}: {tag} が極端（{n}）── 桁を確かめてください");
+                    return fallback;
+                }
+                return n;
+            }
+
+            /// ⭐ 強化・弱化の持続だけ「永続」を通す（<see cref="Skills.Lasting"/>）。
+            /// ⚠️ 毒やスタンには通さない ── 切れない毒は勝負が終わらない。
+            int Turns(int fallback)
+            {
+                if (tags.TryGetValue("ターン", out var v) && v == Everlasting) return Skills.Lasting;
+                return Num("ターン", fallback);
+            }
+
             // ⚠️ **下限は実装から引く。**1〜100 で通していた頃、確率10 と書いた技が
             //    黙って 20 に切り上がっていた（Effect の下限）。
             int chance = Num("確率", 100);
@@ -1014,7 +1065,7 @@ namespace EggCommand.Sim
                     // ⚠️ HP・弱化命中・弱化耐性には修正枠が無い（Battle が持っていない）
                     if (stat != StatKey.Atk && stat != StatKey.Def && stat != StatKey.Spd)
                     { problems.Add($"{at}: {Stats.LabelOf(stat)} は強化・弱化できない"); return false; }
-                    made = Effect.Buff(stat, word == KindBuffUp ? 1 : -1, Num("ターン", 3), chance);
+                    made = Effect.Buff(stat, word == KindBuffUp ? 1 : -1, Turns(3), chance);
                     return true;
                 }
                 case EffectKind.Poison:
@@ -1034,7 +1085,7 @@ namespace EggCommand.Sim
                 case EffectKind.Dispel:
                 {
                     // ⭐ 正なら強化を剥がす／負なら弱化を剥がす（味方の毒などを治す）
-                    int n = Num("個数", 1);
+                    int n = Signed("個数", 1);
                     if (n == 0) { problems.Add($"{at}: 個数が 0"); return false; }
                     made = Effect.Dispel(n, chance); return true;
                 }

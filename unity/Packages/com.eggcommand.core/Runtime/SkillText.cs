@@ -44,7 +44,8 @@ namespace EggCommand.Core
                 case EffectKind.Taunt: return "挑発";
                 case EffectKind.Guts: return "ガッツ";
                 case EffectKind.Immune: return "免疫";
-                case EffectKind.Dispel: return "強化解除";
+                // ⭐ 個数が負なら**弱化のほう**を落とす（⚠️ 名前も逆になる）
+                case EffectKind.Dispel: return effect.Count < 0 ? "弱化解除" : "強化解除";
                 case EffectKind.Steal: return "強化強奪";
                 case EffectKind.Revive: return "蘇生";
                 // ⚠️ 黙って既定に落とさない。足した効果が名無しのまま表に出るのを防ぐ
@@ -158,25 +159,45 @@ namespace EggCommand.Core
         /// <summary>技が何をするかの1文。⭐ 狙い先・確率・持続をすべて含める。</summary>
         public static string Describe(Skill skill)
         {
-            var clauses = new List<Clause>();
+            var main = new List<Effect>();
             foreach (var effect in skill.Effects)
+            {
+                if (effect.Own == null) main.Add(effect);
+            }
+            var sb = new StringBuilder(Sentence(skill.Id, skill.Target, main));
+            // ⭐ **1手2役は別の文にする。**⚠️ 同じ文へ混ぜると狙い先が2つある文になり、
+            //    「敵全体に自分を回復し」のような読めない並びになる。
+            foreach (var effect in skill.Effects)
+            {
+                if (effect.Own == null) continue;
+                sb.Append("、さらに")
+                  .Append(Sentence(skill.Id, effect.Own.Value, new List<Effect> { effect }));
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>1つの狙い先ぶんの文。</summary>
+        private static string Sentence(string id, Target target, List<Effect> effects)
+        {
+            var clauses = new List<Clause>();
+            foreach (var effect in effects)
             {
                 // ⭐ ダメージは最後に回す。状態を付けてから殴る、という起きる順に合わせる
                 if (effect.Kind == EffectKind.Damage) continue;
                 clauses.Add(StateClause(effect));
             }
-            foreach (var effect in skill.Effects)
+            foreach (var effect in effects)
             {
                 if (effect.Kind == EffectKind.Damage) clauses.Add(AttackClause(effect));
             }
             if (clauses.Count == 0)
             {
                 // ⚠️ 効果の無い技は表に出す前に気づきたい
-                throw new InvalidOperationException($"{skill.Id}: 効果が1つも無い");
+                throw new InvalidOperationException($"{id}: 効果が1つも無い");
             }
 
             var sb = new StringBuilder();
-            sb.Append(TargetOf(skill.Target)).Append(clauses[0].Particle);
+            sb.Append(TargetOf(target)).Append(clauses[0].Particle);
             for (int i = 0; i < clauses.Count; i++)
             {
                 if (i > 0) sb.Append('、');
@@ -208,6 +229,10 @@ namespace EggCommand.Core
             };
         }
 
+        /// <summary>持続の書き方。⚠️ 負は <see cref="Skills.Lasting"/>（切れない）。
+        /// ⭐ 「-1T」と出さないための唯一の出所。</summary>
+        private static string Lasts(int turns) => turns < 0 ? "戦闘の間ずっと" : $"{turns}T";
+
         private static Clause StateClause(Effect effect)
         {
             string name = NameOf(effect);
@@ -233,7 +258,11 @@ namespace EggCommand.Core
                     return Of("の", $"全スキルのCTを{chance}{amount}", effect.Delta < 0 ? "短縮" : "延長");
                 }
                 case EffectKind.Dispel:
-                    return Of("の", $"強化を{chance}{effect.Count}個", "解除");
+                {
+                    string what = effect.Count < 0 ? "弱化" : "強化";
+                    int many = effect.Count < 0 ? -effect.Count : effect.Count;
+                    return Of("の", $"{what}を{chance}{many}個", "解除");
+                }
                 case EffectKind.Steal:
                     return Of("の", $"強化を{chance}{effect.Count}個", "強奪");
                 case EffectKind.Shield:
@@ -243,13 +272,13 @@ namespace EggCommand.Core
                 {
                     // ⭐ 重なる効果は枚数と持続の両方を書く
                     string stacks = effect.Stacks > 1 ? $"×{effect.Stacks}" : "";
-                    return Of("に", $"{name}{stacks}を{chance}{effect.Turns}T", "付与");
+                    return Of("に", $"{name}{stacks}を{chance}{Lasts(effect.Turns)}", "付与");
                 }
                 case EffectKind.Buff:
                     // ⚠️ 効き目（±30%）は**ゲーム全体で固定**なので文には書かない。
                     //    技ごとに変わらない数を毎行に書くと、変わる数（確率・持続）が埋もれる。
                     //    ⭐ 数そのものは Wiki の[効果の種類]に1度だけ書いてある。
-                    return Of("に", $"{name}を{chance}{effect.Turns}T", "付与");
+                    return Of("に", $"{name}を{chance}{Lasts(effect.Turns)}", "付与");
                 case EffectKind.Taunt:
                     // ⚠️ **挑発だけ「回」。**T は「その個体の行動回数」だが、挑発が数えるのは
                     //    **相手が単体技を撃った回数**（全体技や自分に掛ける技では減らない）。
@@ -257,7 +286,7 @@ namespace EggCommand.Core
                     return Of("に", $"{name}を{chance}{effect.Hits}回", "付与");
                 default:
                     // スタン・睡眠・ブロック・ガッツ・免疫
-                    return Of("に", $"{name}を{chance}{effect.Turns}T", "付与");
+                    return Of("に", $"{name}を{chance}{Lasts(effect.Turns)}", "付与");
             }
         }
 

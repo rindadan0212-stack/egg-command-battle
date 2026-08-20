@@ -80,7 +80,11 @@ namespace EggCommand.Sim
                 case "landprobe": LandProbe(); break;
                 case "flight": FlightProbe(seed); break;
                 case "trail": TrailProbe(seed); break;
-                case "strategy": StrategyProbe(seed); break;
+                case "strategy":
+                    // ⭐ `sim strategy 4` で4対4。⚠️ 既定を変えない（3対3の記録が読めなくなる）
+                    StrategyProbe(seed, args.Length > 1 && args[1] == "4" ? 4 : 3);
+                    break;
+                case "speed": SpeedProbe(seed); break;
                 // ⭐ 技と種族を手で書くための帳面（Sheet.cs）
                 case "sheet": Sheet.Run(args.Length > 1 ? args[1] : ""); break;
                 case "slant": SlantProbe(seed); break;
@@ -126,6 +130,10 @@ namespace EggCommand.Sim
             public readonly int[] BySlot = new int[3];
             /// <summary>手番が回ってきたとき、枠が待ちで塞がっていた回数。</summary>
             public readonly int[] Locked = new int[3];
+            /// <summary>⭐ **味方側が取った手番の数。**速度の効きを直に測るための欄。
+            /// ⚠️ 勝敗と違って side の有利不利が混ざらない
+            /// （どちらが先に倒れたかではなく、何回動けたかを数える）。</summary>
+            public int AllyActions;
         }
 
         /// <param name="land">弱化が通るかを引く乱数。
@@ -166,6 +174,7 @@ namespace EggCommand.Sim
 
                 Battle.PerformAction(state, actor, slot);
                 fight.Actions++;
+                if (actor.Side == Side.Ally) fight.AllyActions++;
             }
 
             fight.Result = state.Result ?? Outcome.Draw;
@@ -1305,7 +1314,7 @@ namespace EggCommand.Sim
         /// <item>素質は全編成とも1体120・1ステ40まで（総量が同じ）</item>
         /// <item>⭐ **`land` 乱数を毎回渡す** ── 渡さないと確率つき効果が1標本しか引かれない</item>
         /// </list></summary>
-        private static void StrategyProbe(int seed)
+        private static void StrategyProbe(int seed, int members)
         {
             // ⚠️ 1体120・1ステ40 まで。どの案も総量は同じ
             StatBlock W(int hp, int atk, int def, int spd, int acc, int res) =>
@@ -1314,47 +1323,47 @@ namespace EggCommand.Sim
             var plans = new[]
             {
                 new Plan("均等", "寄せない。台帳がいう最強",
-                    new[] { W(20,20,20,20,20,20), W(20,20,20,20,20,20), W(20,20,20,20,20,20) },
-                    new[] { "attack", "attack", "attack" },
-                    new[] { "def-up", "def-up", "def-up" }),
+                    new[] { W(20,20,20,20,20,20), W(20,20,20,20,20,20), W(20,20,20,20,20,20), W(20,20,20,20,20,20) },
+                    new[] { "attack", "attack", "attack", "attack" },
+                    new[] { "def-up", "def-up", "def-up", "def-up" }),
 
                 new Plan("止め", "行動させない。仕留めは1体に任せる",
-                    new[] { W(40,0,0,40,40,0), W(40,0,0,40,40,0), W(40,40,0,40,0,0) },
-                    new[] { "stun-heavy", "gauge-drain", "attack-heavy" },
-                    new[] { "ct-lock", "block", "pierce-strike" }),
+                    new[] { W(40,0,0,40,40,0), W(40,0,0,40,40,0), W(40,40,0,40,0,0), W(40,0,0,40,40,0) },
+                    new[] { "stun-heavy", "gauge-drain", "attack-heavy", "sleep" },
+                    new[] { "ct-lock", "block", "pierce-strike", "gauge-drain" }),
 
                 new Plan("壁と挑発", "受け皿を1体に固定して、後ろから殴る",
-                    new[] { W(40,0,40,0,0,40), W(40,0,40,0,0,40), W(40,40,0,40,0,0) },
-                    new[] { "taunt-long", "bulwark", "attack-heavy" },
-                    new[] { "shield-wall", "guts-deep", "atk-up" }),
+                    new[] { W(40,0,40,0,0,40), W(40,0,40,0,0,40), W(40,40,0,40,0,0), W(40,0,40,0,0,40) },
+                    new[] { "taunt-long", "bulwark", "attack-heavy", "taunt-long" },
+                    new[] { "shield-wall", "guts-deep", "atk-up", "shield-wall" }),
 
                 new Plan("毒と持久", "削って粘る。倒しきらない",
-                    new[] { W(40,0,0,0,40,40), W(40,0,40,0,0,40), W(40,0,0,40,40,0) },
-                    new[] { "venom-heavy", "regen-heavy", "curse" },
-                    new[] { "poison-all", "heal-miracle", "slow-all" }),
+                    new[] { W(40,0,0,0,40,40), W(40,0,40,0,0,40), W(40,0,0,40,40,0), W(40,0,0,0,40,40) },
+                    new[] { "venom-heavy", "regen-heavy", "curse", "poison-all" },
+                    new[] { "poison-all", "heal-miracle", "slow-all", "regen-heavy" }),
 
                 new Plan("速攻", "相手が動く前に終わらせる",
-                    new[] { W(40,40,0,40,0,0), W(40,40,0,40,0,0), W(40,40,0,40,0,0) },
-                    new[] { "dash", "ct-short", "attack-all-heavy" },
-                    new[] { "attack-heavy", "pierce-strike", "atk-up" }),
+                    new[] { W(40,40,0,40,0,0), W(40,40,0,40,0,0), W(40,40,0,40,0,0), W(40,40,0,40,0,0) },
+                    new[] { "dash", "ct-short", "attack-all-heavy", "dash" },
+                    new[] { "attack-heavy", "pierce-strike", "atk-up", "attack-heavy" }),
 
                 new Plan("剥がし", "相手の強化を消して殴る",
-                    new[] { W(40,40,0,0,40,0), W(40,40,0,0,40,0), W(40,40,0,40,0,0) },
-                    new[] { "strip-strike", "buff-steal", "attack-twice" },
-                    new[] { "dispel", "attack", "atk-down" }),
+                    new[] { W(40,40,0,0,40,0), W(40,40,0,0,40,0), W(40,40,0,40,0,0), W(40,40,0,0,40,0) },
+                    new[] { "strip-strike", "buff-steal", "attack-twice", "dispel" },
+                    new[] { "dispel", "attack", "atk-down", "attack-twice" }),
 
                 // ⭐ 台帳の `sim roles` が測っている形（攻撃役・壁役・弱化役）。
                 // ⚠️ ただし素質は法内（1ステ40まで）にし、交絡は全部そろえてある
                 new Plan("役割分担", "攻撃役・壁役・弱化役の3点セット",
-                    new[] { W(40,40,0,40,0,0), W(40,0,40,0,0,40), W(40,0,0,40,40,0) },
-                    new[] { "attack-heavy", "bulwark", "curse" },
-                    new[] { "attack-twice", "harden", "slow-all" }),
+                    new[] { W(40,40,0,40,0,0), W(40,0,40,0,0,40), W(40,0,0,40,40,0), W(40,0,20,0,20,40) },
+                    new[] { "attack-heavy", "bulwark", "curse", "heal-big" },
+                    new[] { "attack-twice", "harden", "slow-all", "regen-heavy" }),
 
                 // ⭐ 速攻から**速度だけ**抜いた版。⚠️ 速攻の強さが速度か攻撃かを分ける
                 new Plan("速攻-速度抜", "同じ技のまま、速度を防御に振り替えた",
-                    new[] { W(40,40,40,0,0,0), W(40,40,40,0,0,0), W(40,40,40,0,0,0) },
-                    new[] { "dash", "ct-short", "attack-all-heavy" },
-                    new[] { "attack-heavy", "pierce-strike", "atk-up" }),
+                    new[] { W(40,40,40,0,0,0), W(40,40,40,0,0,0), W(40,40,40,0,0,0), W(40,40,40,0,0,0) },
+                    new[] { "dash", "ct-short", "attack-all-heavy", "dash" },
+                    new[] { "attack-heavy", "pierce-strike", "atk-up", "attack-heavy" }),
 
                 // ══ 参考作品（R帯 60体）を写した編成 ═══════════════════════
                 // ⚠️ **借りたのは「どの効果を、どう組み合わせるか」だけ。**
@@ -1365,43 +1374,59 @@ namespace EggCommand.Sim
                 // ⭐ 毒撒き（ゴブリン光・マッシュ水・ツボ光 の型）
                 //    全体攻撃＋毒を重ね、削り切る前に相手を溶かす
                 new Plan("R:毒撒き", "全体攻撃に毒を重ねて溶かす",
-                    new[] { W(30,30,20,20,20,0), W(30,20,20,20,30,0), W(30,20,30,20,20,0) },
-                    new[] { "poison-all", "venom-fang", "venom-heavy" },
-                    new[] { "attack-all", "attack-all", "poison" }),
+                    new[] { W(30,30,20,20,20,0), W(30,20,20,20,30,0), W(30,20,30,20,20,0), W(30,20,20,20,30,0) },
+                    new[] { "poison-all", "venom-fang", "venom-heavy", "venom-heavy" },
+                    new[] { "attack-all", "attack-all", "poison", "attack-all" }),
 
                 // ⭐ 足止め（ハンター火・ゴブリン闇・マッシュ火 の型）
                 //    速度弱化を全体に撒き、ゲージも削る
                 new Plan("R:足止め", "速度弱化とゲージ削りで動かせない",
-                    new[] { W(30,20,20,30,20,0), W(30,20,20,30,20,0), W(30,30,20,20,20,0) },
-                    new[] { "slow-all", "gauge-drain", "spd-down" },
-                    new[] { "attack-all", "attack", "attack-twice" }),
+                    new[] { W(30,20,20,30,20,0), W(30,20,20,30,20,0), W(30,30,20,20,20,0), W(30,20,20,30,20,0) },
+                    new[] { "slow-all", "gauge-drain", "spd-down", "slow-all" },
+                    new[] { "attack-all", "attack", "attack-twice", "gauge-drain" }),
 
                 // ⭐ 妨害（ミミック闇・オーク水・ハンター光 の型）
                 //    CT延長で相手の大技を遅らせ続ける
                 new Plan("R:CT縛り", "CT延長で相手の技を出させない",
-                    new[] { W(30,20,20,20,30,0), W(30,20,20,20,30,0), W(30,30,20,20,20,0) },
-                    new[] { "ct-long", "ct-lock", "atk-down" },
-                    new[] { "attack", "attack", "attack-heavy" }),
+                    new[] { W(30,20,20,20,30,0), W(30,20,20,20,30,0), W(30,30,20,20,20,0), W(30,20,20,20,30,0) },
+                    new[] { "ct-long", "ct-lock", "atk-down", "ct-long" },
+                    new[] { "attack", "attack", "attack-heavy", "attack" }),
 
                 // ⭐ 防御参照（ゴブリン火・ハンター水・ひとくいばな闇 の型）
                 //    防御を積んで、その防御で殴る
                 new Plan("R:防御殴り", "防御を積んで、その防御で殴る",
-                    new[] { W(30,0,40,20,0,30), W(30,0,40,20,0,30), W(30,0,40,20,0,30) },
-                    new[] { "attack-def", "attack-def-twice", "attack-def" },
-                    new[] { "def-up", "harden", "attack-def-twice" }),
+                    new[] { W(30,0,40,20,0,30), W(30,0,40,20,0,30), W(30,0,40,20,0,30), W(30,0,40,20,0,30) },
+                    new[] { "attack-def", "attack-def-twice", "attack-def", "attack-def-twice" },
+                    new[] { "def-up", "harden", "attack-def-twice", "harden" }),
 
                 // ⭐ 支援（ハンター風・マッシュ闇・ホネ火 の型）
                 //    強化と回復で長く保たせる
                 new Plan("R:支援", "強化と回復で保たせて押し切る",
-                    new[] { W(40,20,20,0,0,40), W(30,20,30,20,0,20), W(30,30,20,20,20,0) },
-                    new[] { "atk-up", "spd-up", "heal-big" },
-                    new[] { "def-up", "regen-heavy", "attack-all" }),
+                    new[] { W(40,20,20,0,0,40), W(30,20,30,20,0,20), W(30,30,20,20,20,0), W(30,20,30,20,0,20) },
+                    new[] { "atk-up", "spd-up", "heal-big", "heal-big" },
+                    new[] { "def-up", "regen-heavy", "attack-all", "regen-heavy" }),
 
                 // ⭐ 混成（向こうの役割表どおり アタッカー＋デバッファー＋ヒーラー）
+                // ⭐ 2026-08-20 に足した語彙（弱化解除 / 1手2役 / 切れない持続）だけで組んだ案。
+                // ⚠️ 4体目の枠が空いたぶんを「返す手」に使うと強いのか、を測るために並べる。
+                new Plan("新語彙", "解除で返し、1手2役で稼ぎ、構えで固める",
+                    new[] { W(30,40,20,30,0,0), W(40,0,40,0,0,40), W(30,20,20,20,30,0), W(40,0,20,0,20,40) },
+                    new[] { "drain-all", "stance", "warcry", "cleanse" },
+                    new[] { "attack-heavy", "taunt-long", "reckless", "heal-big" }),
+
                 new Plan("R:混成", "アタッカー・デバッファー・ヒーラーの3点",
-                    new[] { W(30,40,20,30,0,0), W(30,20,20,20,30,0), W(40,20,30,10,0,20) },
-                    new[] { "attack-all", "slow-all", "heal-big" },
-                    new[] { "attack-heavy", "poison-all", "def-up" }),
+                    new[] { W(30,40,20,30,0,0), W(30,20,20,20,30,0), W(40,20,30,10,0,20), W(30,30,20,20,20,0) },
+                    new[] { "attack-all", "slow-all", "heal-big", "attack-heavy" },
+                    new[] { "attack-heavy", "poison-all", "def-up", "atk-up" }),
+
+                // ⭐ **対照: R:混成 から回復だけ抜いた版。**
+                // ⚠️ 2026-08-20 の突き合わせで「回復が効いている疑い ── 未検証」と
+                //    書いたまま残っていた問い。ステも技も1か所しか変えていない
+                //    （ヒーラーの2枠を攻撃に差し替えただけ）。
+                new Plan("R:混成-回復抜", "同じ3点セットから回復だけ攻撃に替えた",
+                    new[] { W(30,40,20,30,0,0), W(30,20,20,20,30,0), W(40,20,30,10,0,20), W(30,30,20,20,20,0) },
+                    new[] { "attack-all", "slow-all", "attack-heavy", "attack-heavy" },
+                    new[] { "attack-heavy", "poison-all", "attack-twice", "atk-up" }),
             };
 
             const int Bouts = 240;
@@ -1412,7 +1437,7 @@ namespace EggCommand.Sim
                 Console.WriteLine($"  {plan.Name,-8} {plan.Aim}");
 
             Console.WriteLine();
-            Console.WriteLine($"■ 総当たり（1組 {Bouts} 戦・属性と種族と特性は両側そろえてある）");
+            Console.WriteLine($"■ 総当たり（{members}対{members}・1組 {Bouts} 戦・属性と種族と特性は両側そろえてある）");
             Console.Write($"  {"",-10}");
             foreach (var plan in plans) Console.Write($"{plan.Name,8}");
             Console.WriteLine($"{"総合",8}");
@@ -1425,7 +1450,7 @@ namespace EggCommand.Sim
                 for (int b = 0; b < plans.Length; b++)
                 {
                     if (a == b) { Console.Write($"{"—",8}"); continue; }
-                    int wins = Duel(seed, plans[a], plans[b], Bouts);
+                    int wins = Duel(seed, plans[a], plans[b], Bouts, members: members);
                     won += wins; played += Bouts;
                     Console.Write($"{100.0 * wins / Bouts,7:0}%");
                 }
@@ -1439,7 +1464,7 @@ namespace EggCommand.Sim
             Console.WriteLine($"  {"編成",-10}{"対 均等",10}{"総合",8}");
             for (int a = 1; a < plans.Length; a++)
                 Console.WriteLine($"  {plans[a].Name,-10}"
-                    + $"{100.0 * Duel(seed, plans[a], plans[0], Bouts) / Bouts,9:0}%"
+                    + $"{100.0 * Duel(seed, plans[a], plans[0], Bouts, members: members) / Bouts,9:0}%"
                     + $"{overall[a],7:0}%");
 
             Console.WriteLine();
@@ -1455,18 +1480,18 @@ namespace EggCommand.Sim
             {
                 var full = plans[6];                       // 役割分担
                 var flat = W(20, 20, 20, 20, 20, 20);
-                var names = new[] { "攻撃役", "壁役", "弱化役" };
-                Console.WriteLine($"  {"抜いた役",-12}{"対 3役（land有）",16}{"落ち込み",10}{"land無し",12}{"落ち込み",10}");
-                for (int drop = 0; drop < 3; drop++)
+                var names = new[] { "攻撃役", "壁役", "弱化役", "回復役" };
+                Console.WriteLine($"  {"抜いた役",-12}{$"対 {members}役（land有）",16}{"落ち込み",10}{"land無し",12}{"落ち込み",10}");
+                for (int drop = 0; drop < members; drop++)
                 {
                     var wild = (StatBlock[])full.Wild.Clone();
                     var s2 = (string[])full.Skill2.Clone();
                     var s3 = (string[])full.Skill3.Clone();
                     wild[drop] = flat; s2[drop] = "attack"; s3[drop] = "def-up";
                     var missing = new Plan("欠け", "", wild, s2, s3);
-                    double won = 100.0 * Duel(seed, missing, full, Bouts) / Bouts;
+                    double won = 100.0 * Duel(seed, missing, full, Bouts, members: members) / Bouts;
                     // ⚠️ 同じ測定を「land を渡さない」で並べる（既存 probe と同じ条件）
-                    double blind = 100.0 * Duel(seed, missing, full, Bouts, land: false) / Bouts;
+                    double blind = 100.0 * Duel(seed, missing, full, Bouts, land: false, members: members) / Bouts;
                     Console.WriteLine($"  {names[drop],-12}{won,13:0}%{won - 50.0,9:+0;-0}pt"
                         + $"{blind,12:0}%{blind - 50.0,9:+0;-0}pt");
                 }
@@ -1483,7 +1508,7 @@ namespace EggCommand.Sim
                 double acts = 0; int draws = 0;
                 for (int i = 0; i < Bouts; i++)
                 {
-                    var fight = Bout(seed, i, plans[a], plans[0]);
+                    var fight = Bout(seed, i, plans[a], plans[0], members: members);
                     acts += fight.Actions;
                     if (fight.Result == null) draws++;
                 }
@@ -1493,35 +1518,41 @@ namespace EggCommand.Sim
         }
 
         /// <summary>2つの案を戦わせて、先の案が勝った回数。</summary>
-        private static int Duel(int seed, Plan mine, Plan yours, int bouts, bool land = true)
+        private static int Duel(int seed, Plan mine, Plan yours, int bouts, bool land = true,
+            int members = 3)
         {
             int won = 0;
             for (int i = 0; i < bouts; i++)
-                if (Bout(seed, i, mine, yours, land).Result == Outcome.Ally) won++;
+                if (Bout(seed, i, mine, yours, land, members).Result == Outcome.Ally) won++;
             return won;
         }
 
         /// <param name="land">確率つき効果の乱数を毎回変えるか。
         /// ⚠️ false にすると、既にある probe（roles / species）と同じ条件になる ──
         /// **全戦闘で同じ目**が出るので、確率つきの技は1標本しか引かれない。</param>
-        private static Fight Bout(int seed, int round, Plan mine, Plan yours, bool land = true)
+        private static Fight Bout(int seed, int round, Plan mine, Plan yours, bool land = true,
+            int members = 3)
         {
             var rng = new Rng(seed + round).Stream("plan");
             int serial = 0;
             var draw = land ? new Rng(seed * 7919 + round).Stream("land") : null;
-            return Run(Cast(rng, mine, ref serial), Cast(rng, yours, ref serial), draw);
+            return Run(Cast(rng, mine, ref serial, members), Cast(rng, yours, ref serial, members), draw);
         }
 
-        /// <summary>案どおりの3体を作る。⚠️ 交絡になるものは全部そろえる。</summary>
-        private static List<Creature> Cast(Rng rng, Plan plan, ref int serial)
+        /// <summary>案どおりの N 体を作る。⚠️ 交絡になるものは全部そろえる。</summary>
+        /// <param name="members">⭐ 3 か 4。⚠️ <see cref="Battle"/> は体数を決め打ちしていない
+        /// （<see cref="Battle.LoneScale"/> が体数の**比**で効くので、増やしても式は変わらない）。
+        /// ⚠️ <see cref="Game.PartySize"/> は遊びの側の約束なので、ここでは見ない。</param>
+        private static List<Creature> Cast(Rng rng, Plan plan, ref int serial, int members = 3)
         {
-            // ⚠️ 種族を固定 ＝ 枠1の技を固定（attack / attack-def / attack-twice）
-            var species = new[] { "tsunoga", "tamaru", "haneru" };
-            // ⚠️ 属性を枠ごとに固定。両側同じ並びなので 3すくみは勝敗に入らない
-            var elements = new[] { Element.Fire, Element.Water, Element.Wood };
+            // ⚠️ 種族を固定 ＝ 枠1の技を固定（attack / attack-def / attack-twice / attack）
+            var species = new[] { "tsunoga", "tamaru", "haneru", "hirabe" };
+            // ⚠️ 属性を枠ごとに固定。両側同じ並びなので 3すくみは勝敗に入らない。
+            //    ⭐ 属性は3つしか無いので、4体目は1体目と同じ（両側そろっているので偏らない）
+            var elements = new[] { Element.Fire, Element.Water, Element.Wood, Element.Fire };
 
             var party = new List<Creature>();
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < members; i++)
             {
                 var born = Born(rng, species[i], 5, ref serial, elements[i]);
                 party.Add(new Creature(
@@ -1532,6 +1563,123 @@ namespace EggCommand.Sim
                     null, null, elements[i], null));
             }
             return party;
+        }
+
+        /// <summary>⭐ **速度は本当に一番広いステか。**
+        ///
+        /// ⚠️ これを書いたのは、2026-08-20 の突き合わせで「速度の幅 6.60倍」と報告したのが
+        /// **持ち幅（生の数）を測ったものでしかなかった**から。
+        /// ⭐ 戦闘で効くのはゲージの速さで、そこには全員ぶんの下駄
+        /// （<see cref="Battle.GaugeBase"/>）が乗っている ── 生の幅はそのまま効かない。
+        /// ⚠️ 一方、潜入のさいころは速度の合計を割るだけなので**生の幅がそのまま効く**。
+        /// ⭐ その2つを並べて出すのがこの道具の仕事。</summary>
+        private static void SpeedProbe(int seed)
+        {
+            Console.WriteLine();
+            Console.WriteLine("■ ステの持ち幅（種族の基礎値 ＋ 素質の上限）");
+            Console.WriteLine("  ⚠️ 生の数の幅。⭐ これがそのまま効くとは限らない（下の表）");
+
+            int lift = Stats.WildStatMax * Stats.Scale;
+            var keys = new[] { StatKey.Hp, StatKey.Atk, StatKey.Def, StatKey.Spd };
+            var raw = new Dictionary<StatKey, double>();
+            Console.WriteLine();
+            Console.WriteLine("  ステ    基礎の幅        素質込みの幅      倍率");
+            foreach (var key in keys)
+            {
+                int lo = int.MaxValue, hi = int.MinValue;
+                foreach (var sp in SpeciesTable.All)
+                {
+                    int v = sp.Base[key];
+                    if (v < lo) lo = v;
+                    if (v > hi) hi = v;
+                }
+                double ratio = (double)(hi + lift) / lo;
+                raw[key] = ratio;
+                Console.WriteLine($"  {Stats.LabelOf(key),-6} {lo,4}〜{hi,4}      {lo,4}〜{hi + lift,4}    {ratio,5:0.00}倍");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("■ その幅が**戦闘**でどれだけ効くか（手番の回りやすさ）");
+            Console.WriteLine($"  ⭐ ゲージは 1刻みで「{Battle.GaugeBase}（全員ぶんの下駄）＋ 速度」溜まる");
+            {
+                int lo = int.MaxValue, hi = int.MinValue;
+                foreach (var sp in SpeciesTable.All)
+                {
+                    if (sp.Base.Spd < lo) lo = sp.Base.Spd;
+                    if (sp.Base.Spd > hi) hi = sp.Base.Spd;
+                }
+                int fast = hi + lift;
+                double rateRatio = (double)Battle.GaugeRate(fast) / Battle.GaugeRate(lo);
+                Console.WriteLine($"  一番遅い 速度{lo,4} → 1刻み {Battle.GaugeRate(lo),4} ／ "
+                    + $"満タンまで {Battle.TicksToAct(0, lo),3} 刻み");
+                Console.WriteLine($"  一番速い 速度{fast,4} → 1刻み {Battle.GaugeRate(fast),4} ／ "
+                    + $"満タンまで {Battle.TicksToAct(0, fast),3} 刻み");
+                Console.WriteLine($"  ⭐ 手番の回りやすさの幅 = **{rateRatio:0.00}倍**"
+                    + $"（生の幅 {raw[StatKey.Spd]:0.00}倍 に対して）");
+
+                Console.WriteLine();
+                Console.WriteLine("■ その幅が**潜入**でどれだけ効くか（さいころの数）");
+                Console.WriteLine($"  ⭐ さいころ = 3体の速度合計 ÷ {Trail.SpeedPerRoll}");
+                int slowRolls = Math.Max(1, lo * 3 / Trail.SpeedPerRoll);
+                int fastRolls = Math.Max(1, fast * 3 / Trail.SpeedPerRoll);
+                Console.WriteLine($"  一番遅い3体 合計{lo * 3,5} → {slowRolls,2}回");
+                Console.WriteLine($"  一番速い3体 合計{fast * 3,5} → {fastRolls,2}回");
+                Console.WriteLine($"  ⭐ さいころの幅 = **{(double)fastRolls / slowRolls:0.00}倍**"
+                    + "（⚠️ 下駄が無いので生の幅に近い）");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("■ 実測: 同じ技・同じ総量で、速度に振ったぶんだけ手番が増えるか");
+            Console.WriteLine("  ⚠️ 属性・特性・得意不得意は止めてある。動かすのは素質の配り方だけ");
+
+            var swings = new[]
+            {
+                ("速度 0", new StatBlock(40, 40, 40, 0, 0, 0)),
+                // ⭐ **どこで勝敗が振り切れるか**を見るために、下のほうを細かく刻む
+                ("速度 2", new StatBlock(40, 40, 38, 2, 0, 0)),
+                ("速度 5", new StatBlock(40, 40, 35, 5, 0, 0)),
+                ("速度10", new StatBlock(40, 40, 30, 10, 0, 0)),
+                ("速度20", new StatBlock(40, 40, 20, 20, 0, 0)),
+                ("速度30", new StatBlock(40, 40, 10, 30, 0, 0)),
+                ("速度40", new StatBlock(40, 40, 0, 40, 0, 0)),
+            };
+            var skills2 = new[] { "attack-heavy", "attack-twice", "attack" };
+            var skills3 = new[] { "atk-up", "attack", "def-up" };
+
+            // ⚠️ **表と裏を同じ回数やる。**片側だけだと味方側の構造的な有利が混ざる
+            //    （速度0 どうしで勝率 100% になり、測っているものが速度でなくなる）。
+            const int Rounds = 240;
+            var baseline = new Plan(swings[0].Item1, "",
+                new[] { swings[0].Item2, swings[0].Item2, swings[0].Item2 }, skills2, skills3);
+
+            Console.WriteLine();
+            Console.WriteLine("  編成      速度合計   手番の取り分   速度0 に対する勝率");
+            foreach (var (name, wild) in swings)
+            {
+                var plan = new Plan(name, "", new[] { wild, wild, wild }, skills2, skills3);
+                int wins = 0, mine = 0, all = 0;
+                for (int round = 0; round < Rounds / 2; round++)
+                {
+                    var front = Bout(seed, round, plan, baseline);
+                    if (front.Result == Outcome.Ally) wins++;
+                    mine += front.AllyActions; all += front.Actions;
+
+                    var back = Bout(seed, round, baseline, plan);
+                    if (back.Result == Outcome.Enemy) wins++;
+                    mine += back.Actions - back.AllyActions; all += back.Actions;
+                }
+                int serial = 0;
+                var party = Cast(new Rng(seed).Stream("plan"), plan, ref serial);
+                int sum = 0;
+                foreach (var c in party) sum += Creatures.StatsOf(c).Spd;
+                Console.WriteLine($"  {name,-8} {sum,7}   {100.0 * mine / all,11:0.0}%   {100.0 * wins / Rounds,12:0}%");
+            }
+            Console.WriteLine("  ⚠️ 速度0 の行が『取り分 50%・勝率 50%』でなければ、この測り方が偏っている");
+            Console.WriteLine();
+            Console.WriteLine("  ⭐ **信用できるのは「手番の取り分」の列だけ。**");
+            Console.WriteLine("  ⚠️ 勝率の列は読まないこと ── ほぼ同じ編成どうしなので、");
+            Console.WriteLine("     素質2つぶんの差で 0% と 100% に振り切れる（速度の値打ちではなく");
+            Console.WriteLine("     『ほぼ鏡の勝負は僅差で決まりきる』という別のことを測ってしまっている）。");
         }
 
         private static void LandProbe()

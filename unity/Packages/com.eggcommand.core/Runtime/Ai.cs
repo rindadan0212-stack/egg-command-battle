@@ -83,9 +83,62 @@ namespace EggCommand.Core
             return EstimateDamage(actor, target, effect.Power, effect.Scale, effect.Pierce) * effect.Repeat;
         }
 
+        /// <summary>その者に乗っている**強化**の数。⚠️ <see cref="Battle.StripBoons"/> と
+        /// 同じ面々を数える（片方だけ増やすと、AI の見積もりと実際に剥がれる数がずれる）。</summary>
+        private static int BoonsOn(Unit unit)
+        {
+            int n = 0;
+            foreach (var key in Stats.BuffKeys)
+            {
+                ref var mod = ref unit.Status.ModOf(key);
+                if (Battle.IsOn(mod) && mod.Percent > 0) n++;
+            }
+            if (unit.Status.Shield > 0) n++;
+            if (unit.Status.Guts > 0) n++;
+            if (unit.Status.Immune > 0) n++;
+            if (unit.Status.Regen.Turns > 0) n++;
+            return n;
+        }
+
+        /// <summary>その者に乗っている**弱化**の数。⚠️ <see cref="Battle.StripBanes"/> と同じ面々。</summary>
+        private static int BanesOn(Unit unit)
+        {
+            int n = 0;
+            foreach (var key in Stats.BuffKeys)
+            {
+                ref var mod = ref unit.Status.ModOf(key);
+                if (Battle.IsOn(mod) && mod.Percent < 0) n++;
+            }
+            if (unit.Status.Stun > 0) n++;
+            if (unit.Status.Sleep > 0) n++;
+            if (unit.Status.Poison.Turns > 0) n++;
+            if (unit.Status.Taunt > 0) n++;
+            if (unit.Status.Block > 0) n++;
+            return n;
+        }
+
         private static double ScoreOf(BattleState state, Unit actor, int slot)
         {
             var skill = Battle.ActionSkill(actor, slot);
+            // ⭐ 本体（技の狙い先へ飛ぶぶん）
+            double total = ScoreGroup(state, actor, skill, skill.Target, null);
+            // ⭐ **1手2役のぶんも足す。**⚠️ 足さないと AI から見て
+            //    「回復が付いている技」と「付いていない技」が同点になり、選ぶ理由が消える。
+            foreach (var effect in skill.Effects)
+            {
+                if (effect.Own == null) continue;
+                total += ScoreGroup(state, actor, skill, effect.Own.Value, effect);
+            }
+            return total;
+        }
+
+        /// <summary>1つの飛び先ぶんを採点する。</summary>
+        /// <param name="target">この回で見る飛び先。⚠️ <c>skill.Target</c> とは限らない。</param>
+        /// <param name="only">null なら「飛び先を持たない効果」を全部。
+        /// ⭐ 指定があればその1つだけ（1手2役の後半）。</param>
+        private static double ScoreGroup(BattleState state, Unit actor, Skill skill,
+            Target target, Effect? only)
+        {
             var foes = Battle.LivingOf(state, actor.Side == Side.Ally ? Side.Enemy : Side.Ally);
             var friends = Battle.LivingOf(state, actor.Side);
             if (foes.Count == 0) return 0;
@@ -110,20 +163,20 @@ namespace EggCommand.Core
             // ⚠️ **味方に配る技は Battle に聞く。**ここで「一番弱った味方」と決め打ちしていた頃は、
             //    実際の配り先（伸ばす札はそのステが一番高い味方）とずれていて、
             //    「もう掛かっているか」の判定が常に別人を見ていた。
-            var subject = skill.Target == Target.Self ? actor
-                : skill.Target == Target.AllyLowest || skill.Target == Target.AllyOne
+            var subject = target == Target.Self ? actor
+                : target == Target.AllyLowest || target == Target.AllyOne
                     ? Battle.AllyLandingFor(state, actor, skill) ?? weakest
-                : skill.Target == Target.AllyDown ? downed
+                : target == Target.AllyDown ? downed
                 // ⭐ 味方全体は「一番弱った味方」を代表にして測る
-                : skill.Target == Target.AllyAll ? weakest
+                : target == Target.AllyAll ? weakest
                 // ⚠️ **ランダムは狙えない。**`focus`（一番弱った敵）にしていた頃、
                 //    単体技と**完全に同点**になっていた ── 瀕死が1体居ると
                 //    「その1体の残HP」まで値打ちが落ち、居なければ狙えるのと同じ値だった
                 //    （2026-08-19 の監査）。⭐ 真ん中の相手を代表にする。
-                : skill.Target == Target.EnemyRandom ? byHp[byHp.Count / 2]
+                : target == Target.EnemyRandom ? byHp[byHp.Count / 2]
                 : focus;
             // ⚠️ 倒れた味方が居ないなら蘇生は0点（撃っても何も起きない）
-            if (skill.Target == Target.AllyDown && subject == null) return 0;
+            if (target == Target.AllyDown && subject == null) return 0;
 
             // ⚠️ **全体に効く技は、ダメージ以外も対象数ぶん効く。**
             //    ⭐ ダメージだけ `foes` を回して足していたので、毒・弱化・スタン・ゲージ・
@@ -138,8 +191,8 @@ namespace EggCommand.Core
             //    実際の値打ち 8,505 に対し **25,515**（3倍）と見積もっていた。
             //    逆に代表が盾持ちだと、他2体が裸でも **0点**になっていた。
             // ⭐ だから「配るもの」は下で1体ずつ回す。ここでは掛けない。
-            var spreadOver = skill.Target == Target.EnemyAll ? foes
-                : skill.Target == Target.AllyAll ? friends : null;
+            var spreadOver = target == Target.EnemyAll ? foes
+                : target == Target.AllyAll ? friends : null;
 
             // ⭐ **「何体に効くか」で数える。**⚠️ 人数をそのまま掛けない。
             //    実測（2026-08-19 の監査）: 満タン2体＋瀕死1体に全体回復を撃つと、
@@ -174,6 +227,9 @@ namespace EggCommand.Core
             double score = 0;
             foreach (var effect in skill.Effects)
             {
+                // ⭐ この回で見るぶんだけ。⚠️ 分けずに全部足すと、飛び先の違う効果を
+                //    **この回の相手**に当てた前提で数えてしまう（自分への回復を敵の残HPで測る等）
+                if (only == null ? effect.Own != null : !ReferenceEquals(effect, only)) continue;
                 // ⭐ 外れる技は、外れるぶん安く見積もる。
                 //    ⚠️ これが無いと AI が「必ず通る前提」で弱化を選び続ける
                 double land = Battle.LandChanceOf(effect, actor, subject) / 100.0;
@@ -185,7 +241,7 @@ namespace EggCommand.Core
                 switch (effect.Kind)
                 {
                     case EffectKind.Damage:
-                        if (skill.Target == Target.EnemyAll)
+                        if (target == Target.EnemyAll)
                         {
                             // ⚠️ 過剰打撃を価値に数えない。残 HP で頭打ちにする
                             foreach (var foe in foes)
@@ -295,18 +351,13 @@ namespace EggCommand.Core
                     case EffectKind.Dispel:
                     case EffectKind.Steal:
                     {
-                        // ⭐ 乗っている強化の個数だけ価値がある。何も乗っていなければ 0
-                        int boons = 0;
-                        foreach (var key in Stats.BuffKeys)
-                        {
-                            ref var mod = ref subject.Status.ModOf(key);
-                            if (mod.Turns > 0 && mod.Percent > 0) boons++;
-                        }
-                        if (subject.Status.Shield > 0) boons++;
-                        if (subject.Status.Guts > 0) boons++;
-                        if (subject.Status.Immune > 0) boons++;
-                        if (subject.Status.Regen.Turns > 0) boons++;
-                        int take = Math.Min(boons, effect.Count);
+                        // ⭐ 落とせるものが何個乗っているかだけが価値。0 なら撃つ意味が無い。
+                        // ⚠️ **個数が負なら見るのは弱化のほう**（弱化解除）。
+                        //    符号を見ずに Math.Min していた頃は take が負になり、
+                        //    AI から見て弱化解除は**撃つほど損な技**だった。
+                        bool undo = effect.Count < 0;
+                        int found = undo ? BanesOn(subject) : BoonsOn(subject);
+                        int take = Math.Min(found, undo ? -effect.Count : effect.Count);
                         score += take * DispelValue * (effect.Kind == EffectKind.Steal ? 2 : 1);
                         break;
                     }
