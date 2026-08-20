@@ -211,7 +211,12 @@ namespace EggCommand.Core
                 // ⚠️ **条件を満たしていない効果は値打ち 0。**
                 //    ⭐ 見ないと、敵が条件技を空撃ちする（外して手番を捨てる）。
                 //    ⚠️ 逆に「常に満たしている前提」で採点しても、条件技しか撃たなくなる。
-                if (effect.When != null && !Battle.Holds(effect.When.Value, actor, subject)) continue;
+                // ⚠️ 相手が居ない狙い先（倒れた味方が居ない等）では、条件は判じようがない
+                if (effect.When != null
+                    && (subject == null || !Battle.Holds(effect.When.Value, actor, subject)))
+                {
+                    continue;
+                }
                 // ⭐ 外れる技は、外れるぶん安く見積もる。
                 //    ⚠️ これが無いと AI が「必ず通る前提」で弱化を選び続ける
                 double land = Battle.LandChanceOf(effect, actor, subject) / 100.0;
