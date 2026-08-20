@@ -196,7 +196,9 @@ namespace EggCommand.Core
         /// 「出目のぶん進んでいない」と見える（2026-08-20・作者の指摘）。
         /// ⚠️ 以前は近い道 1〜2 マス／遠い道 3〜5 マスで、近い道の1マスが**2段ぶん**動いていた。
         /// ⭐ 長さの差でつけていた重みは、**関門の重さと道の中身**へ移した。</summary>
-        public const int LaneMin = 2;
+        /// <summary>⚠️ **1 から。**⭐ 1マスだけの道が混じると、盤に「1列の区間」ができて
+        /// 3→1→1→1→2 のような顔つきになる（作者の指摘 2026-08-20）。</summary>
+        public const int LaneMin = 1;
         public const int LaneMax = 5;
 
         /// <summary>⭐ **関門の段の数。**1〜5。0 は「関門なし」。</summary>
@@ -304,8 +306,13 @@ namespace EggCommand.Core
     {
         /// <summary>止まった。⭐ 次を振れる。</summary>
         Moved,
-        /// <summary>分かれ道に着いた。⭐ **どちらの道を行くか**を選ぶ。</summary>
-        AtJunction,
+        /// <summary>⭐ **行ける先を選んでいる。**出目は決まっていて、あとは
+        /// <see cref="Trails.Reach"/> が並べたマスから1つ選ぶだけ。
+        ///
+        /// ⚠️ 以前は「分かれ道に着いた」だった（<c>AtJunction</c>）。
+        /// ⭐ 関門のあるマスに来るたびに**必ず止まって札で選ばせて**いたが、
+        /// マスを直接押す形にしたので、止める必要が無くなった（2026-08-20・作者の指摘）。</summary>
+        Choosing,
         /// <summary>雑魚と出会った。⚠️ 呼び側が戦闘を回す。</summary>
         Met,
         /// <summary>卵に届いた。</summary>
@@ -518,8 +525,12 @@ namespace EggCommand.Core
                     }
                 }
 
+                // ⚠️ **合流をいつも真ん中に置かない。**⭐ 毎回 0 へ戻していたので、
+                //    盤が「開いて閉じる」の繰り返しに見えていた（作者の指摘 2026-08-20）。
+                //    ⭐ どれかの道の車線をそのまま引き継ぐ ── 盤が横へ流れる。
                 int next = squares.Count;
-                squares.Add(new Square { Row = root + span + 1, Lane = 0 });
+                int keepLane = lane[rng.Int(0, ways)];
+                squares.Add(new Square { Row = root + span + 1, Lane = keepLane });
 
                 // ── 関門を付ける ───────────────────────────
                 Gates(rng, squares[hub], heads, lens, free, tier);
@@ -646,28 +657,86 @@ namespace EggCommand.Core
             raid.LastRoll = 1 + rng.Int(0, Trail.Pips);
             raid.Rolls--;
             Age(raid);
-            return Advance(raid, raid.LastRoll);
+            // ⚠️ **ここでは動かさない。**⭐ 行ける先は Reach が並べ、選ぶのは呼び側
+            //    （2026-08-20・作者の指摘「マスを直接押すようになった」）。
+            raid.Pending = raid.LastRoll;
+            return raid.Step = RaidStep.Choosing;
         }
 
-        /// <summary>分かれ道で道を選ぶ。⭐ 関門があれば**そこで払う**。</summary>
-        public static RaidStep Take(Raid raid, int way)
+        /// <summary>⭐ **出目のぶんで行ける先を全部並べる。**
+        ///
+        /// ⭐ 戻りは「通る道筋」の一覧。先頭は必ずいま居るマス、末尾が止まるマス。
+        /// ⚠️ 関門で通れない道は**入らない** ── だから画面は「光っているマス」だけ出せばよく、
+        /// 鍵の絵も要らない（作者の指摘 2026-08-20）。
+        /// ⚠️ 卵に着いたらそこで止まる（行き過ぎない）。</summary>
+        public static List<List<int>> Reach(Raid raid, int pips)
         {
-            Require(raid, RaidStep.AtJunction);
-            var ways = raid.Trail.Squares[raid.At].Ways;
-            if (way < 0 || way >= ways.Count)
-                throw new ArgumentOutOfRangeException(nameof(way), way, "そんな道は無い");
-            var chosen = ways[way];
-            if (!CanPass(raid, chosen)) throw new InvalidOperationException("この道は通れない");
+            var found = new List<List<int>>();
+            var seen = new HashSet<int>();
+            Walk(raid, new List<int> { raid.At }, pips, found, seen);
+            return found;
+        }
 
-            // ⚠️ **通ってもステは減らない。**代価は道の中身（敵と ▲▼）のほう
-            raid.Took[raid.At] = way;
+        private static void Walk(Raid raid, List<int> path, int left,
+            List<List<int>> found, HashSet<int> seen)
+        {
+            int at = path[path.Count - 1];
+            var here = raid.Trail.Squares[at];
+            // ⭐ 卵に着いたら、出目が余っていてもそこで止まる
+            if (left <= 0 || here.IsGoal)
+            {
+                // ⚠️ 同じマスへ2通りで着けるときは、先に見つけた道筋だけを残す
+                if (path.Count > 1 && seen.Add(at)) found.Add(new List<int>(path));
+                return;
+            }
+            foreach (var way in here.Ways)
+            {
+                if (!CanPass(raid, way)) continue;
+                path.Add(way.To);
+                Walk(raid, path, left - 1, found, seen);
+                path.RemoveAt(path.Count - 1);
+            }
+        }
 
-            // ⚠️ **選んだだけでは動かない。**⭐ 動くのは残っている出目のぶんだけ
-            //    （道へ入る1マスも、下の Advance が出目を1つ使って進む）。
-            //    ⚠️ ここで先に1マス動かしていた頃、出目 0 でも1マス進んでいた。
-            int pips = raid.Pending;
+        /// <summary>⭐ **その道筋のとおりに動かす。**⚠️ <see cref="Reach"/> が返したものを渡すこと。
+        ///
+        /// ⚠️ 分かれ道を通ったときは、**通った道を記録する**（画面が跡を出すため）。</summary>
+        public static RaidStep Go(Raid raid, IReadOnlyList<int> path)
+        {
+            Require(raid, RaidStep.Choosing);
+            if (path == null || path.Count < 2)
+                throw new ArgumentException("道筋が短すぎる", nameof(path));
+            if (path[0] != raid.At)
+                throw new ArgumentException("いま居るマスから始まっていない", nameof(path));
+
+            for (int n = 0; n + 1 < path.Count; n++)
+            {
+                var ways = raid.Trail.Squares[path[n]].Ways;
+                int took = -1;
+                for (int k = 0; k < ways.Count; k++)
+                {
+                    if (ways[k].To != path[n + 1]) continue;
+                    if (!CanPass(raid, ways[k]))
+                        throw new InvalidOperationException("この道は通れない");
+                    took = k;
+                    break;
+                }
+                if (took < 0) throw new ArgumentException("繋がっていない道筋", nameof(path));
+                // ⭐ 分かれ道だけ覚える（1本道は覚えるまでもない）
+                if (ways.Count > 1) raid.Took[path[n]] = took;
+                raid.At = path[n + 1];
+            }
+
             raid.Pending = 0;
-            return Arrive(raid, pips);
+            return Settle(raid);
+        }
+
+        /// <summary>⭐ **行ける先が1つだけなら、それ。**⚠️ 無ければ null。
+        /// 呼び側はこれで「選ばせずに進む」を判じる（作者の指示 2026-08-20）。</summary>
+        public static IReadOnlyList<int> OnlyWay(Raid raid, int pips)
+        {
+            var all = Reach(raid, pips);
+            return all.Count == 1 ? all[0] : null;
         }
 
         /// <summary>雑魚に勝った。⭐ **振れる回数が戻る。**</summary>
@@ -683,6 +752,13 @@ namespace EggCommand.Core
         public static RaidStep Lost(Raid raid)
         {
             Require(raid, RaidStep.Met);
+            raid.Result = StealOutcome.Blocked;
+            return raid.Step = RaidStep.Caught;
+        }
+
+        /// <summary>⚠️ **1マスも動けない。**⭐ どの道も通れない ＝ 編成が足りていない。</summary>
+        public static RaidStep Stuck(Raid raid)
+        {
             raid.Result = StealOutcome.Blocked;
             return raid.Step = RaidStep.Caught;
         }
@@ -736,18 +812,17 @@ namespace EggCommand.Core
             if (here.Kind == SquareKind.Mob && !raid.Beaten.Contains(raid.At))
                 return raid.Step = RaidStep.Met;
 
-            // ⚠️ **選び済みの分かれ道では、もう選ばせない。**
-            //    ⭐ 出目を使い切って分かれ道の上で止まったときは、道だけ決めて次を振る
-            if (here.IsJunction && !raid.Took.ContainsKey(raid.At))
+            // ⚠️ **分かれ道でも止めない**（2026-08-20）。⭐ 選ぶのは「行ける先」であって
+            //    「道」ではなくなったので、分かれ道は普通のマスと同じ。
+            // ⚠️ ただし**どの道も通れない**なら、そこで終わり
+            //    （「編成が足りていない」という負け方をはっきり出す）。
+            if (here.IsJunction)
             {
-                // ⚠️ **どの道も通れなければ、そこで終わり。**
-                //    ⭐ 「編成が足りていない」という負け方をはっきり出す
                 if (OpenWays(raid) <= 0)
                 {
                     raid.Result = StealOutcome.Blocked;
                     return raid.Step = RaidStep.Caught;
                 }
-                return raid.Step = RaidStep.AtJunction;
             }
             if (raid.Rolls <= 0)
             {

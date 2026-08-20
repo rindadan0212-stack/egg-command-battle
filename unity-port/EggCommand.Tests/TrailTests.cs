@@ -38,11 +38,16 @@ public class TrailTests
         throw new InvalidOperationException($"出目 {pips} を出す種が見つからない");
     }
 
+    /// <summary>その出目で振って、**行ける先の1つ目**へ進める。
+    /// ⚠️ 振るのと進むのが分かれた（2026-08-20）ので、検査からはまとめて呼ぶ。</summary>
     private static RaidStep Advance(Raid raid, int pips)
     {
         var step = Trails.Roll(RngFor(pips), raid);
         Assert.Equal(pips, raid.LastRoll);
-        return step;
+        if (step != RaidStep.Choosing) return step;
+        var all = Trails.Reach(raid, raid.Pending);
+        if (all.Count == 0) return Trails.Stuck(raid);
+        return Trails.Go(raid, all[0]);
     }
 
     /// <summary>最後まで回す。⭐ 止まらないことの確認も兼ねる。</summary>
@@ -54,20 +59,21 @@ public class TrailTests
             if (++guard > 5000) throw new InvalidOperationException("潜入が終わらない");
             switch (raid.Step)
             {
-                case RaidStep.AtJunction:
-                    var ways = raid.Trail.Squares[raid.At].Ways;
-                    int pick = -1;
-                    for (int i = 0; i < ways.Count; i++)
+                case RaidStep.Choosing:
+                {
+                    // ⭐ 出目で行ける先から選ぶ（2026-08-20 の作り替え）
+                    var all = Trails.Reach(raid, raid.Pending);
+                    if (all.Count == 0) { Trails.Stuck(raid); break; }
+                    int pick = 0;
+                    for (int i = 1; i < all.Count; i++)
                     {
-                        if (!Trails.CanPass(raid, ways[i])) continue;
-                        if (pick < 0) { pick = i; continue; }
-                        bool better = near ? ways[i].Length < ways[pick].Length
-                                           : ways[i].Length > ways[pick].Length;
-                        if (better) pick = i;
+                        int a = raid.Trail.Squares[all[i][all[i].Count - 1]].Row;
+                        int b = raid.Trail.Squares[all[pick][all[pick].Count - 1]].Row;
+                        if (near ? a > b : a < b) pick = i;
                     }
-                    Assert.True(pick >= 0, "通れる道が無いのに詰みになっていない");
-                    Trails.Take(raid, pick);
+                    Trails.Go(raid, all[pick]);
                     break;
+                }
                 case RaidStep.Met: Trails.Beat(raid); break;
                 default: Trails.Roll(rng, raid); break;
             }
@@ -187,8 +193,11 @@ public class TrailTests
                     {
                         int gap = trail.Squares[way.To].Row - from.Row;
                         Assert.True(gap >= 1, $"{i} → {way.To} が前へ進んでいない");
-                        // ⚠️ 分かれ道から入るときと、合流へ出るときだけ段が飛んでよい
-                        bool edge = from.IsJunction || trail.Squares[way.To].Lane == 0;
+                        // ⚠️ 分かれ道から入るときと、合流へ出るときだけ段が飛んでよい。
+                        // ⭐ 合流は「次の分かれ道」か「卵」── 車線で見分けない
+                        //    （合流をいつも真ん中に置くのをやめた・2026-08-20）
+                        var into = trail.Squares[way.To];
+                        bool edge = from.IsJunction || into.IsJunction || into.IsGoal;
                         if (!edge)
                         {
                             Assert.True(gap == 1,
@@ -270,38 +279,45 @@ public class TrailTests
         var trail = Ladder(gap: 3, shortLen: 1, longLen: 3, nearReq: 1, farReq: 1);
         var raid = new Raid(trail, Party(), rolls: 9, pool: Rich());
 
-        // 0〜2 は素通りの一本道。3マス進むと分かれ道
-        Assert.Equal(RaidStep.AtJunction, Advance(raid, 5));
-        Assert.Equal(3, raid.At);
-        Assert.Equal(2, raid.Pending);      // 5 のうち 3 使って残り2
+        // ⭐ 分かれ道でも止まらない（2026-08-20）。⚠️ 出目のぶんきっちり進む
+        Advance(raid, 5);
+        Assert.Equal(0, raid.Pending);
+        Assert.True(raid.At > 3, $"分かれ道（3）で止まっている: {raid.At}");
     }
 
-    /// <summary>⭐ 道を選ぶと、そこへ1マス入って残りの目を歩く。</summary>
+    /// <summary>⭐ 出目のぶんで行ける先が、道ごとに並ぶ。</summary>
     [Fact]
-    public void 道を選ぶと残った目のぶん歩く()
+    public void 行ける先が道ごとに並ぶ()
     {
         var trail = Ladder(gap: 0, shortLen: 2, longLen: 4, nearReq: 1, farReq: 1);
         var raid = AtHub(trail, Rich());
-        raid.Pending = 3;
+        raid.Step = RaidStep.Choosing;
 
-        int head = trail.Squares[0].Ways[1].To;
-        Trails.Take(raid, 1);               // 遠い道（4マス）
-        // ⭐ 入って1マス + 残り2 ＝ 頭から2マス先
-        Assert.Equal(head + 2, raid.At);
+        var all = Trails.Reach(raid, 3);
+        Assert.True(all.Count >= 2, $"行ける先が {all.Count} 通りしかない");
+        foreach (var path in all)
+        {
+            Assert.Equal(raid.At, path[0]);
+            Assert.Equal(4, path.Count);      // ⭐ いま居るマス ＋ 3マス
+        }
     }
 
-    /// <summary>⚠️ 通れない道は選べない（黙って通さない）。</summary>
+    /// <summary>⚠️ 通れない道は、行ける先に**そもそも出てこない**。
+    /// ⭐ だから画面は「光っているマス」だけ出せばよく、鍵の絵が要らない。</summary>
     [Fact]
-    public void 通れない道は選べない()
+    public void 通れない道は行ける先に出てこない()
     {
         var trail = Ladder(gap: 0, shortLen: 1, longLen: 3, nearReq: 999_999, farReq: 1);
         var raid = AtHub(trail, Rich());
+        raid.Step = RaidStep.Choosing;
 
         Assert.False(Trails.CanPass(raid, trail.Squares[0].Ways[0]));
         Assert.True(Trails.CanPass(raid, trail.Squares[0].Ways[1]));
         Assert.Equal(1, Trails.OpenWays(raid));
-        Assert.Throws<InvalidOperationException>(() => Trails.Take(raid, 0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Trails.Take(raid, 7));
+
+        int blocked = trail.Squares[0].Ways[0].To;
+        foreach (var path in Trails.Reach(raid, 3))
+            Assert.DoesNotContain(blocked, path);
     }
 
     /// <summary>⭐ 遊びの芯。**片方は攻撃が足りないが、もう片方は防御で通れる。**</summary>
@@ -332,7 +348,7 @@ public class TrailTests
         var trail = Ladder(gap: 0, shortLen: 1, longLen: 3, nearReq: 500, farReq: 100);
         var raid = AtHub(trail, Rich());
         var before = raid.Pool;
-        Trails.Take(raid, 0);
+        Trails.Go(raid, new[] { raid.At, trail.Squares[raid.At].Ways[0].To });
         Assert.Equal(before.Atk, raid.Pool.Atk);
         Assert.Equal(before.Hp, raid.Pool.Hp);
         Assert.Equal(before.Def, raid.Pool.Def);
@@ -383,9 +399,9 @@ public class TrailTests
         Assert.Equal(50, raid.Temp.Atk);
         Assert.Equal(2, raid.TempLeft.Atk);
 
-        Trails.Roll(new Rng(1), raid);
+        Advance(raid, 1);
         Assert.Equal(1, raid.TempLeft.Atk);
-        Trails.Roll(new Rng(2), raid);
+        Advance(raid, 1);
         Assert.Equal(0, raid.TempLeft.Atk);
         Assert.Equal(0, raid.Temp.Atk);       // ⚠️ 札そのものも消す
     }
@@ -460,7 +476,7 @@ public class TrailTests
     public void 振り切って届かなければ見つかる()
     {
         var raid = new Raid(Line(40), Party(), rolls: 1, pool: Rich());
-        Trails.Roll(new Rng(7), raid);
+        Advance(raid, 6);
         Assert.Equal(StealOutcome.Stalled, raid.Result);
     }
 
@@ -481,11 +497,14 @@ public class TrailTests
         var trail = Ladder(gap: 2, shortLen: 1, longLen: 3, nearReq: 1, farReq: 1);
         var raid = new Raid(trail, Party(), rolls: 9, pool: Rich());
 
-        Assert.Throws<InvalidOperationException>(() => Trails.Take(raid, 0));
+        Assert.Throws<InvalidOperationException>(() =>
+            Trails.Go(raid, new[] { raid.At, trail.Squares[raid.At].Ways[0].To }));
         Assert.Throws<InvalidOperationException>(() => Trails.Beat(raid));
         Assert.Throws<InvalidOperationException>(() => Trails.Lost(raid));
 
-        Advance(raid, 2);                            // AtJunction
+        // ⭐ 振ったあとは「行ける先を選ぶ」段。⚠️ そこで続けて振れない
+        Trails.Roll(new Rng(1), raid);
+        Assert.Equal(RaidStep.Choosing, raid.Step);
         Assert.Throws<InvalidOperationException>(() => Trails.Roll(new Rng(1), raid));
         Assert.Throws<InvalidOperationException>(() => Trails.Beat(raid));
     }
@@ -582,7 +601,9 @@ public class TrailTests
     private static Raid AtHub(Trail trail, StatBlock pool, int rolls = 9)
     {
         var raid = new Raid(trail, Party(), rolls, pool);
-        raid.Step = RaidStep.AtJunction;
+        // ⚠️ 分かれ道でも止まらなくなったので、「行ける先を選ぶ」段に揃える（2026-08-20）
+        raid.Step = RaidStep.Choosing;
+        raid.Pending = 1;
         return raid;
     }
 

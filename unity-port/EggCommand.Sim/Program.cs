@@ -1227,11 +1227,21 @@ namespace EggCommand.Sim
                 if (++guard > 5000) throw new InvalidOperationException("潜入が終わらない");
                 switch (raid.Step)
                 {
-                    case RaidStep.AtJunction:
-                        int way = pick(raid);
-                        if (way < 0) throw new InvalidOperationException("通れる道が無いのに詰みになっていない");
-                        Trails.Take(raid, way);
+                    case RaidStep.Choosing:
+                    {
+                        // ⭐ 出目で行ける先を並べ、その中から選ぶ（2026-08-20 の作り替え）
+                        var all = Trails.Reach(raid, raid.Pending);
+                        if (all.Count == 0)
+                        {
+                            // ⚠️ 1マスも動けない ── そこで見つかる
+                            Trails.Stuck(raid);
+                            break;
+                        }
+                        int at = pick(raid);
+                        if (at < 0 || at >= all.Count) at = 0;
+                        Trails.Go(raid, all[at]);
                         break;
+                    }
                     case RaidStep.Met:
                         // ⚠️ 敵は戦闘。⭐ 一定の割合で負ける前提で測る
                         if (rng.Chance(MobRisk)) Trails.Lost(raid); else Trails.Beat(raid);
