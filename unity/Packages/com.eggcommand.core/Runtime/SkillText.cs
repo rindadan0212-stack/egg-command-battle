@@ -150,10 +150,16 @@ namespace EggCommand.Core
             public string Verb;
             /// <summary>「する」ではなく「させる」で活用するか。</summary>
             public bool Causative;
+            /// <summary>⭐ サ変でない動詞（削る）。⚠️ 「削りする」にしないための札。</summary>
+            public bool Plain;
 
-            public string Ending(bool last) => Causative
-                ? Body + Verb + (last ? "させる" : "させ")
-                : Body + Verb + (last ? "する" : "し");
+            public string Ending(bool last)
+            {
+                if (Plain) return Body + Verb + (last ? "る" : "り");
+                return Causative
+                    ? Body + Verb + (last ? "させる" : "させ")
+                    : Body + Verb + (last ? "する" : "し");
+            }
         }
 
         /// <summary>技が何をするかの1文。⭐ 狙い先・確率・持続をすべて含める。</summary>
@@ -175,7 +181,8 @@ namespace EggCommand.Core
             var main = new List<Effect>();
             foreach (var effect in skill.Effects)
             {
-                if (effect.Own == null) main.Add(effect);
+                // ⚠️ 条件つきと飛び先つきは、あとで**別の文**にする
+                if (effect.Own == null && effect.When == null) main.Add(effect);
             }
             var sb = new StringBuilder(Sentence(skill.Id, skill.Target, main));
             // ⭐ **1手2役は別の文にする。**⚠️ 同じ文へ混ぜると狙い先が2つある文になり、
@@ -185,6 +192,22 @@ namespace EggCommand.Core
                 if (effect.Own == null) continue;
                 sb.Append("、さらに")
                   .Append(Sentence(skill.Id, effect.Own.Value, new List<Effect> { effect }));
+            }
+            // ⭐ **条件つきも別の文。**⚠️ 「〜のとき」を本体の文に混ぜると、
+            //    技全体に条件が掛かっているように読める（実際は追い乗せだけ）。
+            foreach (var effect in skill.Effects)
+            {
+                if (effect.When == null || effect.Own != null) continue;
+                sb.Append("。").Append(WhenOf(effect.When.Value)).Append("、さらに")
+                  .Append(Sentence(skill.Id, skill.Target, new List<Effect> { effect }));
+            }
+            // ⭐ **数えるものは最後に別の文で言う。**⚠️ 「敵1体に〜1種につき〜攻撃をする」と
+            //    1文に押し込むと読めない（2026-08-20 に生成物を見て直した）。
+            foreach (var effect in skill.Effects)
+            {
+                if (effect.Per == Tally.None) continue;
+                sb.Append($"。{TallyOf(effect.Per)}につき威力が{Skills.PerBonusPercent}%上がる")
+                  .Append($"（最大{Skills.PerCap}）");
             }
             return sb.ToString();
         }
@@ -217,6 +240,32 @@ namespace EggCommand.Core
                 sb.Append(clauses[i].Ending(i == clauses.Count - 1));
             }
             return sb.ToString();
+        }
+
+        /// <summary>条件の言い回し。⭐ **画面にそのまま出る語。**</summary>
+        public static string WhenOf(SkillWhen when)
+        {
+            switch (when)
+            {
+                case SkillWhen.FoeWeakened: return "相手に弱化が付いているとき";
+                case SkillWhen.FoeBoosted: return "相手に強化が付いているとき";
+                case SkillWhen.FoeStopped: return "相手が動けないとき";
+                case SkillWhen.FoeHalf: return "相手のHPが半分以下のとき";
+                case SkillWhen.SelfHalf: return "自分のHPが半分以下のとき";
+                default: throw new ArgumentOutOfRangeException(nameof(when), when, "名前の無い条件");
+            }
+        }
+
+        /// <summary>数え方の言い回し。</summary>
+        public static string TallyOf(Tally per)
+        {
+            switch (per)
+            {
+                case Tally.FoeBanes: return "相手に付いている弱化1種";
+                case Tally.FoeBoons: return "相手に付いている強化1つ";
+                case Tally.OwnBoons: return "自分に付いている強化1つ";
+                default: throw new ArgumentOutOfRangeException(nameof(per), per, "名前の無い数え方");
+            }
         }
 
         private static Clause AttackClause(Effect effect)
@@ -254,7 +303,11 @@ namespace EggCommand.Core
             switch (effect.Kind)
             {
                 case EffectKind.HealRatio:
-                    return Of("の", $"HPを{chance}{effect.Percent}%", "回復");
+                    // ⭐ **負は削る側。**⚠️ 「HPを-30%回復する」と出していた（2026-08-20 に発覚）
+                    // ⚠️ 「削り」だと Of がサ変にして「削りする」になる。⭐ 動詞をそのまま渡す
+                    return effect.Percent < 0
+                        ? Bare("の", $"最大HPを{chance}{-effect.Percent}%", "削")
+                        : Of("の", $"HPを{chance}{effect.Percent}%", "回復");
                 case EffectKind.Revive:
                     return Of("を", $"{chance}HP{effect.Percent}%で", "蘇生", causative: true);
                 case EffectKind.Gauge:
@@ -302,6 +355,11 @@ namespace EggCommand.Core
                     return Of("に", $"{name}を{chance}{Lasts(effect.Turns)}", "付与");
             }
         }
+
+        /// <summary>サ変ではない動詞（削る・奪う）の句。⚠️ <see cref="Of"/> は
+        /// 「〜する」を付けるので、「削りする」のような形になってしまう。</summary>
+        private static Clause Bare(string particle, string body, string stem) =>
+            new Clause { Particle = particle, Body = body, Verb = stem, Plain = true };
 
         private static Clause Of(string particle, string body, string verb, bool causative = false) =>
             new Clause { Particle = particle, Body = body, Verb = verb, Causative = causative };

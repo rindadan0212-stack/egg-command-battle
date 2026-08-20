@@ -82,41 +82,17 @@ namespace EggCommand.Core
         /// 盾持ちに対しては多段のほうが通る（そこまでは数えていない — 概算でよい）。</summary>
         private static int EstimateTotal(Unit actor, Unit target, Effect effect)
         {
-            return EstimateDamage(actor, target, effect.Power, effect.Scale, effect.Pierce) * effect.Repeat;
-        }
-
-        /// <summary>その者に乗っている**強化**の数。⚠️ <see cref="Battle.StripBoons"/> と
-        /// 同じ面々を数える（片方だけ増やすと、AI の見積もりと実際に剥がれる数がずれる）。</summary>
-        private static int BoonsOn(Unit unit)
-        {
-            int n = 0;
-            foreach (var key in Stats.BuffKeys)
+            int hit = EstimateDamage(actor, target, effect.Power, effect.Scale, effect.Pierce);
+            // ⚠️ **数えるぶんを見積りにも乗せる。**乗せないと AI から見て
+            //    「弱化を撒いてから回収する技」が素の攻撃と同じ値になり、
+            //    仕込み → 回収の2段が**AI 側では一生成立しない**。
+            if (effect.Per != Tally.None)
             {
-                ref var mod = ref unit.Status.ModOf(key);
-                if (Battle.IsOn(mod) && mod.Percent > 0) n++;
+                int many = Battle.Counted(effect.Per, actor, target);
+                if (many > Skills.PerCap) many = Skills.PerCap;
+                if (many > 0) hit += hit * Skills.PerBonusPercent * many / 100;
             }
-            if (unit.Status.Shield > 0) n++;
-            if (unit.Status.Guts > 0) n++;
-            if (unit.Status.Immune > 0) n++;
-            if (unit.Status.Regen.Turns > 0) n++;
-            return n;
-        }
-
-        /// <summary>その者に乗っている**弱化**の数。⚠️ <see cref="Battle.StripBanes"/> と同じ面々。</summary>
-        private static int BanesOn(Unit unit)
-        {
-            int n = 0;
-            foreach (var key in Stats.BuffKeys)
-            {
-                ref var mod = ref unit.Status.ModOf(key);
-                if (Battle.IsOn(mod) && mod.Percent < 0) n++;
-            }
-            if (unit.Status.Stun > 0) n++;
-            if (unit.Status.Sleep > 0) n++;
-            if (unit.Status.Poison.Turns > 0) n++;
-            if (unit.Status.Taunt > 0) n++;
-            if (unit.Status.Block > 0) n++;
-            return n;
+            return hit * effect.Repeat;
         }
 
         private static double ScoreOf(BattleState state, Unit actor, int slot)
@@ -232,6 +208,10 @@ namespace EggCommand.Core
                 // ⭐ この回で見るぶんだけ。⚠️ 分けずに全部足すと、飛び先の違う効果を
                 //    **この回の相手**に当てた前提で数えてしまう（自分への回復を敵の残HPで測る等）
                 if (only == null ? effect.Own != null : !ReferenceEquals(effect, only)) continue;
+                // ⚠️ **条件を満たしていない効果は値打ち 0。**
+                //    ⭐ 見ないと、敵が条件技を空撃ちする（外して手番を捨てる）。
+                //    ⚠️ 逆に「常に満たしている前提」で採点しても、条件技しか撃たなくなる。
+                if (effect.When != null && !Battle.Holds(effect.When.Value, actor, subject)) continue;
                 // ⭐ 外れる技は、外れるぶん安く見積もる。
                 //    ⚠️ これが無いと AI が「必ず通る前提」で弱化を選び続ける
                 double land = Battle.LandChanceOf(effect, actor, subject) / 100.0;
@@ -358,7 +338,7 @@ namespace EggCommand.Core
                         //    符号を見ずに Math.Min していた頃は take が負になり、
                         //    AI から見て弱化解除は**撃つほど損な技**だった。
                         bool undo = effect.Count < 0;
-                        int found = undo ? BanesOn(subject) : BoonsOn(subject);
+                        int found = undo ? Battle.BanesOn(subject) : Battle.BoonsOn(subject);
                         int take = Math.Min(found, undo ? -effect.Count : effect.Count);
                         score += take * DispelValue * (effect.Kind == EffectKind.Steal ? 2 : 1);
                         break;

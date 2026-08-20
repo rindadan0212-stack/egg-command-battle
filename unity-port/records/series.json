@@ -33,17 +33,17 @@
     {"seed":20260816,"mutations":0,"species":"tamaru","wild":[9,1,2,9,4,12],"mutationCounter":0,"palette":0,"generation":2,"skills":["harden","regen"]}
   ],
   "battles": [
-    {"seed":1,"name":"shallow-scale","outcome":"Ally","actions":64,"logLength":150,"finalHp":[8010,12495,15750,0],"digest":"1b7fdddd3ad2b81f"},
-    {"seed":1,"name":"thicket-fang","outcome":"Ally","actions":43,"logLength":96,"finalHp":[0,6631,15750,0],"digest":"21f7c57ebe89d1c0"},
-    {"seed":1,"name":"cliff-plume","outcome":"Enemy","actions":45,"logLength":120,"finalHp":[0,0,0,10807],"digest":"40bd1c219b1eba61"},
-    {"seed":1,"name":"deep-scale","outcome":"Enemy","actions":104,"logLength":252,"finalHp":[0,0,0,89141],"digest":"6cd630ba243e6b5a"},
-    {"seed":1,"name":"peak-fang","outcome":"Ally","actions":46,"logLength":106,"finalHp":[0,663,11992,0],"digest":"ff105c7ee4778c46"},
-    {"seed":1,"name":"boss","outcome":"Enemy","actions":43,"logLength":96,"finalHp":[0,0,0,30294],"digest":"398e3ee1b41dba73"},
-    {"seed":20260816,"name":"shallow-scale","outcome":"Ally","actions":263,"logLength":627,"finalHp":[19425,17325,11057,0],"digest":"152eabbc4133afc7"},
-    {"seed":20260816,"name":"thicket-fang","outcome":"Ally","actions":41,"logLength":89,"finalHp":[19425,17325,6634,0],"digest":"fa9654ac33cb0dc4"},
-    {"seed":20260816,"name":"cliff-plume","outcome":"Enemy","actions":47,"logLength":126,"finalHp":[0,0,0,4934],"digest":"1346f3437792b66c"},
-    {"seed":20260816,"name":"deep-scale","outcome":"Enemy","actions":199,"logLength":484,"finalHp":[0,0,0,91350],"digest":"fd2af7b7d8ea0e09"},
-    {"seed":20260816,"name":"peak-fang","outcome":"Ally","actions":47,"logLength":109,"finalHp":[15713,12299,3017,0],"digest":"d54aad9237858b55"},
-    {"seed":20260816,"name":"boss","outcome":"Enemy","actions":55,"logLength":128,"finalHp":[0,0,0,35232],"digest":"83373cd91af8d1b7"}
+    {"seed":1,"name":"shallow-scale","outcome":"Ally","actions":66,"logLength":155,"finalHp":[11000,12495,15750,0],"digest":"2ee72809a135c521"},
+    {"seed":1,"name":"thicket-fang","outcome":"Ally","actions":44,"logLength":98,"finalHp":[0,4791,15750,0],"digest":"e3dbbaac77f4906e"},
+    {"seed":1,"name":"cliff-plume","outcome":"Enemy","actions":45,"logLength":122,"finalHp":[0,0,0,12588],"digest":"2d073f1c8435efa0"},
+    {"seed":1,"name":"deep-scale","outcome":"Enemy","actions":111,"logLength":270,"finalHp":[0,0,0,91350],"digest":"c90b61a36aba1fa7"},
+    {"seed":1,"name":"peak-fang","outcome":"Ally","actions":53,"logLength":129,"finalHp":[5201,6202,10113,0],"digest":"d6a591b71645f43c"},
+    {"seed":1,"name":"boss","outcome":"Enemy","actions":56,"logLength":124,"finalHp":[0,0,0,21457],"digest":"210e814b2f62cada"},
+    {"seed":20260816,"name":"shallow-scale","outcome":"Draw","actions":300,"logLength":710,"finalHp":[19425,17325,11057,7347],"digest":"db7df225afbc96fb"},
+    {"seed":20260816,"name":"thicket-fang","outcome":"Ally","actions":39,"logLength":84,"finalHp":[19425,17325,8617,0],"digest":"3727f3d26bae51b2"},
+    {"seed":20260816,"name":"cliff-plume","outcome":"Ally","actions":44,"logLength":116,"finalHp":[19425,5223,0,0],"digest":"b6102a283d651aba"},
+    {"seed":20260816,"name":"deep-scale","outcome":"Draw","actions":300,"logLength":732,"finalHp":[19425,17325,10712,89258],"digest":"6c0e9675e9fbf943"},
+    {"seed":20260816,"name":"peak-fang","outcome":"Ally","actions":55,"logLength":128,"finalHp":[13814,14812,12904,0],"digest":"bc70532b166a0fee"},
+    {"seed":20260816,"name":"boss","outcome":"Enemy","actions":63,"logLength":147,"finalHp":[0,0,0,31021],"digest":"c6d1bc7c0d060c38"}
   ]
 }

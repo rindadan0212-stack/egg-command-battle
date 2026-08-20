@@ -414,7 +414,9 @@ namespace EggCommand.Sim
                       .Append(" 依存:").Append(Skills.LabelOf(e.Scale));
                     if (e.Repeat > 1) sb.Append(" 発数:").Append(e.Repeat);
                     if (e.Pierce) sb.Append(" 防御無視");
-                    return sb.ToString();
+                    // ⚠️ **ここで return しない。**していた頃、ダメージの行だけ
+                    //    飛び先・条件・数えが書き落とされ、読み返すと別の技になっていた
+                    break;
                 case EffectKind.Buff when e.Innate:
                     // ⭐ 生まれつきは持続も確率も無い（⚠️ 書いても読み返せない）
                     return KindInnate + " ステ:" + Stats.LabelOf(e.Stat)
@@ -470,7 +472,56 @@ namespace EggCommand.Sim
             if (e.Chance < 100) sb.Append(" 確率:").Append(e.Chance);
             // ⭐ 1手2役。⚠️ 書き落とすと、読み返したとき飛び先が消えて別の技になる
             if (e.Own != null) sb.Append(" 飛び先:").Append(SkillText.TargetOf(e.Own.Value));
+            // ⭐ 条件と数え。⚠️ 同上（落とすと条件の無い技として読み返され、値段まで変わる）
+            if (e.When != null) sb.Append(" 条件:").Append(WordOfWhen(e.When.Value));
+            if (e.Per != Tally.None) sb.Append(" 数え:").Append(WordOfTally(e.Per));
             return sb.ToString();
+        }
+
+        /// <summary>帳面での条件の語。⚠️ 画面の言い回し（<see cref="SkillText"/>）とは別 ──
+        /// ⭐ 帳面は**短い札**で書く（1行に収める）。</summary>
+        private static string WordOfWhen(SkillWhen when)
+        {
+            switch (when)
+            {
+                case SkillWhen.FoeWeakened: return "相手に弱化";
+                case SkillWhen.FoeBoosted: return "相手に強化";
+                case SkillWhen.FoeStopped: return "相手が動けない";
+                case SkillWhen.FoeHalf: return "相手が半分以下";
+                case SkillWhen.SelfHalf: return "自分が半分以下";
+                default: throw new ArgumentOutOfRangeException(nameof(when), when, "帳面の語が無い条件");
+            }
+        }
+
+        private static bool TryWhen(string? word, out SkillWhen when)
+        {
+            foreach (SkillWhen value in Enum.GetValues(typeof(SkillWhen)))
+            {
+                if (WordOfWhen(value) == word) { when = value; return true; }
+            }
+            when = default;
+            return false;
+        }
+
+        private static string WordOfTally(Tally per)
+        {
+            switch (per)
+            {
+                case Tally.FoeBanes: return "相手の弱化";
+                case Tally.FoeBoons: return "相手の強化";
+                case Tally.OwnBoons: return "自分の強化";
+                default: throw new ArgumentOutOfRangeException(nameof(per), per, "帳面の語が無い数え方");
+            }
+        }
+
+        private static bool TryTally(string? word, out Tally per)
+        {
+            foreach (Tally value in Enum.GetValues(typeof(Tally)))
+            {
+                if (value != Tally.None && WordOfTally(value) == word) { per = value; return true; }
+            }
+            per = Tally.None;
+            return false;
         }
 
         /// <summary>帳面での「切れない持続」の書き方。⚠️ 書く側と読む側で同じ語を使う。</summary>
@@ -779,7 +830,7 @@ namespace EggCommand.Sim
                 // ⭐ パッシブは別の作り方（CT と狙い先は Skill.Always が決める）
                 var skill = b.One("パッシブ") == "はい"
                     ? Skill.Always(b.Id, name, gist, type, effects.ToArray())
-                    : new Skill(b.Id, name, gist, type, ct, target, effects.ToArray());
+                    : new Skill(b.Id, name, gist, type, target, effects.ToArray());
 
                 // ⚠️ **CT では止めない**（作者の指示 2026-08-19）。理由を添えて言うだけ。
                 if (ct < 0) problems.Add($"{at}: CT が負（{ct}）");
@@ -958,14 +1009,39 @@ namespace EggCommand.Sim
             // ⚠️ ここを飛ばすと、書いた飛び先が黙って消えて別の技になる。
             const string mark = "飛び先:";
             int found = line.IndexOf(mark, StringComparison.Ordinal);
-            if (found < 0) return true;
-            string word = line.Substring(found + mark.Length).Split(' ')[0];
-            if (!TryTarget(word, out var aside))
+            if (found >= 0)
             {
-                problems.Add($"{at}: 飛び先が読めない（{word}）");
-                return false;
+                string word = line.Substring(found + mark.Length).Split(' ')[0];
+                if (!TryTarget(word, out var aside))
+                {
+                    problems.Add($"{at}: 飛び先が読めない（{word}）");
+                    return false;
+                }
+                made = made.To(aside);
             }
-            made = made.To(aside);
+            return Trailing(line, at, problems, ref made);
+        }
+
+        /// <summary>条件と数えを読む。⚠️ 飛び先の有無に関わらず必ず通す
+        /// （⭐ 飛び先が無いときに素通りさせていた頃、条件が黙って消えて値段まで変わった）。</summary>
+        private static bool Trailing(string line, string at, List<string> problems, ref Effect made)
+        {
+            int found = line.IndexOf("条件:", StringComparison.Ordinal);
+            if (found >= 0)
+            {
+                string word = line.Substring(found + 3).Split(' ')[0];
+                if (!TryWhen(word, out var when))
+                { problems.Add($"{at}: 条件が読めない（{word}）"); return false; }
+                made = made.If(when);
+            }
+            found = line.IndexOf("数え:", StringComparison.Ordinal);
+            if (found >= 0)
+            {
+                string word = line.Substring(found + 3).Split(' ')[0];
+                if (!TryTally(word, out var per))
+                { problems.Add($"{at}: 数え方が読めない（{word}）"); return false; }
+                made = made.Each(per);
+            }
             return true;
         }
 
@@ -1360,7 +1436,7 @@ namespace EggCommand.Sim
                     type, effects.ToArray());
             }
             return new Skill(b.Id, b.One("名前") ?? "", b.One("説明") ?? "",
-                type, ct, target, effects.ToArray());
+                type, target, effects.ToArray());
         }
 
         /// <summary>帳面の1件（種族）を読む。⚠️ 読めなければ null。</summary>
@@ -1540,7 +1616,12 @@ namespace EggCommand.Sim
             for (int i = 0; i < s.Effects.Count; i++)
             {
                 if (i > 0) sb.Append(",\n    ");
-                sb.Append(CodeOf(s.Effects[i]));
+                var e = s.Effects[i];
+                sb.Append(CodeOf(e));
+                // ⭐ 欄で足したものは、生成する C# でも欄として出す
+                if (e.Own != null) sb.Append($".To(Target.{e.Own.Value})");
+                if (e.When != null) sb.Append($".If(SkillWhen.{e.When.Value})");
+                if (e.Per != Tally.None) sb.Append($".Each(Tally.{e.Per})");
             }
             sb.Append("),");
             return sb.ToString();

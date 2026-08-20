@@ -233,6 +233,31 @@ public class SkillsGoldenTests
     /// <summary>下げたあとの CT。⭐ 全部これ1つ（上限をそろえたので値も1つ）。</summary>
     private const int CtCap = 5;
 
+    /// <summary>⭐ **CT を式で導くようにした（2026-08-20）。**
+    ///
+    /// ⚠️ 手で書いていた頃、64技のうち 44技（69%）が CT5 に張り付いていた。
+    /// 値段が一律だと「重いが強い／軽いが弱い」という比べ方が起きず、
+    /// **強さの差を CT で表していない**状態になっていた。
+    /// ⭐ <see cref="Skills.PriceOf"/> が効果の重さから導く形に変えた
+    /// （設計案 `wiki/開発/技の作り直し案_2026-08-20.md` の §4）。
+    ///
+    /// ⭐ **移植した21技のうち、値が動いたのはここに挙げた分だけ。**
+    /// 残りは式が移植元と**同じ値**を出す（式が既存の妥当な値段を当て直せている証拠）。
+    ///
+    /// ⚠️ **ゴールデンは作り直さない** ── 作り直すと「移植元と一致している」証明が消える。
+    /// ⭐ <see cref="CtLowered"/>・<see cref="Retargeted"/> と同じ流儀で、
+    /// **意図した食い違いを名前つきの表に書く**。</summary>
+    private static readonly HashSet<string> CtRepriced = new HashSet<string>
+    {
+        // ⭐ 仕込みの単品が軽くなった（安く仕込んで、条件・数えで回収する並び）
+        "atk-down", "def-down", "spd-down",     // 4 → 2
+        "poison", "ct-long", "ct-short",        // 5/5/4 → 3
+        "heal-ratio", "shield",                 // 4 → 3
+        // ⭐ 効果1つぶんの重さが軽い単機能が下りた
+        "attack-heavy", "stun", "guts",         // 6 → 4（CtLowered で 5 にしていた分）
+        "attack-all", "immune",                 // 5 → 4
+    };
+
     /// <summary>意図して移植元から**狙い先**を変えた技（2026-08-18）。
     ///
     /// ⚠️ 移植元では強化が全部「自分」、回復が全部「一番弱った味方（自動）」だった。
@@ -295,7 +320,13 @@ public class SkillsGoldenTests
 
             Assert.Equal(id, skill.Id);
             Assert.Equal(entry.GetProperty("name").GetString(), skill.Name);
-            if (CtLowered.Contains(id))
+            if (CtRepriced.Contains(id))
+            {
+                // ⚠️ **値段を式に任せた技。**⭐ 表に載せた以上、移植元と**違っていること**だけ
+                //    確かめる（同じなら表から外すべき ── 載せっぱなしを許すと表が嘘になる）。
+                Assert.NotEqual(entry.GetProperty("ct").GetInt32(), skill.Ct);
+            }
+            else if (CtLowered.Contains(id))
             {
                 // ⭐ 下げた先は全部 CtCap。⚠️ 移植元が既に CtCap 以下だったなら
                 //    「下げた」ことになっていないので、表から外すべき（ここで落ちる）
@@ -321,7 +352,14 @@ public class SkillsGoldenTests
 
             // ⭐ 枠1 の CT は常に 0。CT は技ではなく枠の性質
             Assert.Equal(entry.GetProperty("ctSlot0").GetInt32(), Skills.EffectiveCt(0, skill));
-            if (CtLowered.Contains(id))
+            if (CtRepriced.Contains(id))
+            {
+                // ⭐ 値段を式に任せた技。⚠️ 枠2・3 が**技の CT そのもの**であることだけ見る
+                //    （値そのものは Skills.PriceOf が持つ ── ここに書き写すと出所が2つになる）
+                Assert.Equal(skill.Ct, Skills.EffectiveCt(1, skill));
+                Assert.Equal(skill.Ct, Skills.EffectiveCt(2, skill));
+            }
+            else if (CtLowered.Contains(id))
             {
                 // ⭐ 枠2・3 は技の CT そのもの（下げた先）
                 Assert.Equal(CtCap, Skills.EffectiveCt(1, skill));

@@ -421,13 +421,34 @@ public class TraitTests
 
     // ── 戦闘開始時: 先駆け ────────────────────────────
 
-    /// <summary>⭐ TraitWhen.BattleStart の繋ぎ先は CreateBattle だけ。</summary>
+    /// <summary>⭐ TraitWhen.BattleStart の繋ぎ先は CreateBattle だけ。
+    /// ⚠️ 2026-08-20 に中身を替えた ── 開幕ゲージは実測で「まったく技を選ばない」特性だった
+    /// （進んでも**どの技を選ぶかが1つも変わらない**）。
+    /// ⭐ いまは「開幕の1手目の弱化が外れない」。</summary>
     [Fact]
-    public void 先駆けは開幕にゲージが進んでいる()
+    public void 先駆けは開幕の一手だけ弱化が外れない()
     {
         var state = Fight(Make("a", Traits.Opener), Make("b", null));
-        Assert.Equal(Battle.TraitOpenerGauge, UnitOf(state, Side.Ally).Gauge);
-        Assert.Equal(0, UnitOf(state, Side.Enemy).Gauge);
+        var actor = UnitOf(state, Side.Ally);
+        var foe = UnitOf(state, Side.Enemy);
+        var risky = Effect.Buff(StatKey.Atk, -1, 3, chance: 40);
+
+        Assert.Equal(100, Battle.LandChanceOf(risky, actor, foe));
+
+        // ⚠️ 1手動いたら、もう開幕ではない
+        Battle.PerformAction(state, actor, 0);
+        Assert.True(Battle.LandChanceOf(risky, actor, foe) < 100, "1手動いても開幕のまま");
+    }
+
+    /// <summary>⚠️ 意地は普通に効く（外れないのは「率」の話で、弾く側は別）。</summary>
+    [Fact]
+    public void 先駆けでも意地の相手には外れる()
+    {
+        var state = Fight(Make("a", Traits.Opener), Make("b", Traits.Stubborn));
+        var risky = Effect.Buff(StatKey.Atk, -1, 3, chance: 40);
+        Assert.True(
+            Battle.LandChanceOf(risky, UnitOf(state, Side.Ally), UnitOf(state, Side.Enemy)) < 100,
+            "意地を無視している");
     }
 
     // ── 倒れる一撃を受けたとき: 置き土産 ────────────────
@@ -511,49 +532,56 @@ public class TraitTests
         return target.MaxHp - target.Hp;
     }
 
+    /// <summary>⚠️ 2026-08-20 に中身を替えた ── 威力上昇は「技を選ばない」特性だった
+    /// （どの技を撃っても同じだけ増えるので、選び方が変わらない）。
+    /// ⭐ いまは「半分以下の間、待ちが速く減る」＝**重い技を持たせる理由**。</summary>
     [Fact]
-    public void 背水は自分のHPが半分以下のときだけ増える()
+    public void 背水は半分以下の間だけ待ちが速く減る()
     {
-        int high = DesperationDamage(woundToHalf: false);
-        int low = DesperationDamage(woundToHalf: true);
-        Assert.True(high > 0, "そもそも当たっていない");
-        Assert.Equal(high + high * Battle.TraitDesperationPercent / 100, low);
+        Assert.Equal(1, DesperationStep(woundToHalf: false));
+        Assert.Equal(Battle.TraitDesperationStep, DesperationStep(woundToHalf: true));
     }
 
-    private static int DesperationDamage(bool woundToHalf)
+    /// <summary>1回行動したときに、**撃っていない枠**の待ちがいくつ減ったか。</summary>
+    private static int DesperationStep(bool woundToHalf)
     {
-        var state = Fight(Make("a", Traits.Desperation, "attack"), Make("b", null, hp: 400));
+        var state = Fight(Make("a", Traits.Desperation, "attack", "attack-heavy"),
+            Make("b", null, hp: 400));
         var actor = UnitOf(state, Side.Ally);
-        var target = UnitOf(state, Side.Enemy);
         if (woundToHalf) actor.Hp = actor.MaxHp / 2;
 
+        actor.Cooldowns[2] = 5;
         Battle.PerformAction(state, actor, 1);
 
-        return target.MaxHp - target.Hp;
+        return 5 - actor.Cooldowns[2];
     }
 
-    // ── 攻撃を受けたとき: 粘り腰 ─────────────────────
+    // ── 常時: 粘り腰 ─────────────────────────────
 
+    /// <summary>⚠️ 2026-08-20 に中身を替えた ── 被害減は「技を選ばない」特性だった
+    /// （受け身に効くだけで、こちらの手が変わらない）。
+    /// ⭐ いまは「受け取る回復が増える」＝**回復役を連れているか**が編成の判断になる。</summary>
     [Fact]
-    public void 粘り腰は自分のHPが半分以下のときだけ減る()
+    public void 粘り腰は半分以下の間だけ受け取る回復が増える()
     {
-        int high = TenacityTaken(woundToHalf: false);
-        int low = TenacityTaken(woundToHalf: true);
-        Assert.True(high > 0, "そもそも当たっていない");
-        Assert.Equal(high - high * Battle.TraitTenacityPercent / 100, low);
+        int high = TenacityHealed(woundToHalf: false);
+        int low = TenacityHealed(woundToHalf: true);
+        Assert.True(high > 0, "そもそも回復していない");
+        Assert.Equal(high + high * Battle.TraitTenacityPercent / 100, low);
     }
 
-    private static int TenacityTaken(bool woundToHalf)
+    private static int TenacityHealed(bool woundToHalf)
     {
-        var state = Fight(Make("a", null, "attack"), Make("b", Traits.Tenacity, hp: 400));
-        var actor = UnitOf(state, Side.Ally);
+        var state = Fight(Make("a", null), Make("b", Traits.Tenacity, hp: 400));
+        var healer = UnitOf(state, Side.Ally);
         var target = UnitOf(state, Side.Enemy);
-        int start = woundToHalf ? target.MaxHp / 2 : target.MaxHp;
-        target.Hp = start;
+        // ⚠️ 満タンだと戻る量が頭打ちになるので、どちらも十分に削っておく
+        target.Hp = woundToHalf ? target.MaxHp / 2 : target.MaxHp * 3 / 4;
+        int before = target.Hp;
 
-        Battle.PerformAction(state, actor, 1);
+        Battle.ApplyOne(state, healer, target, Effect.HealRatio(10));
 
-        return start - target.Hp;
+        return target.Hp - before;
     }
 
     // ── 入手経路 ────────────────────────────────────

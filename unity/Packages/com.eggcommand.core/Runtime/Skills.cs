@@ -75,6 +75,50 @@ namespace EggCommand.Core
         Spd,
     }
 
+    /// <summary>技に付く**条件**。⭐ 満たしていなければ、その効果だけが出ない。
+    ///
+    /// ⚠️ <see cref="TraitWhen"/> と**別物**。あちらは「瞬間」（〜したとき）で、
+    /// 特性が戦闘に割り込むための札。⭐ 技は**押した瞬間に判定する**ので瞬間は使えない
+    /// （「攻撃を受けたとき」に押すことはできない）。だから技の条件は**状態**で作る。
+    ///
+    /// ⭐ 選ぶ基準は特性と同じ ── **プレイヤーが画面で確かめられ、作りに行けるものだけ**。
+    /// ⚠️ 相手の CT（画面に出さないと決めてある）、ゲージ（動き続ける）、
+    /// 経過ターン（本作に「全体のターン」が無い）は採らない。</summary>
+    public enum SkillWhen
+    {
+        /// <summary>効果の当たる相手に弱化が1つでも付いている。⭐ 状態アイコンで分かる。</summary>
+        FoeWeakened,
+        /// <summary>同・強化が1つでも付いている。</summary>
+        FoeBoosted,
+        /// <summary>同・スタンか睡眠で止まっている。</summary>
+        FoeStopped,
+        /// <summary>同・残り HP が最大の半分以下。⭐ HP バーで分かる。</summary>
+        FoeHalf,
+        /// <summary>自分の残り HP が最大の半分以下。</summary>
+        SelfHalf,
+    }
+
+    /// <summary>⭐ **盤面の何を数えて効き目を変えるか。**
+    ///
+    /// ⭐ これがある理由（2026-08-20）: 本作の効果は全部**定数**で、
+    /// 「盤面を数えて効き目が変わる技」が1本も無かった。
+    /// ⚠️ そのせいで仕込む技（毒・弱化・CT延長）は在るのに**回収する側が無く**、
+    /// 仕込みが「ゆっくり効くダメージ」にしかならなかった。
+    ///
+    /// ⚠️ 数えられるのは**ダメージだけ**。状態そのものを数で増やすと、
+    /// 上限の無い積み上げ（毒10重ね等）への入口になる。</summary>
+    public enum Tally
+    {
+        /// <summary>数えない（既定）。</summary>
+        None,
+        /// <summary>⭐ 相手に乗っている**弱化の種類数**。仕込みの回収先そのもの。</summary>
+        FoeBanes,
+        /// <summary>相手に乗っている強化の数。⭐ 積んだ相手への罰。</summary>
+        FoeBoons,
+        /// <summary>自分に乗っている強化の数。⭐ 「配ってから撃つ」を筋にする。</summary>
+        OwnBoons,
+    }
+
     public enum EffectKind
     {
         Damage,
@@ -191,10 +235,27 @@ namespace EggCommand.Core
         /// <see cref="Skills.BuffPercent"/>）── **手番を1回も払わない**ぶんの値段。</summary>
         public readonly bool Innate;
 
+        /// <summary>⭐ **この効果が出る条件。**null なら無条件。
+        ///
+        /// ⚠️ 判定は**効果が当たる瞬間・対象ごと**。全体技なら敵1体ずつ別々に見る
+        /// （⭐ 弱化が付いた敵にだけ深く入る全体技が書ける）。
+        /// ⚠️ **技の最初の効果には付けない**（<see cref="Skills.Faults(IReadOnlyList{Skill}, IReadOnlyList{Species})"/>
+        /// が落とす）── 全部が条件つきだと、外して押した手番が**丸ごと空振り**する。
+        /// ⭐ 「押したら決まったことが起きる」の反対側の失敗を作らないための決まり。</summary>
+        public readonly SkillWhen? When;
+
+        /// <summary>⭐ **盤面の何を数えて効き目を変えるか。**<see cref="Tally.None"/> なら定数のまま。
+        /// ⚠️ ダメージ専用。効き目は数×<see cref="Skills.PerBonusPercent"/>%
+        /// （<see cref="Skills.PerCap"/> で頭打ち）。</summary>
+        public readonly Tally Per;
+
         private Effect(EffectKind kind, PowerTier power, DamageScale scale, StatKey stat, int sign,
             int turns, int stacks, int percent, int count, int delta, int hits, int repeat = 1,
-            int chance = 100, bool pierce = false, Target? own = null, bool innate = false)
+            int chance = 100, bool pierce = false, Target? own = null, bool innate = false,
+            SkillWhen? when = null, Tally per = Tally.None)
         {
+            When = when;
+            Per = per;
             Innate = innate;
             Own = own;
             Pierce = pierce;
@@ -328,9 +389,23 @@ namespace EggCommand.Core
         ///
         /// ⭐ 使いどころ: 「敵全体<c>.To(Self)</c> で自分だけ回復」のような1手2役。
         /// ⚠️ 元の効果は書き換えない（新しい1つを返す）。</summary>
-        public Effect To(Target target) =>
+        public Effect To(Target target) => Copy(own: target);
+
+        /// <summary>⭐ **この効果に条件を付ける。**満たさなければこの効果だけ出ない。</summary>
+        public Effect If(SkillWhen when) => Copy(when: when);
+
+        /// <summary>⭐ **盤面を数えて効き目を変える。**⚠️ ダメージにだけ付く。</summary>
+        public Effect Each(Tally per)
+        {
+            if (Kind != EffectKind.Damage)
+                throw new ArgumentException($"数えられるのはダメージだけ（{Kind} に付けようとした）");
+            return Copy(per: per);
+        }
+
+        /// <summary>欄を1つだけ差し替えた写し。⚠️ 元は書き換えない。</summary>
+        private Effect Copy(Target? own = null, SkillWhen? when = null, Tally? per = null) =>
             new Effect(Kind, Power, Scale, Stat, Sign, Turns, Stacks, Percent, Count, Delta, Hits,
-                Repeat, Chance, Pierce, target, Innate);
+                Repeat, Chance, Pierce, own ?? Own, Innate, when ?? When, per ?? Per);
 
         /// <summary>⭐ **生まれつきのステ上昇・下降。**パッシブ技だけが持てる。
         ///
@@ -422,8 +497,16 @@ namespace EggCommand.Core
         public readonly string Name;
         /// <summary>何をするスキルなのかの短い説明。</summary>
         public readonly string Gist;
-        /// <summary>使ったあと、自分が何回行動するまで使えないか。⚠️ 枠1では常に 0 扱い。</summary>
-        public readonly int Ct;
+        /// <summary>使ったあと、自分が何回行動するまで使えないか。⚠️ 枠1では常に 0 扱い。
+        ///
+        /// ⭐ **技表に書かない。**<see cref="Skills.PriceOf"/> が効果から導く（2026-08-20）。
+        /// ⚠️ 手で書いていた頃、64技中 44技（69%）が CT5 に張り付いていた ──
+        /// 値段が一律だと「重いが強い／軽いが弱い」の比べ方が起きない。
+        /// ⚠️ 気に入らない技だけ `CtOverrides` に書く（成長表と同じ流儀）。</summary>
+        public int Ct => _ct >= 0 ? _ct : (_ct = Skills.PriceOf(this));
+
+        // ⚠️ 1度だけ数えて持つ。⭐ 毎手番に呼ばれるので、都度たどると効果の数だけ回る
+        private int _ct = -1;
         public readonly Target Target;
         public readonly IReadOnlyList<Effect> Effects;
         /// <summary>卵の枠2・3 のどちらから出るかを決める型。
@@ -447,18 +530,18 @@ namespace EggCommand.Core
         /// ここには入れない（同じことを2か所で表せるようにしない）。</summary>
         public readonly bool Passive;
 
-        public Skill(string id, string name, string gist, SkillType type, int ct, Target target,
+        public Skill(string id, string name, string gist, SkillType type, Target target,
             params Effect[] effects)
-            : this(id, name, gist, type, ct, target, false, effects)
+            : this(id, name, gist, type, target, false, effects)
         {
         }
 
         /// <summary>パッシブを作る。⚠️ CT は必ず 0（押せないので待ちようが無い）。</summary>
         public static Skill Always(string id, string name, string gist, SkillType type,
             params Effect[] effects) =>
-            new Skill(id, name, gist, type, 0, Target.Self, true, effects);
+            new Skill(id, name, gist, type, Target.Self, true, effects);
 
-        private Skill(string id, string name, string gist, SkillType type, int ct, Target target,
+        private Skill(string id, string name, string gist, SkillType type, Target target,
             bool passive, Effect[] effects)
         {
             Passive = passive;
@@ -466,7 +549,6 @@ namespace EggCommand.Core
             Name = name;
             Gist = gist;
             Type = type;
-            Ct = ct;
             Target = target;
             Effects = effects;
         }
@@ -608,6 +690,12 @@ namespace EggCommand.Core
 
         /// <summary>スキルレベル1段で、生まれつきの効き目に足す %ポイント。</summary>
         public const int GainInnatePoints = 2;
+
+        /// <summary>盤面を数える技が、1つにつき増やす威力（%）。</summary>
+        public const int PerBonusPercent = 30;
+
+        /// <summary>⚠️ 数える上限。⭐ 頭打ちが無いと積み上げが青天井になる。</summary>
+        public const int PerCap = 4;
 
         // ── スキルレベル ─────────────────────────────────
         // ⭐ 伸び幅は語彙ごとに1つだけ。技ごとの数値は置かない。
@@ -885,6 +973,125 @@ namespace EggCommand.Core
             return string.Join("・", names);
         }
 
+        /// <summary>⭐ **技の値段（CT）を効果から導く。唯一の出所。**
+        ///
+        /// ⭐ これがある理由（2026-08-20）: 64技のうち 44技（69%）が CT5 に張り付いていた。
+        /// 値段が一律だと「重いが強い／軽いが弱い」という比べ方が起きず、
+        /// **強さの差を CT で表していない**状態になっていた。
+        ///
+        /// ⚠️ **技ごとに手で決めない。**手で決めると、効果を足した日に値段が置き去りになる
+        /// （成長表を導出にしたのと同じ理由）。気に入らない技だけ
+        /// <see cref="CtOverrides"/> に書く。
+        ///
+        /// 式: <c>1 ＋ Σ効果の重さ − Σ支払い</c>、床 <see cref="CtFloor"/>／
+        /// 天井 <see cref="CtCap"/>／ひっくり返す級は <see cref="CtHeavy"/>。</summary>
+        public static int PriceOf(Skill skill)
+        {
+            int written;
+            if (CtOverrides.TryGetValue(skill.Id, out written)) return written;
+            // ⚠️ パッシブは押せないので値段が無い
+            if (skill.Passive) return 0;
+            // ⭐ 盤面をひっくり返す級は式の外（1回きりが持ち味・既存の規則のまま）
+            if (IsHeavyCt(skill)) return CtHeavy;
+
+            int price = 1;
+            int longest = 0;   // ⭐ 味方に配る持続もの ── 張りっぱなしのガードに使う
+            foreach (var effect in skill.Effects)
+            {
+                // ⚠️ **自分への弱化は代償。**重さに数えず、逆に値引く（捨て身の突きの型）
+                bool cost = effect.Own == Target.Self && IsHarmful(effect);
+                if (cost) { price -= 1; continue; }
+
+                price += WeightOf(effect);
+                // ⚠️ 条件つきは「作りに行く手間」を値段から引く
+                if (effect.When != null) price -= 1;
+
+                if (effect.Turns > longest && !AtFoe(effect.Own ?? skill.Target))
+                    longest = effect.Turns;
+            }
+
+            // ⭐ 面で当たるものは高い。⚠️ 敵全体は挑発の縛りも受けない
+            var at = skill.Target;
+            if (at == Target.EnemyAll) price += 2;
+            else if (at == Target.AllyAll) price += 1;
+            // ⚠️ 狙えないことは値段。⭐ 単体と同じ効き目を安く買える取引（既存の設計意図）
+            else if (at == Target.EnemyRandom) price -= 1;
+
+            // ⚠️ **張りっぱなしを止める。**免疫3T を CT2 で回すと永久免疫になる。
+            //    ⭐ 味方に配る持続ものだけ「持続＋1」を下限にする。
+            //    ⚠️ 近似 ── 持続は**受け手**の行動で減り、CT は**掛け手**の行動で減る。
+            if (longest > 0 && price < longest + 1) price = longest + 1;
+
+            if (price < CtFloor) price = CtFloor;
+            if (price > CtCap) price = CtCap;
+            return price;
+        }
+
+        /// <summary>効果1つぶんの重さ。⭐ **ゲーム全体でこの1枚**（技ごとに数を書かない）。</summary>
+        private static int WeightOf(Effect effect)
+        {
+            switch (effect.Kind)
+            {
+                case EffectKind.Damage:
+                {
+                    // ⭐ 段位の番号（小1・中2・大3・特大4）＋ 多段の1発は段位1つぶん×2
+                    int weight = (int)effect.Power + 1 + (effect.Repeat - 1) * 2;
+                    // ⭐ 相手の守りを踏み倒すぶん
+                    if (effect.Pierce) weight += 1;
+                    // ⚠️ **数えるぶんにも値段が要る。**付け忘れていた頃、
+                    //    「小の一撃 ＋ 数え」が CT2（一番安い帯）に落ちていた ──
+                    //    満載なら大の一撃を超えるのに、弱化の単品と同じ値段だった。
+                    // ⭐ 天井まで積めば威力は約2.2倍（段位2つぶん）。半分を値段に取る
+                    //    ── 残り半分は「仕込みを先に作る手間」で既に払っているため。
+                    if (effect.Per != Tally.None) weight += TallyWeight;
+                    return weight;
+                }
+                // ⭐ **手番を奪うものが一番高い**（1手番 ≒ 技1つぶん）
+                case EffectKind.Stun:
+                case EffectKind.Sleep: return effect.Turns * 3;
+                case EffectKind.Poison:
+                case EffectKind.Regen: return effect.Stacks * 2;
+                // ⚠️ 割合もの。⭐ 負（削り）は相手の防御も属性も見ないので、絶対値で数える
+                case EffectKind.HealRatio:
+                case EffectKind.Gauge:
+                case EffectKind.Revive:
+                {
+                    int amount = effect.Percent < 0 ? -effect.Percent : effect.Percent;
+                    int weight = (amount + PercentPerWeight - 1) / PercentPerWeight;
+                    // ⭐ 最大HP の割合削りは防御を見ない ── 防御無視と同じ値引きの逆
+                    if (effect.Kind == EffectKind.HealRatio && effect.Percent < 0) weight += 1;
+                    return weight;
+                }
+                case EffectKind.Shield: return effect.Count;
+                case EffectKind.Ct: return effect.Delta < 0 ? -effect.Delta : effect.Delta;
+                case EffectKind.Taunt: return (effect.Hits + 1) / 2;
+                case EffectKind.Guts:
+                case EffectKind.Immune: return (effect.Turns + 2) / 3;
+                case EffectKind.Block: return (effect.Turns + 1) / 2;
+                case EffectKind.Dispel:
+                case EffectKind.Steal:
+                    return effect.Count < 0 ? -effect.Count : effect.Count;
+                case EffectKind.Buff: return 1;
+                // ⚠️ 黙って 0 にしない。⭐ 効果を足したのにここへ来ないと、その技が**只**になる
+                default: throw new ArgumentOutOfRangeException(nameof(effect), effect.Kind,
+                    "値段の付いていない効果。Skills.WeightOf に足すこと");
+            }
+        }
+
+        /// <summary>割合もの何%ぶんで重さ1つか。</summary>
+        public const int PercentPerWeight = 25;
+
+        /// <summary>盤面を数える効果の重さ。⭐ 天井まで積んだときの伸びの半分。</summary>
+        public const int TallyWeight = 1;
+
+        /// <summary>値段の床。⚠️ CT1 は「1回おきに押せる」で枠1（CT0）と区別が付かない。</summary>
+        public const int CtFloor = 2;
+
+        /// <summary>⭐ 式の答えが気に入らない技だけ、ここに書く。
+        /// ⚠️ <see cref="GrowthOverrides"/> と同じ流儀 ── **既定は導出・例外だけ手書き**。
+        /// ⚠️ ここに書いたら理由をコメントで残すこと（書かないと次に触る人が式を疑う）。</summary>
+        private static readonly Dictionary<string, int> CtOverrides = new Dictionary<string, int>();
+
         public static bool IsHeavyCt(Skill skill)
         {
             foreach (var e in skill.Effects)
@@ -905,61 +1112,61 @@ namespace EggCommand.Core
         private static readonly Skill[] List =
         {
             // ── 攻撃 ──────────────────────────────
-            new Skill("attack", "攻撃", "敵1体にダメージ", SkillType.Attack, 3, Target.EnemyOne,
+            new Skill("attack", "攻撃", "敵1体にダメージ", SkillType.Attack, Target.EnemyOne,
                 Effect.Damage(PowerTier.Medium, DamageScale.Atk)),
-            new Skill("attack-heavy", "強攻撃", "敵1体に大きなダメージ。次が遠い", SkillType.Attack, 5, Target.EnemyOne,
+            new Skill("attack-heavy", "強攻撃", "敵1体に大きなダメージ。次が遠い", SkillType.Attack, Target.EnemyOne,
                 Effect.Damage(PowerTier.Large, DamageScale.Atk)),
             // ⚠️ 全体なので1段下げて「小」
-            new Skill("attack-all", "全体攻撃", "敵全体にダメージ", SkillType.Attack, 5, Target.EnemyAll,
+            new Skill("attack-all", "全体攻撃", "敵全体にダメージ", SkillType.Attack, Target.EnemyAll,
                 Effect.Damage(PowerTier.Small, DamageScale.Atk)),
-            new Skill("attack-all-heavy", "全体強攻撃", "敵全体に大きなダメージ。次がとても遠い", SkillType.Attack, 7, Target.EnemyAll,
+            new Skill("attack-all-heavy", "全体強攻撃", "敵全体に大きなダメージ。次がとても遠い", SkillType.Attack, Target.EnemyAll,
                 Effect.Damage(PowerTier.Large, DamageScale.Atk)),
-            new Skill("attack-def", "防御依存攻撃", "防御力が高いほど強い一撃", SkillType.Attack, 3, Target.EnemyOne,
+            new Skill("attack-def", "防御依存攻撃", "防御力が高いほど強い一撃", SkillType.Attack, Target.EnemyOne,
                 Effect.Damage(PowerTier.Medium, DamageScale.Def)),
 
             // ── ステータス系 ──────────────────────
             // ⭐ **強化は配る札。**⚠️ 全部 Self にしていた頃は「誰に」の選択が1つも無かった。
-            new Skill("atk-up", "攻撃力UP", "味方1体の攻撃力を上げる", SkillType.Support, 4, Target.AllyOne,
+            new Skill("atk-up", "攻撃力UP", "味方1体の攻撃力を上げる", SkillType.Support, Target.AllyOne,
                 Effect.Buff(StatKey.Atk, 1, 3)),
-            new Skill("atk-down", "攻撃力DOWN", "敵1体の攻撃力を下げる", SkillType.Debuff, 4, Target.EnemyOne,
+            new Skill("atk-down", "攻撃力DOWN", "敵1体の攻撃力を下げる", SkillType.Debuff, Target.EnemyOne,
                 Effect.Buff(StatKey.Atk, -1, 3)),
-            new Skill("def-up", "防御力UP", "味方1体の防御力を上げる", SkillType.Support, 4, Target.AllyOne,
+            new Skill("def-up", "防御力UP", "味方1体の防御力を上げる", SkillType.Support, Target.AllyOne,
                 Effect.Buff(StatKey.Def, 1, 3)),
-            new Skill("def-down", "防御力DOWN", "敵1体の防御力を下げる", SkillType.Debuff, 4, Target.EnemyOne,
+            new Skill("def-down", "防御力DOWN", "敵1体の防御力を下げる", SkillType.Debuff, Target.EnemyOne,
                 Effect.Buff(StatKey.Def, -1, 3)),
-            new Skill("spd-up", "スピードUP", "味方1体のスピードを上げる", SkillType.Support, 4, Target.AllyOne,
+            new Skill("spd-up", "スピードUP", "味方1体のスピードを上げる", SkillType.Support, Target.AllyOne,
                 Effect.Buff(StatKey.Spd, 1, 3)),
-            new Skill("spd-down", "スピードDOWN", "敵1体のスピードを下げる", SkillType.Debuff, 4, Target.EnemyOne,
+            new Skill("spd-down", "スピードDOWN", "敵1体のスピードを下げる", SkillType.Debuff, Target.EnemyOne,
                 Effect.Buff(StatKey.Spd, -1, 3)),
 
             // ── HP系 ──────────────────────────────
-            new Skill("poison", "毒", "敵1体が行動するたびに削れる", SkillType.Debuff, 5, Target.EnemyOne,
+            new Skill("poison", "毒", "敵1体が行動するたびに削れる", SkillType.Debuff, Target.EnemyOne,
                 Effect.Poison(1, 4)),
-            new Skill("regen", "リジェネ", "味方1体が行動するたびに回復する", SkillType.Heal, 5, Target.AllyOne,
+            new Skill("regen", "リジェネ", "味方1体が行動するたびに回復する", SkillType.Heal, Target.AllyOne,
                 Effect.Regen(1, 4)),
-            new Skill("heal-ratio", "HP割合回復", "味方1体の HP を最大値の割合ぶん回復", SkillType.Heal, 4, Target.AllyOne,
+            new Skill("heal-ratio", "HP割合回復", "味方1体の HP を最大値の割合ぶん回復", SkillType.Heal, Target.AllyOne,
                 Effect.HealRatio(30)),
-            new Skill("shield", "シールド", "味方1体に、HP より先に減る盾を張る", SkillType.Support, 4, Target.AllyOne,
+            new Skill("shield", "シールド", "味方1体に、HP より先に減る盾を張る", SkillType.Support, Target.AllyOne,
                 Effect.Shield(2)),
 
             // ── 行動系 ────────────────────────────
-            new Skill("stun", "スタン", "敵1体の手番を飛ばす", SkillType.Debuff, 5, Target.EnemyOne,
+            new Skill("stun", "スタン", "敵1体の手番を飛ばす", SkillType.Debuff, Target.EnemyOne,
                 Effect.Stun(1)),
-            new Skill("ct-short", "CT短縮", "自分の技の待ちを縮める", SkillType.Support, 4, Target.Self,
+            new Skill("ct-short", "CT短縮", "自分の技の待ちを縮める", SkillType.Support, Target.Self,
                 Effect.Ct(-2)),
-            new Skill("ct-long", "CT延長", "敵1体の技の待ちを延ばす", SkillType.Debuff, 5, Target.EnemyOne,
+            new Skill("ct-long", "CT延長", "敵1体の技の待ちを延ばす", SkillType.Debuff, Target.EnemyOne,
                 Effect.Ct(2)),
             // ⚠️ **2026-08-18 まで Target.Self だったため、一度も発動していなかった。**
             //    効果は「相手に付ける弱化」に作り替えたのに技の狙い先を直し忘れていた。
             //    自分に掛かると TauntBy が自分になり、敵側から探す縛りが一致しない。
-            new Skill("taunt", "挑発", "敵1体が、自分しか狙えなくなる", SkillType.Debuff, 3, Target.EnemyOne,
+            new Skill("taunt", "挑発", "敵1体が、自分しか狙えなくなる", SkillType.Debuff, Target.EnemyOne,
                 Effect.Taunt(3)),
 
             // ── 特殊 ──────────────────────────────
-            new Skill("guts", "ガッツ", "味方1体が致命傷を HP1 で耐える", SkillType.Support, 5, Target.AllyOne,
+            new Skill("guts", "ガッツ", "味方1体が致命傷を HP1 で耐える", SkillType.Support, Target.AllyOne,
                 Effect.Guts(3)),
             // ⭐ **先手で配る札。**⚠️ 弱化を通されてから貼っても手遅れ
-            new Skill("immune", "免疫", "味方1体が弱化を受けなくなる", SkillType.Support, 5, Target.AllyOne,
+            new Skill("immune", "免疫", "味方1体が弱化を受けなくなる", SkillType.Support, Target.AllyOne,
                 Effect.Immune(3)),
 
             // ── ここから増やしたぶん（2026-08-17）────────────────
@@ -968,48 +1175,48 @@ namespace EggCommand.Core
             // ⚠️ 足すたびに `sim skills` で「一度も選ばれない技」が出ていないか見る。
 
             // 多段。⭐ 盾は1発ごとに剥がれるので、大きな一撃と役割が分かれる
-            new Skill("attack-twice", "連撃", "敵1体に小さな一撃を2回", SkillType.Attack, 4, Target.EnemyOne,
+            new Skill("attack-twice", "連撃", "敵1体に小さな一撃を2回", SkillType.Attack, Target.EnemyOne,
                 Effect.Damage(PowerTier.Small, DamageScale.Atk, 2)),
-            new Skill("attack-thrice", "乱打", "敵1体に小さな一撃を3回。盾を剥がす", SkillType.Attack, 5, Target.EnemyOne,
+            new Skill("attack-thrice", "乱打", "敵1体に小さな一撃を3回。盾を剥がす", SkillType.Attack, Target.EnemyOne,
                 Effect.Damage(PowerTier.Small, DamageScale.Atk, 3)),
-            new Skill("attack-def-twice", "堅陣突き", "防御が高いほど強い一撃を2回", SkillType.Attack, 5, Target.EnemyOne,
+            new Skill("attack-def-twice", "堅陣突き", "防御が高いほど強い一撃を2回", SkillType.Attack, Target.EnemyOne,
                 Effect.Damage(PowerTier.Medium, DamageScale.Def, 2)),
 
             // 複合。⭐ 1手で2つのことをする代わりに CT が長い
             // ⭐ ここから下の弱化は**外れることがある**（命中と抵抗の差で上下する）。
             // ⚠️ 上の移植した21技は 100% のまま。較正済みの照合が1手も変わらないように残してある。
             // ⚠️ ダメージの側は必ず当たる。外れるのは弱化だけ
-            new Skill("venom-fang", "毒牙", "ダメージを与え、高い確率で毒も入れる", SkillType.Attack, 5, Target.EnemyOne,
+            new Skill("venom-fang", "毒牙", "ダメージを与え、高い確率で毒も入れる", SkillType.Attack, Target.EnemyOne,
                 Effect.Damage(PowerTier.Small, DamageScale.Atk),
                 Effect.Poison(1, 4, chance: 75)),
-            new Skill("crush", "打ち崩し", "ダメージを与え、高い確率で防御力を下げる", SkillType.Attack, 5, Target.EnemyOne,
+            new Skill("crush", "打ち崩し", "ダメージを与え、高い確率で防御力を下げる", SkillType.Attack, Target.EnemyOne,
                 Effect.Damage(PowerTier.Small, DamageScale.Atk),
                 Effect.Buff(StatKey.Def, -1, 3, chance: 75)),
-            new Skill("dash", "早駆け", "自分のスピードを上げ、技の待ちも縮める", SkillType.Support, 5, Target.Self,
+            new Skill("dash", "早駆け", "自分のスピードを上げ、技の待ちも縮める", SkillType.Support, Target.Self,
                 Effect.Buff(StatKey.Spd, 1, 3),
                 Effect.Ct(-2)),
-            new Skill("harden", "硬化", "防御力を上げ、盾も張る", SkillType.Support, 5, Target.Self,
+            new Skill("harden", "硬化", "防御力を上げ、盾も張る", SkillType.Support, Target.Self,
                 Effect.Buff(StatKey.Def, 1, 3),
                 Effect.Shield(1)),
             // ⚠️ 挑発が弱化になったので、相方も敵に掛かるものへ替えた
             //    （Self のままだと防御UP が敵に乗る）。
-            new Skill("bulwark", "受けの構え", "敵1体を釘付けにし、その攻撃を鈍らせる", SkillType.Debuff, 4, Target.EnemyOne,
+            new Skill("bulwark", "受けの構え", "敵1体を釘付けにし、その攻撃を鈍らせる", SkillType.Debuff, Target.EnemyOne,
                 Effect.Taunt(2),
                 Effect.Buff(StatKey.Atk, -1, 3, chance: 75)),
             // ⭐ 2つ掛けるので1つずつの通りは低い。速い個体が使うと両方通りやすい
-            new Skill("curse", "呪詛", "敵1体の攻撃力とスピードを下げる", SkillType.Debuff, 5, Target.EnemyOne,
+            new Skill("curse", "呪詛", "敵1体の攻撃力とスピードを下げる", SkillType.Debuff, Target.EnemyOne,
                 Effect.Buff(StatKey.Atk, -1, 3, chance: 70),
                 Effect.Buff(StatKey.Spd, -1, 3, chance: 70)),
 
             // 濃さを変えただけのもの。⭐ 段位ではなくスタック数・割合で差を出す
-            new Skill("venom-heavy", "毒・大", "毒を2重に入れる。やや外れやすい", SkillType.Debuff, 5, Target.EnemyOne,
+            new Skill("venom-heavy", "毒・大", "毒を2重に入れる。やや外れやすい", SkillType.Debuff, Target.EnemyOne,
                 Effect.Poison(2, 4, chance: 65)),
-            new Skill("heal-big", "HP割合回復・大", "味方1体の HP を大きく回復", SkillType.Heal, 5, Target.AllyOne,
+            new Skill("heal-big", "HP割合回復・大", "味方1体の HP を大きく回復", SkillType.Heal, Target.AllyOne,
                 Effect.HealRatio(55)),
 
             // ⚠️ 全体は1段下げる。全体の弱化は単体よりずっと効く
             // ⚠️ 全体なので通りは低め。全員に確実に入ると1手で試合が決まる
-            new Skill("slow-all", "スピードDOWN・全体", "敵全体のスピードを下げる", SkillType.Debuff, 5, Target.EnemyAll,
+            new Skill("slow-all", "スピードDOWN・全体", "敵全体のスピードを下げる", SkillType.Debuff, Target.EnemyAll,
                 Effect.Buff(StatKey.Spd, -1, 3, chance: 60)),
 
             // ── 効き目と確率のトレードオフ（2026-08-17）─────────────
@@ -1020,19 +1227,19 @@ namespace EggCommand.Core
             //    ここは主に博打sideを足している。
             // ⚠️ 自分・味方に掛けるものは速度で率が動かない。素の率がそのまま賭けになる。
 
-            new Skill("heal-miracle", "HP割合回復・特大", "味方1体を全快させる。半分は失敗する", SkillType.Heal, 5, Target.AllyOne,
+            new Skill("heal-miracle", "HP割合回復・特大", "味方1体を全快させる。半分は失敗する", SkillType.Heal, Target.AllyOne,
                 Effect.HealRatio(100, chance: 50)),
-            new Skill("shield-wall", "シールド・大", "味方1体に盾を4枚張る。3回に1回は失敗する", SkillType.Support, 5, Target.AllyOne,
+            new Skill("shield-wall", "シールド・大", "味方1体に盾を4枚張る。3回に1回は失敗する", SkillType.Support, Target.AllyOne,
                 Effect.Shield(4, chance: 65)),
-            new Skill("guts-deep", "ガッツ・長", "味方1体が長く粘れる。掛かるかは五分", SkillType.Support, 5, Target.AllyOne,
+            new Skill("guts-deep", "ガッツ・長", "味方1体が長く粘れる。掛かるかは五分", SkillType.Support, Target.AllyOne,
                 Effect.Guts(6, chance: 50)),
-            new Skill("immune-long", "免疫・長", "味方1体に長く効く免疫。4割は失敗する", SkillType.Support, 5, Target.AllyOne,
+            new Skill("immune-long", "免疫・長", "味方1体に長く効く免疫。4割は失敗する", SkillType.Support, Target.AllyOne,
                 Effect.Immune(6, chance: 60)),
 
             // ⚠️ 相手に掛ける側は（命中 − 抵抗）÷2 ポイント動く。命中に振った個体が使うと通りやすい
-            new Skill("stun-heavy", "スタン・大", "2回ぶん手番を飛ばす。よく外す", SkillType.Debuff, 5, Target.EnemyOne,
+            new Skill("stun-heavy", "スタン・大", "2回ぶん手番を飛ばす。よく外す", SkillType.Debuff, Target.EnemyOne,
                 Effect.Stun(2, chance: 40)),
-            new Skill("ct-lock", "CT延長・大", "敵の技の待ちを大きく延ばす", SkillType.Debuff, 5, Target.EnemyOne,
+            new Skill("ct-lock", "CT延長・大", "敵の技の待ちを大きく延ばす", SkillType.Debuff, Target.EnemyOne,
                 Effect.Ct(4, chance: 55)),
 
             // ── 手番と打ち消しの層（2026-08-18）──────────────────
@@ -1047,34 +1254,34 @@ namespace EggCommand.Core
             // ⚠️ 効果の種類は1つも足していない。実装済みのプリミティブを技にしただけ。
 
             // ⭐ 行動順そのものへ触る2本。⚠️ これが無いと「順番」はゲージ任せのまま
-            new Skill("gauge-drain", "ゲージ減少", "敵1体のゲージを大きく戻す", SkillType.Debuff, 5, Target.EnemyOne,
+            new Skill("gauge-drain", "ゲージ減少", "敵1体のゲージを大きく戻す", SkillType.Debuff, Target.EnemyOne,
                 Effect.Gauge(-40, chance: 65)),
-            new Skill("gauge-boost", "ゲージ上昇", "味方1体のゲージを進める", SkillType.Support, 4, Target.AllyOne,
+            new Skill("gauge-boost", "ゲージ上昇", "味方1体のゲージを進める", SkillType.Support, Target.AllyOne,
                 Effect.Gauge(30)),
 
             // ⭐ 打ち消しの層。⚠️ 免疫は**強化**なので、これで剥がせる
             //    ＝「剥がしてから弱化を通す」という2手の組み立てが生まれる
-            new Skill("dispel", "強化解除", "敵1体の強化を2つ消す", SkillType.Debuff, 5, Target.EnemyOne,
+            new Skill("dispel", "強化解除", "敵1体の強化を2つ消す", SkillType.Debuff, Target.EnemyOne,
                 Effect.Dispel(2, chance: 70)),
-            new Skill("buff-steal", "強化強奪", "敵1体の強化を1つ、自分へ移す", SkillType.Debuff, 5, Target.EnemyOne,
+            new Skill("buff-steal", "強化強奪", "敵1体の強化を1つ、自分へ移す", SkillType.Debuff, Target.EnemyOne,
                 Effect.Steal(1, chance: 55)),
 
             // ⭐ 外から受け取る回復と強化だけを止める。⚠️ 自然に溜まるゲージと CT は止まらない
             // ⚠️ 名前を「封印」にしていたが、CT を延ばす「封じ」と紛らわしかった。
             //    ⭐ 効果そのものの名（毒・スタン・免疫・シールドと同じ付け方）に揃える。
-            new Skill("block", "ブロック", "敵1体が回復と強化を受け取れなくなる", SkillType.Debuff, 5, Target.EnemyOne,
+            new Skill("block", "ブロック", "敵1体が回復と強化を受け取れなくなる", SkillType.Debuff, Target.EnemyOne,
                 Effect.Block(2, chance: 60)),
 
             // ⭐ スタンと別物。⚠️ **殴ると起きる**ので、殴る順番が問われる
-            new Skill("sleep", "睡眠", "敵1体を眠らせる。攻撃を受けると起きる", SkillType.Debuff, 5, Target.EnemyOne,
+            new Skill("sleep", "睡眠", "敵1体を眠らせる。攻撃を受けると起きる", SkillType.Debuff, Target.EnemyOne,
                 Effect.Sleep(2, chance: 55)),
 
             // ⭐ 硬い相手を抜く。⚠️ 盾は抜けない（そこは剥がすか多段で削る）
-            new Skill("pierce-strike", "防御無視攻撃", "防御を計算に入れずに斬る", SkillType.Attack, 5, Target.EnemyOne,
+            new Skill("pierce-strike", "防御無視攻撃", "防御を計算に入れずに斬る", SkillType.Attack, Target.EnemyOne,
                 Effect.Damage(PowerTier.Medium, DamageScale.Atk, pierce: true)),
 
             // ⭐ 倒れてからの手。⚠️ 強化も弱化も持ち越さない（ゲージと CT は続き）
-            new Skill("revive", "蘇生", "倒れた味方1体を呼び戻す", SkillType.Heal, 7, Target.AllyDown,
+            new Skill("revive", "蘇生", "倒れた味方1体を呼び戻す", SkillType.Heal, Target.AllyDown,
                 Effect.Revive(40)),
 
             // ── しかけて回収する層（2026-08-19・🚧 まだ配っていない）───────────
@@ -1088,40 +1295,40 @@ namespace EggCommand.Core
 
             // ⭐ 弱化を「広く置く」2本。追い打ち・狙い澄ましの回収先が増える
             // ⚠️ 全体なので1段下げる: 単体の毒（4T・100%）に対し 3T・50%
-            new Skill("poison-all", "毒・全体", "敵全体に毒を入れる。半分は外れる", SkillType.Debuff, 5, Target.EnemyAll,
+            new Skill("poison-all", "毒・全体", "敵全体に毒を入れる。半分は外れる", SkillType.Debuff, Target.EnemyAll,
                 Effect.Poison(1, 3, chance: 50)),
             // ⭐ 殴りながら置く。⚠️ ダメージは必ず当たり、外れるのはスタンだけ
-            new Skill("stun-strike", "痺れ打ち", "ダメージを与え、たまにスタンも入れる", SkillType.Debuff, 5, Target.EnemyOne,
+            new Skill("stun-strike", "痺れ打ち", "ダメージを与え、たまにスタンも入れる", SkillType.Debuff, Target.EnemyOne,
                 Effect.Damage(PowerTier.Small, DamageScale.Atk),
                 Effect.Stun(1, chance: 45)),
 
             // ⭐ 剥がしてから通す層の複合版。強化解除（2個・CT5）より軽い代わりに殴れる
-            new Skill("strip-strike", "剥ぎ打ち", "ダメージを与え、高い確率で強化も1つ消す", SkillType.Attack, 5, Target.EnemyOne,
+            new Skill("strip-strike", "剥ぎ打ち", "ダメージを与え、高い確率で強化も1つ消す", SkillType.Attack, Target.EnemyOne,
                 Effect.Damage(PowerTier.Small, DamageScale.Atk),
                 Effect.Dispel(1, chance: 70)),
 
             // ⭐ 濃さと確率のトレードオフ。毒・大（2重・65%）の回復側の鏡
-            new Skill("regen-heavy", "リジェネ・大", "リジェネを2重に掛ける。やや外れやすい", SkillType.Heal, 5, Target.AllyOne,
+            new Skill("regen-heavy", "リジェネ・大", "リジェネを2重に掛ける。やや外れやすい", SkillType.Heal, Target.AllyOne,
                 Effect.Regen(2, 4, chance: 65)),
             // ⭐ ゲージ上昇（30%・確実）の博打側。⚠️ 味方に掛けるので素の率がそのまま賭け
-            new Skill("gauge-boost-heavy", "ゲージ上昇・大", "味方1体のゲージを大きく進める。半分は失敗する", SkillType.Support, 5, Target.AllyOne,
+            new Skill("gauge-boost-heavy", "ゲージ上昇・大", "味方1体のゲージを大きく進める。半分は失敗する", SkillType.Support, Target.AllyOne,
                 Effect.Gauge(60, chance: 50)),
             // ⭐ 挑発（3回・確実・CT3）の長持ち側。置き土産・背水の「わざと受ける」相方
-            new Skill("taunt-long", "挑発・長", "敵1体を長く釘付けにする。3割は外す", SkillType.Debuff, 5, Target.EnemyOne,
+            new Skill("taunt-long", "挑発・長", "敵1体を長く釘付けにする。3割は外す", SkillType.Debuff, Target.EnemyOne,
                 Effect.Taunt(5, chance: 70)),
 
             // ⭐ 硬い相手への締めの一撃。⚠️ 防御無視攻撃（中・CT5）より1段上で、そのぶん遠い
-            new Skill("pierce-strike-heavy", "防御無視強攻撃", "防御を計算に入れない大きな一撃。次が遠い", SkillType.Attack, 5, Target.EnemyOne,
+            new Skill("pierce-strike-heavy", "防御無視強攻撃", "防御を計算に入れない大きな一撃。次が遠い", SkillType.Attack, Target.EnemyOne,
                 Effect.Damage(PowerTier.Large, DamageScale.Atk, pierce: true)),
             // ⭐ 全体 × 多段。盾を**面で**剥がす唯一の札（執念持ちの敵には貢ぎ物になる読み合い）
-            new Skill("attack-all-twice", "全体連撃", "敵全体に小さな一撃を2回。盾を広く剥がす", SkillType.Attack, 7, Target.EnemyAll,
+            new Skill("attack-all-twice", "全体連撃", "敵全体に小さな一撃を2回。盾を広く剥がす", SkillType.Attack, Target.EnemyAll,
                 Effect.Damage(PowerTier.Small, DamageScale.Atk, 2)),
 
             // ⭐ 蘇生（40%・確実）の博打側。⚠️ 外すと1手が丸ごと消える
-            new Skill("revive-heavy", "蘇生・大", "倒れた味方を手厚く呼び戻す。4割は失敗する", SkillType.Heal, 7, Target.AllyDown,
+            new Skill("revive-heavy", "蘇生・大", "倒れた味方を手厚く呼び戻す。4割は失敗する", SkillType.Heal, Target.AllyDown,
                 Effect.Revive(70, chance: 60)),
             // ⭐ 複合（スピードUP＋ゲージ上昇）。⚠️ 複合は名前で両方言えないので短い名
-            new Skill("tailwind", "追い風", "味方1体のスピードを上げ、ゲージも進める", SkillType.Support, 5, Target.AllyOne,
+            new Skill("tailwind", "追い風", "味方1体のスピードを上げ、ゲージも進める", SkillType.Support, Target.AllyOne,
                 Effect.Buff(StatKey.Spd, 1, 3),
                 Effect.Gauge(25)),
 
@@ -1137,25 +1344,25 @@ namespace EggCommand.Core
             //    ── 速度DOWN を通されたら、こちらに打つ手が1つも無い（⭐ 読み合いが片道）。
             // ⚠️ 落ちる順は「重いものから」（スタン → 睡眠 → 毒 …）。
             //    軽いものから落ちると「治したのに手応えが無い」になる。
-            new Skill("cleanse", "弱化解除", "味方1体に乗った弱化を2つ落とす", SkillType.Heal, 4, Target.AllyOne,
+            new Skill("cleanse", "弱化解除", "味方1体に乗った弱化を2つ落とす", SkillType.Heal, Target.AllyOne,
                 Effect.Cleanse(2)),
             // ⚠️ 全体なので1段下げる: 単体2個・確実 に対し 1個・確実
-            new Skill("cleanse-all", "弱化解除・全体", "味方全体の弱化を1つずつ落とす", SkillType.Heal, 5, Target.AllyAll,
+            new Skill("cleanse-all", "弱化解除・全体", "味方全体の弱化を1つずつ落とす", SkillType.Heal, Target.AllyAll,
                 Effect.Cleanse(1)),
 
             // ⭐ **1手2役。**狙い先の違う効果を1つの技に載せる形。
             //    ⚠️ どれも「得だけ」にしない ── 得だけなら他の技を選ぶ理由が消える。
 
             // ⭐ 殴った手で自分を立て直す。回復役を1枠空けられる代わりに、一撃は小さい
-            new Skill("drain-all", "吸い上げ", "敵全体に小さな一撃。自分のHPが少し戻る", SkillType.Attack, 5, Target.EnemyAll,
+            new Skill("drain-all", "吸い上げ", "敵全体に小さな一撃。自分のHPが少し戻る", SkillType.Attack, Target.EnemyAll,
                 Effect.Damage(PowerTier.Small, DamageScale.Atk),
                 Effect.HealRatio(15).To(Target.Self)),
             // ⭐ 大きく踏み込む代わりに、自分の守りが薄くなる
-            new Skill("reckless", "捨て身の突き", "大きな一撃。そのあと自分の防御が下がる", SkillType.Attack, 5, Target.EnemyOne,
+            new Skill("reckless", "捨て身の突き", "大きな一撃。そのあと自分の防御が下がる", SkillType.Attack, Target.EnemyOne,
                 Effect.Damage(PowerTier.Large, DamageScale.Atk),
                 Effect.Buff(StatKey.Def, -1, 3).To(Target.Self)),
             // ⭐ 相手を下げながら味方を上げる。⚠️ 下げる側だけ外れる（上げる側は自分たちに掛かる）
-            new Skill("warcry", "鬨の声", "敵全体の攻撃を下げ、味方全体の攻撃を上げる", SkillType.Debuff, 5, Target.EnemyAll,
+            new Skill("warcry", "鬨の声", "敵全体の攻撃を下げ、味方全体の攻撃を上げる", SkillType.Debuff, Target.EnemyAll,
                 Effect.Buff(StatKey.Atk, -1, 3, chance: 60),
                 Effect.Buff(StatKey.Atk, 1, 3).To(Target.AllyAll)),
 
@@ -1171,6 +1378,54 @@ namespace EggCommand.Core
                 Effect.Always(StatKey.Def, 1)),
             Skill.Always("nimble", "身軽", "常にスピードが上がっている", SkillType.Support,
                 Effect.Always(StatKey.Spd, 1)),
+
+            // ── 仕込みを回収する層（2026-08-20・🚧 まだ配っていない）───────────
+            // ⭐ **仕込む技は在るのに、回収する側が無かった。**
+            //    毒・弱化・CT延長は「ゆっくり効くダメージ」にしかならず、
+            //    測定でも R:毒撒き 48% / R:足止め 36% / R:CT縛り 22% と沈んでいた。
+            // ⭐ ここは「盤面を数える」「条件を見る」の2つで、その回収先を作る層。
+            // ⚠️ 効果の種類は1つも増えていない（数え方と条件は効果の**欄**）。
+
+            // ⭐ 弱化を撒いてから殴る筋の回収先。⚠️ 数えるのは**種類**（毒を重ねても1つ）
+            new Skill("chase-down", "追い崩し", "敵1体を攻撃。相手に付いた弱化の種類だけ強くなる",
+                SkillType.Attack, Target.EnemyOne,
+                Effect.Damage(PowerTier.Small, DamageScale.Atk).Each(Tally.FoeBanes)),
+            // ⭐ 面で撒いて面で回収する。⚠️ 数えるのは**相手ごと**（深く入る相手と浅い相手が出る）
+            new Skill("sweep-down", "総崩し", "敵全体を攻撃。相手ごとに弱化の種類だけ強くなる",
+                SkillType.Attack, Target.EnemyAll,
+                Effect.Damage(PowerTier.Small, DamageScale.Atk).Each(Tally.FoeBanes)),
+
+            // ⭐ 積んだ相手への罰。⚠️ 剥がさずに殴るので、強化解除・強奪と棲み分ける
+            new Skill("pride-strike", "驕り討ち", "敵1体を攻撃。相手に付いた強化の数だけ強くなる",
+                SkillType.Attack, Target.EnemyOne,
+                Effect.Damage(PowerTier.Small, DamageScale.Atk).Each(Tally.FoeBoons)),
+            // ⭐ 「配ってから撃つ」を筋にする。⚠️ 味方に配る札の回収先
+            new Skill("stacked-shot", "積み放ち", "敵1体を攻撃。自分に付いた強化の数だけ強くなる",
+                SkillType.Attack, Target.EnemyOne,
+                Effect.Damage(PowerTier.Medium, DamageScale.Atk).Each(Tally.OwnBoons)),
+
+            // ⭐ 硬い相手・HPが多い相手への答え。⚠️ 防御も属性も見ないので、確率だけが防ぎ手
+            new Skill("life-cut", "命削り", "敵1体の最大HPを削る。防御を見ない",
+                SkillType.Attack, Target.EnemyOne,
+                Effect.HealRatio(-30, chance: 70)),
+
+            // ⭐ 止め筋の回収先。⚠️ **睡眠は1発目で起きる**ので、スタンと組む技
+            //    （ここに小さな読みが1つ生まれる）
+            new Skill("ambush-strike", "寝込み討ち", "敵1体を攻撃。相手が動けないなら深く入る",
+                SkillType.Attack, Target.EnemyOne,
+                Effect.Damage(PowerTier.Medium, DamageScale.Atk),
+                Effect.Damage(PowerTier.Medium, DamageScale.Atk).If(SkillWhen.FoeStopped)),
+            // ⭐ 回復持ちを閾値ごと割る／多数戦の掃除
+            new Skill("finisher", "止めの一撃", "敵1体を攻撃。相手が半分以下なら大きく入る",
+                SkillType.Attack, Target.EnemyOne,
+                Effect.Damage(PowerTier.Small, DamageScale.Atk),
+                Effect.Damage(PowerTier.Large, DamageScale.Atk).If(SkillWhen.FoeHalf)),
+
+            // ⭐ 弱化を受けたあとの切り返しを1手にまとめる（弱化解除の上位でなく複合）
+            new Skill("rally", "立て直し", "味方1体の弱化を2つ落とし、HPも少し戻す",
+                SkillType.Heal, Target.AllyOne,
+                Effect.Cleanse(2),
+                Effect.HealRatio(20)),
         };
 
         public static IReadOnlyList<Skill> All => List;
@@ -1289,6 +1544,9 @@ namespace EggCommand.Core
             "cleanse", "cleanse-all",
             "drain-all", "reckless", "warcry",
             "vigor", "sturdy", "nimble",
+            // ⭐ 2026-08-20 に足した「回収する側」の8本
+            "chase-down", "sweep-down", "pride-strike", "stacked-shot",
+            "life-cut", "ambush-strike", "finisher", "rally",
         };
 
         /// <summary>技表とガチャプールの整合を数える。
@@ -1488,6 +1746,39 @@ namespace EggCommand.Core
                     {
                         if (e.Innate)
                             problems.Add($"{skill.Id}: パッシブでないのに「生まれつき」を持っている");
+                    }
+                }
+            }
+
+            // ⚠️ **条件つきの決まり。**（設計案 §2）
+            foreach (var skill in table)
+            {
+                for (int i = 0; i < skill.Effects.Count; i++)
+                {
+                    var e = skill.Effects[i];
+                    // ⚠️ **1つ目の効果に条件を付けない。**全部が条件つきだと、
+                    //    条件を外して押した手番が丸ごと空振りする
+                    if (i == 0 && e.When != null)
+                        problems.Add($"{skill.Id}: 最初の効果に条件が付いている（外すと空振りする技になる）");
+                    // ⚠️ 数えられるのはダメージだけ
+                    if (e.Per != Tally.None && e.Kind != EffectKind.Damage)
+                        problems.Add($"{skill.Id}: ダメージ以外に数えが付いている（{e.Kind}）");
+                }
+                // ⚠️ **自作自演の禁止。**同じ技で条件を作って同じ技で回収すると、条件が常に真になる
+                foreach (var e in skill.Effects)
+                {
+                    if (e.When == null && e.Per == Tally.None) continue;
+                    bool wantsBane = e.When == SkillWhen.FoeWeakened || e.Per == Tally.FoeBanes;
+                    bool wantsStop = e.When == SkillWhen.FoeStopped;
+                    foreach (var other in skill.Effects)
+                    {
+                        if (ReferenceEquals(other, e)) continue;
+                        bool atFoe = AtFoe(other.Own ?? skill.Target);
+                        if (!atFoe) continue;
+                        if (wantsBane && IsHarmful(other) && other.Kind != EffectKind.Damage)
+                            problems.Add($"{skill.Id}: 同じ技で弱化を付けて、同じ技でそれを見ている（条件が常に真になる）");
+                        if (wantsStop && (other.Kind == EffectKind.Stun || other.Kind == EffectKind.Sleep))
+                            problems.Add($"{skill.Id}: 同じ技で止めて、同じ技でそれを見ている（条件が常に真になる）");
                     }
                 }
             }

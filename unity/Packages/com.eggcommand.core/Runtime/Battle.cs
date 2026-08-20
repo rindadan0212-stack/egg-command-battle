@@ -90,6 +90,9 @@ namespace EggCommand.Core
         /// （特性ごとに欄を増やす必要はない）。
         /// ⚠️ 2つ目が出たとき「畳み掛け用の欄」を作りかけたが、上の理由でやめた。</summary>
         public bool TraitSpent;
+        /// <summary>⭐ 先駆け: **まだ1手も動いていない。**この間の弱化は外れない。
+        /// ⚠️ 特性を持たない個体では常に false（<see cref="Battle.CreateBattle"/> が立てる）。</summary>
+        public bool Opening;
         /// <summary>スキル枠3つぶん。0 なら使える。</summary>
         public readonly int[] Cooldowns = new int[3];
 
@@ -297,6 +300,7 @@ namespace EggCommand.Core
         /// ⚠️ **半分にすると +22.5pt**（2026-08-19 実測 400回）で、既存の帯（+2〜19pt）を
         /// 突き抜けた。開幕の先手は「相手より先に1手多い」そのものなので、
         /// 1回きりでも見た目より重い。⭐ 1/4 で +5〜10pt 帯に収まる（実測）。</summary>
+        [Obsolete("2026-08-20 に廃止。⭐ 先駆けは「開幕の1手目の弱化が外れない」になった")]
         public const int TraitOpenerGauge = GaugeMax / 4;
 
         /// <summary>置き土産: 倒れたとき、残った味方1体ごとに入るゲージ。⭐ <see cref="GaugeMax"/> の 1/4。
@@ -311,7 +315,11 @@ namespace EggCommand.Core
 
         /// <summary>背水: 自分の HP が半分以下のときの与ダメージに足す割合（%）。
         /// ⚠️ 半分以下は「回復が届く前の数手」しか続かないことが多いので、追い打ちより大きく。</summary>
+        [Obsolete("2026-08-20 に廃止。⭐ 背水は「半分以下の間、待ちが速く減る」になった")]
         public const int TraitDesperationPercent = 25;
+
+        /// <summary>背水: 半分以下の間、1行動で減る CT。⚠️ 通常は 1。</summary>
+        public const int TraitDesperationStep = 2;
 
         /// <summary>粘り腰: 自分の HP が半分以下のとき、受けるダメージから引く割合（%）。
         /// ⚠️ 背水と同じ条件の受け身側。⭐ 「倒れる一撃」の判定より前に引くので、
@@ -359,7 +367,11 @@ namespace EggCommand.Core
                 case TraitWhen.BattleStart:
                     // ⭐ 先駆け: 開幕からゲージを持って始める
                     // ⚠️ ログは残さない（ゲージは画面のバーにそのまま見える）
-                    if (HasTrait(subject, Traits.Opener)) subject.Gauge += TraitOpenerGauge;
+                    // ⚠️ 開幕ゲージは廃止（2026-08-20）。⭐ 実測で「まったく技を選ばない」特性だった
+                    //    ── ゲージが進んでも**どの技を選ぶかが1つも変わらない**ため。
+                    //    ⭐ いまは「開幕の1手目の弱化が外れない」（下の LandChanceOf）。
+                    //    ⚠️ 乱数をむしろ減らす向きの直し。「先に配る札」という原設計に寄せてある。
+                    if (HasTrait(subject, Traits.Opener)) subject.Opening = true;
                     break;
 
                 case TraitWhen.OnShieldBreak:
@@ -449,6 +461,18 @@ namespace EggCommand.Core
                 || s.Block > 0 || s.Taunt > 0;
         }
 
+        /// <summary>⭐ 粘り腰: **半分以下の間、受け取る回復が増える。**
+        ///
+        /// ⭐ これがある理由（2026-08-20）: 前は「受ける被害が減る」だったが、実測で
+        /// **まったく技を選ばない特性**だった（受け身に効くだけで、こちらの手が変わらない）。
+        /// ⭐ 回復側に移すと「**回復役を連れているか**」が編成の判断になる。
+        /// ⚠️ 自然回復（リジェネ）にも乗る ── どちらも「受け取る回復」なので分けない。</summary>
+        private static int Nursed(Unit unit, int amount)
+        {
+            if (!HasTrait(unit, Traits.Tenacity) || unit.Hp * 2 > unit.MaxHp) return amount;
+            return amount + Ratio(amount, TraitTenacityPercent);
+        }
+
         /// <summary>割合を取る。⚠️ 0 にしない（「効いたのに何も起きない」を作らない）。</summary>
         private static int Ratio(int value, int percent)
         {
@@ -460,6 +484,74 @@ namespace EggCommand.Core
         private static int JsRound(double value) => (int)Math.Floor(value + 0.5);
 
         // ── 唯一の出所となる計算 ──────────────────────────────
+
+        /// <summary>条件を満たしているか。⭐ **唯一の出所。**
+        ///
+        /// ⚠️ 見るのは**状態**だけ（瞬間は <see cref="TraitWhen"/> の仕事）。
+        /// ⭐ どれも画面で確かめられる ── 状態アイコンか HP バー。</summary>
+        public static bool Holds(SkillWhen when, Unit actor, Unit target)
+        {
+            switch (when)
+            {
+                case SkillWhen.FoeWeakened: return HasWeakness(target);
+                case SkillWhen.FoeBoosted: return BoonsOn(target) > 0;
+                case SkillWhen.FoeStopped: return target.Status.Stun > 0 || target.Status.Sleep > 0;
+                case SkillWhen.FoeHalf: return target.Hp * 2 <= target.MaxHp;
+                case SkillWhen.SelfHalf: return actor.Hp * 2 <= actor.MaxHp;
+                // ⚠️ 黙って true にしない。⭐ 条件を足したのにここへ来ないと**常に通る**
+                default: throw new ArgumentOutOfRangeException(nameof(when), when,
+                    "見方の無い条件。Battle.Holds に足すこと");
+            }
+        }
+
+        /// <summary>盤面を数える。⭐ **唯一の出所。**</summary>
+        public static int Counted(Tally per, Unit actor, Unit target)
+        {
+            switch (per)
+            {
+                case Tally.None: return 0;
+                case Tally.FoeBanes: return BanesOn(target);
+                case Tally.FoeBoons: return BoonsOn(target);
+                case Tally.OwnBoons: return BoonsOn(actor);
+                default: throw new ArgumentOutOfRangeException(nameof(per), per,
+                    "数え方の無い札。Battle.Counted に足すこと");
+            }
+        }
+
+        /// <summary>乗っている**強化**の数。⚠️ <see cref="StripBoons"/> と同じ面々を数える
+        /// （片方だけ増やすと、数えた値と剥がれる数がずれる）。</summary>
+        public static int BoonsOn(Unit unit)
+        {
+            int n = 0;
+            foreach (var key in Stats.BuffKeys)
+            {
+                ref var mod = ref unit.Status.ModOf(key);
+                if (IsOn(mod) && mod.Percent > 0) n++;
+            }
+            if (unit.Status.Shield > 0) n++;
+            if (unit.Status.Guts > 0) n++;
+            if (unit.Status.Immune > 0) n++;
+            if (unit.Status.Regen.Turns > 0) n++;
+            return n;
+        }
+
+        /// <summary>乗っている**弱化の種類数**。⚠️ <see cref="StripBanes"/> と同じ面々。
+        /// ⭐ 種類で数える（毒を重ねても1つ）── 重ねるだけで威力が伸びる道を作らない。</summary>
+        public static int BanesOn(Unit unit)
+        {
+            int n = 0;
+            foreach (var key in Stats.BuffKeys)
+            {
+                ref var mod = ref unit.Status.ModOf(key);
+                if (IsOn(mod) && mod.Percent < 0) n++;
+            }
+            if (unit.Status.Stun > 0) n++;
+            if (unit.Status.Sleep > 0) n++;
+            if (unit.Status.Poison.Turns > 0) n++;
+            if (unit.Status.Taunt > 0) n++;
+            if (unit.Status.Block > 0) n++;
+            return n;
+        }
 
         /// <summary>その修正が今かかっているか。⭐ **唯一の出所。**
         ///
@@ -860,6 +952,7 @@ namespace EggCommand.Core
             {
                 int amount = (int)Math.Floor((double)(unit.MaxHp * Skills.TickPercent * s.Regen.Stacks) / 100);
                 if (amount < 1) amount = 1;
+                amount = Nursed(unit, amount);
                 int before = unit.Hp;
                 unit.Hp = Math.Min(unit.MaxHp, unit.Hp + amount);
                 state.Log.Add(new BattleEvent(BattleEventKind.Regen, unit.Key, amount: unit.Hp - before, hp: unit.Hp));
@@ -1213,11 +1306,10 @@ namespace EggCommand.Core
             // ⭐ 粘り腰: HP が半分以下の間、受けが固くなる。⚠️ 判定は**殴られる前**の HP。
             //    ⚠️ 盾には触らない（盾は威力と無関係に1枚で1回を消す）。毒も受けない
             //    （毒は DealDamage を通らない ── 「攻撃を受けたとき」の場面の名のとおり）
-            if (HasTrait(target, Traits.Tenacity) && target.Hp * 2 <= target.MaxHp)
-            {
-                int kept = amount - Ratio(amount, TraitTenacityPercent);
-                amount = kept < 1 ? 1 : kept;
-            }
+            // ⚠️ 粘り腰の被害減は廃止（2026-08-20）。⭐ 実測で「技を選ばない」特性だった
+            //    ── 受け身に効くだけで、こちらの手が1つも変わらない。
+            //    ⭐ いまは「半分以下の間、受け取る回復が増える」（下の Healed）。
+            //    ⚠️ **回復役を連れているか**が編成の判断になる向きの直し。
 
             int before = target.Hp;
             target.Hp = Math.Max(0, target.Hp - amount);
@@ -1281,6 +1373,10 @@ namespace EggCommand.Core
 
             // ⭐ 特性は「弱化の通しやすさ」だけに触る。狙い澄まし＝通す / 意地＝通させない
             int shift = 0;
+            // ⭐ 先駆け: **開幕の1手目だけ、弱化が外れない。**
+            // ⚠️ 意地・免疫は普通に効く（外れないのは「率」の話で、弾く側は別）。
+            if (actor.Opening && !HasTrait(target, Traits.Stubborn)) return 100;
+
             if (HasTrait(actor, Traits.Aim)) shift += TraitAim;
             if (HasTrait(target, Traits.Stubborn)) shift -= TraitStubborn;
 
@@ -1340,6 +1436,11 @@ namespace EggCommand.Core
         private static int ApplyEffect(BattleState state, Unit actor, Unit target, Effect effect,
             SkillBoost boost)
         {
+            // ⭐ **条件を満たしていなければ、この効果だけ出ない。**
+            // ⚠️ 一番先に見る ── 免疫やブロックの「弾いた」記録を残す前に降りる
+            //    （出ないものが弾かれたことにならない）。
+            if (effect.When != null && !Holds(effect.When.Value, actor, target)) return 0;
+
             // ⭐ 免疫は弱い側の効果だけを弾く
             if (Skills.IsHarmful(effect) && target.Status.Immune > 0)
             {
@@ -1395,6 +1496,15 @@ namespace EggCommand.Core
                     int hit = DamageOf(Skills.BoostedPower(effect.Power, boost),
                         attackStat, defenseStat, mult);
 
+                    // ⭐ **盤面を数えて増える。**⚠️ 追い打ち（特性）とは働きが違う ──
+                    //    特性は「弱化が有るか」だけを見て常時薄く乗り、こちらは**数**で太く乗る。
+                    //    ⭐ 両方積むのがこの筋の天井で、それは編成の判断（設計案 §7）。
+                    if (effect.Per != Tally.None)
+                    {
+                        int many = Counted(effect.Per, actor, target);
+                        if (many > Skills.PerCap) many = Skills.PerCap;
+                        if (many > 0) hit += Ratio(hit, Skills.PerBonusPercent * many);
+                    }
                     // ⭐ 追い打ち: **弱化を置いてから殴る**と増える（しかけ → 回収の2段）。
                     //    ⚠️ 有無だけを見る。重ねても増えない
                     if (HasTrait(actor, Traits.Pursuit) && HasWeakness(target))
@@ -1404,10 +1514,9 @@ namespace EggCommand.Core
                     // ⭐ 背水: 自分が半分以下のときだけ。⚠️ 判定は**技を撃つ瞬間**の HP。
                     //    多段の途中で返し身を受けて半分を割っても、その技の中では増えない
                     //    （1回の技の威力は1回だけ決める、という既存の形に合わせる）
-                    if (HasTrait(actor, Traits.Desperation) && actor.Hp * 2 <= actor.MaxHp)
-                    {
-                        hit += Ratio(hit, TraitDesperationPercent);
-                    }
+                    // ⚠️ 背水の威力上昇は廃止（2026-08-20）。⭐ 実測で「技を選ばない」特性だった
+                    //    ── どの技を撃っても同じだけ増えるので、選び方が1つも変わらない。
+                    //    ⭐ いまは「半分以下の間、技の待ちが速く減る」（下の PerformAction）。
                     // ⭐ 多段。⚠️ 途中で倒れたら止める（死体を殴り続けない）
                     // ⚠️ **殴った側が倒れたときも止める。** 返し身が入るまで
                     //    「行動者が自分の行動中に死ぬ」経路は存在しなかった。
@@ -1484,6 +1593,7 @@ namespace EggCommand.Core
                     int amount = (int)Math.Floor(
                         (double)(target.MaxHp * (effect.Percent + boost.ExtraPercent)) / 100);
                     if (amount < 1) amount = 1;
+                    amount = Nursed(target, amount);
                     int before = target.Hp;
                     target.Hp = Math.Min(target.MaxHp, target.Hp + amount);
                     state.Log.Add(new BattleEvent(BattleEventKind.Heal, target.Key,
@@ -1672,10 +1782,18 @@ namespace EggCommand.Core
                 }
             }
 
+            // ⚠️ **先駆けはここで降りる。**1手動いたらもう「開幕」ではない。
+            //    ⭐ 降ろす場所を CT と同じにしてあるのは、どちらも「本人の行動回数」で動くため。
+            actor.Opening = false;
+
             // ⚠️ CT は「本人の行動回数」で減る。何をしたかに関わらず1回ぶん進む
+            // ⭐ 背水: 半分以下の間、待ちが速く減る。⚠️ **重い技を持たせる理由**がここで生まれる
+            //    （低空を保つほど手数になるので、待ちの長い札と噛み合う）。
+            int step = HasTrait(actor, Traits.Desperation) && actor.Hp * 2 <= actor.MaxHp
+                ? TraitDesperationStep : 1;
             for (int i = 0; i < actor.Cooldowns.Length; i++)
             {
-                actor.Cooldowns[i] = Math.Max(0, actor.Cooldowns[i] - 1);
+                actor.Cooldowns[i] = Math.Max(0, actor.Cooldowns[i] - step);
             }
             // ⭐ CT は技ではなく枠の性質。枠1は常に 0
             actor.Cooldowns[slot] = Skills.EffectiveCt(slot, skill, boost);

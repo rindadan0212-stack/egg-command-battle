@@ -541,10 +541,10 @@ namespace EggCommand.Sim
                 // ── 条件付きの層（2026-08-19）。噛み合わせは Trait.cs の欄のとおり
                 // ⚠️ 先駆け・置き土産・背水・粘り腰は「動き」の条件が技より広いので、
                 //    右（噛み合わない技）も多少動くのは織り込み（返し身と同じ性格）
-                new TraitCase(Traits.Opener, "immune", "slow-all"),
+                new TraitCase(Traits.Opener, "slow-all", "curse"),
                 new TraitCase(Traits.Parting, "taunt", "revive"),
                 new TraitCase(Traits.Pursuit, "curse", "poison"),
-                new TraitCase(Traits.Desperation, "taunt", "guts"),
+                new TraitCase(Traits.Desperation, "attack-all-twice", "stun-heavy"),
                 new TraitCase(Traits.Tenacity, "heal-ratio", "regen"),
                 // ⭐ 畳み掛けは「弱化を通すこと」が条件なので、弱化技を持たせる
                 new TraitCase(Traits.Surge, "curse", "poison"),
@@ -1411,13 +1411,33 @@ namespace EggCommand.Sim
                 // ⚠️ 4体目の枠が空いたぶんを「返す手」に使うと強いのか、を測るために並べる。
                 new Plan("新語彙", "解除で返し、1手2役で稼ぎ、構えで固める",
                     new[] { W(30,40,20,30,0,0), W(40,0,40,0,0,40), W(30,20,20,20,30,0), W(40,0,20,0,20,40) },
-                    new[] { "drain-all", "stance", "warcry", "cleanse" },
+                    // ⚠️ sturdy はパッシブ ── この1体は枠を1つ潰して常時の底上げを買っている
+                    new[] { "drain-all", "sturdy", "warcry", "cleanse" },
                     new[] { "attack-heavy", "taunt-long", "reckless", "heal-big" }),
 
                 new Plan("R:混成", "アタッカー・デバッファー・ヒーラーの3点",
                     new[] { W(30,40,20,30,0,0), W(30,20,20,20,30,0), W(40,20,30,10,0,20), W(30,30,20,20,20,0) },
                     new[] { "attack-all", "slow-all", "heal-big", "attack-heavy" },
                     new[] { "attack-heavy", "poison-all", "def-up", "atk-up" }),
+
+                // ══ 回収する側を持たせた対照（2026-08-20）═══════════════
+                // ⚠️ 元の案と**ステは1つも変えない。**替えたのは技だけ ──
+                //    「仕込みが沈んでいるのは回収が無いからか」を切り分けるため。
+
+                new Plan("R:毒撒き+回収", "同じ毒編成に、弱化を数える技を持たせた",
+                    new[] { W(30,30,20,20,20,0), W(30,20,20,20,30,0), W(30,20,30,20,20,0), W(30,20,20,20,30,0) },
+                    new[] { "poison-all", "venom-fang", "chase-down", "venom-heavy" },
+                    new[] { "sweep-down", "chase-down", "poison", "attack-all" }),
+
+                new Plan("R:足止め+回収", "同じ足止め編成に、弱化を数える技を持たせた",
+                    new[] { W(30,20,20,30,20,0), W(30,20,20,30,20,0), W(30,30,20,20,20,0), W(30,20,20,30,20,0) },
+                    new[] { "slow-all", "gauge-drain", "chase-down", "slow-all" },
+                    new[] { "sweep-down", "attack", "chase-down", "gauge-drain" }),
+
+                new Plan("止め+回収", "同じ止め編成に、動けない相手を叩く技を持たせた",
+                    new[] { W(40,0,0,40,40,0), W(40,0,0,40,40,0), W(40,40,0,40,0,0), W(40,0,0,40,40,0) },
+                    new[] { "stun-heavy", "gauge-drain", "ambush-strike", "sleep" },
+                    new[] { "ct-lock", "ambush-strike", "finisher", "gauge-drain" }),
 
                 // ⭐ **対照: R:混成 から回復だけ抜いた版。**
                 // ⚠️ 2026-08-20 の突き合わせで「回復が効いている疑い ── 未検証」と
