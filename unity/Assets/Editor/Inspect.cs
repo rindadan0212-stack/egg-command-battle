@@ -49,6 +49,9 @@ namespace EggCommand.EditorTools
                 // ⚠️ 遊びは**設計座標の1**。ワールドの 1f だと、この Canvas では
                 //    設計座標 192 ぶんになり、検査が事実上効かない（2026-08-20 に踏んだ）
                 float slack = Slack(rect);
+                // ⚠️ **スクロールする層の中身は画面外に出てよい**（切り取るのが仕事）。
+                //    ⭐ 数えると、盤をスクロールにした日に 93件の偽の指摘が出る（2026-08-20）
+                if (rect.GetComponentInParent<RectMask2D>() != null) continue;
                 if (self[0].x < frame[0].x - slack || self[2].x > frame[2].x + slack
                     || self[0].y < frame[0].y - slack || self[2].y > frame[2].y + slack)
                 {

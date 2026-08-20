@@ -922,91 +922,83 @@ namespace EggCommand.Sim
 
         /// <summary>すごろくの数字が成立するか。⭐ **実際の編成で回して測る。**
         ///
-        /// ⚠️ 机上の分布（さいころの合計）だけでは、分かれ道・雑魚・増減が入った後の
+        /// ⚠️ 机上の分布（さいころの合計）だけでは、分岐・雑魚・増減が入った後の
         /// 実際の届く率は出ない。ここでは本番と同じ <see cref="Trails"/> を回す。</summary>
         private static void TrailProbe(int seed)
         {
             Console.WriteLine();
-            Console.WriteLine("■ 編成は何回振れて、いくら払えるか");
-            Console.WriteLine($"  {"段",4}{"道の長さ",10}{"分かれ道",10}{"速度合計",10}"
-                + $"{"振れる回数",12}{"攻撃",8}{"HP",8}{"防御",8}");
+            Console.WriteLine("■ 盤の大きさと、編成の持ち分");
+            Console.WriteLine($"  {"段",4}{"分かれ道",10}{"マス数",8}{"最短",7}{"最長",7}"
+                + $"{"振れる回数",12}{"攻",7}{"HP",7}{"防",7}");
             for (int tier = 1; tier <= 5; tier++)
             {
                 var party = Steal.ReferenceParty(tier);
-                int spd = 0;
-                foreach (var c in party) spd += Creatures.StatsOf(c).Spd;
+                var trail = Trails.Make(new Rng(seed).Stream($"size:{tier}"), tier);
+                var raid = Trails.Begin(trail, party);
+                int shortest = Trails.Left(raid);
+                // ⭐ 最長 ＝ 全部の道を通れる編成で、いちばん遠い行き方
+                int longest = 0;
+                foreach (var j in trail.Junctions)
+                {
+                    int most = 0;
+                    foreach (var w in trail.Squares[j].Ways) if (w.Length > most) most = w.Length;
+                    longest += most;
+                }
                 var pool = Trails.PoolOf(party);
-                int len = Trail.LengthFor(tier);
-                Console.WriteLine($"  {tier,4}{len,10}{Trail.ForksFor(len),10}{spd,10}"
-                    + $"{Trails.RollsFor(party),12}{pool.Atk,8}{pool.Hp,8}{pool.Def,8}");
+                Console.WriteLine($"  {tier,4}{trail.Junctions.Count,10}{trail.Count,8}"
+                    + $"{shortest,7}{longest,7}{raid.Rolls,12}"
+                    + $"{pool.Atk,7}{pool.Hp,7}{pool.Def,7}");
             }
 
             Console.WriteLine();
-            Console.WriteLine("■ 財布の大きさと相場（5マス飛ぶ1本）");
-            Console.WriteLine($"  {"段",4}{"財布",10}{"相場",10}{"何本ぶん",12}");
+            Console.WriteLine("■ 関門の重さ（参照編成の持ち分に対して）");
+            Console.WriteLine($"  {"段",4}{"近い道",10}{"遠い道",10}   ← 攻の場合");
             for (int tier = 1; tier <= 5; tier++)
             {
                 var pool = Trails.PoolOf(Steal.ReferenceParty(tier));
-                int purse = pool.Atk + pool.Hp + pool.Def;
-                Console.WriteLine($"  {tier,4}{purse,10}{Trail.PriceFor(tier),10}"
-                    + $"{(double)purse / Trail.PriceFor(tier),12:0.0}");
+                Console.WriteLine($"  {tier,4}"
+                    + $"{100.0 * Trail.PriceFor(GimmickKind.Wall, tier, Trail.ShortShare) / pool.Atk,9:0}%"
+                    + $"{100.0 * Trail.PriceFor(GimmickKind.Wall, tier, Trail.LongShare) / pool.Atk,9:0}%");
             }
 
-            // ⭐ 指し手。⚠️ 「壊せるだけ」を他が上回らないなら、選ぶ意味が無い
-            var moves = new (string Name, Func<Raid, bool> Take)[]
+            // ⭐ 指し手。⚠️ 素直な指し手を上回るものが在るかを見る
+            var moves = new (string Name, Func<Raid, int> Pick)[]
             {
-                ("歩くだけ", _ => false),
-                ("壊せるだけ", _ => true),
-                ("割安だけ", r => Bargain(r) <= 100),
-                ("割安＋出目", r => Bargain(r) * 100
-                    <= 100 * 100 * Square(r).Saves / Math.Max(1, Square(r).Saves - r.Pending)),
-                ("追い込まれたら", r => Trails.Odds(r) < 60 || Bargain(r) <= 85),
-                // ⭐ 盤は巣ごとに固定＝**下見できる**ので、先の分かれ道まで見て決める
-                ("先を見比べる", r => !BetterAhead(r)),
-                ("見比べ＋出目", r => !BetterAhead(r) || r.Pending == 0),
+                ("いつも近い道", r => Prefer(r, true)),
+                ("いつも遠い道", r => Prefer(r, false)),
+                ("残りが短い道", r => Shortest(r)),
+                ("届く率が高い道", r => Likeliest(r)),
+                // ⭐ 届きそうなら近い道（敵を避ける）／危なければ遠回りして回数を稼ぐ
+                ("危なければ遠回り", r => Wise(r)),
             };
 
             Console.WriteLine();
-            Console.WriteLine("■ 指し手を変えて回す（段5・8000回・雑魚には必ず勝つ想定）");
-            Console.WriteLine($"  {"指し手",-16}{"卵",8}{"壊した",9}{"見送り",9}{"判断",8}");
+            Console.WriteLine("■ 指し手を変えて回す（段5・6000回・雑魚に 8% 負ける想定）");
+            Console.WriteLine($"  {"指し手",-20}{"卵",7}{"詰み",8}{"敵に負け",10}{"力尽き",9}"
+                + $"{"近い道",8}{"遠い道",8}{"倒した",7}");
             foreach (var move in moves)
-                Console.WriteLine("  " + RunTrail(seed, 5, move.Name, move.Take, 8000));
+                Console.WriteLine("  " + RunTrail(seed, 5, move.Name, move.Pick, 6000));
 
             Console.WriteLine();
-            Console.WriteLine("■ 段ごと（指し手は『割安＋出目』・3000回）");
-            Console.WriteLine($"  {"段",4}{"歩くだけ",12}{"割安＋出目",14}{"差",8}");
+            Console.WriteLine("  ⚠️ 『いつも近い道』を上回る指し手が無いなら、選ぶ意味が無い");
+            Console.WriteLine("  ⚠️ 『詰み』＝どの道も通れなくなった（編成が足りない）");
+
+            Console.WriteLine();
+            Console.WriteLine("■ 段ごと（指し手は『届く率が高い道』・3000回）");
+            Console.WriteLine($"  {"段",4}{"いつも近い道",14}{"危なければ遠回り",16}{"差",8}");
             for (int tier = 1; tier <= 5; tier++)
             {
-                double bare = WinRate(seed, tier, _ => false, 3000);
-                double smart = WinRate(seed, tier, moves[3].Take, 3000);
-                Console.WriteLine($"  {tier,4}{bare,11:0%}{smart,13:0%}{smart - bare,8:+0%;-0%}");
+                double bare = WinRate(seed, tier, r => Prefer(r, true), 3000);
+                double smart = WinRate(seed, tier, r => Wise(r), 3000);
+                Console.WriteLine($"  {tier,4}{bare,13:0%}{smart,14:0%}{smart - bare,8:+0%;-0%}");
             }
 
             Console.WriteLine();
-            Console.WriteLine("■ 巣ごとに道が固定されるか（同じ巣を2回作って突き合わせる）");
+            Console.WriteLine("■ ⭐ 寄せた編成は、噛み合う巣でなら強いか（段5の道 600本）");
+            Console.WriteLine($"  {"道の顔つき",-16}{"ならし",10}{"攻に寄せ",11}{"防に寄せ",11}");
             {
-                var world = Nests.All;
-                int same = 0, total = 0;
-                foreach (var nest in world)
-                {
-                    var a = Trails.OfNest(nest);
-                    var b = Trails.OfNest(nest);
-                    total++;
-                    bool eq = a.Length == b.Length;
-                    for (int i = 0; eq && i < a.Length; i++)
-                        eq = a.Squares[i].Kind == b.Squares[i].Kind
-                            && a.Squares[i].Requires == b.Squares[i].Requires
-                            && a.Squares[i].Saves == b.Squares[i].Saves;
-                    if (eq) same++;
-                }
-                Console.WriteLine($"  {same}/{total} の巣で同じ道が出た");
-            }
-
-            Console.WriteLine();
-            Console.WriteLine("■ ⭐ 寄せた編成は、噛み合う巣でなら強いか（段5の巣を関門の偏りで分ける）");
-            Console.WriteLine($"  {"巣の顔つき",-14}{"ならし",10}{"攻に寄せ",11}{"防に寄せ",11}");
-            {
-                var flat = Trails.PoolOf(Steal.ReferenceParty(5));
+                var party = Steal.ReferenceParty(5);
+                var flat = Trails.PoolOf(party);
                 var pools = new (string Name, StatBlock Pool)[]
                 {
                     ("ならし", flat),
@@ -1019,39 +1011,40 @@ namespace EggCommand.Sim
                 {
                     var picked = new List<Trail>();
                     var made = new Rng(seed).Stream("faces");
-                    while (picked.Count < 400)
+                    int guard = 0;
+                    while (picked.Count < 600 && guard++ < 200000)
                     {
                         var t = Trails.Make(made, 5);
                         int mine = 0, all = 0;
-                        foreach (var sp in t.Squares)
-                            if (sp.Kind == SquareKind.Fork) { all++; if (sp.Gate == face) mine++; }
-                        if (all > 0 && mine * 2 > all) picked.Add(t);   // ⭐ その関門が過半
+                        foreach (var j in t.Junctions)
+                            foreach (var w in t.Squares[j].Ways)
+                            { all++; if (w.Gate == face) mine++; }
+                        // ⭐ その関門が多く、しかも**近い道の側**に寄っている盤
+                        if (all > 0 && mine * 5 > all * 2) picked.Add(t);
                     }
-                    var row = $"  {(face == GimmickKind.Wall ? "壁が多い巣" : "重圧が多い巣"),-14}";
+                    var row = $"  {(face == GimmickKind.Wall ? "壁が多い" : "重圧が多い"),-16}";
                     foreach (var p in pools)
                     {
-                        int win = 0;
+                        int win = 0, runs = 0;
                         var play = new Rng(seed).Stream("play");
                         foreach (var t in picked)
-                            for (int rep = 0; rep < 12; rep++)
+                            for (int rep = 0; rep < 6; rep++)
                             {
-                                var raid = Trails.Begin(t, Steal.ReferenceParty(5));
+                                var raid = Trails.Begin(t, party);
                                 raid.Pool = p.Pool;
-                        raid.Power = p.Pool.Atk + p.Pool.Hp + p.Pool.Def;
-                                Play(play, raid, moves[3].Take);
+        
+                                if (raid.Result == null) Play(play, raid, r => Wise(r));
+                                runs++;
                                 if (raid.Result == StealOutcome.Success) win++;
                             }
-                        row += $"{100.0 * win / (picked.Count * 12),10:0}%";
+                        row += $"{100.0 * win / Math.Max(1, runs),10:0}%";
                     }
                     Console.WriteLine(row);
                 }
             }
 
             Console.WriteLine();
-            Console.WriteLine("  ⭐ 寄せた編成が『噛み合う巣』でならしを上回れば、寄せる意味がある");
-
-            Console.WriteLine();
-            Console.WriteLine("■ 盗むほど苦しくなるか（段5・3000回・指し手は『割安＋出目』）");
+            Console.WriteLine("■ 盗むほど苦しくなるか（段5・3000回・指し手は『危なければ遠回り』）");
             Console.WriteLine($"  {"盗んだ回数",12}{"振れる回数",12}{"卵に届く",10}");
             {
                 var party = Steal.ReferenceParty(5);
@@ -1063,7 +1056,7 @@ namespace EggCommand.Sim
                     for (int n = 0; n < runs; n++)
                     {
                         var raid = Trails.Begin(Trails.Make(rng, 5), party, raids);
-                        Play(rng, raid, moves[3].Take);
+                        if (raid.Result == null) Play(rng, raid, r => Wise(r));
                         if (raid.Result == StealOutcome.Success) win++;
                     }
                     Console.WriteLine($"  {raids,12}{Trails.RollsFor(party, raids),12}"
@@ -1071,58 +1064,176 @@ namespace EggCommand.Sim
                 }
                 Console.WriteLine($"  {Steal.RaidsToSeal,12}{"—",12}{"必ず戦闘",10}");
             }
-        }
 
-        /// <summary>いま止まっている分かれ道。</summary>
-        private static Square Square(Raid raid) => raid.Trail.Squares[raid.At];
-
-        /// <summary>同じ種類で、**この先にもっと得な分かれ道**があり、しかも今の持ち分で払えるか。
-        ///
-        /// ⭐ 道は巣ごとに固定なので、遊ぶ側も同じことが見える。
-        /// ⚠️ これが「壊せるだけ壊す」を上回らないなら、選ぶ余地は無い。</summary>
-        private static bool BetterAhead(Raid raid)
-        {
-            var here = Square(raid);
-            int have = raid.Power;
-            // ⭐ 得の測り方 = 1 払って何マス飛べるか
-            double mine = (double)here.Saves / Trails.CostOf(raid, here);
-            for (int i = raid.At + 1; i < raid.Trail.Length; i++)
+            Console.WriteLine();
+            Console.WriteLine("■ 巣ごとに道が固定されるか（同じ巣を2回作って突き合わせる）");
             {
-                var sp = raid.Trail.Squares[i];
-                if (sp.Kind != SquareKind.Fork) continue;
-                int cost = Trails.CostOf(raid, sp);
-                if (cost > have) continue;                        // ⚠️ 届かない物は待つ意味が無い
-                if ((double)sp.Saves / cost > mine) return true;
+                int same = 0, total = 0;
+                foreach (var nest in Nests.All)
+                {
+                    var a = Trails.OfNest(nest);
+                    var b = Trails.OfNest(nest);
+                    total++;
+                    bool eq = a.Count == b.Count;
+                    for (int i = 0; eq && i < a.Count; i++)
+                    {
+                        eq = a.Squares[i].Kind == b.Squares[i].Kind
+                            && a.Squares[i].Ways.Count == b.Squares[i].Ways.Count;
+                        for (int w = 0; eq && w < a.Squares[i].Ways.Count; w++)
+                            eq = a.Squares[i].Ways[w].To == b.Squares[i].Ways[w].To
+                                && a.Squares[i].Ways[w].Requires == b.Squares[i].Ways[w].Requires;
+                    }
+                    if (eq) same++;
+                }
+                Console.WriteLine($"  {same}/{total} の巣で同じ道が出た");
             }
-            return false;
         }
 
-        /// <summary>相場に対する割高さ（100 が相場、小さいほど割安）。</summary>
-        private static int Bargain(Raid raid)
+        /// <summary>近い道／遠い道を選ぶ（通れるほう優先）。</summary>
+        private static int Prefer(Raid raid, bool near)
         {
-            var space = Square(raid);
-            int fair = Trail.FairPrice(raid.Trail.Tier, space.Saves);
-            return fair <= 0 ? 999 : Trails.CostOf(raid, space) * 100 / fair;
+            var ways = raid.Trail.Squares[raid.At].Ways;
+            int best = -1;
+            for (int i = 0; i < ways.Count; i++)
+            {
+                if (!Trails.CanPass(raid, ways[i])) continue;
+                if (best < 0) { best = i; continue; }
+                bool better = near ? ways[i].Length < ways[best].Length
+                                   : ways[i].Length > ways[best].Length;
+                if (better) best = i;
+            }
+            return best;
         }
+
+        /// <summary>選んだあとの残りが一番短い道。</summary>
+        private static int Shortest(Raid raid)
+        {
+            var ways = raid.Trail.Squares[raid.At].Ways;
+            int best = -1, bestLeft = int.MaxValue;
+            for (int i = 0; i < ways.Count; i++)
+            {
+                if (!Trails.CanPass(raid, ways[i])) continue;
+                int left = Trails.LeftIfTake(raid, i);
+                if (left < 0) continue;
+                if (left < bestLeft) { bestLeft = left; best = i; }
+            }
+            return best >= 0 ? best : Prefer(raid, true);
+        }
+
+        /// <summary>届く見込みが一番高い道。⭐ 同じなら実りの多い（長い）ほう。</summary>
+        private static int Likeliest(Raid raid)
+        {
+            var ways = raid.Trail.Squares[raid.At].Ways;
+            int best = -1, bestOdds = -1;
+            for (int i = 0; i < ways.Count; i++)
+            {
+                if (!Trails.CanPass(raid, ways[i])) continue;
+                int odds = Trails.OddsIfTake(raid, i);
+                if (odds > bestOdds || (odds == bestOdds && best >= 0
+                    && ways[i].Length > ways[best].Length))
+                { bestOdds = odds; best = i; }
+            }
+            return best;
+        }
+
+        /// <summary>⭐ **届きそうなら近い道、危なければ遠回り。**
+        ///
+        /// 敵は倒せば振れる回数が戻るが、負ければそこで終わり。
+        /// ⭐ だから「回数が足りているうちは敵を避け、足りなくなったら賭ける」が筋になる。
+        /// ⚠️ これが『いつも近い道』を上回らないなら、遠回りに置いた物が効いていない。</summary>
+        private static int Wise(Raid raid)
+        {
+            var ways = raid.Trail.Squares[raid.At].Ways;
+            int near = -1, far = -1;
+            for (int i = 0; i < ways.Count; i++)
+            {
+                if (!Trails.CanPass(raid, ways[i])) continue;
+                if (near < 0 || ways[i].Length < ways[near].Length) near = i;
+                if (far < 0 || ways[i].Length > ways[far].Length) far = i;
+            }
+            if (near < 0) return -1;
+            if (near == far) return near;
+
+            // ⭐ 近い道で十分届きそうなら、敵に触らない
+            if (Trails.OddsIfTake(raid, near) >= 70) return near;
+
+            // ⚠️ 危ない。遠回りに敵が乗っているなら、回数を賭けに行く
+            int mobs = 0, at = ways[far].To;
+            for (int n = 0; n < ways[far].Length - 1; n++)
+            {
+                var sq = raid.Trail.Squares[at];
+                if (sq.Kind == SquareKind.Mob && !raid.Beaten.Contains(at)) mobs++;
+                if (sq.Ways.Count == 0) break;
+                at = sq.Ways[0].To;
+            }
+            // ⭐ 敵1体 ＝ 回数 +1 ＝ 3.5マス。遠回りの余分な長さより多いなら行く
+            int extra = ways[far].Length - ways[near].Length;
+            return mobs * 3 >= extra ? far : near;
+        }
+
+        /// <summary>道に乗っている実りを歩数に換算して選ぶ。
+        ///
+        /// ⭐ 敵は倒せば振れる回数が +1 ＝ さいころの期待値 3.5 マスぶん。
+        /// ⚠️ ただし戦闘なので、負ければそこで終わり（<see cref="MobRisk"/>）。
+        /// ⭐ ▲ は先の関門を開けることがあるので、控えめに 1マスぶんと見る。</summary>
+        private static int Richest(Raid raid)
+        {
+            var ways = raid.Trail.Squares[raid.At].Ways;
+            int best = -1;
+            double bestScore = double.NegativeInfinity;
+            for (int i = 0; i < ways.Count; i++)
+            {
+                if (!Trails.CanPass(raid, ways[i])) continue;
+                int rest = Trails.LeftIfTake(raid, i);
+                if (rest < 0) continue;
+                double score = -rest;
+                // ⭐ その道に何が乗っているか
+                int at = ways[i].To;
+                for (int n = 0; n < ways[i].Length - 1; n++)
+                {
+                    var sq = raid.Trail.Squares[at];
+                    if (sq.Kind == SquareKind.Mob && !raid.Beaten.Contains(at))
+                        score += 3.5 * (1 - MobRisk) - 12 * MobRisk;
+                    else if (sq.Kind == SquareKind.Boon) score += 1.0;
+                    else if (sq.Kind == SquareKind.Bane) score -= 1.0;
+                    if (sq.Ways.Count == 0) break;
+                    at = sq.Ways[0].To;
+                }
+                if (score > bestScore) { bestScore = score; best = i; }
+            }
+            return best >= 0 ? best : Prefer(raid, true);
+        }
+
+        /// <summary>雑魚に負ける割合。⚠️ Core は戦闘を知らないので、測るときだけ置く見積り。
+        /// ⭐ 0 にすると敵が「ただの回数の素」になり、遠回りが不当に強く見える。</summary>
+        private const double MobRisk = 0.08;
 
         /// <summary>1回の潜入を最後まで回す。</summary>
-        private static void Play(Rng rng, Raid raid, Func<Raid, bool> take)
+        private static void Play(Rng rng, Raid raid, Func<Raid, int> pick)
         {
+            int guard = 0;
             while (raid.Result == null)
             {
+                if (++guard > 5000) throw new InvalidOperationException("潜入が終わらない");
                 switch (raid.Step)
                 {
-                    case RaidStep.AtFork:
-                        if (Trails.CanBreak(raid) && take(raid)) Trails.Break(raid);
-                        else Trails.Walk(raid);
+                    case RaidStep.AtJunction:
+                        int way = pick(raid);
+                        if (way < 0) throw new InvalidOperationException("通れる道が無いのに詰みになっていない");
+                        Trails.Take(raid, way);
                         break;
-                    case RaidStep.Met: Trails.Beat(raid); break;
-                    default: Trails.Roll(rng, raid); break;
+                    case RaidStep.Met:
+                        // ⚠️ 敵は戦闘。⭐ 一定の割合で負ける前提で測る
+                        if (rng.Chance(MobRisk)) Trails.Lost(raid); else Trails.Beat(raid);
+                        break;
+                    default:
+                        if (raid.Rolls <= 0) throw new InvalidOperationException("振れないのに続いている");
+                        Trails.Roll(rng, raid); break;
                 }
             }
         }
 
-        private static double WinRate(int seed, int tier, Func<Raid, bool> take, int runs)
+        private static double WinRate(int seed, int tier, Func<Raid, int> pick, int runs)
         {
             var rng = new Rng(seed).Stream($"trail:{tier}");
             var party = Steal.ReferenceParty(tier);
@@ -1130,28 +1241,37 @@ namespace EggCommand.Sim
             for (int n = 0; n < runs; n++)
             {
                 var raid = Trails.Begin(Trails.Make(rng, tier), party);
-                Play(rng, raid, take);
+                if (raid.Result == null) Play(rng, raid, pick);
                 if (raid.Result == StealOutcome.Success) win++;
             }
             return (double)win / runs;
         }
 
         private static string RunTrail(int seed, int tier, string name,
-            Func<Raid, bool> take, int runs)
+            Func<Raid, int> pick, int runs)
         {
             var rng = new Rng(seed).Stream($"trail:{tier}");
             var party = Steal.ReferenceParty(tier);
-            int win = 0, broke = 0, walked = 0;
+            int win = 0, stuck = 0, killed = 0, spent = 0, near = 0, far = 0, mobs = 0;
             for (int n = 0; n < runs; n++)
             {
                 var raid = Trails.Begin(Trails.Make(rng, tier), party);
-                Play(rng, raid, take);
+                if (raid.Result == null) Play(rng, raid, pick);
                 if (raid.Result == StealOutcome.Success) win++;
-                broke += raid.Broken.Count;
-                walked += raid.Passed.Count;
+                // ⚠️ 「どの道も通れない」と「敵に負けた」を混ぜない。直す先が違う
+                else if (raid.Result == StealOutcome.Blocked)
+                { if (raid.Step == RaidStep.Caught && raid.Trail.Squares[raid.At].Kind == SquareKind.Mob) killed++; else stuck++; }
+                else spent++;
+                foreach (var pair in raid.Took)
+                {
+                    var ways = raid.Trail.Squares[pair.Key].Ways;
+                    if (ways[pair.Value].Length <= ways[1 - pair.Value].Length) near++; else far++;
+                }
+                mobs += raid.Beaten.Count;
             }
-            return $"{name,-16}{100.0 * win / runs,7:0}%{(double)broke / runs,9:0.00}"
-                + $"{(double)walked / runs,9:0.00}{(double)(broke + walked) / runs,8:0.00}";
+            return $"{name,-20}{100.0 * win / runs,6:0}%{100.0 * stuck / runs,7:0}%"
+                + $"{100.0 * killed / runs,8:0}%{100.0 * spent / runs,8:0}%"
+                + $"{(double)near / runs,8:0.0}{(double)far / runs,8:0.0}{(double)mobs / runs,7:0.0}";
         }
 
         private static void LandProbe()

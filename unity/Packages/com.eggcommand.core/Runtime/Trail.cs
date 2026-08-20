@@ -10,33 +10,54 @@ namespace EggCommand.Core
     /// ⭐ ここに在るものは全部、**卵に届くかどうかの算数に直に効く**。</summary>
     public enum SquareKind
     {
-        /// <summary>何も起きない。⭐ 分かれ道と分かれ道のあいだの「間」。</summary>
+        /// <summary>何も起きない。</summary>
         Plain,
         /// <summary>雑魚。⭐ 倒すと**振れる回数が戻る**。⚠️ 戦闘を挟む。</summary>
         Mob,
-        /// <summary>分かれ道。⭐ 塞いだ物をステで壊すと**先へ飛べる**。
-        /// ⚠️ **踏まなくても、通り過ぎようとすると止まる**（<see cref="Trails.Roll"/>）。
-        /// 踏んだときだけ効く物にすると、1回の潜入で判断が 0.65 回しか起きなかった
-        /// （2026-08-20 の実測）。</summary>
-        Fork,
-        /// <summary>ステが**一時的に上がる**。⭐ 「いまなら壊せる」を作る。</summary>
+        /// <summary>ステが**一時的に上がる**。⭐ 「この先の関門が通れる」を作る。</summary>
         Boon,
-        /// <summary>ステが**一時的に下がる**。⚠️ 予定していた近道が消える。</summary>
+        /// <summary>ステが**一時的に下がる**。⚠️ 予定していた道が閉じる。</summary>
         Bane,
+    }
+
+    /// <summary>マスから出ていく道。⭐ **関門は道が持つ**（マスではなく）。
+    ///
+    /// ⚠️ 道が分かれるからこそ「こっちは攻撃が足りないが、あっちは防御で通れる」が成り立つ
+    /// （作者の指示 2026-08-20）。関門をマスに置くと、**同じ1本道の上で払うか払わないか**に
+    /// なってしまい、その比べ方ができない。</summary>
+    public sealed class Way
+    {
+        /// <summary>入る先のマス。⚠️ 必ず自分より後ろ（添字が増える向き）。</summary>
+        public readonly int To;
+        /// <summary>何が塞いでいるか。⭐ 壁＝攻撃 / 床＝HP / 重圧＝防御。</summary>
+        public readonly GimmickKind Gate;
+        /// <summary>通るのに要る量。⭐ **足りていれば通れる。減りはしない。**
+        ///
+        /// ⚠️ 最初は「払って減らす」形にしていたが、分岐と噛み合わなかった（実測 2026-08-20）:
+        /// 2本とも関門付きなので払い切ると**行き止まり**になり、詰みが 63% 出た。
+        /// さらに**寄せた編成ほど早く尽きる**ので、ならした編成のほうが強かった。
+        /// ⭐ 分岐では**道の長さそのものが代価**（振れる回数を食う）。
+        /// その上に消費を重ねると二重に取ることになる。
+        /// 0 なら関門なし。</summary>
+        public readonly int Requires;
+        /// <summary>この道を選ぶと、合流まで何マスか。⭐ 選ぶ前に見せる。</summary>
+        public readonly int Length;
+
+        public Way(int to, GimmickKind gate = GimmickKind.Wall, int requires = 0, int length = 1)
+        {
+            To = to;
+            Gate = gate;
+            Requires = requires;
+            Length = length;
+        }
+
+        public bool IsGated => Requires > 0;
     }
 
     /// <summary>道の1マス。</summary>
     public sealed class Square
     {
         public readonly SquareKind Kind;
-
-        // ── 分かれ道のとき ────────────────────────────
-        /// <summary>何で塞がれているか。⭐ 壁＝攻撃 / 床＝HP / 重圧＝防御。</summary>
-        public readonly GimmickKind Gate;
-        /// <summary>壊すのに払う量。⚠️ **閾値ではなく消費**（作者の指示 2026-08-19）。</summary>
-        public readonly int Requires;
-        /// <summary>壊すと何マス先へ出るか。</summary>
-        public readonly int Saves;
 
         // ── 増減のとき ──────────────────────────────
         public readonly StatKey Stat;
@@ -45,49 +66,81 @@ namespace EggCommand.Core
         /// <summary>何回ぶん効くか（振る回数で数える）。</summary>
         public readonly int Rolls;
 
-        public Square(SquareKind kind, GimmickKind gate = GimmickKind.Wall, int requires = 0,
-            int saves = 0, StatKey stat = StatKey.Atk, int percent = 0, int rolls = 0)
+        /// <summary>ここから出ていく道。⭐ **2本以上なら分かれ道**。0本なら卵。</summary>
+        public readonly List<Way> Ways = new List<Way>();
+
+        /// <summary>入口から数えた段。⭐ **画面が並べるための目安**。
+        ///
+        /// ⚠️ 画面側で道を辿って割り出さない。ひし形の連なりは**作るときに形が分かっている**ので、
+        /// そこで書いておく。辿って割り出した版はマスが重なって線が交差した
+        /// （実機で確認 2026-08-20）。</summary>
+        public int Row;
+        /// <summary>左右の寄り。⭐ **-1 が近い道、+1 が遠い道、0 が分かれ道と合流点**。</summary>
+        public int Lane;
+
+        public Square(SquareKind kind = SquareKind.Plain,
+            StatKey stat = StatKey.Atk, int percent = 0, int rolls = 0)
         {
             Kind = kind;
-            Gate = gate;
-            Requires = requires;
-            Saves = saves;
             Stat = stat;
             Percent = percent;
             Rolls = rolls;
         }
+
+        /// <summary>分かれ道か。</summary>
+        public bool IsJunction => Ways.Count > 1;
+        /// <summary>卵か。</summary>
+        public bool IsGoal => Ways.Count == 0;
     }
 
-    /// <summary>巣へ続く道。⭐ **すごろく**（作者の指示 2026-08-20）。
+    /// <summary>巣へ続く道。⭐ **分岐するすごろく**（作者の指示 2026-08-20）。
     ///
     /// ⚠️ **飛ばす遊び（<see cref="Steal"/>）と混ぜないこと。**
     /// あちらは移植元の規則で、較正済みの照合（`goldens/steal.json`）が踏んでいるので残してある。
     /// <see cref="Breeding"/> と <see cref="Fusion"/> の関係と同じ。
     ///
-    /// ⭐ なぜ作り替えたか（2026-08-20 の実測）:
-    /// <list type="bullet">
-    /// <item>投げた1回の **63〜76% が何にも当たらず力尽きて**いた</item>
-    /// <item>当たっても**最初の1つで飛行が終わる**ので、接触の6〜7割を捨てていた</item>
-    /// <item>的が盤の **6〜8%** しか覆っておらず、跳ね返り自体は起きていたのに当たる物が無かった</item>
-    /// <item>⚠️ そして**一番大きい的（親）が「当ててはいけないもの」** ── 弾く遊びの見た目で
-    ///   「避ける遊び」を回していた</item>
-    /// </list>
+    /// ⭐ 形は**ひし形の連なり**。分かれ道から2本出て、少し先で合流し、また分かれる。
+    /// <code>
+    ///          ○─○─○          ← 遠い道（関門は軽い・実りが多い）
+    ///         ╱       ╲
+    ///   ●───●          ●───   ← ● が分かれ道
+    ///         ╲       ╱
+    ///          ○─○            ← 近い道（関門は重い）
+    /// </code>
     ///
-    /// ⭐ すごろくにすると「親の留守のあいだに戻れるか」が制限になり、
-    /// **こっそり盗む**という話と、遊びの制限が同じものになる。</summary>
+    /// ⭐ なぜ1本道をやめたか（2026-08-20 の実測）:
+    /// 1本道に「払って飛ぶ近道」を置くと、**払える数と跨ぐ数のつり合いだけ**が問題になり、
+    /// 「壊せるだけ壊す」が常に最善になった。⚠️ ステの種類は値引きにしか効かず、
+    /// **どのステが要るかを比べる場面が無かった**。
+    /// ⭐ 分岐にすると「この道は攻撃、あの道は防御」と**種類そのものを比べる**ことになる。</summary>
     public sealed class Trail
     {
         public readonly IReadOnlyList<Square> Squares;
-        /// <summary>どの段の巣か。⚠️ 値段と長さの出どころ。</summary>
+        /// <summary>どの段の巣か。⚠️ 長さと関門の重さの出どころ。</summary>
         public readonly int Tier;
+        /// <summary>分かれ道のマスの添字（入口から順）。⭐ 画面が段を組むのに使う。</summary>
+        public readonly IReadOnlyList<int> Junctions;
 
-        public Trail(IReadOnlyList<Square> spaces, int tier)
+        public Trail(IReadOnlyList<Square> squares, int tier, IReadOnlyList<int> junctions)
         {
-            Squares = spaces;
+            Squares = squares;
             Tier = tier;
+            Junctions = junctions;
         }
 
-        public int Length => Squares.Count;
+        public int Count => Squares.Count;
+        /// <summary>卵のマス。⚠️ 必ず最後。</summary>
+        public int Goal => Squares.Count - 1;
+        /// <summary>いちばん深い段。⭐ 画面が盤の高さを出すのに使う。</summary>
+        public int Depth
+        {
+            get
+            {
+                int deep = 0;
+                foreach (var sq in Squares) if (sq.Row > deep) deep = sq.Row;
+                return deep;
+            }
+        }
 
         /// <summary>速度いくつで1回振れるか。⭐ **140**。
         ///
@@ -99,58 +152,29 @@ namespace EggCommand.Core
         /// <summary>さいころの目。⭐ 1〜<see cref="Pips"/>。</summary>
         public const int Pips = 6;
 
-        /// <summary>分かれ道が飛ばすマスの**ならし**。⭐ **5**。
-        ///
-        /// ⚠️ さいころの最大が6なので、**5 は「1回ぶんちょっと」**。
-        /// 壊すと残りの目を捨てるので、⭐ 出目が小さいときほど壊す価値が高い。
-        /// ⚠️ 実際の1本ずつは <see cref="SavesMin"/>〜<see cref="SavesMax"/> に散る。</summary>
-        public const int ForkSaves = 5;
-
-        /// <summary>1本ずつの飛べるマス。⭐ **3〜8**。
-        ///
-        /// ⚠️ 全部が同じ +5 だったとき、**最初に払えた1本を壊すのが常に最善**になり、
-        /// 「出目を見て選ぶ」と「壊せるだけ壊す」が同じ成績になった（2026-08-20 の実測）。
-        /// ⭐ 飛べる数と値段を**別々に**振ると、割安な本と割高な本が生まれ、
-        /// 「ここで払うか、次の割安を待つか」という問いになる。</summary>
-        public const int SavesMin = 3;
-        public const int SavesMax = 8;
-
-        /// <summary>値段の振れ幅。⭐ 相場の **70%〜130%**。</summary>
-        public const int PriceLow = 70;
-        public const int PriceHigh = 130;
-
-        /// <summary>分かれ道の数。⭐ **道の長さ ÷ 6**（3〜5本）。
-        ///
-        /// ⚠️ 3〜4本を固定で置いたら、跨いだのは1回の潜入で **1.8〜2.4回**しかなかった
-        /// （2026-08-20 の実測）。壊すと5マス飛ぶので、後ろの分かれ道を跳び越すため。
-        /// ⭐ 長さに比例させると 3／3／4／5／5 になり、跨ぐ回数が 3〜4 に乗る。</summary>
-        public static int ForksFor(int length) => length / 6;
-
-        /// <summary>分かれ道どうしの最小の間。⚠️ 隣り合わせだけ避ける。</summary>
-        public const int ForkGap = 2;
-
         /// <summary>雑魚を倒すと戻る回数。</summary>
         public const int MobRefund = 1;
 
         /// <summary>その巣から1回盗むごとに減る、振れる回数。⭐ **1**。
         ///
-        /// ⭐ 巣の寿命（[巣の寿命] 4回で封鎖）を、すごろくでも効かせるための取り方。
-        /// ⚠️ **盤の形は変えない。**盗むたびに道を作り直すと、下見して編成を選ぶ
-        /// という遊びの芯が消える。⭐ 代わりに**親が早く帰ってくる**ようにする。
-        ///
-        /// ⚠️ <see cref="Steal.RaidsToSeal"/> に達した巣は入れば必ず戦闘なので、
-        /// ここで 0 以下になる心配はしなくてよい（呼び側が先に振り分ける）。</summary>
+        /// ⭐ 巣の寿命（4回で封鎖）を、すごろくでも効かせるための取り方。
+        /// ⚠️ **道の形は変えない。**盗むたびに作り直すと、下見して編成を選ぶ
+        /// という遊びの芯が消える。⭐ 代わりに**親が早く帰ってくる**ようにする。</summary>
         public const int RollsLostPerRaid = 1;
 
-        /// <summary>段ごとの道の長さ。⭐ **15 + 4×段** → 19／23／27／31／35。
-        ///
-        /// ⚠️ **編成の速さで長さを変えてはいけない。**変えると速さが打ち消される。
-        /// ⭐ 参照編成が「分かれ道を1つも壊さないと 6割落ちる」帯に置いてある。</summary>
-        public static int LengthFor(int tier) => 15 + 4 * tier;
+        /// <summary>分かれ道の数。⭐ **3 + 段** → 4／5／6／7／8。
+        /// ⚠️ 1回の潜入で**その数だけ**「どっちの道か」を選ぶことになる。</summary>
+        public static int JunctionsFor(int tier) => 3 + tier;
+
+        /// <summary>近い道の長さ。⭐ 合流まで <see cref="ShortMin"/>〜<see cref="ShortMax"/> マス。</summary>
+        public const int ShortMin = 1;
+        public const int ShortMax = 2;
+        /// <summary>遠い道の長さ。⚠️ 近い道より必ず長い。</summary>
+        public const int LongMin = 3;
+        public const int LongMax = 5;
 
         /// <summary>その段の参照編成が、そのステに持っている量。⚠️ `sim trail` の実測（2026-08-20）。
-        ///
-        /// ⭐ **値引きの基準**に使う。ここより多く持っていれば安く、少なければ高くつく。</summary>
+        /// ⭐ 関門の重さはここからの割合で決める。</summary>
         public static int RefStat(GimmickKind gate, int tier)
         {
             switch (gate)
@@ -162,27 +186,30 @@ namespace EggCommand.Core
             }
         }
 
-        /// <summary>その段の参照編成の**合計**（攻＋HP＋防）。⭐ これが財布の大きさの基準。</summary>
-        public static int RefTotal(int tier) =>
-            RefStat(GimmickKind.Wall, tier) + RefStat(GimmickKind.Damage, tier)
-            + RefStat(GimmickKind.Pressure, tier);
-
-        /// <summary><see cref="ForkSaves"/> マス飛ぶ1本が、財布の何割を持っていくか。⭐ **40%**。
+        /// <summary>近い道の関門が要求する量。⭐ 参照編成の持ち分の **115%**。
         ///
-        /// ⚠️ ここが遊びの芯。**払える数 &lt; 跨ぐ数** でなければ「どれに払うか」が問いにならない。
-        /// 跨ぐのは1回の潜入で 4.3 回なので、⭐ 40% ＝ 2.5本ぶん ＝ **2本ぶん足りない**。
-        ///
-        /// ⚠️ 財布を3つ（ステごと）に分けていたときは、どの財布も種類ごとに 1.7本しか
-        /// 機会が無く、余った。⭐ 1つにまとめると全部の分かれ道が同じ金を取り合う
-        /// （作者の答え「合計から引く」2026-08-20）。</summary>
-        public const int PriceShare = 40;
+        /// ⭐ ここが「寄せる意味」の出どころ。振れ幅 80〜120% を掛けると
+        /// 実際の要求は **持ち分の 0.92〜1.38倍**:
+        /// <list type="bullet">
+        /// <item>ならした編成（1.0倍）… 通れるのは **2割弱**</item>
+        /// <item>1本に寄せた編成（1.5倍）… そのステの近道は **全部**通れる（＝全体の1/3）</item>
+        /// <item>**2本に寄せた編成**（1.25倍）… **7割 × 2/3 ＝ ほぼ半分**</item>
+        /// </list>
+        /// ⚠️ つまり**2本に寄せるのが一番強い**。1本全振りは尖りすぎ、ならしは通れない。</summary>
+        public const int ShortShare = 115;
 
-        /// <summary><see cref="ForkSaves"/> マス飛ぶ1本の相場。⚠️ 種類では変わらない
-        /// （種類は <see cref="Trails.SlantOf"/> の値引きで効く）。</summary>
-        public static int PriceFor(int tier) => RefTotal(tier) * PriceShare / 100;
+        /// <summary>遠い道の関門。⭐ **25%**。
+        /// ⚠️ 軽くしてあるのは、**行き止まりを作らないため**
+        /// （両方通れないと潜入がそこで終わる）。寄せた編成の薄いほう（0.5倍）でも通る。
+        /// ⭐ 代わりに遠い ＝ 振れる回数を食う。</summary>
+        public const int LongShare = 25;
 
-        /// <summary>飛べるマス数に比例した相場。</summary>
-        public static int FairPrice(int tier, int saves) => PriceFor(tier) * saves / ForkSaves;
+        /// <summary>関門の重さの振れ幅。⭐ 相場の 80〜120%。</summary>
+        public const int PriceLow = 80;
+        public const int PriceHigh = 120;
+
+        public static int PriceFor(GimmickKind gate, int tier, int share) =>
+            RefStat(gate, tier) * share / 100;
     }
 
     /// <summary>1回振ったあと、いま何を待っているか。</summary>
@@ -190,13 +217,13 @@ namespace EggCommand.Core
     {
         /// <summary>止まった。⭐ 次を振れる。</summary>
         Moved,
-        /// <summary>分かれ道で止まった。⭐ **壊すか、歩いて通り過ぎるか**を選ぶ。</summary>
-        AtFork,
+        /// <summary>分かれ道に着いた。⭐ **どちらの道を行くか**を選ぶ。</summary>
+        AtJunction,
         /// <summary>雑魚と出会った。⚠️ 呼び側が戦闘を回す。</summary>
         Met,
         /// <summary>卵に届いた。</summary>
         Reached,
-        /// <summary>親が帰ってきた。</summary>
+        /// <summary>親が帰ってきた／どの道も通れなくなった。</summary>
         Caught,
     }
 
@@ -206,43 +233,35 @@ namespace EggCommand.Core
         public readonly Trail Trail;
         public readonly IReadOnlyList<Creature> Party;
 
-        /// <summary>いま何マス目に居るか。⭐ 0 が入口、道の長さが卵。</summary>
+        /// <summary>いまどのマスに居るか。</summary>
         public int At;
         /// <summary>あと何回振れるか。⚠️ 0 になって届いていなければ親が帰ってくる。</summary>
         public int Rolls;
-        /// <summary>編成の合計ステ。⚠️ **減らない** ── 値引きの基準として最後まで効く。</summary>
+        /// <summary>編成の合計ステ。⚠️ **減らない** ── 関門は「足りているか」だけを見る。</summary>
         public StatBlock Pool;
-        /// <summary>財布。⭐ 攻＋HP＋防 の合計から始まり、**分かれ道を壊すと減る**（戻らない）。</summary>
-        public int Power;
         /// <summary>一時的な増減（%）。</summary>
         public StatBlock Temp;
         /// <summary>その増減があと何回ぶん効くか。</summary>
         public StatBlock TempLeft;
 
-        /// <summary>分かれ道で止まったときの、**使い残した目**。
-        /// ⭐ 壊せば捨てる／歩けば進める。</summary>
+        /// <summary>分かれ道で止まったときの、**使い残した目**。⭐ 道を選ぶと、そのぶん進む。</summary>
         public int Pending;
 
         /// <summary>倒した雑魚のマス。</summary>
         public readonly HashSet<int> Beaten = new HashSet<int>();
-        /// <summary>壊した分かれ道のマス。</summary>
-        public readonly HashSet<int> Broken = new HashSet<int>();
-        /// <summary>歩いて通り過ぎた分かれ道のマス。⚠️ 二度は止まらない。</summary>
-        public readonly HashSet<int> Passed = new HashSet<int>();
+        /// <summary>通った道（分かれ道のマス → 選んだ道の番号）。⭐ 画面が跡を描く。</summary>
+        public readonly Dictionary<int, int> Took = new Dictionary<int, int>();
+
+        /// <summary>直前の出目。⚠️ 画面が出すため。0 はまだ振っていない。</summary>
+        public int LastRoll;
+        /// <summary>いま何を待っているか。</summary>
+        public RaidStep Step = RaidStep.Moved;
 
         /// <summary>いまの残り HP（<see cref="Party"/> と同じ並び）。
         /// ⭐ **雑魚との戦闘で負った傷は潜入のあいだ残る。**⚠️ -1 は「満タン」。</summary>
         public readonly List<int> Hp = new List<int>();
         /// <summary>いまの CT（個体 × 枠3）。⭐ 傷と同じく引き継がれる。</summary>
         public readonly List<int[]> Cooldowns = new List<int[]>();
-        // ⚠️ 経験値の欄は置かない。報酬を配るのは戦闘の決着（呼び側）で、
-        //    ここに写しを持つと「増えないのに増えると書いてある欄」ができる
-        //    （実際そうなっていた。レビューで発覚 2026-08-20）。
-
-        /// <summary>直前の出目。⚠️ 画面が出すため。0 はまだ振っていない。</summary>
-        public int LastRoll;
-        /// <summary>いま何を待っているか。</summary>
-        public RaidStep Step = RaidStep.Moved;
 
         /// <summary>決着。⚠️ null なら続行中。</summary>
         public StealOutcome? Result;
@@ -253,7 +272,6 @@ namespace EggCommand.Core
             Party = party;
             Rolls = rolls;
             Pool = pool;
-            Power = pool.Atk + pool.Hp + pool.Def;
             Temp = new StatBlock(0, 0, 0, 0);
             TempLeft = new StatBlock(0, 0, 0, 0);
             for (int i = 0; i < party.Count; i++)
@@ -278,11 +296,11 @@ namespace EggCommand.Core
             return rolls < 1 ? 1 : rolls;
         }
 
-        /// <summary>分かれ道を壊すのに使える合計ステ。⭐ **3体ぶんを足す。**
+        /// <summary>関門に払える量。⭐ **3体ぶんを足す。**
         ///
         /// ⚠️ 素質は1体につき3ステまでしか上限に届かない（<see cref="Stats.WildStatMax"/> ×3 ＝
         /// <see cref="Stats.WildTotalMax"/>）ので、**寄せると1本が 1.5倍**になり、
-        /// 代わりに別の1本が半分になる。⭐ ここが「どういう編成を作るか」の問いになる。</summary>
+        /// 代わりに別の1本が半分になる。⭐ ここが「どの道を通れるか」を決める。</summary>
         public static StatBlock PoolOf(IReadOnlyList<Creature> party)
         {
             var sum = new StatBlock(0, 0, 0, 0);
@@ -294,7 +312,7 @@ namespace EggCommand.Core
             return sum;
         }
 
-        /// <summary>その分かれ道が要求するステ。⭐ <see cref="Steal"/> と同じ対応を使う。</summary>
+        /// <summary>その関門が要求するステ。⭐ <see cref="Steal"/> と同じ対応を使う。</summary>
         public static StatKey StatOf(GimmickKind kind)
         {
             switch (kind)
@@ -306,117 +324,165 @@ namespace EggCommand.Core
             }
         }
 
-        /// <summary>そのステを、その段の参照編成に対して何%持っているか（一時増減こみ）。
-        ///
-        /// ⭐ **これが値引き率**。100 が並。150 なら払う量が 2/3、50 なら 2倍。
-        /// ⚠️ ここが「寄せた編成」の効き所 ── 素質は1体3ステまでしか上限に届かないので、
-        /// 1本を 150 にすると別の1本が 50 になる。</summary>
-        public static int SlantOf(Raid raid, GimmickKind gate)
+        /// <summary>いまそのステを実際にいくら使えるか（一時増減こみ）。</summary>
+        public static int Usable(Raid raid, StatKey key)
         {
-            var key = StatOf(gate);
             int had = raid.Pool[key];
             int pct = raid.TempLeft[key] > 0 ? raid.Temp[key] : 0;
-            long mine = (long)had * (100 + pct) / 100;
-            int refer = Trail.RefStat(gate, raid.Trail.Tier);
-            if (refer <= 0) return 100;
-            int slant = (int)(mine * 100 / refer);
-            return slant < 10 ? 10 : slant;   // ⚠️ 0除算と青天井の値段を避ける
+            long v = (long)had * (100 + pct) / 100;
+            return v < 0 ? 0 : (int)v;
         }
 
-        /// <summary>いまこの分かれ道を壊すのに、財布からいくら要るか。</summary>
-        public static int CostOf(Raid raid, Square space) =>
-            (int)((long)space.Requires * 100 / SlantOf(raid, space.Gate));
+        /// <summary>その道を通れるか。</summary>
+        public static bool CanPass(Raid raid, Way way) =>
+            !way.IsGated || Usable(raid, StatOf(way.Gate)) >= way.Requires;
 
-        /// <summary>道を作る。</summary>
+        /// <summary>いま居る分かれ道の、通れる道の数。</summary>
+        public static int OpenWays(Raid raid)
+        {
+            int open = 0;
+            foreach (var way in raid.Trail.Squares[raid.At].Ways) if (CanPass(raid, way)) open++;
+            return open;
+        }
+
+        // ── 盤を作る ────────────────────────────────
+
+        /// <summary>その巣の道。⭐ **巣ごとに固定**（同じ巣はいつ来ても同じ道）。
+        ///
+        /// ⚠️ 毎回作り直すと下見が意味を失う。⭐ 巣の中身（<see cref="Nests.SkillsOfNest"/>）と
+        /// 同じやり方 ── 巣の id から流れを起こすので、保存する物が増えない。</summary>
+        public static Trail OfNest(Nest nest) =>
+            Make(new Rng(0).Stream($"trail:{nest.Id}"), nest.Tier);
+
+        /// <summary>道を作る。⭐ **ひし形の連なり**（分かれて、合流して、また分かれる）。</summary>
         public static Trail Make(Rng rng, int tier)
         {
-            int length = Trail.LengthFor(tier);
-            var kinds = new List<GimmickKind>
-                { GimmickKind.Wall, GimmickKind.Damage, GimmickKind.Pressure };
+            var squares = new List<Square>();
+            var junctions = new List<int>();
+            var kinds = new[] { GimmickKind.Wall, GimmickKind.Damage, GimmickKind.Pressure };
 
-            // ⭐ 分かれ道は長さに比例。⚠️ 入口と卵の直前は空けておく（選ぶ余地が要る）
-            int wants = Trail.ForksFor(length);
-            var slots = new List<int>();
-            for (int i = 2; i < length - 2; i++) slots.Add(i);
+            int sections = Trail.JunctionsFor(tier);
+            int hub = 0;
+            squares.Add(new Square());                     // 入口
 
-            // ⚠️ **引いてから間引くだけにしない。**間引いたぶんを引き直さないと、
-            //    実際の本数が意図より 0.5〜0.6 本ぶん下振れする
-            //    （段3で「4本」のはずが 2本 2.3% / 3本 43% だった。レビューで実測 2026-08-20）。
-            // ⭐ 引ける場所が尽きるまで、間隔を守れる位置から足していく。
-            var kept = new List<int>();
-            var pool = new List<int>(slots);
-            while (kept.Count < wants && pool.Count > 0)
+            for (int s = 0; s < sections; s++)
             {
-                int at = pool[rng.Int(0, pool.Count)];
-                kept.Add(at);
-                // ⚠️ 隣り合うと、片方を壊した先がもう片方になって判断が潰れる
-                pool.RemoveAll(i => i > at - Trail.ForkGap && i < at + Trail.ForkGap);
-            }
-            kept.Sort();
+                junctions.Add(hub);
 
-            var spaces = new List<Square>();
-            for (int i = 0; i < length; i++)
-            {
-                if (kept.Contains(i))
+                // ⭐ 2本の道は**必ず違うステ**を要求する。
+                //    ⚠️ 同じステだと「どっちが安いか」だけになり、種類を比べる場面が消える
+                int a = rng.Int(0, kinds.Length);
+                int b = (a + 1 + rng.Int(0, kinds.Length - 1)) % kinds.Length;
+
+                int shortLen = rng.Int(Trail.ShortMin, Trail.ShortMax + 1);
+                int longLen = rng.Int(Trail.LongMin, Trail.LongMax + 1);
+                int shortCost = Jitter(rng, Trail.PriceFor(kinds[a], tier, Trail.ShortShare));
+                int longCost = Jitter(rng, Trail.PriceFor(kinds[b], tier, Trail.LongShare));
+
+                // ⚠️ **近い道のマスは、合流点までのあいだに散らす。**
+                //    先頭から詰めると、最後の1マスから合流点まで長い斜線が伸びて
+                //    ひし形に見えなかった（実機で確認 2026-08-20）。
+                int span = longLen + 1;                     // 分かれ道から合流点までの段数
+                int shortHead = squares.Count;
+                for (int i = 0; i < shortLen; i++)
                 {
-                    var gate = kinds[rng.Int(0, kinds.Count)];
-                    int saves = rng.Int(Trail.SavesMin, Trail.SavesMax + 1);
-                    // ⭐ 相場に対して 70〜130%。⚠️ 飛べる数とは**別に**振る（連動させると一律になる）
-                    int price = Trail.FairPrice(tier, saves)
-                        * rng.Int(Trail.PriceLow, Trail.PriceHigh + 1) / 100;
-                    spaces.Add(new Square(SquareKind.Fork, gate, requires: price, saves: saves));
-                    continue;
+                    var sq = Filler(rng, false);
+                    sq.Row = squares[hub].Row + (i + 1) * span / (shortLen + 1);
+                    sq.Lane = -1;                            // ⭐ 近い道は左
+                    squares.Add(sq);
                 }
-                spaces.Add(Ordinary(rng, i, length));
+                int longHead = squares.Count;
+                for (int i = 0; i < longLen; i++)
+                {
+                    var sq = Filler(rng, true);
+                    sq.Row = squares[hub].Row + 1 + i;
+                    sq.Lane = 1;                            // ⭐ 遠い道は右
+                    squares.Add(sq);
+                }
+                int next = squares.Count;
+                var join = new Square();                    // 合流点（次の分かれ道 or 卵）
+                // ⚠️ 合流点は**遠い道の先**。⭐ 近い道は途中に散らしてあるので、
+                //    どちらの道も同じ段で合流し、ひし形になる
+                join.Row = squares[hub].Row + span;
+                join.Lane = 0;
+                squares.Add(join);
+
+                squares[hub].Ways.Add(new Way(shortHead, kinds[a], shortCost, shortLen + 1));
+                squares[hub].Ways.Add(new Way(longHead, kinds[b], longCost, longLen + 1));
+                for (int i = 0; i < shortLen; i++)
+                    squares[shortHead + i].Ways.Add(new Way(
+                        i + 1 < shortLen ? shortHead + i + 1 : next));
+                for (int i = 0; i < longLen; i++)
+                    squares[longHead + i].Ways.Add(new Way(
+                        i + 1 < longLen ? longHead + i + 1 : next));
+
+                hub = next;
             }
-
-            return new Trail(spaces, tier);
+            return new Trail(squares, tier, junctions);
         }
 
-        /// <summary>分かれ道でないマス。⭐ 雑魚と増減を散らす。</summary>
-        private static Square Ordinary(Rng rng, int index, int length)
+        private static int Jitter(Rng rng, int price) =>
+            price * rng.Int(Trail.PriceLow, Trail.PriceHigh + 1) / 100;
+
+        /// <summary>道の途中に置くマス。
+        ///
+        /// ⭐ **遠い道のほうが実りが多い。**⚠️ そうしないと「近い道が通れるなら必ず近い道」に
+        /// なって、選ぶ余地が長さと関門だけになる。
+        /// ⭐ 遠回りには**雑魚（振れる回数が戻る）と ▲（ステが上がる）**を厚く置く
+        /// ── 「遠いが、その先の関門を通れるようになる」という筋ができる。</summary>
+        private static Square Filler(Rng rng, bool longWay)
         {
-            // ⚠️ 入口と卵の直前は素通りにする（開幕と決着に余計なものを挟まない）
-            if (index < 2 || index >= length - 1) return new Square(SquareKind.Plain);
-
             int roll = rng.Int(0, 100);
-            if (roll < 16) return new Square(SquareKind.Mob);
-            if (roll < 28)
-                return new Square(SquareKind.Boon, stat: PickStat(rng),
-                    percent: 15 + rng.Int(0, 3) * 5, rolls: 2 + rng.Int(0, 2));
-            if (roll < 38)
-                return new Square(SquareKind.Bane, stat: PickStat(rng),
-                    percent: -(15 + rng.Int(0, 3) * 5), rolls: 2 + rng.Int(0, 2));
-            return new Square(SquareKind.Plain);
+            if (longWay)
+            {
+                // ⭐ **遠回りの取り柄は「敵」と「▲」。**
+                // ⚠️ 敵を薄くすると、近い道が通れるときは必ず近い道になり、
+                //    分かれ道の半分が「選ばない選択」になる（実測 2026-08-20）。
+                //    ⭐ 敵は倒せば振れる回数が戻るので、**2体乗っている遠回りは行く価値がある**。
+                // ⚠️ ただし敵は戦闘 ── 傷と CT を持ち越し、負ければそこで終わり。
+                //    ⭐ 「遠くて危ないが速くなる」対「近くて安全だが痩せている」の取引にする。
+                if (roll < 30) return new Square(SquareKind.Mob);
+                if (roll < 58)
+                    return new Square(SquareKind.Boon, PickStat(rng),
+                        30 + rng.Int(0, 4) * 10, 4 + rng.Int(0, 4));
+                if (roll < 58)
+                    return new Square(SquareKind.Bane, PickStat(rng),
+                        -(15 + rng.Int(0, 2) * 10), 2 + rng.Int(0, 2));
+                return new Square();
+            }
+            // ⚠️ 近い道は素通りが多い。⭐ 速いことが取り柄なので、そこに実りを足さない
+            if (roll < 10) return new Square(SquareKind.Mob);
+            if (roll < 22)
+                return new Square(SquareKind.Bane, PickStat(rng),
+                    -(15 + rng.Int(0, 2) * 10), 2 + rng.Int(0, 2));
+            return new Square();
         }
 
-        /// <summary>増減が乗るステ。⭐ 分かれ道の通貨になっている3本だけ。</summary>
+        /// <summary>増減が乗るステ。⭐ 関門の通貨になっている3本だけ。</summary>
         private static StatKey PickStat(Rng rng)
         {
             var keys = new[] { StatKey.Atk, StatKey.Hp, StatKey.Def };
             return keys[rng.Int(0, keys.Length)];
         }
 
-        /// <summary>その巣の道。⭐ **巣ごとに固定**（同じ巣はいつ来ても同じ道）。
-        ///
-        /// ⚠️ 毎回作り直すと下見が意味を失う。⭐ 巣の中身（<see cref="Nests.SkillsOfNest"/>）と
-        /// 同じやり方 ── 巣の id から流れを起こすので、保存する物が増えない。
-        ///
-        /// ⭐ ここが「寄せた編成」の置き場所: 道の関門の種類が見えるので、
-        /// **攻に寄せた編成は壁だらけの巣へ行く**という選び方ができる。</summary>
-        public static Trail OfNest(Nest nest) =>
-            Make(new Rng(0).Stream($"trail:{nest.Id}"), nest.Tier);
+        // ── 進む ────────────────────────────────────
 
         /// <summary>始める。</summary>
         /// <param name="raids">その巣から既に盗んだ回数。⭐ そのぶん振れる回数が減る。</param>
-        public static Raid Begin(Trail trail, IReadOnlyList<Creature> party, int raids = 0) =>
-            new Raid(trail, party, RollsFor(party, raids), PoolOf(party));
+        public static Raid Begin(Trail trail, IReadOnlyList<Creature> party, int raids = 0)
+        {
+            var raid = new Raid(trail, party, RollsFor(party, raids), PoolOf(party));
+            // ⚠️ 入口がいきなり分かれ道。⭐ 振る前に道を選ばせる
+            if (trail.Squares[0].IsJunction)
+                raid.Step = OpenWays(raid) > 0 ? RaidStep.AtJunction : RaidStep.Caught;
+            if (raid.Step == RaidStep.Caught) raid.Result = StealOutcome.Blocked;
+            return raid;
+        }
 
         /// <summary>1回振る。⭐ 戻り値は**次に何を待っているか**。
         ///
         /// ⚠️ ここでは雑魚の戦闘を始めない。始めるのは呼び側（画面）で、
-        /// 勝ったら <see cref="Beat"/>、負けたら <see cref="Lost"/> を呼ぶ。
-        /// ⭐ Core は戦闘の進行を知らない。</summary>
+        /// 勝ったら <see cref="Beat"/>、負けたら <see cref="Lost"/> を呼ぶ。</summary>
         public static RaidStep Roll(Rng rng, Raid raid)
         {
             Require(raid, RaidStep.Moved);
@@ -428,37 +494,24 @@ namespace EggCommand.Core
             return Advance(raid, raid.LastRoll);
         }
 
-        /// <summary>分かれ道を壊さずに、残った目のぶん歩く。</summary>
-        public static RaidStep Walk(Raid raid)
+        /// <summary>分かれ道で道を選ぶ。⭐ 関門があれば**そこで払う**。</summary>
+        public static RaidStep Take(Raid raid, int way)
         {
-            Require(raid, RaidStep.AtFork);
-            raid.Passed.Add(raid.At);
+            Require(raid, RaidStep.AtJunction);
+            var ways = raid.Trail.Squares[raid.At].Ways;
+            if (way < 0 || way >= ways.Count)
+                throw new ArgumentOutOfRangeException(nameof(way), way, "そんな道は無い");
+            var chosen = ways[way];
+            if (!CanPass(raid, chosen)) throw new InvalidOperationException("この道は通れない");
+
+            // ⚠️ **通ってもステは減らない。**代価は道の長さ（振れる回数）のほう
+            raid.Took[raid.At] = way;
+
             int pips = raid.Pending;
             raid.Pending = 0;
-            if (pips <= 0) return Settle(raid);
-            return Advance(raid, pips);
-        }
-
-        /// <summary>いま止まっている分かれ道を壊せるか。</summary>
-        public static bool CanBreak(Raid raid)
-        {
-            if (raid.Step != RaidStep.AtFork) return false;
-            return raid.Power >= CostOf(raid, raid.Trail.Squares[raid.At]);
-        }
-
-        /// <summary>分かれ道を壊して先へ出る。⭐ **払った量は戻らず、残った目も捨てる。**
-        ///
-        /// ⚠️ だから「出目が小さいときほど得」── 壊すか歩くかは出目で変わる。
-        /// ⭐ 振る回数は減らない（壊すのは進むことの代わりではなく、道を縮める行為）。</summary>
-        public static RaidStep Break(Raid raid)
-        {
-            if (!CanBreak(raid)) throw new InvalidOperationException("ここは壊せない");
-            var space = raid.Trail.Squares[raid.At];
-            raid.Power -= CostOf(raid, space);
-            if (raid.Power < 0) raid.Power = 0;
-            raid.Broken.Add(raid.At);
-            raid.Pending = 0;
-            return Advance(raid, space.Saves);
+            raid.At = chosen.To;
+            // ⭐ 道へ入るのが1マスぶん。残りはそのまま歩く
+            return Arrive(raid, pips > 0 ? pips - 1 : 0);
         }
 
         /// <summary>雑魚に勝った。⭐ **振れる回数が戻る。**</summary>
@@ -478,45 +531,59 @@ namespace EggCommand.Core
             return raid.Step = RaidStep.Caught;
         }
 
-        /// <summary>マスを進める。⭐ **分かれ道は踏まなくても止まる**（跨ごうとした時点で）。</summary>
+        /// <summary>マスを進める。⚠️ 分かれ道に着いたらそこで止まる。</summary>
         private static RaidStep Advance(Raid raid, int steps)
         {
-            int goal = raid.Trail.Length;
-            for (int n = 1; n <= steps; n++)
+            for (int n = 0; n < steps; n++)
             {
-                int next = raid.At + 1;
-                if (next >= goal)
-                {
-                    raid.At = goal;
-                    raid.Result = StealOutcome.Success;
-                    return raid.Step = RaidStep.Reached;
-                }
-                raid.At = next;
-
-                // ⚠️ 壊した／通り過ぎた分かれ道では、もう止まらない
-                if (raid.Trail.Squares[next].Kind == SquareKind.Fork
-                    && !raid.Broken.Contains(next) && !raid.Passed.Contains(next))
+                var here = raid.Trail.Squares[raid.At];
+                if (here.IsGoal) break;
+                if (here.IsJunction)
                 {
                     raid.Pending = steps - n;
-                    return raid.Step = RaidStep.AtFork;
+                    return Settle(raid);
                 }
+                raid.At = here.Ways[0].To;
             }
+            return Arrive(raid, 0);
+        }
+
+        /// <summary>着いたマスを片付けてから、残りの歩数を続ける。</summary>
+        private static RaidStep Arrive(Raid raid, int rest)
+        {
+            if (rest > 0) return Advance(raid, rest);
             return Settle(raid);
         }
 
         /// <summary>止まったマスの効き目を出し、次に何を待つか決める。</summary>
         private static RaidStep Settle(Raid raid)
         {
-            var space = raid.Trail.Squares[raid.At];
-            if (space.Kind == SquareKind.Boon || space.Kind == SquareKind.Bane)
+            var here = raid.Trail.Squares[raid.At];
+            if (here.IsGoal)
+            {
+                raid.Result = StealOutcome.Success;
+                return raid.Step = RaidStep.Reached;
+            }
+            if (here.Kind == SquareKind.Boon || here.Kind == SquareKind.Bane)
             {
                 // ⭐ 上書きする（重ねない）。重ねると桁が読めなくなる
-                raid.Temp = raid.Temp.With(space.Stat, space.Percent);
-                raid.TempLeft = raid.TempLeft.With(space.Stat, space.Rolls);
+                raid.Temp = raid.Temp.With(here.Stat, here.Percent);
+                raid.TempLeft = raid.TempLeft.With(here.Stat, here.Rolls);
             }
-            if (space.Kind == SquareKind.Mob && !raid.Beaten.Contains(raid.At))
+            if (here.Kind == SquareKind.Mob && !raid.Beaten.Contains(raid.At))
                 return raid.Step = RaidStep.Met;
 
+            if (here.IsJunction)
+            {
+                // ⚠️ **どの道も通れなければ、そこで終わり。**
+                //    ⭐ 「編成が足りていない」という負け方をはっきり出す
+                if (OpenWays(raid) <= 0)
+                {
+                    raid.Result = StealOutcome.Blocked;
+                    return raid.Step = RaidStep.Caught;
+                }
+                return raid.Step = RaidStep.AtJunction;
+            }
             if (raid.Rolls <= 0)
             {
                 raid.Result = StealOutcome.Stalled;
@@ -543,99 +610,49 @@ namespace EggCommand.Core
             }
         }
 
-        /// <summary>あといくつ進めば卵か。</summary>
-        public static int Left(Raid raid) => raid.Trail.Length - raid.At;
+        // ── 見通し ──────────────────────────────────
 
-        /// <summary>いまの分かれ道を壊したら、**実際に止まるマス**。
+        /// <summary>各マスから卵までの**最短の歩数**（いま通れる道だけを数える）。
         ///
-        /// ⚠️ `At + Saves` ではない。<see cref="Advance"/> は途中の未処理の分かれ道で
-        /// 止まるので、跨いだ先には着かない（分かれ道の最小間隔は
-        /// <see cref="Trail.ForkGap"/>、飛べるのは最大 <see cref="Trail.SavesMax"/> なので
-        /// **跨ぐのが普通**）。画面が指す印がここを使わないと、印と実際がずれる
-        /// （レビューで発覚 2026-08-20）。</summary>
-        public static int LandingOf(Raid raid)
+        /// ⚠️ 届かないマスは -1。⭐ 添字は必ず増える向きなので、後ろから1回なめれば出る。
+        /// ⚠️ **払った後のことは見ていない**（関門を通るとステが減るので、実際はもっと厳しい）。
+        /// ⭐ 画面に出すのは「いまの持ち分で、いちばん短く行けるとしたら何マスか」。</summary>
+        public static int[] StepsToGoal(Raid raid)
         {
-            if (raid.Step != RaidStep.AtFork) return raid.At;
-            int saves = raid.Trail.Squares[raid.At].Saves;
-            int goal = raid.Trail.Length;
-            for (int n = 1; n <= saves; n++)
+            var squares = raid.Trail.Squares;
+            var dist = new int[squares.Count];
+            dist[squares.Count - 1] = 0;
+            for (int i = squares.Count - 2; i >= 0; i--)
             {
-                int next = raid.At + n;
-                if (next >= goal) return goal;
-                var sq = raid.Trail.Squares[next];
-                if (sq.Kind == SquareKind.Fork
-                    && !raid.Broken.Contains(next) && !raid.Passed.Contains(next)) return next;
+                int best = -1;
+                foreach (var way in squares[i].Ways)
+                {
+                    if (!CanPass(raid, way)) continue;
+                    int d = dist[way.To];
+                    if (d < 0) continue;
+                    if (best < 0 || d + 1 < best) best = d + 1;
+                }
+                dist[i] = best;
             }
-            return raid.At + saves;
+            return dist;
         }
 
-        /// <summary>いまの分かれ道を歩いて通ったら、**実際に止まるマス**。</summary>
-        public static int WalkingTo(Raid raid)
+        /// <summary>あと何マスで卵か（いま通れる道での最短）。⚠️ -1 は「もう届かない」。</summary>
+        public static int Left(Raid raid) => StepsToGoal(raid)[raid.At];
+
+        /// <summary>その道を選んだら、あと何マスになるか。⚠️ -1 は「その先が詰む」。</summary>
+        public static int LeftIfTake(Raid raid, int way)
         {
-            if (raid.Step != RaidStep.AtFork) return raid.At;
-            int goal = raid.Trail.Length;
-            for (int n = 1; n <= raid.Pending; n++)
-            {
-                int next = raid.At + n;
-                if (next >= goal) return goal;
-                var sq = raid.Trail.Squares[next];
-                if (sq.Kind == SquareKind.Fork
-                    && !raid.Broken.Contains(next) && !raid.Passed.Contains(next)) return next;
-            }
-            return raid.At + raid.Pending;
+            var chosen = raid.Trail.Squares[raid.At].Ways[way];
+            int rest = StepsToGoal(raid)[chosen.To];
+            return rest < 0 ? -1 : rest + 1;
         }
 
-        /// <summary>この先の分かれ道を壊して稼げるマス数。⭐ **いまの財布で届く範囲の目安。**
-        ///
-        /// ⚠️ **目安であって最適解ではない。**1マスあたりの安さが良い順に買うだけの見積り
-        /// （本当の最適は積み荷問題になる）。画面に「壊せばここまで行ける」を出すためだけに使う。
-        /// ⭐ 少なめに出ることはあっても、**払えない額を数えることはない**
-        /// （＝出した数より実際が悪くなることはない）。
-        ///
-        /// ⚠️ 残った目を捨てる損は数えない（いま何を振ったかに依るので、ここでは決まらない）。</summary>
-        public static int Sparable(Raid raid)
+        /// <summary>残り <paramref name="need"/> マスを、いまの回数で歩き切れる見込み（%）。</summary>
+        private static int Chance(int rolls, int need)
         {
-            var ahead = new List<Square>();
-            for (int i = raid.At; i < raid.Trail.Length; i++)
-            {
-                var sq = raid.Trail.Squares[i];
-                if (sq.Kind != SquareKind.Fork) continue;
-                if (raid.Broken.Contains(i) || raid.Passed.Contains(i)) continue;
-                ahead.Add(sq);
-            }
-            // ⭐ 1マスあたりが安い順
-            ahead.Sort((a, b) =>
-            {
-                long left = (long)CostOf(raid, a) * b.Saves;
-                long right = (long)CostOf(raid, b) * a.Saves;
-                return left.CompareTo(right);
-            });
-
-            int purse = raid.Power, saved = 0;
-            foreach (var sq in ahead)
-            {
-                int cost = CostOf(raid, sq);
-                if (cost > purse) continue;
-                purse -= cost;
-                saved += sq.Saves;
-            }
-            return saved;
-        }
-
-        /// <summary>このまま振り続けて届く見込み（%）。⭐ **画面に出して判断の材料にする。**
-        ///
-        /// ⚠️ 分かれ道と雑魚は数えない（＝**歩き通した場合**の下限）。
-        /// ⭐ 「壊すか歩くか」を決めるのはこの数字なので、隠さず出す。</summary>
-        public static int Odds(Raid raid, int extraSteps = 0)
-        {
-            int need = Left(raid) - extraSteps;
-            int rolls = raid.Rolls;
             if (need <= 0) return 100;
-            // ⚠️ ここで <see cref="Raid.Pending"/> を足さない。**呼ぶ側が渡す。**
-            //    両方でやると同じ目を二重に数え、最後の1振りが分かれ道で止まった場面で
-            //    「壊しても歩いても 100%」という嘘になる（レビューで発覚 2026-08-20）。
             if (rolls <= 0) return 0;
-
             var now = new double[1] { 1.0 };
             for (int r = 0; r < rolls; r++)
             {
@@ -650,6 +667,27 @@ namespace EggCommand.Core
             double reach = 0;
             for (int s = need; s < now.Length; s++) reach += now[s];
             return (int)Math.Round(reach * 100);
+        }
+
+        /// <summary>このまま振り続けて届く見込み（%）。⭐ **画面に出して判断の材料にする。**
+        ///
+        /// ⚠️ 雑魚で回数が戻るぶんは数えない（＝控えめに出る）。
+        /// ⚠️ 使い残した目は**呼び側が足す**（両方で足すと二重に数える）。</summary>
+        public static int Odds(Raid raid, int extraSteps = 0)
+        {
+            int need = Left(raid);
+            if (need < 0) return 0;
+            return Chance(raid.Rolls, need - extraSteps);
+        }
+
+        /// <summary>その道を選んだときの見込み（%）。
+        /// ⭐ 道へ入るのに1マス使い、使い残した目のぶんはそのまま歩ける。</summary>
+        public static int OddsIfTake(Raid raid, int way)
+        {
+            int rest = LeftIfTake(raid, way);
+            if (rest < 0) return 0;
+            int carried = raid.Pending > 0 ? raid.Pending - 1 : 0;
+            return Chance(raid.Rolls, rest - 1 - carried);
         }
     }
 }
