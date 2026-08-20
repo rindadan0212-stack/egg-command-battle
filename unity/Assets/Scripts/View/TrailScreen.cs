@@ -39,9 +39,9 @@ namespace EggCommand.View
         private const float CellH = 192f;
         /// <summary>段の高さ（マス＋あいだ）。⚠️ あいだは 26 のまま。</summary>
         private const float RowStep = 218f;
-        /// <summary>車線1つぶんの横のずれ。⭐ 車線は外から -3 / -1 / +1 / +3。
-        /// ⚠️ <see cref="CellW"/> の半分より狭いと、隣の車線と重なる。</summary>
-        private const float LaneStep = 264f;
+        /// <summary>一番外の車線までの横のずれ。⭐ 車線 ±<see cref="Trail.LaneEdge"/> がここ。
+        /// ⚠️ 本数は毎回変わる（2〜4）ので、**端を決めて割る**形にしてある。</summary>
+        private const float LaneStep = 396f;
         /// <summary>関門の札の高さ。⭐ マスの上端に帯として重ねる。</summary>
         private const float GateHigh = 64f;
         private const float GoalHeight = 176f;
@@ -251,8 +251,8 @@ namespace EggCommand.View
                 var sq = trail.Squares[i];
                 spots[i] = new Spot
                 {
-                    // ⭐ 車線は -3 / -2 / -1 / 0 / +1 / +2 / +3。⚠️ 1つぶんは半分
-                    X = mid + sq.Lane * (LaneStep / 2f),
+                    // ⭐ 車線は -3 〜 +3。⚠️ 一番外（±LaneEdge）が画面の端に来るよう割る
+                    X = mid + sq.Lane * (LaneStep / (float)Trail.LaneEdge),
                     Y = GoalHeight + 28f + (deep - sq.Row) * RowStep,
                 };
             }

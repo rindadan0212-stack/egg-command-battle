@@ -184,16 +184,11 @@ namespace EggCommand.Core
         /// 段5の最短路が 39 → 18 マスに縮み、**どの指し手でも 97% 届く**盤になった
         /// （2026-08-20 に実測）。⭐ 振れる回数（段5で 8回・平均 3.5 で 28 マスぶん）に対して
         /// 最短路が短すぎると、道を選ぶ意味そのものが消える。</summary>
-        public static int SectionsFor(int tier) => 2 + tier;
+        public static int SectionsFor(int tier) => 1 + tier;
 
-        /// <summary>分かれ道の数の**下限**。⭐ ひと区切りに、大きいのが1つ ＋ 枝分かれが1つ以上。
-        ///
-        /// ⚠️ **ぴったりの数にならない**（2026-08-20）── 大きい分かれ道が2本なら
-        /// その先が2つとも枝分かれし、3本なら1つだけ枝分かれするので、区切りごとに 2 か 3。</summary>
-        public static int JunctionsAtLeast(int tier) => SectionsFor(tier) * 2;
-
-        /// <summary>分かれ道の数の上限。</summary>
-        public static int JunctionsAtMost(int tier) => SectionsFor(tier) * 3;
+        /// <summary>分かれ道の数。⭐ **ひと区切りに1つ。**
+        /// ⚠️ 本数（2〜4）は毎回変わるが、分かれる**場所**は区切りごとに1つ。</summary>
+        public static int JunctionsFor(int tier) => SectionsFor(tier);
 
         /// <summary>ひと筋の長さ（小さい分かれ道から合流点まで）。
         ///
@@ -202,7 +197,7 @@ namespace EggCommand.Core
         /// ⚠️ 以前は近い道 1〜2 マス／遠い道 3〜5 マスで、近い道の1マスが**2段ぶん**動いていた。
         /// ⭐ 長さの差でつけていた重みは、**関門の重さと道の中身**へ移した。</summary>
         public const int LaneMin = 2;
-        public const int LaneMax = 3;
+        public const int LaneMax = 5;
 
         /// <summary>⭐ **関門の段の数。**1〜5。0 は「関門なし」。</summary>
         public const int GateGrades = 5;
@@ -219,12 +214,17 @@ namespace EggCommand.Core
         /// ここが「遠回りの道には関門を少なく」（作者の指示 2026-08-20）の要。</summary>
         public const int GradeStep = 0;
 
-        /// <summary>大きい分かれ道の、一番内側の段。⭐ ここが一番重い。</summary>
-        public const int GradeTop = 5;
+        /// <summary>⭐ **1マス縮めるごとに上がる段。**
+        /// ⚠️ 無関門の道より1マス短いだけなら軽く、大きく縮めるほど重い。</summary>
+        public const int GradePerStep = 2;
 
-        /// <summary>小さい分かれ道の、一番内側の段。⚠️ 大きいほうより軽くする ──
-        /// 2段つづけて重い関門が来ると、通れる道が一気に消える。</summary>
-        public const int GradeSub = 3;
+        /// <summary>分かれ道の本数。⭐ **毎回変わる**（2〜4）。
+        /// ⚠️ 4本に縛ると、盤がどこも同じ顔になる（作者の指摘 2026-08-20）。</summary>
+        public const int WaysMin = 2;
+        public const int WaysMax = 4;
+
+        /// <summary>一番外の車線。⭐ 画面はこれを幅に合わせて割る。</summary>
+        public const int LaneEdge = 3;
 
         /// <summary>その段の参照編成が、そのステに持っている量。⚠️ `sim trail` の実測（2026-08-20）。
         /// ⭐ 関門の重さはここからの割合で決める。</summary>
@@ -457,84 +457,79 @@ namespace EggCommand.Core
 
             for (int s = 0; s < sections; s++)
             {
-                // ⭐ **分かれ道は 2本 か 3本**（2026-08-20・作者の指示）。
-                //    ⚠️ その先の枝分かれと合わせて、**並ぶ車線は最大4本**に収める
-                //    （4本を超えると 1080 の幅に入らない）。
-                //      2本 → 両方が枝分かれ → 4車線
-                //      3本 → 1本だけ枝分かれ → 4車線
-                int top = 2 + rng.Int(0, 2);
+                // ⭐ **分かれ道の本数は 2〜4 で毎回変わる**（2026-08-20・作者の指示
+                //    「4が2回連続に縛る必要もない」「もっと自由な盤面に」）。
+                int ways = rng.Int(Trail.WaysMin, Trail.WaysMax + 1);
                 int root = squares[hub].Row;
-                int lane = rng.Int(Trail.LaneMin, Trail.LaneMax + 1);
                 junctions.Add(hub);
 
-                // ⭐ どの枝を further に割るか。⚠️ 3本のときは真ん中以外を選ばない
-                //    （真ん中を割ると左右の車線が入れ替わって読めなくなる）
-                int splits = top == 2 ? 2 : 1;
-                int splitAt = top == 2 ? -1 : rng.Int(0, 2) * 2;   // 0 か 2（両端）
+                // ⭐ **道の長さは違ってよい。**⚠️ 以前は全部そろえていたが、
+                //    そろえる必要は無かった（作者の指摘）。
+                //    ⚠️ 「1マス＝1段」と「長さが違う」は同時に成り立たない
+                //    （入口と卵を固定すると、段数＝マス数になるため）。
+                //    ⭐ だから**1つの道の中だけ**マスを隣り合わせにし、長さの差は
+                //    **合流までの1本の繋ぎ**に寄せる ── 数え間違えず、長さは自由になる。
+                var lens = new int[ways];
+                for (int k = 0; k < ways; k++)
+                    lens[k] = rng.Int(Trail.LaneMin, Trail.LaneMax + 1);
 
-                // ── 中段（大きい分かれ道の行き先）────────────────
-                var mids = new int[top];
-                for (int k = 0; k < top; k++)
+                // ⭐ **関門を通らない道を必ず1本。しかもそれが一番長い。**
+                //    （作者の指示「最上位の条件」）
+                // ⚠️ 一番長いのが関門なしでないと、「長いのに関門もある」道ができて
+                //    選ぶ理由が消える。⭐ どれか1本を最長にしてから、そこを無関門にする。
+                int free = rng.Int(0, ways);
+                int longest = 0;
+                for (int k = 0; k < ways; k++) if (lens[k] > lens[longest]) longest = k;
+                if (lens[free] <= lens[longest]) lens[free] = lens[longest] + 1;
+
+                // ── 車線を割り当てる ────────────────────────
+                // ⭐ 本数に合わせて左右へ散らす。⚠️ 無関門（一番長い）は**一番外**へ置く
+                var lane = new int[ways];
+                for (int k = 0; k < ways; k++)
+                    lane[k] = ways <= 1 ? 0 : -Trail.LaneEdge + k * (Trail.LaneEdge * 2) / (ways - 1);
+                // ⚠️ 外側は険しい（Filler）ので、無関門の道が外に来るように入れ替える
+                if (ways > 1 && free != 0 && free != ways - 1)
                 {
-                    mids[k] = squares.Count;
-                    squares.Add(new Square { Row = root + 1, Lane = MidLane(k, top) });
+                    int edge = lane[free] < 0 ? 0 : ways - 1;
+                    int keep = lane[free]; lane[free] = lane[edge]; lane[edge] = keep;
                 }
 
-                // ── 車線（4本）────────────────────────────
-                var lanes = new[] { -3, -1, 1, 3 };
-                var heads = new int[4];
-                for (int k = 0; k < 4; k++)
+                // ── 道を敷く ──────────────────────────────
+                var heads = new int[ways];
+                int span = 0;
+                for (int k = 0; k < ways; k++) if (lens[k] > span) span = lens[k];
+
+                for (int k = 0; k < ways; k++)
                 {
                     heads[k] = squares.Count;
-                    // ⭐ **外側ほど険しい。**⚠️ 内側と同じ中身だと、外へ行く理由が無い
-                    bool harsh = k == 0 || k == 3;
-                    for (int i = 0; i < lane; i++)
+                    // ⭐ **険しいのは「関門なしの道」。**
+                    // ⚠️ 車線の外側で決めていた頃、本数が2本だと**両方が外側**になり、
+                    //    険しさの差が消えていた（2026-08-20 に実測して気づいた）。
+                    // ⭐ 無関門の道は一番長く、そのうえ敵と ▲ が厚い ──
+                    //    「ステは要らないが、遠くて危ない」という1本にまとまる。
+                    bool harsh = k == free;
+                    for (int i = 0; i < lens[k]; i++)
                     {
                         var sq = Filler(rng, harsh);
-                        sq.Row = root + 2 + i;
-                        sq.Lane = lanes[k];
+                        // ⭐ **1つの道の中は隣り合わせ。**ここが「数え間違えない」の要
+                        sq.Row = root + 1 + i;
+                        sq.Lane = lane[k];
                         squares.Add(sq);
                     }
                 }
 
                 int next = squares.Count;
-                squares.Add(new Square { Row = root + 2 + lane, Lane = 0 });
+                squares.Add(new Square { Row = root + span + 1, Lane = 0 });
 
-                // ── 大きい分かれ道 ────────────────────────
-                // ⭐ **内から外へ、段が下がる。**⚠️ 0 まで下がった道には関門が無い
-                //    ── これが「遠回りの道には関門を少なく」（作者の指示）の形。
-                // ⭐ 大きい分かれ道から合流まで: 中段1 ＋ 車線 lane ＋ 合流1
-                Gates(rng, squares[hub], mids, tier, Trail.GradeTop, lane + 2);
+                // ── 関門を付ける ───────────────────────────
+                Gates(rng, squares[hub], heads, lens, free, tier);
 
-                // ── 中段から車線へ ────────────────────────
-                for (int k = 0; k < top; k++)
+                for (int k = 0; k < ways; k++)
                 {
-                    bool split = top == 2 || k == splitAt;
-                    if (split)
-                    {
-                        // ⭐ 2本に割る。⚠️ 割った先は隣り合う2車線
-                        //    ⚠️ **この中段も分かれ道**なので、忘れずに数える
-                        junctions.Add(mids[k]);
-                        int first = top == 2 ? k * 2 : (k == 0 ? 0 : 2);
-                        // ⭐ 中段から合流まで: 車線 lane ＋ 合流1
-                        Gates(rng, squares[mids[k]],
-                            new[] { heads[first + 1], heads[first] }, tier, Trail.GradeSub,
-                            lane + 1);
-                    }
-                    else
-                    {
-                        // ⚠️ 割らない枝は、そのまま1本の車線へ（関門は無い）
-                        int only = k == 0 ? 0 : (k == top - 1 ? 3 : 1 + k - 1);
-                        squares[mids[k]].Ways.Add(new Way(heads[only], length: lane + 1));
-                    }
-                }
-
-                for (int k = 0; k < 4; k++)
-                {
-                    for (int i = 0; i < lane; i++)
+                    for (int i = 0; i < lens[k]; i++)
                     {
                         squares[heads[k] + i].Ways.Add(new Way(
-                            i + 1 < lane ? heads[k] + i + 1 : next));
+                            i + 1 < lens[k] ? heads[k] + i + 1 : next));
                     }
                 }
 
@@ -543,34 +538,35 @@ namespace EggCommand.Core
             return new Trail(squares, tier, junctions);
         }
 
-        /// <summary>中段のマスをどの車線に置くか。⭐ 内から外へ均等に散らす。</summary>
-        private static int MidLane(int k, int many) =>
-            many <= 1 ? 0 : -2 + k * 4 / (many - 1);
-
         /// <summary>分かれ道に関門を付ける。
         ///
-        /// ⭐ **内から外へ、段が <see cref="Trail.GradeStep"/> ずつ下がる。**
-        /// ⚠️ 0 まで下がった道には関門を付けない ── これが
-        /// 「遠回りの道には関門を少なく」（作者の指示 2026-08-20）の形。
-        /// ⭐ 段の数だけで決まるので、道の本数が 2本でも 3本でも同じ規則で通る。
-        /// ⚠️ ステは道ごとに変える（同じだと「どっちが安いか」だけになる）。</summary>
-        /// <param name="steps">その道を選ぶと合流まで何マスか。⚠️ 画面が「あと何マス」と出す。</param>
-        private static void Gates(Rng rng, Square from, IReadOnlyList<int> to, int tier,
-            int topGrade, int steps)
+        /// ⭐ **最上位の決まり: 関門を通らない道が必ず1本あり、それが一番長い**
+        /// （作者の指示 2026-08-20）。⚠️ それより短い道には必ず関門が付く ──
+        /// 「短く済ませたいなら、ステで払え」という形。
+        /// ⭐ 段は**短いほど重い**。本数が 2本でも 4本でも同じ規則で通る。</summary>
+        private static void Gates(Rng rng, Square from, IReadOnlyList<int> heads,
+            IReadOnlyList<int> lens, int free, int tier)
         {
             var kinds = new[] { GimmickKind.Wall, GimmickKind.Damage, GimmickKind.Pressure };
             int pick = rng.Int(0, kinds.Length);
-            for (int k = 0; k < to.Count; k++)
+            int longest = lens[free];
+
+            for (int k = 0; k < heads.Count; k++)
             {
-                // ⭐ **内が一番重く、外は 0（関門なし）。**あいだは均等に割る。
-                // ⚠️ 「一定ずつ下げる」にしていた頃、2本のときの外側が段3（75%）に残り、
-                //    薄い編成がその場で詰んだ（2026-08-20 に検査が落ちた）。
-                //    ⭐ 本数が変わっても**外は必ず 0**になる形にする。
-                int grade = to.Count <= 1 ? topGrade
-                    : topGrade * (to.Count - 1 - k) / (to.Count - 1);
+                if (k == free)
+                {
+                    // ⭐ 無関門。⚠️ 長さ（振れる回数）だけが代価
+                    from.Ways.Add(new Way(heads[k], kinds[pick % kinds.Length], 0, lens[k] + 1));
+                    continue;
+                }
+                // ⭐ **短いほど重い。**縮めた段数がそのまま段になる
+                int saved = longest - lens[k];
+                int grade = saved * Trail.GradePerStep;
+                if (grade < 1) grade = 1;
+                if (grade > Trail.GateGrades) grade = Trail.GateGrades;
                 var gate = kinds[(pick + k) % kinds.Length];
-                from.Ways.Add(new Way(to[k], gate,
-                    Trail.PriceOfGrade(gate, tier, grade), steps, grade));
+                from.Ways.Add(new Way(heads[k], gate,
+                    Trail.PriceOfGrade(gate, tier, grade), lens[k] + 1, grade));
             }
         }
 

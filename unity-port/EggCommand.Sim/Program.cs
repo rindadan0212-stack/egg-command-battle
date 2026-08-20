@@ -985,7 +985,7 @@ namespace EggCommand.Sim
             Console.WriteLine();
             Console.WriteLine("■ 指し手を変えて回す（段5・6000回・雑魚に 8% 負ける想定）");
             Console.WriteLine($"  {"指し手",-20}{"卵",7}{"詰み",8}{"敵に負け",10}{"力尽き",9}"
-                + $"{"近い道",8}{"遠い道",8}{"倒した",7}");
+                + $"{"関門つき",8}{"関門なし",8}{"倒した",7}");
             foreach (var move in moves)
                 Console.WriteLine("  " + RunTrail(seed, 5, move.Name, move.Pick, 6000));
 
@@ -1274,8 +1274,9 @@ namespace EggCommand.Sim
                 else spent++;
                 foreach (var pair in raid.Took)
                 {
-                    var ways = raid.Trail.Squares[pair.Key].Ways;
-                    if (ways[pair.Value].Length <= ways[1 - pair.Value].Length) near++; else far++;
+                    // ⚠️ **2本前提で数えない**（本数は 2〜4 で毎回変わる・2026-08-20）。
+                    // ⭐ いま意味があるのは「関門を通ったか」なので、そちらを数える。
+                    if (raid.Trail.Squares[pair.Key].Ways[pair.Value].IsGated) near++; else far++;
                 }
                 mobs += raid.Beaten.Count;
             }

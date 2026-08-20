@@ -139,23 +139,62 @@ public class TrailTests
                         Assert.True(way.To > i, $"道が後ろへ向いている: {i} → {way.To}");
 
                     if (!sq.IsJunction) continue;
-                    Assert.Equal(2, sq.Ways.Count);
-                    var near = sq.Ways[0];
-                    var far = sq.Ways[1];
-                    // ⭐ 近い道は必ず短い
-                    Assert.True(near.Length < far.Length, "近い道が遠い道より長い");
-                    // ⭐ 2本は必ず違うステを要求する（種類を比べる場面を作るため）
-                    Assert.NotEqual(near.Gate, far.Gate);
-                    Assert.True(near.IsGated && far.IsGated, "関門の無い道がある");
-                    Assert.InRange(near.Length - 1, Trail.ShortMin, Trail.ShortMax);
-                    Assert.InRange(far.Length - 1, Trail.LongMin, Trail.LongMax);
+                    // ⭐ 分かれ道は 2〜4本（2026-08-20・作者の指示「4に縛らない」）
+                    Assert.InRange(sq.Ways.Count, Trail.WaysMin, Trail.WaysMax);
 
-                    int nearFair = Trail.PriceFor(near.Gate, tier, Trail.ShortShare);
-                    int farFair = Trail.PriceFor(far.Gate, tier, Trail.LongShare);
-                    Assert.InRange(near.Requires,
-                        nearFair * Trail.PriceLow / 100, nearFair * Trail.PriceHigh / 100);
-                    Assert.InRange(far.Requires,
-                        farFair * Trail.PriceLow / 100, farFair * Trail.PriceHigh / 100);
+                    // ⭐ **最上位の決まり: 関門を通らない道が必ず1本、かつ一番長い。**
+                    int free = 0, longest = 0;
+                    foreach (var way in sq.Ways)
+                    {
+                        if (!way.IsGated) free++;
+                        if (way.Length > longest) longest = way.Length;
+                    }
+                    Assert.True(free == 1, $"関門を通らない道が {free} 本（1本でなければならない）");
+                    foreach (var way in sq.Ways)
+                    {
+                        if (way.IsGated)
+                        {
+                            Assert.True(way.Length < longest,
+                                "関門つきの道が、関門なしの道より短くない");
+                        }
+                        else
+                        {
+                            Assert.Equal(longest, way.Length);
+                        }
+                    }
+
+                    // ⚠️ **要る量は段だけで決まる**（揺らぎを掛けない）
+                    foreach (var way in sq.Ways)
+                    {
+                        Assert.Equal(Trail.PriceOfGrade(way.Gate, tier, way.Grade), way.Requires);
+                        Assert.Equal(way.Grade > 0, way.IsGated);
+                        if (way.Grade > 0)
+                        {
+                            Assert.True(way.Requires % Trail.PriceRound == 0,
+                                $"要る量が {Trail.PriceRound} の倍数でない: {way.Requires}");
+                        }
+                    }
+                }
+
+                // ⭐ **道の中では、マスが隣り合っている。**
+                // ⚠️ ここが崩れると「出目のぶん進んでいない」と見える。
+                //    ⭐ 長さの差は**合流の1本の繋ぎ**に寄せてあるので、
+                //    段が飛ぶのは「合流へ入る繋ぎ」だけ。
+                for (int i = 0; i < trail.Count; i++)
+                {
+                    var from = trail.Squares[i];
+                    foreach (var way in from.Ways)
+                    {
+                        int gap = trail.Squares[way.To].Row - from.Row;
+                        Assert.True(gap >= 1, $"{i} → {way.To} が前へ進んでいない");
+                        // ⚠️ 分かれ道から入るときと、合流へ出るときだけ段が飛んでよい
+                        bool edge = from.IsJunction || trail.Squares[way.To].Lane == 0;
+                        if (!edge)
+                        {
+                            Assert.True(gap == 1,
+                                $"道の途中で {gap} 段ぶん飛んでいる（{i} → {way.To}）");
+                        }
+                    }
                 }
 
                 // ⚠️ 卵は最後の1マスだけ
