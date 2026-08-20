@@ -41,3 +41,40 @@ CC0 の範囲で太枠を持つセットは見つからなかったため、
 - 影が**下方向だけ**入っているので、9スライスの下辺は影を含む太さにする
 - 白い器には枠が無い。**淡い地の上では輪郭が消える**ので、地の色は器と差を付ける
 - ドット絵ではないので Point フィルタにしない（Bilinear のまま）
+
+---
+
+## Board Game Icons 1.1（Kenney）
+
+| | |
+|---|---|
+| 出所 | https://kenney.nl/assets/board-game-icons |
+| ライセンス | **CC0 1.0 Universal**（zip 内 `License.txt` に明記）|
+| 取得したファイル | `kenney_board-game-icons.zip`（1.04 MB）|
+| 取得日 | 2026-08-20 |
+
+⚠️ **zip には `.swf` と `.url` が入っている。**
+`Vector/overview.swf` / `Visit Kenney.url` / `Visit Patreon.url` の3つは
+**取り込んでいない**（PNG 以外は入れない）。取り込む前に PNG の頭 8 バイトも確かめてある。
+
+⭐ 絵は**白の抜き（透過）**。色は Unity 側で `Image.color` を掛けて出す。
+128px 版を使用（`PNG/Double (128px)/`）。
+
+### 使っているもの（`Resources/UI/icon/`）
+
+| ファイル | 元 | 役割 |
+|---|---|---|
+| `die-1`〜`die-6` | dice_1〜dice_6 | さいころの出目 |
+| `die` / `die-spent` | dice / dice_empty | ⭐ **残りの回数**（使うと空になる）|
+| `stat-atk` | sword | 壁＝攻撃 |
+| `stat-hp` | suit_hearts | 床＝HP |
+| `stat-def` | shield | 重圧＝防御 |
+| `locked` | lock_closed | ⚠️ **通れない**（字で書かない）|
+| `mob` | skull | 敵のマス |
+| `goal` | flag_triangle | 卵（ゴール）|
+| `plain` | token | 何も無いマス |
+| `up` / `down` | direction_n / direction_s | ステが上がる / 下がる |
+| `pawn` | pawn | 駒（予備）|
+
+⭐ **上の帯と盤で同じ絵を使う。**「壁 ＝ 剣の絵 ＝ 攻撃」を字で説明せず、
+同じ絵が両方に出ていることで結び付ける。

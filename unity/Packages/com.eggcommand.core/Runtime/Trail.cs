@@ -237,6 +237,9 @@ namespace EggCommand.Core
         public int At;
         /// <summary>あと何回振れるか。⚠️ 0 になって届いていなければ親が帰ってくる。</summary>
         public int Rolls;
+        /// <summary>始めたときの回数。⭐ **画面がさいころを何個並べるか**の元。
+        /// ⚠️ 画面側で推測させない（推測させたら、雑魚で回数が戻った日にずれる）。</summary>
+        public readonly int Given;
         /// <summary>編成の合計ステ。⚠️ **減らない** ── 関門は「足りているか」だけを見る。</summary>
         public StatBlock Pool;
         /// <summary>一時的な増減（%）。</summary>
@@ -271,6 +274,7 @@ namespace EggCommand.Core
             Trail = trail;
             Party = party;
             Rolls = rolls;
+            Given = rolls;
             Pool = pool;
             Temp = new StatBlock(0, 0, 0, 0);
             TempLeft = new StatBlock(0, 0, 0, 0);

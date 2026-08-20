@@ -20,10 +20,12 @@ namespace EggCommand.View
         /// <summary>目が切り替わる間隔。</summary>
         private const float Flick = 0.055f;
 
-        /// <summary>目の字。⚠️ <see cref="Core.Trail.Pips"/> ぶん要る。</summary>
-        private static readonly string[] Faces = { "", "１", "２", "３", "４", "５", "６" };
+        /// <summary>目の絵（`Resources/UI/icon/die-N`）。
+        /// ⚠️ 字で「５」と出さない ── ⭐ **さいころの面をそのまま見せる**
+        /// （上の帯に並ぶ残りのさいころと同じ絵なので、結び付けの説明が要らない）。</summary>
+        private static string FaceOf(int pips) => "die-" + pips;
 
-        private Text _face;
+        private Image _face;
         private RectTransform _box;
         private int _result;
         private float _age;
@@ -57,13 +59,13 @@ namespace EggCommand.View
             plate.type = Image.Type.Sliced;
             plate.raycastTarget = false;
 
-            var face = Ui.Label(box, "Face", "", 150, Ui.Ink, TextAnchor.MiddleCenter,
-                0f, 0f, size, size);
-            face.horizontalOverflow = HorizontalWrapMode.Overflow;
+            const float art = 190f;
+            var face = Ui.Icon(box, "Face", "die", Ui.Ink,
+                (size - art) / 2f, (size - art) / 2f, art);
 
             dice._face = face;
             dice._box = box;
-            dice._result = Mathf.Clamp(result, 1, Mathf.Min(Core.Trail.Pips, Faces.Length - 1));
+            dice._result = Mathf.Clamp(result, 1, Core.Trail.Pips);
             dice._onDone = onDone;
         }
 
@@ -79,8 +81,8 @@ namespace EggCommand.View
                 {
                     _flicked = 0f;
                     // ⚠️ 乱数を引かない。回っている見た目だけなので順に回す
-                    _shown = _shown % Mathf.Min(Core.Trail.Pips, Faces.Length - 1) + 1;
-                    if (_face != null) _face.text = Faces[_shown];
+                    _shown = _shown % Core.Trail.Pips + 1;
+                    if (_face != null) _face.sprite = Ui.SkinSprite("icon/" + FaceOf(_shown));
                 }
                 // ⭐ だんだん小さくなって、止まる所へ収まる
                 if (_box != null)
@@ -91,9 +93,10 @@ namespace EggCommand.View
                 return;
             }
 
-            if (_face != null && _face.text != Faces[_result])
+            if (_face != null && _shown != _result)
             {
-                _face.text = Faces[_result];
+                _shown = _result;
+                _face.sprite = Ui.SkinSprite("icon/" + FaceOf(_result));
                 if (_box != null)
                 {
                     _box.localScale = Vector3.one;

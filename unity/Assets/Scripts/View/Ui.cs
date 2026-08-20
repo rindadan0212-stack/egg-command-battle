@@ -431,6 +431,47 @@ namespace EggCommand.View
             if (label != null) label.GetComponent<Text>().fontSize = size;
         }
 
+        /// <summary>9スライスの面を1枚置く。⭐ **素材の器をそのまま使うための入口。**
+        ///
+        /// ⚠️ 素の <see cref="Image"/> に色を塗ると、角が立った「手で描いた四角」になる。
+        /// ⭐ ここを通せば、丸角と影の付いた素材（Hyper Casual UI / CC0）の面になる。</summary>
+        public static RectTransform Plate(Transform parent, string name, string skin, Color tint,
+            float left, float top, float width, float height)
+        {
+            var rect = Rect(name, parent);
+            Place(rect, left, top, width, height);
+            var image = rect.gameObject.AddComponent<Image>();
+            image.sprite = SkinSprite(skin);
+            image.type = Image.Type.Sliced;
+            image.pixelsPerUnitMultiplier = 1f;
+            image.color = tint;
+            image.raycastTarget = false;
+            return rect;
+        }
+
+        /// <summary>絵の札を1つ置く（`Resources/UI/icon/*`）。
+        ///
+        /// ⭐ **字の代わりに絵を置くための唯一の入口。**素材（Kenney Board Game Icons / CC0）は
+        /// **白の抜き**なので、色を掛けて出す ── 明るい器の上では濃く、暗い器の上では白く。
+        ///
+        /// ⚠️ 同じものには**必ず同じ絵**を使う。上の帯の「攻撃」と盤の「壁」が同じ剣なら、
+        /// 字で結び付けを説明する必要が無くなる。違う絵にした瞬間、説明が要る。</summary>
+        /// <param name="turn">回す角度。⭐ 上向きの矢印は「右向き」を 90 度回して作る
+        /// （⚠️ 上下の矢印の素材には字が入っていて、字を消す方針に反する）。</param>
+        public static Image Icon(Transform parent, string name, string icon, Color tint,
+            float left, float top, float size, float turn = 0f)
+        {
+            var rect = Rect(name, parent);
+            Place(rect, left, top, size, size);
+            if (turn != 0f) rect.localRotation = Quaternion.Euler(0f, 0f, turn);
+            var image = rect.gameObject.AddComponent<Image>();
+            image.sprite = SkinSprite("icon/" + icon);
+            image.color = tint;
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+            return image;
+        }
+
         /// <summary>ドット絵を貼る。⚠️ 補間しない（<see cref="PixelSpriteTexture"/> が保証する）。</summary>
         public static Image Pixel(Transform parent, string name, PixelSprite sprite, Palette palette,
             float left, float top, float size)
