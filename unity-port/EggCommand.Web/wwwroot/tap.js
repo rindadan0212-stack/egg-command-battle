@@ -20,4 +20,18 @@ window.eggTap = {
     }
     document.addEventListener('pointerup', this._on, true)
   },
+
+  /** 帯だけ差し替える。
+   *
+   * ⚠️ 🔴 **画面を組み直さないために在る。**
+   * ⭐ 毎秒10回組み直すと、押しどころが作り直されて**触れなくなる**
+   *   （Unity 版の `UnitStand.Retick` が同じ理由で分けてある）。
+   *
+   * @param {Record<string, number>} bars id → 0〜1 */
+  bars(bars) {
+    for (const id in bars) {
+      const el = document.getElementById(id)
+      if (el) el.style.width = (bars[id] * 100) + '%'
+    }
+  },
 }

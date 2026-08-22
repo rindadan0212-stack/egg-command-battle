@@ -46,8 +46,12 @@ public static class Board
     }
 
     /// <summary>盤ぜんぶ。⭐ 線 → マス → 駒 の順に重ねる。</summary>
-    public static string Draw(Raid raid)
+    /// <param name="open">行ける先。⚠️ null なら選んでいない。
+    /// ⭐ **行けるマスだけを光らせる** ── 字で「選んでください」と書かない。</param>
+    public static string Draw(Raid raid, List<List<int>>? open = null)
     {
+        var lit = new HashSet<int>();
+        if (open != null) foreach (var path in open) lit.Add(path[path.Count - 1]);
         var trail = raid.Trail;
         var spots = Lay(trail, out float tall);
         var sb = new StringBuilder();
@@ -61,7 +65,7 @@ public static class Board
             foreach (var way in trail.Squares[i].Ways)
                 sb.Append(Link(spots[i], spots[way.To], Behind(raid, i) ? .10 : .42));
 
-        for (int i = 0; i < trail.Count; i++) sb.Append(Cell(raid, i, spots[i]));
+        for (int i = 0; i < trail.Count; i++) sb.Append(Cell(raid, i, spots[i], lit.Contains(i)));
 
         // ⭐ 駒は一番上（いま居る所）
         int at = raid.At;
@@ -81,7 +85,7 @@ public static class Board
     private static bool Behind(Raid raid, int i) =>
         raid.Took.ContainsKey(i) || raid.Trail.Squares[i].Row < raid.Trail.Squares[raid.At].Row;
 
-    private static string Cell(Raid raid, int index, Spot at)
+    private static string Cell(Raid raid, int index, Spot at, bool lit)
     {
         var sq = raid.Trail.Squares[index];
         bool behind = Behind(raid, index);
@@ -93,7 +97,7 @@ public static class Board
 
         var sb = new StringBuilder();
         sb.Append("<div id=\"sq#").Append(index)
-          .Append("\" class=\"n card").Append(behind ? " gone" : "")
+          .Append("\" class=\"n card").Append(behind ? " gone" : "").Append(lit ? " lead" : "")
           .Append(sq.Kind == SquareKind.Mob && !beaten ? " dark" : "")
           .Append("\" style=\"left:").Append(Px(at.X)).Append(";top:").Append(Px(at.Y))
           .Append(";width:").Append(Px(CellW)).Append(";height:").Append(Px(CellH))

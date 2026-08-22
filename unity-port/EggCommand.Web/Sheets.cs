@@ -245,7 +245,7 @@ public static class Sheets
             Count = key => key switch { "dice" => show, "purse" => keys.Length, _ => 0 },
             At = (key, i) => { if (key == "dice") die = i; else purse = i; },
 
-            Inside = key => key == "ground" ? Board.Draw(raid) : "",
+            Inside = key => key == "ground" ? Board.Draw(raid, s.Open_) : "",
 
             Text = key => key switch
             {
@@ -254,6 +254,10 @@ public static class Sheets
                 // ⚠️ **`Usable` で出す。**⭐ 払ったぶんを引き、一時増減を掛けた
                 //    「いま実際に出せる額」でないと、関門の数と見比べられない。
                 "pursen" => Face.Digits(Shown(keys[purse], Trails.Usable(raid, keys[purse]))),
+                // ⭐ 関門で払う量と、もらえる物
+                "payn" => Toll_(raid) is Toll t
+                    ? Face.Digits(Shown(Trails.StatOf(t.Kind), t.Price)) : "",
+                "paygot" => Gift_(raid) is Gift g ? Word(g) : "",
                 _ => "",
             },
 
@@ -262,6 +266,7 @@ public static class Sheets
             {
                 "die" => die < raid.Rolls ? "die" : "die-spent",
                 "purse" => Board.IconOf(keys[purse]),
+                "paypic" => Toll_(raid) is Toll t ? Board.IconOf(Trails.StatOf(t.Kind)) : "plain",
                 _ => null,
             },
             Tint = key => key switch
@@ -280,11 +285,15 @@ public static class Sheets
                 "more" => had > show,
                 // ⚠️ **振れるのは Moved のときだけ。**⭐ 他の段で釦を出すと、
                 //    押した瞬間に `Trails.Roll` が撥ねて進行不能に見える。
-                "canroll" => raid.Result == null && raid.Step == RaidStep.Moved,
+                // ⭐ 関門で選んでいるあいだは、振る釦を引っ込める
+                "offer" => raid.Step == RaidStep.Offered,
                 _ => false,
             },
 
-            Tappable = key => key != "roll" || raid.Rolls > 0,
+            // ⚠️ **振れるのは Moved のときだけ**（他の段で押せると
+            //    `Trails.Roll` が樰ねて進行不能に見える）。⭐ 出すが、押せない。
+            Tappable = key => key != "roll"
+                || (raid.Rolls > 0 && raid.Result == null && raid.Step == RaidStep.Moved),
         });
 
         static string Temp(Raid raid, StatKey key)
@@ -296,6 +305,20 @@ public static class Sheets
         // ⚠️ HP だけ桁が違う（画面に出る HP は ×105）
         static int Shown(StatKey key, int value) =>
             key == StatKey.Hp ? value * EggCommand.Core.Battle.HpScale : value;
+
+        static Toll? Toll_(Raid r) =>
+            r.Step == RaidStep.Offered ? r.Trail.Squares[r.At].Toll : null;
+        static Gift? Gift_(Raid r) =>
+            r.Step == RaidStep.Offered ? r.Trail.Squares[r.At].Face : null;
+
+        // ⭐ もらえる物を短く。⚠️ 字で説明しない
+        static string Word(Gift g) => g.Kind switch
+        {
+            GiftKind.Rolls => $"＋{g.Amount}",
+            GiftKind.Hop => $"＋{g.Amount}マス",
+            GiftKind.Stat => $"{(g.Amount < 0 ? "" : "＋")}{g.Amount}%",
+            _ => "",
+        };
     }
 
     // ── 戦闘 ──────────────────────────────────────────────

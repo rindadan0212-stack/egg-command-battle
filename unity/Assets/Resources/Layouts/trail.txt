@@ -31,5 +31,19 @@ board      scroll  0    228   1080 1164
   ground   host    0    0     1080 1164
 
 foot       box     0    1396  1080 392   dock=no bind=board
-  roll     button  48   108   984  150   tap=roll lead=yes when=canroll
+  # ⚠️ **振れないときは灰で出す**（消さない）。
+  #    ⭐ 消えると「この先はどうするのか」が画面から失せる。
+  roll     button  48   108   984  150   tap=roll lead=yes when=!offer
     rollpic icon   448  31    88   88    pic=die ink=on-lead
+
+  # ⭐ **払うか、払わないか。**⚠️ 字で説明しない ──
+  #    左が「払う量」、右が「もらえる物」。矢印が交換の合図。
+  # ⚠️ 押さない選択も**同じ大きさで**置く ── 小さくすると
+  #    「押すのが正解」に見えて、判断そのものが消える。
+  pay      button  48   108   486  150   tap=pay lead=yes when=offer
+    paypic icon    18   49    52   52    bind=paypic
+    payn   label   92   0     180  150   size=32 anchor=left bind=payn
+    payarr icon    280  57    36   36    pic=arrow ink=on-lead
+    paygot label   330  0     140  150   size=32 anchor=left bind=paygot
+  skip     button  546  108   486  150   tap=skip when=offer
+    skippic icon   213  45    60   60    pic=arrow ink=dim

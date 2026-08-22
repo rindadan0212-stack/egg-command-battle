@@ -8,8 +8,9 @@
 <div id="stage-wrap">
   <div id="stage">
     @* ⚠️ **画面を先に、外枠を後に描く。**⭐ 後に描いたものが上に乗るので、
-       下の帯が一覧の上に来る（Unity では外枠が親で、Body がその中だった）。 *@
-    <div id="body" class="n" style="left:0;top:132px;width:1080px;height:1556px;overflow:hidden">
+       下の帯が一覧の上に来る（Unity では外枠が親で、Body がその中だった）。
+       ⚠️ 戦闘と潜入は帯を出さないので、本体が 1788 まで使える。 *@
+    <div id="body" class="n" style="left:0;top:132px;width:1080px;overflow:hidden;height:@(_tall)px">
       @((MarkupString)_body)
     </div>
     @((MarkupString)_frame)
@@ -18,9 +19,9 @@
 
 @if (_say.Length > 0)
 {
-  @* ⚠️ **黙って諦めない。**⭐ 保存できていないことに気づけないほうが困る。 *@
+  @* ⚠️ **黙って諦めない。**⭐ 起きたことに気づけないほうが困る。 *@
   <div id="say" style="position:fixed;left:0;right:0;bottom:0;padding:10px 14px;
-       background:#c0303f;color:#fff;font:14px/1.5 system-ui;z-index:9">@_say</div>
+       background:#2b3350;color:#fff;font:14px/1.5 system-ui;z-index:9">@_say</div>
 }
 
 @code {
@@ -32,7 +33,9 @@
     private Shell _shell = default!;
     private Vault _vault = default!;
     private DotNetObjectReference<AppPage>? _me;
+    private System.Threading.Timer? _clock;
     private string _body = "", _frame = "", _say = "";
+    private int _tall = 1556;
 
     protected override void OnInitialized()
     {
@@ -70,9 +73,44 @@
         _shell.Tap(what, at);
         Draw();
         StateHasChanged();
+        Wind();
         // ⭐ 触るたびに書く。⚠️ 実測 11KB なので、間引く理由が無い
-        //    （中身が変わっていなければ `Vault` が書かずに帰る）。
         await Keep();
+    }
+
+    /// <summary>戦いの時計。⭐ **人の手番では止まる** ── そこが「選ぶ」ところ。
+    ///
+    /// ⚠️ 演出（名乗り・着弾・間の3拍）はまだ無い。⭐ いまは1拍ずつ進めるだけ。
+    /// ⚠️ Unity 版と同じ速さ（1秒に 10.5 拍）に合わせてある。</summary>
+    private void Wind()
+    {
+        _clock?.Dispose();
+        _clock = null;
+        if (_shell.Fight_ == null) return;
+        _clock = new System.Threading.Timer(_ => InvokeAsync(Beat), null, 95, 95);
+    }
+
+    private async Task Beat()
+    {
+        if (_shell.Fight_ == null) { Wind(); return; }
+        var how = Deeds.Beat(_shell, 1);
+
+        // ⚠️ 🔴 **帯が伸びただけなら組み直さない。**⭐ 組み直すと押しどころが
+        //    作り直されて触れなくなる（Unity 版の `UnitStand.Retick` と同じ理由）。
+        if (how == Deeds.Tick.Filling)
+        {
+            await Js.InvokeVoidAsync("eggTap.bars", Deeds.Bars(_shell));
+            return;
+        }
+        // ⚠️ 🔴 **人の手番になったら、時計を止めて、組み直しもしない。**
+        //    ⭐ 押した側は既に描き直している（`Tapped`）ので、ここで重ねると
+        //    **押した直後に部品が入れ替わって触れなくなる**
+        //    （実測 2026-08-22: 押そうとするたび要素が外れ、22回retryして諦めた）。
+        if (how == Deeds.Tick.Stopped) { _clock?.Dispose(); _clock = null; return; }
+
+        Draw();
+        StateHasChanged();
+        if (_shell.Fight_ == null) Wind();
     }
 
     private async Task Keep()
@@ -83,16 +121,22 @@
 
     private void Draw()
     {
+        // ⚠️ 戦闘と潜入は下の帯を出さない ── そのぶん本体が縦に伸びる
+        bool wide = _shell.Now_Sheet is Sheet.Fight or Sheet.Raid;
+        _tall = wide ? 1788 : 1556;
         _body = _shell.Now_Sheet switch
         {
             Sheet.Home => Sheets.Home(_shell),
             Sheet.Nests => Sheets.Wilds(_shell),
             Sheet.Breed => Sheets.Breed(_shell),
             Sheet.Box => Sheets.Box(_shell),
+            Sheet.Raid => Sheets.Raid(_shell),
+            Sheet.Fight => Sheets.Fight(_shell),
             _ => "",
         };
         _frame = _shell.Frame();
+        if (_shell.Say != null) { _say = _shell.Say; _shell.Say = null; }
     }
 
-    public void Dispose() => _me?.Dispose();
+    public void Dispose() { _me?.Dispose(); _clock?.Dispose(); }
 }

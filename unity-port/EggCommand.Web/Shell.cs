@@ -43,6 +43,25 @@ public sealed class Shell
     /// <summary>いまの潜入。⚠️ 無ければ潜っていない。</summary>
     public Raid? Raid_;
 
+    /// <summary>いま挑んでいる巣。⚠️ ヌシのときは null。</summary>
+    public Nest? Nest_;
+    /// <summary>ヌシとの戦いか。</summary>
+    public bool Boss;
+    /// <summary>雑魚戦のマス。⚠️ -1 なら雑魚戦ではない
+    /// （⭐ これで「卵を出すか」が分かれる）。</summary>
+    public int Space = -1;
+    /// <summary>行ける先。⚠️ null なら選んでいない。</summary>
+    public List<List<int>>? Open_;
+    /// <summary>孵化器のどの枠へ入れるか。</summary>
+    public int Aim;
+    /// <summary>狙っている相手と味方。⭐ **別々に覚える**
+    /// ── 1つで兼ねると、敵を選んだまま強化を押したときに黙って別の相手へ飛ぶ。</summary>
+    public string? AimFoe, AimAlly;
+    /// <summary>オートで戦うか。⚠️ 戦闘をまたいで覚えておく。</summary>
+    public bool Auto;
+    /// <summary>画面に出す一言。⚠️ 黙って変わらないことを防ぐ。</summary>
+    public string? Say;
+
     public Shell(Game game, long now) { Game = game; Now = now; }
 
     // ── 一覧 ────────────────────────────────────────
@@ -90,8 +109,22 @@ public sealed class Shell
 
             case "one": Choose(i); break;
 
+            // ── 遊びを動かす ────────────────────────
+            case "nest": Deeds.Dive(this, i); break;
+            case "boss": Deeds.Boss(this); break;
+            case "roll": Deeds.Roll(this); break;
+            case "square": Deeds.Step(this, i); break;
+            case "pay": Deeds.Pay(this); break;
+            case "skip": Deeds.Pass(this); break;
+            case "s0": Deeds.Strike(this, 0); break;
+            case "s1": Deeds.Strike(this, 1); break;
+            case "s2": Deeds.Strike(this, 2); break;
+            case "pick": Auto = !Auto; break;
+            case "finish": Now_Sheet = Sheet.Nests; break;
+
             // ⭐ 空き枠を押したら、そのとき初めて卵の在庫が開く（棚を常に出しておかない）
-            case "slot": Open = Panel.Eggs; break;
+            case "slot": Deeds.Slot(this, i); break;
+            case "egg": Deeds.Warm(this, i); break;
             case "train": Open = Panel.Train; break;
             case "fuse": Open = Panel.Fuse; break;
         }
@@ -159,11 +192,11 @@ public sealed class Shell
             // ⭐ いま居るタブだけ塗る
             Tint = key => key == "tab" && tab == here ? "#f59e0b" : null,
             // ⚠️ タブのある画面に ‹ を出さない ── タブが行き先を全部持っている
-            // ⚠️ **戦闘中は帯を出さない** ── 抜けられると、
-            //    不利な盤面をいつでも無かったことにできてしまう。
             When = key => key switch
             {
-                "dock" => Now_Sheet != Sheet.Fight,
+                // ⚠️ **戦闘中と潜入中は戻れない** ── 抜けられると、
+                //    不利な盤面をいつでも無かったことにできてしまう。
+                "dock" => Now_Sheet is not (Sheet.Fight or Sheet.Raid),
                 _ => false,
             },
             Tappable = key => true,
@@ -177,7 +210,8 @@ public sealed class Shell
         Sheet.Breed => "配合",
         Sheet.Box => "BOX",
         Sheet.Book => "図鑑",
-        Sheet.Fight => "戦闘",
+        Sheet.Fight => Boss ? Nests.BossName : "戦闘",
+        Sheet.Raid => Nest_ != null ? Nest_.Name : "強奪",
         _ => "",
     };
 
