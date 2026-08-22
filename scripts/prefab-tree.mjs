@@ -111,9 +111,14 @@ const say = (id, depth) => {
       .toString(16).padStart(2, '0')).join('')}/a${(+col[4]).toFixed(2)}`
   }
   const stretch = r.aMin && r.aMax && (r.aMin.x !== r.aMax.x || r.aMin.y !== r.aMax.y)
+  // ⚠️ **左上以外に留めてある部品は、書いてある数がそのままの位置ではない。**
+  //    ⭐ 右留め（anchor.x=1）なら「右端から −左」の意味になる。
+  const pinned = !stretch && r.aMin && (r.aMin.x !== 0 || r.aMin.y !== 1)
   const flags = [
     go.active ? '' : '⚠️隠',
     stretch ? `伸(${r.aMin.x},${r.aMin.y}→${r.aMax.x},${r.aMax.y})` : '',
+    pinned ? `留(${r.aMin.x},${r.aMin.y})` : '',
+    r.pivot && (r.pivot.x !== 0 || r.pivot.y !== 1) ? `軸(${r.pivot.x},${r.pivot.y})` : '',
   ].filter(Boolean).join(' ')
   console.log('  '.repeat(depth)
     + (go.name || '(無名)').padEnd(22 - depth * 2)

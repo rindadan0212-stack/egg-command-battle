@@ -1,0 +1,18 @@
+# 探索 ── ⭐ 札は3枚固定
+#
+# ⚠️ 増やすと「全部見てから決める」になり、選択が薄まる。
+# ⭐ この画面で塗るのは**ヌシの札だけ**（輪の目的地は1つしかない）。
+#
+# ⚠️ **巻物に入れてある。**実物は 札3枚（380）＋ヌシ（380）で下端 1604 になり、
+#    下の帯（1556）へ 48 潜っていた。⭐ 骨組みでは巻物に入れて、潜らせない。
+#
+# ⭐ **ヌシは札の後ろに詰める**（`flow=down`）。⚠️ 実物は決め打ちだったので、
+#    巣が2件しか出ていないときに札1枚ぶんの穴が空いていた。
+#
+#  名前    種類    左   上    幅   高    付け足し
+list      scroll  48   24    984  1532
+  stack   box     0    0     984  1620  flow=down
+    card  card    0    0     984  380   repeat=nests cols=1 rows=400 max=3 tap=nest use=encounter
+    boss  card    0    20    984  380   lead=yes tap=boss
+      bart  pixel  40  76    228  228   foe=yes bind=bart
+      bname label  320 148   600  90    size=56 anchor=upper-left bind=bname

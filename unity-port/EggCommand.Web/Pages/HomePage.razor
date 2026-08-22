@@ -8,7 +8,10 @@
 
 @code {
     /// <summary>いくつの枠に卵が入っている状態で描くか。⭐ 空の枠も検査したい。</summary>
-    [SupplyParameterFromQuery] public int Eggs { get; set; } = 3;
+    // ⚠️ **問い合わせに無い値は、型の既定で**上書き**される。**
+    // ⭐ だから `int?` で受けて、既定をこちらで決める
+    // （実測 2026-08-22: `= 2` と書いた既定が 0 になり、枝を一度も描いていなかった）。
+    [SupplyParameterFromQuery] public int? Eggs { get; set; }
 
     private string _html = "";
 
@@ -23,7 +26,7 @@
         // ⭐ 卵をいくつか温めている状態を作る（決まった引きで）。
         // ⚠️ 入れる前に**棚へ載せる** ── `Hatchery.Begin` は棚から取る作り。
         // ⭐ 始めた時刻をずらして、進み具合の違う枠を並べる（帯を見るため）。
-        int want = Math.Clamp(Eggs, 0, Hatchery.Slots);
+        int want = Math.Clamp(Eggs ?? 3, 0, Hatchery.Slots);
         var nest = Nests.ById("shallow-scale");
         for (int i = 0; i < want; i++)
         {

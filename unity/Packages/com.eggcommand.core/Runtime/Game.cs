@@ -139,6 +139,16 @@ namespace EggCommand.Core
         /// ⭐ 体数を変えたとき、比例して動かすための分母。</summary>
         public const int CalibratedParty = 3;
 
+        /// <summary>一度にまとめて選べる数（分解・技を鍛える）。
+        ///
+        /// ⭐ **1体ずつだと保管庫を空けるのに何十回も往復する**ので、まとめて選ばせる。
+        /// ⚠️ **取り消せない操作**なので、増やすなら確認を挟むこと。
+        ///
+        /// ⚠️ **View に2つ持たせない。**⭐ 分解（`FusePanel`）とたまご（`SkillEggPanel`）が
+        /// 「揃える」と書いて別々に 10 を持っていた ── 片方だけ直せば黙って食い違う。
+        /// これは遊びの規則なので Core が唯一の出所になる。</summary>
+        public const int PickAtOnce = 10;
+
         /// <param name="nowUnix">いまの時刻。⚠️ **渡さないと開幕の3件が永久に消えません**
         /// （期限 0 ＝「期限を持たない」扱いになるため）。⭐ 既定 0 は較正済みの照合のため。</param>
         /// <param name="startWith">最初に持つ体数。⚠️ **0 なら <see cref="PartySize"/>。**

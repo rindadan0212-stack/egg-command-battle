@@ -1,0 +1,79 @@
+@page "/fuse"
+@using EggCommand.Core
+@using EggCommand.Web
+
+<div id="stage-wrap">
+  <div id="stage">@((MarkupString)_html)</div>
+</div>
+
+@code {
+    /// <summary>何体えらんだ状態で描くか。⭐ 0体（押せない）も検査したい。</summary>
+    // ⚠️ 問い合わせに無い値は型の既定で上書きされるので `int?` で受ける
+    [SupplyParameterFromQuery] public int? Picked { get; set; }
+    /// <summary>候補が居ない状態を出すか。⭐ 「壊れている」に見えない形を確かめる。</summary>
+    [SupplyParameterFromQuery] public bool Empty { get; set; }
+
+    private string _html = "";
+
+    protected override void OnParametersSet()
+    {
+        var game = Demo.Game();
+        var sorted = Demo.Sorted(game);
+        var eater = sorted[0];
+        // ⚠️ 出さないのは**いま見ている本人だけ**（見ている札が消えるのを防ぐ）。
+        //    ⭐ 出撃中の個体も候補に出す ── 外していた頃は、手持ちが少ない序盤に
+        //    1体も選べず何もできなかった。出撃中は升に印で出す。
+        var pool = Empty ? new List<Creature>()
+            : sorted.Where(c => c.Id != eater.Id).ToList();
+
+        int picked = Math.Clamp(Picked ?? 3, 0, Math.Min(Games.PickAtOnce, pool.Count));
+        // ⭐ 分解で入るのは EXP だけ。⚠️ 誰に使うかはここで決めない
+        int exp = pool.Take(picked).Sum(Levels.DissolveExpOf);
+
+        int at = 0;
+        var cells = new Face[pool.Count];
+
+        _html = LayoutDom.Render(LayoutStore.Of("fuse"), new DomFill
+        {
+            Count = key => key == "box" ? pool.Count : 0,
+            At = (key, i) => at = i,
+
+            Text = key => key switch
+            {
+                "who" => $"{Creatures.SpeciesOf(eater).Name}  "
+                    + $"Lv {Levels.Of(eater)}/{Levels.MaxOf(eater)}"
+                    + $"　　持っている EXP {Face.Digits(game.Idle.Exp)}",
+                "gain" => $"選んだ {picked}/{Games.PickAtOnce} 体で  EXP ＋{Face.Digits(exp)}",
+                "go" => picked > 0 ? $"分解する（EXP ＋{Face.Digits(exp)}）" : "分解する",
+                "cell-star" => Face.Star(pool[at]),
+                // ⭐ 一言は「分解したら何 EXP になるか」。
+                // ⚠️ **出撃中は分解する前に分かるようにする**（分解すると失われる）
+                "cell-note" => (Games.IsInParty(game, pool[at].Id) ? "出撃中  " : "")
+                    + $"EXP {Face.Digits(Levels.DissolveExpOf(pool[at]))}",
+                _ => "",
+            },
+
+            Sprite = key => key == "cell-art" ? Cell(at).Sprite : null,
+            Palette = key => key == "cell-art" ? Cell(at).Palette : null,
+
+            Tint = key => key switch
+            {
+                "cell-elem" => Face.ElementCss(pool[at].Element),
+                "cell-note" => Games.IsInParty(game, pool[at].Id) ? "#c0303f" : null,
+                _ => null,
+            },
+
+            When = key => key switch
+            {
+                "any" => pool.Count > 0,
+                "cell-picked" => at < picked,
+                "cell-note" => true,
+                _ => false,
+            },
+
+            Tappable = key => key != "fuse" || picked > 0,
+        });
+
+        Face Cell(int i) => cells[i] ??= new Face(pool[i]);
+    }
+}

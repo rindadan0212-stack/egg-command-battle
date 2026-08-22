@@ -12,8 +12,11 @@
     /// <summary>どの枠に入っているか。⚠️ **枠1（0）は CT を 0 で出す。**
     /// ⭐ 技の表の数をそのまま出すと画面が嘘をつく（実測 2026-08-22:
     /// BOX の札は「CT0」、長押しの詳細は「CT 3」と出ていた）。</summary>
-    [SupplyParameterFromQuery] public int Slot { get; set; } = -1;
-    [SupplyParameterFromQuery] public int Level { get; set; } = 1;
+    // ⚠️ **問い合わせに無い値は、型の既定で**上書き**される。**
+    // ⭐ だから `int?` で受けて、既定をこちらで決める
+    // （実測 2026-08-22: `= 2` と書いた既定が 0 になり、枝を一度も描いていなかった）。
+    [SupplyParameterFromQuery] public int? Slot { get; set; }
+    [SupplyParameterFromQuery] public int? Level { get; set; }
 
     private string _html = "";
 
@@ -22,6 +25,8 @@
         var all = Skills.All;
         var skill = all[Math.Clamp(At, 0, all.Count - 1)];
         var power = SkillText.PowerOf(skill);
+        int slot = Slot ?? -1;
+        int level = Math.Max(1, Level ?? 1);
 
         _html = LayoutDom.Render(LayoutStore.Of("skillinfo"), new DomFill
         {
@@ -29,12 +34,12 @@
             {
                 "name" => skill.Name,
                 // ⭐ Lv・CT・威力を1行に。⚠️ 3行に割ると札より縦に長い覆いになる
-                "meta" => $"Lv {Math.Max(1, Level)} / {Skills.MaxLevel}"
-                    + $"　CT {(Slot == 0 ? 0 : skill.Ct)}"
+                "meta" => $"Lv {level} / {Skills.MaxLevel}"
+                    + $"　CT {(slot == 0 ? 0 : skill.Ct)}"
                     + (power.Length > 0 ? $"　威力 {power}" : ""),
                 "body" => SkillText.Describe(skill),
                 // ⚠️ 「上げると強くなる」と書かない。⭐ Lv2→Lv5 の実数を並べる
-                "steps" => SkillText.StepsOf(skill, Slot),
+                "steps" => SkillText.StepsOf(skill, slot),
                 _ => "",
             },
             Tappable = key => true,

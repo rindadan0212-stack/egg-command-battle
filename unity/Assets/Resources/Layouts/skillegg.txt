@@ -1,0 +1,27 @@
+# 技を鍛える ── ⭐ **孵さない卵の唯一の出口**
+#
+# ⭐ ★＝強さ を成立させている支え。★5 は「2時間待って強い個体」と
+#    「いま技を1段上げる」の二択になり、どちらも正解でありうる。
+#
+# ⭐ **選んでから、最後に「強化する」を押す**（2026-08-21・作者の指示）。
+# ⚠️ 直す前は押した瞬間に入っていたので、10個入れるには10回押すことになり、
+#    そのたびに裏でレベルが上がっていた。入れた卵は戻らない。
+#
+#  名前    種類    左   上    幅   高    付け足し
+dim       veil    0    0     1080 1920
+panel     card    48   200   984  1520
+  title   label   24   24    936  56    size=40 anchor=upper-left text=技を鍛える
+  who     label   24   86    936  40    size=26 ink=dim anchor=upper-left bind=who
+
+  # ⭐ 注ぐ先の3枠。⚠️ 「あと少し」と書かない ── 要る数を出せば足りる
+  row     button  24   148   936  112   repeat=slots cols=1 rows=124 max=3 tap=row bind=row
+    rname label   24   0     420  112   size=30 anchor=left bind=rname
+    rlv   label   460  0     160  112   size=30 anchor=center bind=rlv
+    rneed label   652  0     260  112   size=26 anchor=right bind=rneed
+
+  head    label   24   532   936  36    size=26 ink=dim anchor=upper-left bind=head
+  eggs    scroll  24   580   936  656
+    chip  card    6    6     216  156   repeat=eggs cols=4 gap=12 rows=168 tap=egg use=eggchip
+
+  go      button  24   1260  936  112   size=34 tap=feed lead=yes bind=go
+  close   button  24   1384  936  112   size=34 tap=close text=閉じる

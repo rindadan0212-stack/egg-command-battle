@@ -1,0 +1,16 @@
+# 孵化器の空き枠に入れる卵を選ぶ覆い
+#
+# ⚠️ **覆いは画面いっぱいに出す。**以前はホームの本体の中に置いていたので、
+#    上段の見出しと下段の 探索/配合/BOX が**そこだけ明るいまま押せた**。
+# ⚠️ 閉じる押しどころを**目に見える形で置く** ── 以前は「地を押せば閉じる」だけで、
+#    閉じ方が画面のどこにも書いていなかった。
+#
+#  名前    種類    左   上    幅   高    付け足し
+dim       veil    0    0     1080 1920
+panel     card    48   240   984  1440
+  title   label   24   24    936  56    size=40 anchor=upper-left text=どの卵を温めるか
+  # ⚠️ 「卵がありません」と書かない。⭐ 数を言えば足りる
+  count   label   24   86    936  40    size=26 ink=dim anchor=upper-left bind=count
+  eggs    scroll  24   140   936  1140
+    egg   card    0    0     228  280   repeat=eggs cols=4 gap=4 rows=300 tap=egg use=eggcard
+  close   button  24   1304  936  112   size=34 tap=close text=やめる

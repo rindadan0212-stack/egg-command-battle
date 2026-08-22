@@ -52,6 +52,17 @@ const PAGES = args.length ? args : [
   '/home?eggs=3',
   '/home?eggs=0',
   '/home?eggs=6',
+  // ⭐ 探索と卵の在庫。⚠️ **減ったとき**も見る
+  '/nests',
+  '/nests?shown=1&raids=4',
+  '/eggs?have=7',
+  '/eggs?have=0',
+  // ⭐ 分解と技を鍛える。⚠️ **選んでいない状態**と**候補が0件**も見る
+  '/fuse?picked=3',
+  '/fuse?picked=0',
+  '/fuse?empty=true',
+  '/train?picked=3',
+  '/train?picked=0&have=0',
 ]
 
 /** ⚠️ 実機の幅は 320〜430。⭐ 一番狭いところで測るのが要点（罠22・24・26）。 */

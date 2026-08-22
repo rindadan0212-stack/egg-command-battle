@@ -1,0 +1,16 @@
+# 卵1つの札 ── ⭐ **部品**（器は 228x280）
+#
+# ⚠️ 実物の Prefab は 268 だが、種族名（240 から 34）が**枠から 6px はみ出していた**
+#    ── Unity は枠の外へ字を描くので気づけない形。⭐ 器のほうを 280 にした。
+#
+# ⭐ **何の卵か**を必ず出す（作者の指示 2026-08-22）。
+#    ⚠️ ★も素質も時計も「どれくらい」しか言わず、「何が」を言う字が1つも無かった。
+#
+#  名前   種類    左   上    幅   高    付け足し
+art      pixel   66   16    96   96    bind=art
+elem     round   190  14    24   24    bind=elem
+stars    label   0    116   228  34    size=22 ink=accent anchor=upper-center bind=stars
+# ⭐ 素質は伏せない。手元にある卵なので、どれを先に温めるかの材料になる
+wild     label   0    150   228  48    size=34 anchor=upper-center bind=wild
+wait     label   0    202   228  34    size=22 ink=faint anchor=upper-center bind=wait
+who      label   0    240   228  34    size=24 anchor=center bind=who

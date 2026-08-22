@@ -504,19 +504,21 @@ Unity では GameObject 名が重なってよいので気づけない形です�
 | 3 | SpeciesPanel | ✅ `species.txt`（⭐ `flow=down` の初実戦）|
 | 4 | SkillInfoPanel | ✅ `skillinfo.txt`（⭐ 高さは実測して決め打ち）|
 | 5 | HomeScreen | ✅ `home.txt` + `slot.txt`（⭐ `host` と `bar` の初実戦）|
-| 5b | NestsScreen | 🔴 未 |
+| 5b | NestsScreen | ✅ `nests.txt` + `encounter.txt` |
 | 6 | SortBar | ✅ `sortbar.txt` + `sortchips.txt`（**2枚に割った**・下記）|
 | 7 | PartyPanel / BoxScreen / BreedScreen | ✅ `party.txt` `partyidle.txt` `box.txt` `breed.txt` |
-| 7b | EggPickerPanel | 🔴 未 |
+| 7b | EggPickerPanel | ✅ `eggpicker.txt` + `eggcard.txt` |
 | 8 | `BoxView.Spread()` | ✅ **消えた**（`width=share` は要らなかった ── 出す釦が3枚に固定されたので、位置を3つ書くだけで済む）|
-| 9 | FusePanel / SkillEggPanel | 🔴 未 |
+| 9 | FusePanel / SkillEggPanel | ✅ `fuse.txt` `skillegg.txt` + `eggchip.txt` |
 | Hosted | TrailScreen の盤 / BattleView / UnitStand / IdleStrip | 🔴 未（`host` も未実装）|
 | Frozen | StealScreen | 移さない |
 
-⭐ 部品として切り出したもの: `cell.txt`（升）・`panel.txt` / `panelmini.txt`（1体の札）。
+⭐ 部品として切り出したもの（**7枚**）:
+`cell`（升）/ `panel` `panelmini`（1体の札）/ `sortbar` `sortchips`（並べ替え）/
+`slot`（孵化器）/ `encounter`（巣の札）/ `eggcard` `eggchip`（卵）。
 ⚠️ 図鑑（`book.txt`）は 3-5 の節を見ること。
 
-**検査**: **19画面** × 3サイズ（320/390/430）で **不備 0 件**。
+**検査**: **28画面** × 3サイズ（320/390/430）で **不備 0 件**。
 ⚠️ 「開いた並べ替え」「親が居ない配合」「放置の編成」も**別の1枚として数えている**
 ── `when=` で中身が入れ替わるので、片側しか見ない検査は嘘をつく。
 

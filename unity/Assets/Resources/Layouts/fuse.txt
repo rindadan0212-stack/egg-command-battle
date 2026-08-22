@@ -1,0 +1,25 @@
+# 分解 ── ⭐ **個体を EXP に還す入口**
+#
+# ⚠️ 分解した個体は**失われる**（＝「逃がす」の代わりでもある）。
+# ⭐ 一度に10体まで選べる。1体ずつだと保管庫を空けるのに何十回も往復する。
+# ⚠️ **升そのものがトグル。**押すたびに選ぶ／外すが入れ替わる。
+#
+# ⚠️ **タブの跡の空白（124）を詰めた。**「たまごで技を鍛える」を外した日
+#    （2026-08-22）にタブが消えたが、その高さぶんが空いたままだった。
+#
+#  名前    種類    左   上    幅   高    付け足し
+dim       veil    0    0     1080 1920
+panel     card    48   180   984  1560
+  title   label   24   24    936  56    size=40 anchor=upper-left text=分解
+  # ⭐ 溜まっている EXP を出す。⚠️ 分解の行き先がここだと分かる形にする
+  who     label   24   86    936  40    size=26 ink=dim anchor=upper-left bind=who
+  gain    label   24   150   936  40    size=28 anchor=upper-left bind=gain
+
+  # ⚠️ **候補が0のとき、理由を出す。**空の枠だけ出すと「壊れている」に見える
+  empty   label   24   242   936  100   size=28 ink=dim anchor=upper-center when=!any text=分解できる個体がいません
+  pool    scroll  24   202   936  1086  when=any
+    # ⚠️ 左は 2。⭐ 器が 936 なので 4列（932）の余りは 4 しか無い
+    cell  card    2    0     224  200   repeat=box cols=4 gap=12 rows=212 tap=one use=cell
+
+  go      button  24   1300  936  112   size=34 tap=fuse lead=yes bind=go when=any
+  close   button  24   1424  936  112   size=34 tap=close text=閉じる

@@ -169,6 +169,21 @@ s box    0 0 984 400
         Assert.Equal(new System.Collections.Generic.List<string>(), Layouts.Faults(fine));
     }
 
+    /// <summary>⚠️ 🔴 **左へ寄せた分を数え忘れない。**
+    /// ⭐ 一覧は中央に見せるため左を 2〜26 にずらしてあるので、
+    /// 左を無視すると**右端の1列が黙ってはみ出す**（実測 2026-08-22: 分解の一覧で 22px）。</summary>
+    [Fact]
+    public void 左へ寄せた分も数えて列の収まりを見る()
+    {
+        var bad = Layouts.Parse("t", @"s scroll 0 0 936 400
+  cell card 26 0 224 200 repeat=box cols=4 gap=12");
+        Assert.Contains(Layouts.Faults(bad), p => p.Contains("収まらない"));
+
+        var fine = Layouts.Parse("t", @"s scroll 0 0 936 400
+  cell card 2 0 224 200 repeat=box cols=4 gap=12");
+        Assert.Equal(new System.Collections.Generic.List<string>(), Layouts.Faults(fine));
+    }
+
     // ── ⚠️ 2026-08-22 に塞いだ穴（事前検死とUI設計の指摘）──────
 
     /// <summary>⚠️ **巻物の外で繰り返すなら、何段までかを宣言させる。**

@@ -22,8 +22,9 @@ namespace EggCommand.View
     /// </summary>
     public static class FusePanel
     {
-        /// <summary>一度に分解できる数。⚠️ 取り消せない操作なので、増やすなら確認を挟むこと。</summary>
-        public const int MaxPick = 10;
+        /// <summary>一度に分解できる数。
+        /// ⚠️ **ここで数を持たない** ── 遵びの規則なので Core が唯一の出所。</summary>
+        public const int MaxPick = Games.PickAtOnce;
 
         private const float PanelLeft = 48f;
         private const float PanelTop = 180f;

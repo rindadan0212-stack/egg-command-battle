@@ -22,8 +22,9 @@ namespace EggCommand.View
     /// </summary>
     public static class SkillEggPanel
     {
-        /// <summary>一度に選べる卵の数。⭐ 分解（<see cref="FusePanel.MaxPick"/>）と揃える。</summary>
-        public const int MaxPick = 10;
+        /// <summary>一度に選べる卵の数。
+        /// ⚠️ **分解と「揃える」のではなく、同じ定数を見る**（Core が唯一の出所）。</summary>
+        public const int MaxPick = Games.PickAtOnce;
 
         private const float PanelLeft = 48f;
         private const float PanelTop = 200f;

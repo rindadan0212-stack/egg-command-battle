@@ -505,12 +505,15 @@ namespace EggCommand.Core
             {
                 int cols = node.Number("cols", 1);
                 float gap = node.Number("gap", 0);
-                float need = cols * node.Width + (cols - 1) * gap;
+                // ⚠️ **左のする分を足す。**⭐ 左を 26 へ寄せて中央に見せている
+                //    一覧が多いので、左を無視すると**右端の1列が黙ってはみ出る**
+                //    （実測 2026-08-22: 分解の一覧で 4列目が 22px 出ていた）。
+                float need = node.Left + cols * node.Width + (cols - 1) * gap;
                 if (cols < 1)
                     problems.Add($"{id}/{node.Name}: cols= が {cols}（1以上）");
                 else if (parentW > 0f && need > parentW + 0.5f)
                     problems.Add($"{id}/{node.Name}: {cols}列が親の幅に収まらない"
-                        + $"（要る {need} / 親 {parentW}）");
+                        + $"（左{node.Left} + 要る {need - node.Left} = {need} / 親 {parentW}）");
 
                 // ⚠️ **巻物の外で繰り返すなら、何段までかを宣言させる**（#7）。
                 //    ⭐ 繰り返しの数はデータ次第なので、検査は「何個来るか」を知らない。

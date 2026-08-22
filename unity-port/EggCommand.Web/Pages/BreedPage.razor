@@ -9,7 +9,10 @@
 @code {
     [SupplyParameterFromQuery] public bool Open { get; set; }
     /// <summary>親を何体えらんだ状態で描くか（0〜2）。⭐ 空の枠も検査したい。</summary>
-    [SupplyParameterFromQuery] public int Picked { get; set; } = 2;
+    // ⚠️ **問い合わせに無い値は、型の既定で**上書き**される。**
+    // ⭐ だから `int?` で受けて、既定をこちらで決める
+    // （実測 2026-08-22: `= 2` と書いた既定が 0 になり、枝を一度も描いていなかった）。
+    [SupplyParameterFromQuery] public int? Picked { get; set; }
 
     private string _html = "";
 
@@ -20,8 +23,9 @@
     {
         var game = Demo.Game();
         var sorted = Demo.Sorted(game);
-        var a = Picked >= 1 ? sorted[0] : null;
-        var b = Picked >= 2 ? sorted[1] : null;
+        int picked = Picked ?? 2;
+        var a = picked >= 1 ? sorted[0] : null;
+        var b = picked >= 2 ? sorted[1] : null;
         var fa = a == null ? null : new Face(a);
         var fb = b == null ? null : new Face(b);
 
