@@ -9,11 +9,17 @@ namespace EggCommand.View
     {
         Home,
         Nests,
-        Steal,
         Trail,
         Battle,
         Breed,
         Box,
+        /// <summary>試練。⭐ ホームから開く（下の帯には出さない）。
+        /// ⚠️ 帯は4つで埋まっていて、5つ目を足すと1つあたりが指で押しにくくなる。</summary>
+        Trial,
+        /// <summary>図鑑。⭐ ホームの**右肩**から開く（2026-08-22・作者の指示）。
+        /// ⚠️ 帯にも本体にも空きが無い ── 本体は 1420 の1行しか空いておらず、
+        /// そこは試練とパーティ編成で埋まっている。</summary>
+        Book,
     }
 
     /// <summary>画面の器と行き来。⭐ ホームがハブ。各画面は ‹ でホームへ戻る。
@@ -27,7 +33,18 @@ namespace EggCommand.View
     public sealed class App : MonoBehaviour
     {
         /// <summary>⚠️ 種を固定しておくと、同じ話が何度でも再現できる。</summary>
+        /// <summary>⭐ **世界の種を固定するか**（不具合を追うときだけ）。
+        /// ⚠️ 既定は false ＝ **端末ごとに引く**。2026-08-21 まで下の定数を
+        /// そのまま使っていたので、**全端末がまったく同じ世界**を引いていた
+        /// （同じ初期編成・同じ卵・同じ巣）。集める遊びなので、そこが同じでは売りが立たない。</summary>
+        public bool PinWorld = false;
+
+        /// <summary><see cref="PinWorld"/> のときに使う種。⚠️ 固定しないなら使わない。</summary>
         public int Seed = 20260816;
+
+        /// <summary>いまの世界の種。⭐ 引いた種はここに残る（保存にも入る）。
+        /// ⚠️ 不具合の報告にはこの数が要る。</summary>
+        public int WorldSeed { get; private set; }
 
         /// <summary>試遊のための短縮。⭐ 孵化の待ち時間をこの数で割る。
         /// ⚠️ 1 が本番の速さ。出荷前に 1 へ戻すこと。</summary>
@@ -57,8 +74,6 @@ namespace EggCommand.View
         /// <summary>雑魚と戦っているマス。⚠️ -1 は「戦っていない」。</summary>
         public int CurrentSpace = -1;
 
-        /// <summary>いま戦っている雑魚の番号。⚠️ **-1 は親／ボス戦**。</summary>
-        public int CurrentMob = -1;
 
         /// <summary>強奪に成功したか（戦闘を挟まずに卵が手に入ったか）。</summary>
         public EggOrigin PendingOrigin = EggOrigin.Defeated;
@@ -71,9 +86,33 @@ namespace EggCommand.View
         /// <summary>いまの時刻（Unix 秒）。⚠️ Core は時計を持たない。ここが唯一の出所。</summary>
         public long Now() => Hatchery.Now(DateTime.UtcNow);
 
+        /// <summary>新しい世界の種を出す。⭐ **端末ごとに違う**（2026-08-21）。
+        ///
+        /// ⚠️ <see cref="PinWorld"/> のときだけ <see cref="Seed"/> を使う。
+        /// ⭐ 引いた種は保存に入る（`GameSave.Seed`）ので、同じ端末では変わらない。
+        /// ⚠️ **`Rng` は Core の物なのでここでは使わない** ── Core は時計を知らない決まり。
+        /// 種を作るのは画面の仕事。</summary>
+        private int NewSeed()
+        {
+            if (PinWorld) return Seed;
+            // ⭐ 時計と GUID を混ぜる。⚠️ 時計だけだと、同じ秒に始めた端末が揃う
+            long mixed = DateTime.UtcNow.Ticks ^ ((long)Guid.NewGuid().GetHashCode() << 16);
+            int drawn = unchecked((int)(mixed ^ (mixed >> 32)));
+            return drawn == 0 ? 1 : drawn;
+        }
+
         /// <summary>演出を載せる場所。⚠️ App 本体ではなく Canvas。
         /// 本体に載せると RectTransform の親が無く、画面のどこにも出ない。</summary>
         public RectTransform Overlay => _root;
+
+        /// <summary>⭐ **揺らす相手。**画面ごと震わせたいときはここへ。
+        ///
+        /// ⚠️ <see cref="Overlay"/>（＝ Canvas そのもの）は揺らせない。
+        /// Screen Space の Canvas は自分の RectTransform を**毎フレーム画面の大きさへ戻す**ので、
+        /// ずらしても次のフレームで消える（＝何も起きないのに動いたつもりになる）。
+        /// ⭐ 1つ内側の枠を揺らす ── 空（背景）は動かず、UI だけが震える。</summary>
+        public RectTransform Stage =>
+            _frame == null ? _root : (RectTransform)_frame.transform;
 
         /// <summary>いま出ている画面。⚠️ 告知の後始末が
         /// 「まだその画面に居るか」を確かめるために要る（レビュー指摘 2026-08-20）。</summary>
@@ -88,7 +127,8 @@ namespace EggCommand.View
             Game = FreshStart ? null : SaveFile.Read(out _readFailed);
             // ⚠️ 時刻を渡す。渡さないと最初の3つの巣が**期限を持たない**まま作られ、
             //    「巣ごとに居座る時間がある」という規則がその巣にだけ効かない
-            if (Game == null) Game = Games.NewGame(Seed, Now());
+            if (Game == null) Game = Games.NewGame(NewSeed(), Now());
+            WorldSeed = Game.Seed;
             // ⭐ 編成をここで確定させる。⚠️ 通さないと、良い個体を手に入れた瞬間に
             //    「素質の高い順」で埋め直されて、選んだ3体が黙って入れ替わる
             Games.LockParty(Game);
@@ -203,18 +243,17 @@ namespace EggCommand.View
             if (Game == null)
             {
                 Debug.LogWarning("Game が失われていた（Play 中の再コンパイル）。作り直して続ける");
-                Game = Games.NewGame(Seed, Now());
+                Game = Games.NewGame(NewSeed(), Now());
+                WorldSeed = Game.Seed;
                 Battle = null;
                 Infiltration = null;
                 Raid = null;
-                CurrentMob = -1;
                 CurrentSpace = -1;
             }
             if (_frame == null) return;
 
             // ⚠️ 強奪の盤はワールド空間に居るので、画面を離れるときに自分で片付ける。
             //    残すとカメラの寸法が戻らず、次の画面が拡大されたままになる。
-            if (_screen == Screen.Steal && screen != Screen.Steal) StealScreen.Leave();
             if (_screen == Screen.Battle && screen != Screen.Battle) BattleScreen.Leave();
 
             _screen = screen;
@@ -222,10 +261,9 @@ namespace EggCommand.View
 
             // ⚠️ 強奪だけは盤がワールド空間に居る。地を塗ると UI が世界を隠してしまう
             var sky = SkyOf(screen);
-            _sky.sprite = screen == Screen.Steal ? null : Ui.SkySpriteOf(sky);
-            _sky.color = screen == Screen.Steal ? new Color(0f, 0f, 0f, 0f)
-                : _sky.sprite != null ? Color.white : Ui.SkyOf(sky);
-            _sky.raycastTarget = screen != Screen.Steal;
+            _sky.sprite = Ui.SkySpriteOf(sky);
+            _sky.color = _sky.sprite != null ? Color.white : Ui.SkyOf(sky);
+            _sky.raycastTarget = true;
 
             // ⚠️ **戦闘中と潜入中は戻れない。**戻れると、
             //    不利な盤面をいつでも無かったことにできてしまう。
@@ -278,11 +316,12 @@ namespace EggCommand.View
             {
                 case Screen.Home: HomeScreen.Build(this, body); break;
                 case Screen.Nests: NestsScreen.Build(this, body); break;
-                case Screen.Steal: StealScreen.Build(this, body); break;
                 case Screen.Trail: TrailScreen.Build(this, body); break;
                 case Screen.Battle: BattleScreen.Build(this, body); break;
                 case Screen.Breed: BreedScreen.Build(this, body); break;
                 case Screen.Box: BoxScreen.Build(this, body); break;
+                case Screen.Trial: TrialScreen.Build(this, body); break;
+                case Screen.Book: BookScreen.Build(this, body); break;
             }
 
             // ⚠️ **タブバーは本体の下 232px を覆う。**Body は縮まないので、
@@ -298,15 +337,32 @@ namespace EggCommand.View
         /// ⭐ こうすると、下端の1行がタブバーの下へ潜らず、最後まで送れる。</summary>
         private static void ReserveDock(RectTransform body)
         {
+            // ⚠️ **測る前に組み終わらせる。**組み上がる前の rect は 0 なので、
+            //    そのまま測ると「食い込んでいない」と誤判定する
+            Canvas.ForceUpdateCanvases();
+
+            var frame = new Vector3[4];
+            body.GetWorldCorners(frame);
+            float span = frame[1].y - frame[0].y;
+            if (span <= 0f || body.rect.height <= 0f) return;
+            // ⭐ 設計の1px が世界でいくつか
+            float unit = span / body.rect.height;
+            // ⭐ 帯の上端（世界）。ここより下へ出た窓を詰める
+            float limit = frame[0].y + Ui.DockHeight * unit;
+
             foreach (var scroll in body.GetComponentsInChildren<ScrollRect>(true))
             {
                 var view = scroll.viewport != null ? scroll.viewport : (RectTransform)scroll.transform;
-                // ⚠️ 親の座標での下端。Body の下端より下なら、そのぶん詰める
-                float bottom = -view.anchoredPosition.y + view.sizeDelta.y;
-                float room = body.rect.height - Ui.DockHeight;
-                if (bottom <= room) continue;
-                view.sizeDelta = new Vector2(view.sizeDelta.x,
-                    Mathf.Max(120f, view.sizeDelta.y - (bottom - room)));
+                // ⚠️ **直の親の座標で測らない。**⭐ 窓は入れ子になりうる
+                //    （Body → Stack → Grid）ので、途中の親のぶんが丸ごと抜ける。
+                //    実測 2026-08-21: 配合の一覧が本体を **126px** はみ出して
+                //    タブ帯を貫通していたのに、この関数は素通りしていた。
+                var window = new Vector3[4];
+                view.GetWorldCorners(window);
+                float over = (limit - window[0].y) / unit;
+                if (over <= 0.5f) continue;
+                view.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,
+                    Mathf.Max(120f, view.rect.height - over));
             }
         }
 
@@ -336,8 +392,9 @@ namespace EggCommand.View
             {
                 case Screen.Home: return Sky.Home;
                 case Screen.Nests:
-                case Screen.Steal:
-                case Screen.Trail: return Sky.Nest;
+                case Screen.Trail:
+                case Screen.Trial: return Sky.Nest;
+                case Screen.Book: return Sky.Nest;
                 case Screen.Battle: return Sky.Battle;
                 case Screen.Breed: return Sky.Breed;
                 default: return Sky.Box;
@@ -350,10 +407,11 @@ namespace EggCommand.View
             {
                 case Screen.Home: return "EGG COMMAND";
                 case Screen.Nests: return "探索";
-                case Screen.Steal:
                 case Screen.Trail: return CurrentNest != null ? CurrentNest.Name : "強奪";
                 case Screen.Battle: return CurrentIsBoss ? Nests.BossName : "戦闘";
                 case Screen.Breed: return "配合";
+                case Screen.Trial: return "試練";
+                case Screen.Book: return "図鑑";
                 default: return "BOX";
             }
         }
@@ -363,8 +421,15 @@ namespace EggCommand.View
         {
             switch (screen)
             {
+                // ⭐ **溜まっている EXP をここにも出す**（2026-08-21・作者の指示）。
+                // ⚠️ ホームにしか出ていなかったので、BOX で「レベルアップ +1 EXP 122」を
+                //    見ても、足りているのかが分からなかった。
+                // ⚠️ **体数はここに出さない。**⭐ 下のタブが既に出している
+                //    （「BOX 44/50」「配合 44体」）。両方出したら枠に入らなかった
+                //    ── 実測「EXP 19,475　44/50」は 315 要るのに枠は 252（2026-08-21）。
                 case Screen.Box:
-                case Screen.Breed: return $"{Game.Storage.Creatures.Count}/{Game.Storage.Slots}";
+                case Screen.Breed:
+                    return $"EXP {Ui.Digits(Game.Idle.Exp)}";
                 // ⚠️ 行動回数は出さない。⭐ 数えて楽しむものではなく、
                 //    出すと「減らすべき数」に見えてしまう
                 case Screen.Battle: return "";
@@ -381,11 +446,26 @@ namespace EggCommand.View
         {
             CurrentNest = nest;
             CurrentIsBoss = boss;
-            CurrentMob = -1;
             CurrentSpace = -1;
             PendingOrigin = EggOrigin.Defeated;
             var enemies = boss ? Nests.MakeBossParty() : Games.DefendersOf(Game, nest);
             StartBattle(enemies, carry?.Hp, carry?.Cooldowns);
+        }
+
+        /// <summary>いま挑んでいる試練。⚠️ 試練でないときは null。</summary>
+        public Trial CurrentTrial { get; private set; }
+
+        /// <summary>試練へ挑む。⭐ **顔ぶれは毎回まったく同じ**（<see cref="Trials.PartyOf"/>）。
+        ///
+        /// ⚠️ 巣の欄（<c>CurrentNest</c>）は空にする。⭐ 空にしないと、決着のときに
+        /// 「巣を引き直す」「卵を出す」といった巣の後始末が動いてしまう。</summary>
+        public void EnterTrial(Trial trial)
+        {
+            CurrentNest = null;
+            CurrentIsBoss = false;
+            CurrentSpace = -1;
+            CurrentTrial = trial;
+            StartBattle(Trials.PartyOf(trial), null, null);
         }
 
         /// <summary>すごろく潜入から親戦へ。⭐ 負った傷と CT をそのまま持ち込む。</summary>
@@ -395,7 +475,6 @@ namespace EggCommand.View
         {
             CurrentNest = nest;
             CurrentIsBoss = boss;
-            CurrentMob = -1;
             CurrentSpace = -1;
             PendingOrigin = EggOrigin.Defeated;
             var enemies = boss ? Nests.MakeBossParty() : Games.DefendersOf(Game, nest);
@@ -410,34 +489,21 @@ namespace EggCommand.View
         {
             CurrentNest = nest;
             CurrentIsBoss = false;
-            CurrentMob = -1;
             CurrentSpace = space;
             PendingOrigin = EggOrigin.Defeated;
             var enemies = Steal.MobPartyOf(nest, Games.RaidsOn(Game, nest), space);
             StartBattle(enemies, Raid?.Hp, Raid?.Cooldowns);
         }
 
-        /// <summary>道中の雑魚と戦う。⭐ **3対3**。
-        ///
-        /// ⭐ 勝てば潜入へ戻り、投げる回数がリセットされる。⚠️ 負けたらそこで終わり。
-        /// ⚠️ 相手は巣と番号だけで決まる（<see cref="Steal.MobPartyOf"/>）。
-        /// その場で引くと、画面を出入りするだけで顔ぶれを選び直せてしまう。</summary>
-        public void EnterMobBattle(Nest nest, int mob)
-        {
-            CurrentNest = nest;
-            CurrentIsBoss = false;
-            CurrentMob = mob;
-            CurrentSpace = -1;
-            PendingOrigin = EggOrigin.Defeated;
-            StartBattle(Steal.MobPartyOf(nest, Games.RaidsOn(Game, nest), mob),
-                Infiltration?.Hp, Infiltration?.Cooldowns);
-        }
 
         private void StartBattle(System.Collections.Generic.List<Creature> enemies,
             System.Collections.Generic.List<int> hp,
             System.Collections.Generic.List<int[]> cooldowns)
         {
-            Battle = Core.Battle.CreateBattle(Games.PartyOf(Game), enemies);
+            // ⭐ **戦闘ごとに引く。**⚠️ 渡さないと `CreateBattle` の既定（固定の種）が使われ、
+            //    弱化が通るかが**毎回同じテープ**になる ── 同じ編成なら必ず同じ試合。
+            //    ⭐ `Game.RngBattle` は保存されるので、**落として引き直すことはできない**。
+            Battle = Core.Battle.CreateBattle(Games.PartyOf(Game), enemies, Game.RngBattle);
             // ⭐ 潜入で負った傷と CT をそのまま持ち込む
             if (hp != null && cooldowns != null) Core.Battle.CarryIn(Battle, hp, cooldowns);
             // ⚠️ 前の戦闘の帯を忘れる。残ると初手から満タンに見える
@@ -457,7 +523,7 @@ namespace EggCommand.View
 
             // ⭐ 雑魚戦は潜入の途中。⚠️ 卵も巣の差し替えもここでは起きない
             if (CurrentSpace >= 0) { FinishTrailMobBattle(state, nest, won); return; }
-            if (CurrentMob >= 0) { FinishMobBattle(state, nest, won); return; }
+            if (CurrentTrial != null) { FinishTrial(won); return; }
 
             if (won)
             {
@@ -474,6 +540,29 @@ namespace EggCommand.View
             // ⚠️ 負けた巣も引き直す。同じ相手を叩き続ける形にしない
             if (!CurrentIsBoss && nest != null) Encounters.Replace(Game, nest, Now());
             Show(Screen.Nests);
+        }
+
+        /// <summary>試練の決着。⭐ **返るのは勝った印だけ**（卵も EXP も出さない）。
+        ///
+        /// ⚠️ 出撃していた個体の育成 +1 は、他の戦闘とまったく同じ扱いで付く
+        /// ── 試練だけ特別扱いにしない。
+        /// ⚠️ 負けても何も失わない。⭐ 「組み直して挑み直す」のが遊びなので、
+        /// 挑むこと自体に対価を付けない。</summary>
+        private void FinishTrial(bool won)
+        {
+            var trial = CurrentTrial;
+            CurrentTrial = null;
+            if (won && trial != null)
+            {
+                Games.GrowParty(Games.PartyOf(Game));
+                // ⭐ 初めて勝ったときだけ告げる。⚠️ 2度目以降に同じ帯を出すと、
+                //    「何か新しく起きた」と読めてしまう
+                if (Games.MarkTrial(Game, trial.Id))
+                {
+                    BannerView.Show(Overlay, $"試練 {Trials.StepOf(trial.Id)}「{trial.Name}」を越えた", null);
+                }
+            }
+            Show(Screen.Trial);
         }
 
         /// <summary>すごろくの雑魚戦の決着。⭐ 勝てば**振れる回数が戻って**続きへ。
@@ -503,34 +592,6 @@ namespace EggCommand.View
             Show(Screen.Trail);
         }
 
-        /// <summary>雑魚戦の決着。⭐ 勝てば**潜入の続き**へ戻る。
-        ///
-        /// ⚠️ 傷と CT を潜入へ書き戻してから <see cref="Steal.Beat"/> を呼ぶ。
-        /// 書き戻しを飛ばすと、次の戦いが毎回満タンから始まり、
-        /// 「戦うほど苦しくなる」という雑魚の対価が丸ごと消える。</summary>
-        private void FinishMobBattle(BattleState state, Nest nest, bool won)
-        {
-            var infil = Infiltration;
-            int mob = CurrentMob;
-            CurrentMob = -1;
-
-            if (infil == null) { Show(Screen.Nests); return; }
-
-            if (!won)
-            {
-                Steal.LostTo(infil);
-                Infiltration = null;
-                // ⚠️ 負けた巣は引き直す（親に見つかって負けたときと同じ）
-                if (nest != null) Encounters.Replace(Game, nest, Now());
-                Show(Screen.Nests);
-                return;
-            }
-
-            Core.Battle.CarryOut(state, infil.Hp, infil.Cooldowns);
-            Steal.Beat(infil, mob);
-            Games.GrowParty(Games.PartyOf(Game), Steal.MobReward);
-            Show(Screen.Steal);
-        }
 
         /// <summary>卵を1個手に入れる。⭐ 手に入れた瞬間だけは演出を出す。</summary>
         /// <param name="closeNest">その巣を閉じるか。

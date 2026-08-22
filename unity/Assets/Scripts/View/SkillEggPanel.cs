@@ -10,15 +10,21 @@ namespace EggCommand.View
     /// ⭐ ★＝強さ を成立させている支え。★5 は「2時間待って強い個体」と
     /// 「いま技を1段上げる」の二択になり、どちらも正解でありうる。
     ///
-    /// ⚠️ 押しどころは「枠を選ぶ」と「卵を入れる」の2種類だけ。
-    /// 確認も取り消しも置かない ── 入れた卵は戻らないが、それは
-    /// 逃がすのと同じで、**取り返しがつかないほうが判断に重みが出る**。
+    /// ⭐ **一度に <see cref="MaxPick"/> 個まで選んでから、最後に「強化する」を押す**
+    /// （2026-08-21・作者の指示）。⚠️ 直す前は**押した瞬間に入っていた**ので、
+    /// 10個入れるには10回押すことになり、そのたびに裏でレベルが上がっていた。
+    ///
+    /// ⚠️ 入れた卵は戻らない。⭐ だから「選ぶ」と「入れる」を分ける ──
+    /// 取り返しがつかないのは変えないが、**押し間違いで起きない**ようにする。
     ///
     /// ⚠️ 器はここでは Prefab にしていない。並ぶ卵の数が変わるので、
     /// 置き場所を固定した Prefab にしても中身は結局コードが作ることになる。
     /// </summary>
     public static class SkillEggPanel
     {
+        /// <summary>一度に選べる卵の数。⭐ 分解（<see cref="FusePanel.MaxPick"/>）と揃える。</summary>
+        public const int MaxPick = 10;
+
         private const float PanelLeft = 48f;
         private const float PanelTop = 200f;
         private const float PanelWidth = 984f;
@@ -37,9 +43,14 @@ namespace EggCommand.View
         /// <summary>いま注ぐ先の枠。⚠️ 画面を開き直しても覚えておく（続けて入れるため）。</summary>
         private static int _slot;
 
+        /// <summary>いま選んでいる卵。⭐ **押した順に入る**（入る順がそのまま並び順）。</summary>
+        private static readonly System.Collections.Generic.List<string> Picked =
+            new System.Collections.Generic.List<string>();
+
         /// <summary>開く。⭐ 最初に鍛えられる枠を選んでおく。</summary>
         public static void Show(App app, string creatureId)
         {
+            Picked.Clear();
             _slot = FirstOpen(app, creatureId);
             Rebuild(app, creatureId);
         }
@@ -108,7 +119,10 @@ namespace EggCommand.View
                 bool picked = slot == _slot;
 
                 Ui.Tappable(panel, $"Slot {i}", "",
-                    usable ? new Action(() => { _slot = slot; Rebuild(app, creatureId); }) : null,
+                    // ⚠️ **枠を変えたら選び直し**（FusePanel と同じ理由）
+                    usable
+                        ? new Action(() => { _slot = slot; Picked.Clear(); Rebuild(app, creatureId); })
+                        : null,
                     Pad, top, Inner, Ui.Tap, lead: picked && usable, enabled: usable);
 
                 var row = (RectTransform)panel.Find($"Slot {i}");
@@ -132,56 +146,101 @@ namespace EggCommand.View
             }
         }
 
-        /// <summary>棚の卵。⭐ 押した瞬間に入る。
+        /// <summary>棚の卵。⭐ **押すのは「選ぶ／外す」だけ。**入るのは「強化する」を押したとき。
         ///
-        /// ⚠️ 上限を超える卵は押させない。受け取ると超えた分が黙って消える
+        /// ⚠️ 上限を超える卵は選ばせない。受け取ると超えた分が黙って消える
         /// （2時間待った★5が蒸発する）。⭐ 入らないことは灰色で示す。</summary>
         private static void BuildEggs(App app, RectTransform panel, Creature creature,
             string creatureId)
         {
             var eggs = app.Game.Eggs;
-            float listTop = RowTop + RowStep * 3f + 12f;
-            Ui.Label(panel, "EggsTitle", $"棚の卵 {eggs.Count}", 26, Ui.InkDim,
-                TextAnchor.UpperLeft, Pad, listTop, Inner, 36f);
-
-            float areaTop = listTop + 48f;
-            float areaHeight = PanelHeight - Ui.Tap - Pad * 2f - areaTop;
-            int rows = (eggs.Count + EggPerRow - 1) / EggPerRow;
-            var content = Ui.Scroller(panel, "Eggs", Pad, areaTop, Inner, areaHeight,
-                rows * EggCellH);
-
             var skills = Creatures.SkillsOf(creature);
             bool slotUsable = _slot >= 0 && _slot < skills.Length && skills[_slot] != null
                 && !SkillCosts.IsMaxed(creature.SkillPoints[_slot]);
+            int points = slotUsable ? creature.SkillPoints[_slot] : 0;
             int room = slotUsable
                 ? SkillCosts.TotalFor(Skills.MaxLevel) - creature.SkillPoints[_slot]
                 : 0;
+
+            int gain = 0;
+            foreach (string id in Picked)
+            {
+                var one = EggById(app, id);
+                if (one != null) gain += Rarities.PointsOf(one.Rarity);
+            }
+
+            float listTop = RowTop + RowStep * 3f + 12f;
+            // ⭐ **入れたあとのレベルまで出す。**⚠️ ポイントだけだと人が計算することになる
+            string say = !slotUsable ? "この枠はもう鍛えられません"
+                : gain > 0
+                    ? $"選んだ {Picked.Count}/{MaxPick} 個で ＋{gain}　"
+                        + $"Lv{SkillCosts.LevelOf(points)} → Lv{SkillCosts.LevelOf(points + gain)}"
+                    : $"棚の卵 {eggs.Count}　（{MaxPick} 個まで選べます）";
+            Ui.Label(panel, "EggsTitle", say, 26, gain > 0 ? Ui.Ink : Ui.InkDim,
+                TextAnchor.UpperLeft, Pad, listTop, Inner, 36f);
+
+            float areaTop = listTop + 48f;
+            float areaHeight = PanelHeight - Ui.Tap * 2f - Pad * 2f - 12f - areaTop;
+            int rows = (eggs.Count + EggPerRow - 1) / EggPerRow;
+            var content = Ui.Scroller(panel, "Eggs", Pad, areaTop, Inner, areaHeight,
+                rows * EggCellH);
 
             for (int i = 0; i < eggs.Count; i++)
             {
                 var egg = eggs[i];
                 string eggId = egg.Id;
-                int points = Rarities.PointsOf(egg.Rarity);
-                bool fits = slotUsable && points <= room;
+                int worth = Rarities.PointsOf(egg.Rarity);
+                bool picked = Picked.Contains(eggId);
+                bool fits = picked
+                    || (slotUsable && Picked.Count < MaxPick && worth <= room - gain);
                 float left = (i % EggPerRow) * EggCellW;
                 float top = (i / EggPerRow) * EggCellH;
 
                 // ⭐ **どの画面でも同じ卵の升**（絵・★・一言）
-                var box = Ui.EggCell(content, $"Egg {i}", egg, "＋" + points, Ui.Ink,
-                    left + 6f, top + 6f, EggCellW - 12f, EggCellH - 12f, dim: !fits);
+                var box = Ui.EggCell(content, $"Egg {i}", egg, "＋" + worth, Ui.Ink,
+                    left + 6f, top + 6f, EggCellW - 12f, EggCellH - 12f,
+                    dim: !fits, picked: picked);
                 var tap = box.gameObject.AddComponent<Button>();
                 tap.targetGraphic = box.GetComponent<Image>();
                 tap.interactable = fits;
-                if (fits)
+                if (!fits) continue;
+                tap.onClick.AddListener(() =>
                 {
-                    tap.onClick.AddListener(() =>
-                    {
-                        Games.FeedEggToSkill(app.Game, creatureId, _slot, eggId);
-                        app.Refresh();              // 後ろの BOX も新しいレベルにする
-                        Rebuild(app, creatureId);   // ⭐ 続けて入れられるよう開いたまま
-                    });
-                }
+                    if (!Picked.Remove(eggId)) Picked.Add(eggId);
+                    Rebuild(app, creatureId);
+                });
             }
+
+            bool ready = Picked.Count > 0;
+            var go = Ui.Tappable(panel, "Feed",
+                ready ? $"強化する（＋{gain}）" : "強化する",
+                () => Feed(app, creatureId),
+                Pad, PanelHeight - Ui.Tap * 2f - Pad - 12f, Inner, Ui.Tap);
+            go.interactable = ready;
+            var face = go.GetComponent<Image>();
+            if (face != null) face.sprite = Ui.SkinSprite(ready ? "button-lead" : "button-off");
+        }
+
+        /// <summary>選んだぶんをまとめて注ぐ。
+        /// ⭐ **入れる順も削除も Core が1回で持つ**（<see cref="Games.FeedEggsToSkill"/>）。</summary>
+        private static void Feed(App app, string creatureId)
+        {
+            int count = Picked.Count;
+            int total = Games.FeedEggsToSkill(app.Game, creatureId, _slot,
+                new System.Collections.Generic.List<string>(Picked));
+            Picked.Clear();
+            if (total > 0)
+            {
+                BannerView.Show(app.Overlay, $"たまご{count}個で技が鍛わった  ＋{total}", null);
+            }
+            app.Refresh();                  // 後ろの BOX も新しいレベルにする
+            Rebuild(app, creatureId);       // ⭐ 続けて選べるよう開いたまま
+        }
+
+        private static Egg EggById(App app, string id)
+        {
+            foreach (var egg in app.Game.Eggs) if (egg.Id == id) return egg;
+            return null;
         }
 
         /// <summary>保管庫から引く。⚠️ <see cref="Games.CreatureById"/> は

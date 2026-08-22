@@ -34,6 +34,7 @@ namespace EggCommand.View
                 var species = SpeciesTable.ById("nushi");
                 _bossArt.sprite = PixelSpriteTexture.ToSprite(species.Sprite, species.Palettes[0]);
                 _bossArt.preserveAspect = true;
+                Ui.Face(_bossArt.rectTransform, true);
             }
             if (_boss != null)
             {

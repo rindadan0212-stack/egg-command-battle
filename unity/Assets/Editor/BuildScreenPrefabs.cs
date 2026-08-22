@@ -38,7 +38,6 @@ namespace EggCommand.EditorTools
             made += One("CreatureCell", BuildCreatureCell);
             made += One("BoxScreen", BuildBox);
             made += One("BreedScreen", BuildBreed);
-            made += One("StealResult", BuildStealResult);
             made += One("CreaturePanel", BuildCreaturePanelPrefab);
 
             AssetDatabase.Refresh();
@@ -633,11 +632,6 @@ namespace EggCommand.EditorTools
             var take = Tap(root, "Take", Ui.Margin, top, full, Ui.Tap, "button-lead", "卵を持ち帰る", 32);
             var fight = Tap(root, "Fight", Ui.Margin, top, full, Ui.Tap, "button-danger", "戦闘へ", 32);
 
-            var view = root.AddComponent<StealResultView>();
-            var so = new SerializedObject(view);
-            so.FindProperty("_take").objectReferenceValue = take;
-            so.FindProperty("_fight").objectReferenceValue = fight;
-            so.ApplyModifiedPropertiesWithoutUndo();
             return root;
         }
 

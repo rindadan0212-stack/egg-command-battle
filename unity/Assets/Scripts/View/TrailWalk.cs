@@ -15,7 +15,11 @@ namespace EggCommand.View
     /// ここは決まった道を辿って見せるだけで、行き先を選び直さない。
     ///
     /// ⚠️ 画面の外（Overlay）に置く。画面は1マスごとに組み直されるので、
-    /// 中に置くと歩いている最中に自分が消える。</summary>
+    /// 中に置くと歩いている最中に自分が消える。
+    ///
+    /// ⭐ **一歩ごとに間を変えられる**（2026-08-21）。⚠️ 全部が同じ間だと、
+    /// 関門を通った所も素通りの所も同じ重さに見える ── 一番「払った甲斐」を
+    /// 感じるべき所が、何も起きずに過ぎていた。</summary>
     public sealed class TrailWalk : MonoBehaviour
     {
         /// <summary>1マスぶんの間。⭐ **短く。**⚠️ 長いと、出目のぶんだけ待たされる。</summary>
@@ -24,12 +28,16 @@ namespace EggCommand.View
         private List<int> _path;
         private int _at;
         private float _age;
+        private float _wait;
         private Action<int> _onStep;
+        private Func<int, float> _holdOf;
         private Action _onDone;
 
         /// <summary>その道を1マスずつ辿る。⚠️ <paramref name="path"/> の先頭は**いま居るマス**。</summary>
+        /// <param name="holdOf">そのマスを踏んだあと、余分に置く間（秒）。
+        /// ⭐ 関門のような「重い」マスで一拍おくために使う。null なら一定。</param>
         public static void Show(RectTransform parent, List<int> path,
-            Action<int> onStep, Action onDone)
+            Action<int> onStep, Action onDone, Func<int, float> holdOf = null)
         {
             if (path == null || path.Count <= 1)
             {
@@ -43,7 +51,9 @@ namespace EggCommand.View
             var walk = go.AddComponent<TrailWalk>();
             walk._path = path;
             walk._at = 0;
+            walk._wait = StepTime;
             walk._onStep = onStep;
+            walk._holdOf = holdOf;
             walk._onDone = onDone;
         }
 
@@ -72,19 +82,23 @@ namespace EggCommand.View
         private void Update()
         {
             _age += Time.deltaTime;
-            if (_age < StepTime) return;
+            if (_age < _wait) return;
             _age = 0f;
 
             _at++;
             if (_at < _path.Count)
             {
-                _onStep?.Invoke(_path[_at]);
+                int here = _path[_at];
+                // ⭐ 次の一歩までの間は、踏んだマスが決める
+                _wait = StepTime + (_holdOf == null ? 0f : Mathf.Max(0f, _holdOf(here)));
+                _onStep?.Invoke(here);
                 return;
             }
 
             var done = _onDone;
             _onDone = null;
             _onStep = null;
+            _holdOf = null;
             gameObject.SetActive(false);
             transform.SetParent(null, false);
             Destroy(gameObject);

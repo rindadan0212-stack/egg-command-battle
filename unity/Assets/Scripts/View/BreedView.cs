@@ -72,8 +72,10 @@ namespace EggCommand.View
                 var host = Ui.Rect("Sort Host", stack);
                 // ⚠️ 一覧の**すぐ上**へ。作っただけだと末尾に並ぶ
                 host.SetSiblingIndex(box.GetSiblingIndex());
+                // ⭐ 一覧のぶんを空きとして渡す（収まらなければ中身が巻物になる）
                 float used = SortBar.Build(host, 0f, 0f, Ui.W - Ui.Margin * 2f,
-                    filter, sort, onFilter, onSort, repaint);
+                    filter, sort, onFilter, onSort, repaint,
+                    room: SortBar.ClosedHeight + box.rect.height);
                 // ⭐ **入れ物の高さを直に設定する。**
                 // ⚠️ LayoutElement では効かない ── この Stack は childControlHeight が
                 //    false なので、レイアウトは LayoutElement を見ず、

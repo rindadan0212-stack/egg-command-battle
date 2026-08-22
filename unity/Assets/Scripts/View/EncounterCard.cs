@@ -51,6 +51,8 @@ namespace EggCommand.View
             {
                 _art.sprite = PixelSpriteTexture.ToSprite(species.Sprite, species.Palettes[0]);
                 _art.preserveAspect = true;
+                // ⚠️ 巣の札に出るのは**その巣の親** ＝ 敵
+                Ui.Face(_art.rectTransform, true);
             }
             if (_level != null) _level.text = encounter.Level.ToString();
             if (_raids != null)

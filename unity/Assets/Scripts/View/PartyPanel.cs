@@ -15,6 +15,12 @@ namespace EggCommand.View
     ///
     /// ⚠️ 入口はホームと、巣を選ぶ前の2か所。BOX からは開かない
     /// （BOX は「1体を見る」画面で、編成は「並べる」画面なので混ぜない）。
+    ///
+    /// ⭐ **どちらの編成かは、開いた場所で決まる**（2026-08-21・作者の指示）:
+    /// | ホームから開く | 放置の編成だけ |
+    /// | 探索から開く | 巣へ潜る編成だけ |
+    /// ⚠️ 中の切り替えタブは**外した**。⭐ 開いた場所と中身が食い違わないので、
+    /// 「どっちを触っているか」を読む手間が消える。
     /// </summary>
     public static class PartyPanel
     {
@@ -25,8 +31,9 @@ namespace EggCommand.View
         private const float Pad = 24f;
         private const float Inner = PanelWidth - Pad * 2f;
 
-        private const float KindTop = 150f;
-        private const float SlotTop = KindTop + Ui.Tap + 12f;
+        /// ⚠️ **切り替えタブは 2026-08-21 に外した**（開いた場所で決まる）。
+        /// ⭐ そのぶん、下の段が1段ぶん上がる。
+        private const float SlotTop = 150f;
         /// <summary>「編成1/2/3」の段の高さ。⭐ 上段より**小さい**（下位だと形で示す）。
         /// ⚠️ Ui.Tappable は Ui.Tap を下回る高さを引き上げるので、ここは自前で組む。</summary>
         private const float SlotH = 72f;
@@ -77,15 +84,17 @@ namespace EggCommand.View
             close.onClick.AddListener(() => { Close(); app.Refresh(); });
 
             var panel = Ui.Card(root, "Panel", PanelLeft, PanelTop, PanelWidth, PanelHeight);
-            Ui.Label(panel, "Title", "パーティ編成", 40, Ui.Ink, TextAnchor.UpperLeft,
-                Pad, Pad, Inner, 56f);
+            // ⭐ **どちらの編成かを見出しで言い切る。**⚠️ タブを外したので、
+            //    ここが「いま何を触っているか」の唯一の手掛かりになる
+            Ui.Label(panel, "Title",
+                _kind == PartyKind.Idle ? "放置の編成" : "巣へ潜る編成",
+                40, Ui.Ink, TextAnchor.UpperLeft, Pad, Pad, Inner, 56f);
             Ui.Label(panel, "Note",
                 _kind == PartyKind.Idle
                     ? $"放置で戦い続ける{Games.PartySize}体です。巣へ潜る編成とは別です。"
                     : $"巣へ潜る{Games.PartySize}体です。3つまで登録できます。",
                 24, Ui.InkDim, TextAnchor.UpperLeft, Pad, 84f, Inner, 40f);
 
-            Kinds(app, panel);
             // ⚠️ **空白を残さない。**放置側で段を消したとき、その高さぶんの空白が
             //    そのまま残っていた（レビュー指摘 2026-08-19）。⭐ 下を詰める。
             float y = SlotTop;
@@ -95,27 +104,6 @@ namespace EggCommand.View
 
             Ui.Tappable(panel, "Done", "決定", () => { Close(); app.Refresh(); },
                 Pad, PanelHeight - Ui.Tap - Pad, Inner, Ui.Tap);
-        }
-
-        /// <summary>放置／巣 の切り替え。</summary>
-        private static void Kinds(App app, RectTransform panel)
-        {
-            float half = (Inner - 12f) / 2f;
-            Kind(app, panel, "KindIdle", $"放置の{Games.PartySize}体", PartyKind.Idle, Pad, half);
-            Kind(app, panel, "KindNest", $"巣へ潜る{Games.PartySize}体", PartyKind.Nest,
-                Pad + half + 12f, half);
-        }
-
-        private static void Kind(App app, RectTransform panel, string name, string label,
-            PartyKind kind, float left, float width)
-        {
-            var b = Ui.Tappable(panel, name, label, () => { _kind = kind; Rebuild(app); },
-                left, KindTop, width, Ui.Tap);
-            // ⭐ **選んでいる側だけ塗る。**選んでいない側は白い札に字だけ
-            var plate = b.GetComponent<Image>();
-            if (plate != null) plate.sprite = Ui.SkinSprite(_kind == kind ? "button-lead" : "panel");
-            var ink = b.GetComponentInChildren<Text>();
-            if (ink != null) ink.color = _kind == kind ? Ui.OnLead : Ui.Ink;
         }
 
         /// <summary>巣の編成 3つ。⭐ 押すと、その番号の編成に切り替わる。</summary>
@@ -208,14 +196,27 @@ namespace EggCommand.View
         private static void Pool(App app, RectTransform panel, float ListTop)
         {
             var roster = Games.RosterOf(app.Game, _kind);
-            var all = app.Game.Storage.Creatures;
+            // ⭐ **絞ってから並べる**（BOX・配合と同じ順）。
+            var pool = Filters.Apply(app.Game, app.Game.Storage.Creatures, _filter);
+            var all = Storages.Sorted(new Storage(app.Game.Storage.Slots, pool), _sort);
+
+            // ⭐ **並び順の帯。**⚠️ 手持ちが増えると、目で探すのが一番の手間になる
+            //    （作者の指示 2026-08-21「並び順機能がほしい」）。BOX と同じ部品を使う。
+            float used = SortBar.Build(panel, Pad, ListTop, Inner,
+                _filter, _sort,
+                key => { _filter = key; Rebuild(app); },
+                key => { _sort = key; Rebuild(app); },
+                () => Rebuild(app),
+                // ⭐ 一覧に使えるぶんが空き（収まらなければ中身が巻物になる）
+                room: PanelHeight - ListTop - Ui.Tap - Pad * 2f);
+            float gridTop = ListTop + used + 12f;
+
             // ⭐ **BOX・配合と同じ升**（作者の指示「すべて揃えたい」）。
-            // ⚠️ もう一方の編成に入っているなら一言で出す（同じ個体を両方に入れられるが、
-            //    知らずに入れると放置か潜入のどちらかが手薄になる）
+            // ⚠️ **一言は Lv を優先する**（2026-08-21・作者の指示「巣に登録＝不要／Lv優先」）。
+            //    ⭐ もう一方の編成に入っていることは**色**で示す ── Lv の場所を奪わない。
             var other = _kind == PartyKind.Idle ? PartyKind.Nest : PartyKind.Idle;
-            string mark = other == PartyKind.Idle ? "放置中" : "巣に登録";
-            CellGrid.Scroll(panel, "Pool", Pad, ListTop, Inner,
-                PanelHeight - ListTop - Ui.Tap - Pad * 2f,
+            CellGrid.Scroll(panel, "Pool", Pad, gridTop, Inner,
+                PanelHeight - gridTop - Ui.Tap - Pad * 2f,
                 CellGrid.Template(), all,
                 id => roster.Contains(id),
                 id =>
@@ -223,9 +224,13 @@ namespace EggCommand.View
                     Games.TogglePartyMember(app.Game, id, _kind);
                     Rebuild(app);
                 },
-                c => Games.IsInParty(app.Game, c.Id, other) ? mark : $"Lv {Levels.Of(c)}",
+                c => $"Lv {Levels.Of(c)}",
                 c => Games.IsInParty(app.Game, c.Id, other) ? Ui.AccentInk : Ui.InkDim);
         }
+
+        /// <summary>絞りと並び。⭐ 開き直しても覚えておく（BOX・配合と同じ約束）。</summary>
+        private static FilterKey _filter = FilterKey.All;
+        private static SortKey _sort = SortKey.WildTotal;
 
         private static Creature FindById(App app, string id)
         {

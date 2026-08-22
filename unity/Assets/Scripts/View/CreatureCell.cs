@@ -13,16 +13,17 @@ namespace EggCommand.View
         [SerializeField] private Image _element;
         [SerializeField] private Text _wild;
         [SerializeField] private GameObject _mark;   // 選ばれている印
-        /// <summary>特性を持っている印。⭐ 一覧で持ち主を見つけるためだけの丸。
-        /// ⚠️ 名前は出さない（升が小さい）。何を持っているかは詳細で読ませる。</summary>
+        /// <summary>⚠️ **もう出さない印**（2026-08-21）。特性が種族に固定されたので、
+        /// 全員が必ず持つ ── 全部の升に同じ丸が付くだけで、何も区別しない。
+        /// ⭐ 欄は残す（Prefab に置いてあるものを消すと、次に作り直すとき手で置き直しになる）。</summary>
         [SerializeField] private GameObject _trait;
         [SerializeField] private Button _button;
 
-        /// <summary>★の枠。⭐ **Prefab には無い。**要るときに1度だけ作って使い回す。
+        /// <summary>★の並び。⭐ **Prefab には無い。**要るときに1度だけ作って使い回す。
         ///
         /// ⚠️ Prefab を作り直すと手で置いた物が消えるので、後から足す物はここで作る。
         /// ⚠️ Bind のたびに作らない（升は毎フレーム敷き直されるので、積み上がる）。</summary>
-        private RectTransform _rarity;
+        private Text _rarity;
 
         public void Bind(Creature creature, bool picked, Action onTap) =>
             Bind(creature, picked, onTap, null, Ui.InkDim);
@@ -52,7 +53,8 @@ namespace EggCommand.View
             // ⭐ ★の枠。素質の合計から引く（生まれつきの良し悪しがそのまま縁に出る）
             ShowRarity(Nests.RarityOfWildTotal(Stats.TotalOf(creature.Wild)));
             if (_mark != null) _mark.SetActive(picked);
-            if (_trait != null) _trait.SetActive(creature.TraitId != null);
+            // ⚠️ 常に消す。⭐ 「全員が持つもの」を升に出しても、探す手がかりにならない
+            if (_trait != null) _trait.SetActive(false);
             if (_button != null)
             {
                 _button.onClick.RemoveAllListeners();
@@ -60,7 +62,14 @@ namespace EggCommand.View
             }
         }
 
-        /// <summary>★の枠を出す。⭐ 升より一回り大きく、**升の後ろ**に敷いて縁だけ見せる。</summary>
+        /// <summary>レア度を出す。⭐ **★の数**（2026-08-21・作者の指示）。
+        ///
+        /// ⚠️ 2026-08-21 まで**縁の色**（橙・紫・青・緑・灰）で出していた。
+        /// ⭐ 色は覚えないと読めないが、★は数えれば読める。
+        /// ⚠️ 色での別は付けない ── 2つの言い方が並ぶと、どちらを見るか迷う。
+        ///
+        /// ⚠️ 絵の**上**の帯（0〜28）に置く。⭐ そこだけが空いている
+        /// （左上は属性の丸、下段は一言）。</summary>
         private void ShowRarity(int rarity)
         {
             var self = (RectTransform)transform;
@@ -68,13 +77,13 @@ namespace EggCommand.View
             // ⚠️ 格子が並べ終わる前は寸法が 0。そのときは出さない（次の Bind で付く）
             if (w <= 1f || h <= 1f) { if (_rarity != null) _rarity.gameObject.SetActive(false); return; }
 
-            if (_rarity == null) _rarity = Ui.RarityFrame(transform, "Rarity", rarity, w, h);
+            if (_rarity == null)
+            {
+                _rarity = Ui.Label(transform, "Rarity", "", 20, Ui.AccentInk,
+                    TextAnchor.MiddleCenter, 34f, 2f, w - 68f, 26f);
+            }
             _rarity.gameObject.SetActive(true);
-            float edge = Ui.RarityEdge(rarity);
-            Ui.Place(_rarity, -edge, -edge, w + edge * 2f, h + edge * 2f);
-            var image = _rarity.GetComponent<Image>();
-            if (image != null) image.color = Ui.RarityInk(rarity);
-            _rarity.SetAsFirstSibling();
+            _rarity.text = Rarities.StarsOf(rarity);
         }
     }
 

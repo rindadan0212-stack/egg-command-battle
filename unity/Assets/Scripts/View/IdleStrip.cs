@@ -110,6 +110,8 @@ namespace EggCommand.View
                 var species = Creatures.SpeciesOf(party[i]);
                 _walkers[i].sprite = PixelSpriteTexture.ToSprite(species.Sprite, Creatures.PaletteOf(party[i]));
                 _walkers[i].preserveAspect = true;
+                // ⚠️ 味方も**言い切る**（器を使い回すので、前の向きが残る）
+                Ui.Face(_walkers[i].rectTransform, false);
             }
 
             if (_enemySlot != null) _enemyHome = _enemySlot.anchoredPosition;
@@ -120,6 +122,7 @@ namespace EggCommand.View
                 var species = SpeciesTable.ById("nushi");
                 _enemy.sprite = PixelSpriteTexture.ToSprite(species.Sprite, species.Palettes[0]);
                 _enemy.preserveAspect = true;
+                Ui.Face(_enemy.rectTransform, true);
             }
         }
 

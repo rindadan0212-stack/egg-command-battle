@@ -17,8 +17,36 @@ namespace EggCommand.EditorTools
     /// </summary>
     public static class InspectScreens
     {
-        /// <summary>接している（隣り合う表の行など）を重なりと数えない余裕。</summary>
-        private const float Slack = 0.02f;
+        /// <summary>**画面の1点ぶんの世界の長さ。**⚠️ <see cref="Sweep"/> の頭で入れ直す。
+        ///
+        /// ⚠️ **誤差の許容を生の数で書かない。**⭐ 四隅は**世界の単位**で返ってくるので、
+        /// 画面まるごとが縦 10.0 しかない。そこへ「0.5 なら誤差」と書くと、
+        /// 実質 **96 点ぶん**を見逃す ── 検査が甘いのではなく、**目盛りが違っていた**。
+        /// ⭐ 実測（2026-08-21）: BOX 画面で、縦に 0.23 も離れた別の札に
+        /// 「覆われて見えない」と 3 件の嘘が出た。⚠️ 嘘を出す道具は読まれなくなる。</summary>
+        private static float _dot = 0.005f;
+
+        /// <summary>接している（隣り合う表の行など）を重なりと数えない余裕。⭐ 4点ぶん。</summary>
+        private static float Slack { get { return _dot * 4f; } }
+
+        /// <summary>ここまでのずれは測り誤差とみなす。⭐ 2点ぶん。</summary>
+        private static float Nudge { get { return _dot * 2f; } }
+
+        /// <summary>これ以上薄いものは「描かれていない」とみなす。</summary>
+        private const float Faint = 0.02f;
+
+        /// <summary>見つかったもの。⭐ 種類ごとに分ける ── 直す先が違う。</summary>
+        private sealed class Findings
+        {
+            public readonly List<string> Overlaps = new List<string>();
+            public readonly List<string> Wide = new List<string>();
+            public readonly List<string> Outside = new List<string>();
+            public readonly List<string> OffScreen = new List<string>();
+            public readonly List<string> Buried = new List<string>();
+
+            public int Total => Overlaps.Count + Wide.Count + Outside.Count
+                + OffScreen.Count + Buried.Count;
+        }
 
         [MenuItem("Egg Command/画面を検査する")]
         public static void Inspect()
@@ -40,6 +68,55 @@ namespace EggCommand.EditorTools
             else Debug.Log("■ 崩れていません\n" + report);
         }
 
+        /// <summary>**画面を順に回して全部見る。**
+        ///
+        /// ⚠️ **1画面ずつ手で回さない。**⭐ この道具は今まで「いま出ている画面」しか
+        /// 見られず、実際には**触っている画面にしか掛けていなかった**。
+        /// そのせいで配合画面の重なり 15 件が、検査を持っているのに 3 日見つからなかった
+        /// （2026-08-21 の討論 ── 「測る道具が見ていない」）。
+        ///
+        /// ⚠️ 画面を渡り歩くので、遊んでいる途中に押すと**その潜入は捨てられる**。</summary>
+        [MenuItem("Egg Command/画面を全部検査する")]
+        public static void InspectAll()
+        {
+            if (!Application.isPlaying)
+            {
+                Debug.LogWarning("画面を全部検査する: ▶ を押してから、もう一度どうぞ。");
+                return;
+            }
+            Debug.Log(AllScreens());
+        }
+
+        /// <summary>全画面ぶんの結果を1つの文字にして返す。⭐ 道具から呼べる。</summary>
+        public static string AllScreens()
+        {
+            var app = Object.FindAnyObjectByType<View.App>();
+            if (app == null) return "画面の親（App）が見つかりませんでした。";
+
+            var sb = new StringBuilder("■ 画面を全部検査する\n");
+            var order = new[]
+            {
+                View.Screen.Home, View.Screen.Nests, View.Screen.Breed, View.Screen.Box,
+            };
+            foreach (var screen in order)
+            {
+                app.Show(screen);
+                app.Refresh();
+                sb.Append(screen).Append(": ").Append(OneLine()).Append('\n');
+            }
+
+            // ⭐ 潜入だけは巣が要る。⚠️ 出会いが1つも無い盤面では飛ばす
+            if (app.Game != null && app.Game.Encounters.Count > 0)
+            {
+                View.TrailScreen.Enter(app, app.Game.Encounters[0].Nest);
+                app.Refresh();
+                sb.Append(View.Screen.Trail).Append(": ").Append(OneLine()).Append('\n');
+            }
+            else sb.Append("Trail: 出会いが無いので飛ばしました\n");
+
+            return sb.ToString();
+        }
+
         /// <summary>結果を文字で返す。⭐ ダイアログを出さないので、道具から呼べる。
         /// ⚠️ ダイアログを出すと Unity が操作待ちで止まり、外から続きを流せない。</summary>
         public static string Report()
@@ -47,21 +124,21 @@ namespace EggCommand.EditorTools
             var canvas = Screenful();
             if (canvas == null) return "画面が見つかりませんでした。";
 
-            var overlaps = new List<string>();
-            var wide = new List<string>();
-            var outside = new List<string>();
-            int looked = Sweep(canvas.transform, overlaps, wide, outside);
+            var found = new Findings();
+            int looked = Sweep(canvas.transform, found);
 
             var report = new StringBuilder();
             report.Append("調べた部品: ").Append(looked).Append("\n\n");
-            Line(report, "字の重なり", overlaps);
-            Line(report, "字が枠より広い", wide);
-            Line(report, "枠からのはみ出し", outside);
+            Line(report, "字の重なり", found.Overlaps);
+            Line(report, "字が枠より広い", found.Wide);
+            Line(report, "字が枠からはみ出し", found.Outside);
+            Line(report, "画面の外", found.OffScreen);
+            Line(report, "覆われて見えない", found.Buried);
 
-            if (overlaps.Count + wide.Count + outside.Count > 0)
+            if (found.Total > 0)
             {
                 report.Append("\n詳しい場所は Console に出しました。");
-                Debug.LogWarning(Detail(overlaps, wide, outside));
+                Debug.LogWarning(Detail(found));
             }
             return report.ToString();
         }
@@ -108,20 +185,35 @@ namespace EggCommand.EditorTools
                 .Append(found.Count).Append(" 件\n");
         }
 
-        private static string Detail(List<string> a, List<string> b, List<string> c)
+        private static string Detail(Findings f)
         {
             var sb = new StringBuilder("■ 画面の検査\n");
-            foreach (var line in a) sb.Append("  字の重なり: ").Append(line).Append('\n');
-            foreach (var line in b) sb.Append("  字が枠より広い: ").Append(line).Append('\n');
-            foreach (var line in c) sb.Append("  枠からはみ出し: ").Append(line).Append('\n');
+            foreach (var line in f.Overlaps) sb.Append("  字の重なり: ").Append(line).Append('\n');
+            foreach (var line in f.Wide) sb.Append("  字が枠より広い: ").Append(line).Append('\n');
+            foreach (var line in f.Outside) sb.Append("  枠からはみ出し: ").Append(line).Append('\n');
+            foreach (var line in f.OffScreen) sb.Append("  画面の外: ").Append(line).Append('\n');
+            foreach (var line in f.Buried) sb.Append("  覆われて見えない: ").Append(line).Append('\n');
             return sb.ToString();
         }
 
-        /// <summary>いま出ているものを全部見る。⚠️ 隠れているものは数えない。</summary>
-        private static int Sweep(Transform root, List<string> overlaps, List<string> wide,
-            List<string> outside)
+        /// <summary>いま出ているものを全部見る。⚠️ 隠れているものは数えない。
+        ///
+        /// ⚠️ **絵も測る。**⭐ 2026-08-21 の討論まで、ここは <see cref="Text"/> と
+        /// <see cref="Button"/> しか集めていなかった。つまり「はみ出し 0 件」は
+        /// **字だけを数えた 0** で、絵は1枚も見ていなかった。
+        /// ⭐ 実際にその隙間から2つ抜けた ── 行き先の印を一番下へ送って
+        /// 地の**下**に沈めた件と、卵のマスが盤ぜんぶを押しどころにした件。</summary>
+        private static int Sweep(Transform root, Findings f)
         {
             Canvas.ForceUpdateCanvases();
+
+            // ⭐ **目盛りを合わせる。**画面の高さ（世界）÷ 画面の高さ（点）
+            {
+                var frame = (RectTransform)root;
+                var edge = new Vector3[4];
+                frame.GetWorldCorners(edge);
+                _dot = frame.rect.height > 1f ? (edge[2].y - edge[0].y) / frame.rect.height : 0.005f;
+            }
 
             var rects = new List<RectTransform>();
             var names = new List<string>();
@@ -140,8 +232,36 @@ namespace EggCommand.EditorTools
                 // ⚠️ 字が入れ物より広いと、端が切れるか隣へはみ出す
                 if (text != null && text.preferredWidth > rect.rect.width + 1f)
                 {
-                    wide.Add($"{Path(rect)}「{text.text}」"
+                    f.Wide.Add($"{Path(rect)}「{text.text}」"
                         + $" 要る {text.preferredWidth:0} / 幅 {rect.rect.width:0}");
+                }
+            }
+
+            // ⭐ **描かれている物を全部集める**（字・絵の両方）。
+            //    ⚠️ 重なりの判定には使わない ── 面と面は重なって当たり前。
+            //    使うのは「画面の外」と「覆われて見えない」だけ。
+            var art = new List<RectTransform>();
+            var artNames = new List<string>();
+            var artOpaque = new List<bool>();
+            var order = new Dictionary<Transform, int>();
+            {
+                int at = 0;
+                foreach (var rect in root.GetComponentsInChildren<RectTransform>(false))
+                {
+                    order[rect] = at++;
+                    if (Faded(rect, root)) continue;
+                    var text = rect.GetComponent<Text>();
+                    var image = rect.GetComponent<Image>();
+                    bool inked = text != null && !string.IsNullOrEmpty(text.text)
+                        && text.color.a > Faint;
+                    bool painted = image != null && image.enabled && image.color.a > Faint;
+                    if (!inked && !painted) continue;
+                    art.Add(rect);
+                    artNames.Add(Path(rect) + (inked ? $"「{text.text}」" : "（絵）"));
+                    // ⭐ 覆い隠せるのは「透けない一色の面」。
+                    //    ⚠️ 絵柄つきは中が抜けていることがあるので覆いに数えない。
+                    artOpaque.Add(!inked && painted
+                        && image.sprite == null && image.color.a > 0.99f);
                 }
             }
 
@@ -177,7 +297,49 @@ namespace EggCommand.EditorTools
                     // ⚠️ **押しどころどうしも見る。**見ていなかった頃は、開いた札の下に
                     //    一覧の升が丸ごと潜り込んでも「0件」と報告していた（実測で発覚）。
                     //    ⭐ 触れる面が重なっていたら、下は押せないので必ず不具合。
-                    if (boxes[i].Overlaps(boxes[j])) overlaps.Add($"{names[i]} × {names[j]}");
+                    if (boxes[i].Overlaps(boxes[j])) f.Overlaps.Add($"{names[i]} × {names[j]}");
+                }
+            }
+
+            // ⭐ **画面の外へ出ていないか。**⚠️ 巻物で切り取られたぶんは数えない
+            var screen = Rect.MinMaxRect(whole[0].x, whole[0].y, whole[2].x, whole[2].y);
+            var artBox = new Rect[art.Count];
+            var artLayer = new Transform[art.Count];
+            var artGone = new bool[art.Count];
+            for (int i = 0; i < art.Count; i++)
+            {
+                artBox[i] = InkOf(art[i]);
+                artLayer[i] = LayerOf(art[i], root, screenArea);
+                artGone[i] = !Clip(art[i], ref artBox[i]);
+                if (artGone[i]) continue;
+                // ⚠️ **巻物の中は数えない。**⭐ 一覧は画面の端で切れるのが当たり前で、
+                //    数えると升が流れているだけで嘘の警告が出る
+                //    （実測 12件・2026-08-21 の配合画面 ── 窓が画面の下端を
+                //    0.66 はみ出しており、そこに並ぶ升が全部引っかかった）。
+                if (Scrolled(art[i], root)) continue;
+                if (artBox[i].xMin < screen.xMin - Nudge || artBox[i].xMax > screen.xMax + Nudge
+                    || artBox[i].yMin < screen.yMin - Nudge || artBox[i].yMax > screen.yMax + Nudge)
+                {
+                    f.OffScreen.Add(artNames[i]);
+                }
+            }
+
+            // ⭐ **覆われて見えないものが無いか。**
+            //    ⚠️ 「あとから描かれた・透けない・一色の面」に**丸ごと**入っているものだけ。
+            //    ⭐ 見えているのに数えると誰も読まなくなるので、条件はきつくしてある。
+            for (int i = 0; i < art.Count; i++)
+            {
+                if (artGone[i] || artOpaque[i]) continue;
+                for (int j = 0; j < art.Count; j++)
+                {
+                    if (i == j || !artOpaque[j] || artGone[j]) continue;
+                    if (artLayer[i] != artLayer[j]) continue;
+                    if (art[i].IsChildOf(art[j]) || art[j].IsChildOf(art[i])) continue;
+                    // ⚠️ **あとに描かれたものが上。**先に描かれた面は覆えない
+                    if (order[art[j]] <= order[art[i]]) continue;
+                    if (!Swallows(artBox[j], artBox[i])) continue;
+                    f.Buried.Add($"{artNames[i]} ← {artNames[j]}");
+                    break;
                 }
             }
 
@@ -187,22 +349,62 @@ namespace EggCommand.EditorTools
             {
                 var holder = (RectTransform)box.transform;
                 if (holder.childCount == 0) continue;
+                // ⚠️ **巻物の窓を「器」と見なさない。**窓は中身より小さいのが当たり前で、
+                //    まだ流れてきていない升を全部「はみ出し」と数えてしまう
+                //    （実測 14件・2026-08-20 の潜入画面）。⭐ 器は札のほうであって窓ではない。
+                if (holder.GetComponent<RectMask2D>() != null) continue;
                 holder.GetWorldCorners(corners);
                 var bounds = Rect.MinMaxRect(corners[0].x, corners[0].y, corners[2].x, corners[2].y);
                 foreach (var child in holder.GetComponentsInChildren<RectTransform>(false))
                 {
                     if (child == holder) continue;
                     var text = child.GetComponent<Text>();
-                    if (text == null || string.IsNullOrEmpty(text.text)) continue;
+                    // ⚠️ **ここは字だけ。絵を混ぜない。**⭐ 器が切り取らないなら、
+                    //    枠から出た絵は「崩れ」ではなく**飾り**。混ぜて測ったら
+                    //    出てきたのは 42 件すべて意図した飾りだった
+                    //    （実測 2026-08-21 ── 草の房・いま居る印・レア度の角バッジ）。
+                    //    ⭐ 絵は「画面の外」と「覆われて見えない」で見る。そちらは曖昧さが無い。
+                    if (text == null || string.IsNullOrEmpty(text.text)
+                        || text.color.a <= Faint) continue;
+                    if (Faded(child, root)) continue;
+                    // ⚠️ 巻物で切り取られて**描かれていない**ものは数えない
+                    var ink = InkOf(child);
+                    if (!Clip(child, ref ink)) continue;
                     child.GetWorldCorners(corners);
-                    if (corners[0].x < bounds.xMin - 0.5f || corners[2].x > bounds.xMax + 0.5f
-                        || corners[0].y < bounds.yMin - 0.5f || corners[2].y > bounds.yMax + 0.5f)
+                    if (corners[0].x < bounds.xMin - Nudge || corners[2].x > bounds.xMax + Nudge
+                        || corners[0].y < bounds.yMin - Nudge || corners[2].y > bounds.yMax + Nudge)
                     {
-                        outside.Add($"{Path(child)}「{text.text}」が {holder.name} の外");
+                        f.Outside.Add($"{Path(child)}「{text.text}」が {holder.name} の外");
                     }
                 }
             }
             return rects.Count;
+        }
+
+        /// <summary>巻物の中に居るか。⭐ 中なら「画面の端で切れる」のは当たり前。</summary>
+        private static bool Scrolled(Transform part, Transform root)
+        {
+            for (var at = part.parent; at != null && at != root; at = at.parent)
+                if (at.GetComponent<RectMask2D>() != null) return true;
+            return false;
+        }
+
+        /// <summary>a が b を**丸ごと**呑み込んでいるか。</summary>
+        private static bool Swallows(Rect a, Rect b) =>
+            a.xMin <= b.xMin + Nudge && a.yMin <= b.yMin + Nudge
+            && a.xMax >= b.xMax - Nudge && a.yMax >= b.yMax - Nudge;
+
+        /// <summary>親のどこかで薄められていないか。
+        /// ⚠️ <see cref="CanvasGroup"/> で消してある札を「見えている」と数えない。</summary>
+        private static bool Faded(Transform part, Transform root)
+        {
+            for (var at = part; at != null; at = at.parent)
+            {
+                var group = at.GetComponent<CanvasGroup>();
+                if (group != null && group.alpha <= Faint) return true;
+                if (at == root) break;
+            }
+            return false;
         }
 
         /// <summary>巻物（<see cref="RectMask2D"/>）で切り取られたぶんを落とす。

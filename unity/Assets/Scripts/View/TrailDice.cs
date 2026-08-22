@@ -43,6 +43,12 @@ namespace EggCommand.View
         /// ⚠️ 立体が焼けなかったときだけ使う。</summary>
         private static string FaceOf(int pips) => "die-" + pips;
 
+        /// <summary>覆いが暗くなり切るまでの時間。⚠️ 回っている時間より短く。</summary>
+        private const float Veil = 0.18f;
+        /// <summary>覆いの濃さ。⚠️ 濃いと盤が読めず、薄いと転がりが背景に紛れる。</summary>
+        private const float VeilInk = 0.34f;
+
+        private Image _veil;
         private DieCube _cube;
         private RawImage _shot;
         private Image _face;          // ⚠️ 立体が焼けなかったときの落とし先
@@ -68,8 +74,12 @@ namespace EggCommand.View
             Ui.Stretch(root);
             // ⚠️ 覆いは触れない。回っている最中に盤を押させない
             var veil = go.AddComponent<Image>();
-            veil.color = new Color(0f, 0f, 0f, 0.34f);
+            // ⭐ **溶かして入れる**（2026-08-21）。⚠️ いきなり暗くすると、
+            //    さいころが出るより先に「画面が切り替わった」ように見えて、
+            //    転がりの始まりが見えない
+            veil.color = new Color(0f, 0f, 0f, 0f);
             veil.raycastTarget = true;
+            dice._veil = veil;
 
             // ⭐ **器に入れない。**画面の真ん中でそのまま転がす
             //    （2026-08-20・作者の指示「枠の中で回るんじゃなくて画面にそのまま」）。
@@ -110,6 +120,12 @@ namespace EggCommand.View
         {
             if (_done) return;
             _age += Time.deltaTime;
+
+            if (_veil != null)
+            {
+                float ink = Mathf.Clamp01(_age / Veil) * VeilInk;
+                _veil.color = new Color(0f, 0f, 0f, ink);
+            }
 
             if (_age < Spin)
             {

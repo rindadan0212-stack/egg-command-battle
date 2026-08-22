@@ -58,13 +58,26 @@ namespace EggCommand.View
         /// <summary>焼き上がった絵。⚠️ 使い終わったら <see cref="Dismiss"/> を呼ぶこと。</summary>
         public RenderTexture Shot { get { return _shot; } }
 
+        /// <summary>網と材質は**1度だけ**作って使い回す。
+        ///
+        /// ⚠️ **振るたびに作ると、そのぶん丸ごと残る。**Unity は実行時に <c>new</c> した
+        /// <see cref="Mesh"/> / <see cref="Material"/> / <see cref="Texture2D"/> を、
+        /// GameObject を壊しても回収しない（`Resources.UnloadUnusedAssets` か場面の入れ替えまで）。
+        /// ⚠️ 本作は場面が1つなので、**永久に残る**。
+        /// ⭐ 面の絵は 128×128 の RGBA が6枚 ＝ **1回振るごとに約 384 KB**。
+        /// 段5 の潜入で 9〜11 回振るので、1回の潜入で 4 MB 近く積み上がっていた
+        /// （2026-08-21 の監査で発覚）。
+        /// ⭐ 中身は毎回まったく同じなので、作り直す理由が最初から無い。</summary>
+        private static Mesh _mesh;
+        private static Material[] _materials;
+
         /// <summary>立体のさいころを1つ用意する。⚠️ 作れなければ null（呼び側は平面へ落とす）。</summary>
         public static DieCube Make()
         {
-            var mesh = BuildMesh();
+            var mesh = _mesh != null ? _mesh : (_mesh = BuildMesh());
             if (mesh == null) return null;
 
-            var materials = BuildMaterials();
+            var materials = _materials != null ? _materials : (_materials = BuildMaterials());
             if (materials == null) return null;
 
             var root = new GameObject("DieCube");
@@ -164,7 +177,10 @@ namespace EggCommand.View
 
         private static readonly int Tint = Shader.PropertyToID("_Color");
 
-        /// <summary>片づける。⚠️ RenderTexture は自分で解放しないと残る。</summary>
+        /// <summary>片づける。⚠️ RenderTexture は自分で解放しないと残る。
+        ///
+        /// ⚠️ 網と材質は**壊さない** ── <see cref="_mesh"/> / <see cref="_materials"/> で
+        /// 使い回しているので、壊すと次に振ったときに空のさいころが出る。</summary>
         public void Dismiss()
         {
             if (_camera != null) _camera.targetTexture = null;

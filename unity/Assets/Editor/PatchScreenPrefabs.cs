@@ -56,6 +56,7 @@ namespace EggCommand.EditorTools
             touched += Patch("UnitStand", PatchUnitStand);
             touched += Patch("BattleScreen", PatchBattle);
             touched += Patch("HomeScreen", PatchHome);
+            touched += Patch("AppFrame", PatchFrame);
             AssetDatabase.Refresh();
             _rebuild = false;
             Debug.Log(touched == 0
@@ -627,6 +628,34 @@ namespace EggCommand.EditorTools
         ///
         /// ⚠️ **消すのは作り直しのときだけ。**古い並びの残骸より、人が置いたものを
         /// 壊さないほうが大事（残骸は「画面を作り直す」で消える）。</summary>
+        // ── 器: タブ帯の地 ─────────────────────────────
+
+        /// <summary>⭐ **タブ帯に地を敷く**（2026-08-21・作者の指示）。
+        ///
+        /// ⚠️ 帯はボタン4つだけで、**地が無かった**。だから一覧が帯の隙間から
+        /// 透けて見え、「貫通している」ように読めた
+        /// （`画面を全部検査する` も字の重なりとして数え続けていた）。
+        /// ⭐ 地を敷けば、下に潜った行が見えなくなる。
+        ///
+        /// ⚠️ **ボタンより後ろへ置く**（子の並びの先頭）。後ろにしないとボタンを覆う。</summary>
+        private static bool PatchFrame(GameObject root)
+        {
+            var dock = Find(root, "Dock");
+            if (dock == null) { Debug.LogError("AppFrame に Dock が無い"); return false; }
+            if (Find(root, "Plate") != null) return false;
+
+            var plate = Add(dock, "Plate", 0f, 0f, Ui.W, Ui.DockHeight);
+            // ⭐ 面で分ける（線は引かない・画面の作法）。⚠️ 透けないこと
+            var image = plate.gameObject.AddComponent<Image>();
+            image.sprite = Ui.SkinSprite("panel");
+            image.type = Image.Type.Sliced;
+            image.color = Ui.Paper;
+            // ⚠️ 帯の下を押しても画面へ抜けないようにする
+            image.raycastTarget = true;
+            plate.SetAsFirstSibling();
+            return true;
+        }
+
         private static void Drop(Component parent, params string[] names)
         {
             foreach (var name in names)
