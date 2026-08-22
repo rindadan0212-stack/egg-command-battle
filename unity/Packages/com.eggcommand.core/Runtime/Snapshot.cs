@@ -31,9 +31,12 @@ namespace EggCommand.Core
         public string? Skill2, Skill3, ParentA, ParentB;
         /// <summary>⚠️ -1 は「持たない」。enum を直に入れると 0 と区別が付かない。</summary>
         public int Strong = -1, Weak = -1;
+        /// <summary>大得意・大不得意。⚠️ -1 は「大得意より前の保存」（そのまま持たない扱い）。</summary>
+        public int Best = -1, Worst = -1;
         /// <summary>属性。⚠️ -1 は「属性を個体に持たせる前の保存」。種族の昔の属性で埋める。</summary>
         public int Element = -1;
-        /// <summary>特性の id。⚠️ null は「持たない」（特性より前の保存もここに来る）。</summary>
+        /// <summary>⚠️ **読まない欄**（2026-08-21 から特性は種族で決まる）。
+        /// ⭐ 書き続けるのは、古い版のアプリでも保存が読めるようにするため。</summary>
         public string? Trait;
         /// <summary>枠ごとのスキルポイント。⚠️ 短い／空なら 0（スキルレベルより前の保存）。
         /// ⭐ レベルは保存しない（ポイントから導出する）。</summary>
@@ -45,12 +48,15 @@ namespace EggCommand.Core
     {
         public string Id = "", SpeciesId = "";
         public StatSave Wild = new StatSave();
-        public int MutationCounter, PaletteIndex, Generation, How, Rarity;
+        /// <summary>⚠️ **PaletteIndex は 2026-08-21 に卵から外した**（色は孵るときに引く）。
+        /// 古い保存に入っていても読まない。</summary>
+        public int MutationCounter, Generation, How, Rarity;
         public bool HasSkills;
         public string? Skill2, Skill3, ParentA, ParentB;
         public int Strong = -1, Weak = -1;
+        public int Best = -1, Worst = -1;
         public int Element = -1;
-        /// <summary>配合で親から継いだ特性。⚠️ null なら孵すときに引く（野生の卵）。</summary>
+        /// <summary>⚠️ **読まない欄**（<see cref="CreatureSave.Trait"/> と同じ）。</summary>
         public string? Trait;
     }
 
@@ -108,6 +114,12 @@ namespace EggCommand.Core
         /// <summary>乱数の系統ぶんの状態を平らに並べたもの（4語 × 系統数）。
         /// ⚠️ 件数は書かない。系統を足すたびに直す羽目になり、直し忘れが嘘になる。</summary>
         public List<uint> Rng = new List<uint>();
+        /// <summary>勝った試練の id。⚠️ 無ければ「まだ1つも勝っていない」。</summary>
+        public List<string> Trials = new List<string>();
+        /// <summary>⭐ **一度でも手に入れた種族の id**（図鑑）。
+        /// ⚠️ 空でも版は上げない ── 読む側が保管庫から**継ぎ足す**ので、
+        /// 古い保存も「いま持っているぶんは載っている」状態から始まる。</summary>
+        public List<string> Seen = new List<string>();
     }
 
     /// <summary>保存と復元。⭐ **ここが唯一の変換場所**。
@@ -126,6 +138,11 @@ namespace EggCommand.Core
             game.RngNest, game.RngEgg, game.RngHatch, game.RngSteal,
             game.RngBreed, game.RngRarity, game.RngEncounter, game.RngSlant,
             game.RngElement, game.RngTrait,
+            // ⚠️ **足すときは必ず末尾へ。**⭐ 読み込みは前から4語ずつ当てて、
+            //    足りなくなったら止まる（`if (at + 4 > save.Rng.Count) break;`）ので、
+            //    末尾に足すかぎり**古い保存もそのまま読める**。
+            game.RngBattle,
+            game.RngPalette,
         };
 
         public static GameSave Save(Game game)
@@ -182,6 +199,9 @@ namespace EggCommand.Core
                 save.RaidCounts.Add(pair.Value);
             }
 
+            save.Trials.AddRange(game.TrialsBeaten);
+            save.Seen.AddRange(game.SpeciesSeen);
+
             foreach (var rng in StreamsOf(game)) save.Rng.AddRange(rng.State());
             return save;
         }
@@ -225,6 +245,21 @@ namespace EggCommand.Core
                     e.Level, e.UntilUnix));
             }
             game.Party.AddRange(save.Party);
+            // ⚠️ **表から消えた試練の id は捨てる。**⭐ 残すと「勝った印が付いているのに
+            //    その段が無い」状態になり、数え方（TrialsCleared）と食い違う。
+            foreach (var id in save.Trials)
+            {
+                if (Trials.Has(id)) game.TrialsBeaten.Add(id);
+                else notes?.Add($"試練 {id} が表に無いので勝った印を外した");
+            }
+            // ⭐ **図鑑。**⚠️ `Games.See` を通すので、表から消えた種族は落ちる。
+            foreach (var id in save.Seen) Games.See(game, id);
+            // ⚠️ **保管庫から継ぎ足す。**⭐ 古い保存（この欄が無い頃のもの）でも、
+            //    いま持っている個体ぶんは図鑑に載る ── 手元に居るのに
+            //    「まだ見ていない」と出るほうが嘘になる。
+            //    ⭐ 直し（self-heal）でもある: 口を通さずに入った個体を拾い直す。
+            foreach (var creature in game.Storage.Creatures) Games.See(game, creature.SpeciesId);
+
             game.NestParty = save.NestParty;
             if (save.NestPartyCounts.Count == 0)
             {
@@ -306,15 +341,18 @@ namespace EggCommand.Core
             return null;
         }
 
-        /// <summary>⚠️ 別の特性で埋めない。埋めると「持っていない特性を持っている」状態になる。
-        /// 空にするほうが、まだ読める（技と同じ扱い）。</summary>
-        private static string? ResolveTrait(string? id, List<string>? notes)
+        /// <summary>読み込み時に特性を**種族から引き直す**。
+        ///
+        /// ⚠️ 保存に入っている値は見ない。2026-08-21 まで個体ごとに引いていたので、
+        /// そのまま読むと**同じ種族なのに特性が14通りある箱**が残り続ける。
+        /// ⭐ 特性は種族から一意に決まるので、読むたびに作り直せる ── 失うものは無い
+        /// （育てた分を <see cref="Creatures.TrainedFor"/> で作り直すのと同じ約束）。</summary>
+        private static string? ResolveTrait(string speciesId, string? saved, List<string>? notes)
         {
-            // ⚠️ <see cref="ResolveSkill"/> と同じ理由で空文字も「持たない」
-            if (string.IsNullOrEmpty(id)) return null;
-            if (Traits.Has(id)) return id;
-            notes?.Add($"特性 {id} が表に無いので持たない扱いにした");
-            return null;
+            string now = Creatures.TraitIdFor(speciesId);
+            if (!string.IsNullOrEmpty(saved) && saved != now)
+                notes?.Add($"特性を種族のもの（{now}）にした");
+            return now;
         }
 
         // ── 個々の変換 ──────────────────────────────────
@@ -349,7 +387,8 @@ namespace EggCommand.Core
             Earned = c.Earned, MutationCounter = c.MutationCounter,
             Skill2 = c.Skill2, Skill3 = c.Skill3, PaletteIndex = c.PaletteIndex,
             ParentA = c.ParentA, ParentB = c.ParentB, Generation = c.Generation,
-            Strong = Key(c.Strong), Weak = Key(c.Weak), Element = (int)c.Element,
+            Strong = Key(c.Strong), Weak = Key(c.Weak),
+            Best = Key(c.Best), Worst = Key(c.Worst), Element = (int)c.Element,
             Trait = c.TraitId,
             SkillPoints = new List<int>(c.SkillPoints),
         };
@@ -363,7 +402,8 @@ namespace EggCommand.Core
             s.MutationCounter, ResolveSkill(s.Skill2, notes), ResolveSkill(s.Skill3, notes),
             s.PaletteIndex,
             s.ParentA, s.ParentB, s.Generation, Key(s.Strong), Key(s.Weak),
-            Elem(s.Element), ResolveTrait(s.Trait, notes));
+            Elem(s.Element), ResolveTrait(speciesId, s.Trait, notes),
+            Key(s.Best), Key(s.Worst));
 
         // ⚠️ 育てた分は保存から読まず、**Lv から作り直す**（Creatures.TrainedFor）。
         //    育成の規則を 2026-08-19 に二度変えており（得意1本 → 平らに＋1 → 素質の割合）、
@@ -374,19 +414,19 @@ namespace EggCommand.Core
         private static EggSave Of(Egg e) => new EggSave
         {
             Id = e.Id, SpeciesId = e.SpeciesId, Wild = StatSave.Of(e.Wild),
-            MutationCounter = e.MutationCounter, PaletteIndex = e.PaletteIndex,
+            MutationCounter = e.MutationCounter,
             Generation = e.Generation, How = (int)e.How, Rarity = e.Rarity,
             HasSkills = e.HasSkills, Skill2 = e.Skill2, Skill3 = e.Skill3,
             ParentA = e.ParentA, ParentB = e.ParentB,
-            Strong = Key(e.Strong), Weak = Key(e.Weak), Element = (int)e.Element,
-            Trait = e.TraitId,
+            Strong = Key(e.Strong), Weak = Key(e.Weak),
+            Best = Key(e.Best), Worst = Key(e.Worst), Element = (int)e.Element,
         };
 
         private static Egg To(EggSave s, List<string>? notes) => new Egg(
-            s.Id, ResolveSpecies(s.SpeciesId, notes), s.Wild.To(), s.MutationCounter, s.PaletteIndex,
+            s.Id, ResolveSpecies(s.SpeciesId, notes), s.Wild.To(), s.MutationCounter,
             s.ParentA, s.ParentB, s.Generation, (EggOrigin)s.How,
             s.HasSkills, ResolveSkill(s.Skill2, notes), ResolveSkill(s.Skill3, notes),
             s.Rarity, Key(s.Strong), Key(s.Weak), Elem(s.Element),
-            ResolveTrait(s.Trait, notes));
+            Key(s.Best), Key(s.Worst));
     }
 }

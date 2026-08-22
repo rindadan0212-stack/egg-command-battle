@@ -27,6 +27,10 @@ namespace EggCommand.Core
         Spd,
         Generation,
         Mutation,
+        /// <summary>⭐ **入手順**（2026-08-22・作者の指示）。
+        /// ⚠️ 数で並べるのではなく、**保管庫に入った順そのもの**。
+        /// ⭐ 新しく手に入れた個体を探すのが、これが一番速い。</summary>
+        Caught,
     }
 
     /// <summary>保管庫。枠は有限。どれを逃がすかの整理が遊びになる。
@@ -54,7 +58,7 @@ namespace EggCommand.Core
         public static readonly SortKey[] SortKeys =
         {
             SortKey.WildTotal, SortKey.Hp, SortKey.Atk, SortKey.Def, SortKey.Spd,
-            SortKey.Generation, SortKey.Mutation,
+            SortKey.Generation, SortKey.Mutation, SortKey.Caught,
         };
 
         public static string LabelOf(SortKey key)
@@ -69,6 +73,7 @@ namespace EggCommand.Core
                 case SortKey.Spd: return Stats.LabelOf(StatKey.Spd);
                 case SortKey.Generation: return "世代";
                 case SortKey.Mutation: return "変異";
+                case SortKey.Caught: return "入手";
                 default: throw new ArgumentOutOfRangeException(nameof(key));
             }
         }
@@ -121,7 +126,7 @@ namespace EggCommand.Core
             // ⚠️ どちらも「画面の表に出ている数」と同じ ── 生の野生ロールでは並べない。
             var stats = basis == SortBasis.Born
                 ? Creatures.Slanted(Creatures.BornStatsOf(creature.SpeciesId, creature.Wild),
-                    creature.Strong, creature.Weak)
+                    creature)
                 : Creatures.StatsOf(creature);
 
             switch (key)
@@ -141,6 +146,15 @@ namespace EggCommand.Core
             SortBasis basis = SortBasis.Born)
         {
             var list = new List<Creature>(storage.Creatures);
+            // ⭐ **入手順は並べ替えない。**⚠️ 保管庫は入った順に足していく
+            //    （<see cref="Accept"/> が末尾へ）ので、**そのままが入手順**。
+            //    ⚠️ 数で並べようとすると id の付け方に頼ることになり、
+            //    撮影用など別の付け方の id が混じった瞬間に狂う。
+            if (key == SortKey.Caught)
+            {
+                list.Reverse();   // ⭐ 新しいものが先頭（探したいのは直近の1体）
+                return list;
+            }
             list.Sort((a, b) =>
             {
                 int diff = SortValue(b, key, basis) - SortValue(a, key, basis);

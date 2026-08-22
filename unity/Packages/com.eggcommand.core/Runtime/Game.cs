@@ -42,6 +42,23 @@ namespace EggCommand.Core
         /// ここを持たないと、挑むたびに盤が振り直せてしまう（粘れば良い盤が出る）。</summary>
         public readonly Dictionary<string, int> Raids = new Dictionary<string, int>();
 
+        /// <summary>勝った試練の id。⭐ **試練が返す唯一のもの。**
+        ///
+        /// ⚠️ 卵も EXP も出さない（出すと「試練で稼ぐ」が最短経路になり、
+        /// 潜入も配合も回らなくなる）。⭐ 出撃していた個体の育成 +1 は、
+        /// 他の戦闘とまったく同じ扱いで付く。
+        /// ⚠️ 重複して足さない（<see cref="Games.BeatTrial"/> が見る）。</summary>
+        public readonly List<string> TrialsBeaten = new List<string>();
+
+        /// <summary>⭐ **一度でも手に入れた種族の id**（図鑑の中身）。
+        ///
+        /// ⚠️ 「いま持っている種族」ではない ── ⭐ [分解](../../../wiki/分解.md)しても
+        /// 図鑑からは消えない。消える作りにすると「集めた記録」にならず、
+        /// **枠を空けるたびに図鑑が減る**という妙なことになる。
+        /// ⚠️ 足すのは <see cref="Games.Keep"/> と <see cref="Games.See"/> だけ
+        /// （保管庫へ入れる道が増えたときに、書き忘れを1か所で防ぐ）。</summary>
+        public readonly List<string> SpeciesSeen = new List<string>();
+
         /// <summary>通し番号。id を一意にするためだけに使う。</summary>
         public int Serial;
         /// <summary>探索の巣の通し番号。⚠️ <see cref="Serial"/> と分ける。
@@ -61,8 +78,27 @@ namespace EggCommand.Core
         public readonly Rng RngSlant;
         /// <summary>属性を引く系統。⚠️ 後から足したもの。既にある系統の消費順を1つも変えていない。</summary>
         public readonly Rng RngElement;
-        /// <summary>特性を引く系統。⚠️ 同上。混ぜて引かないこと。</summary>
+        /// <summary>⚠️ **もう引いていない系統**（特性は種族から決まる・2026-08-21）。
+        ///
+        /// ⚠️ **消さない。**保存は系統を順番に4語ずつ並べるので、途中の1本を抜くと
+        /// **そこから後ろが全部ずれる**（<see cref="Snapshots"/> の <c>StreamsOf</c>）。
+        /// ⭐ 残しておけば、古い保存もそのまま読める。</summary>
         public readonly Rng RngTrait;
+
+        /// <summary>⭐ **戦闘の運を引く系統。**弱化が通るかはここから出る。
+        ///
+        /// ⚠️ 2026-08-21 まで、画面が <see cref="Battle.CreateBattle"/> へ乱数を
+        /// **渡していなかった** ── 既定の固定の種が使われ、
+        /// **同じ編成なら必ず同じ試合**になっていた。
+        /// ⭐ `sim` のほうは渡していて、註に「渡さないと全戦闘が同じ列になる」と
+        /// 警告まで書いてあった。⚠️ **測る経路と遊ぶ経路が食い違っていた**。
+        ///
+        /// ⚠️ **系統を分ける。**卵や巣と混ぜると、戦うだけで次に出る卵が変わる。</summary>
+        public readonly Rng RngBattle;
+
+        /// <summary>⭐ **色を引く系統**（2026-08-21）。孵すたびに1回引く。
+        /// ⚠️ 孵化の系統（RngHatch）に混ぜない ── 技のガチャの列がずれる。</summary>
+        public readonly Rng RngPalette;
 
         public Game(int seed)
         {
@@ -79,6 +115,8 @@ namespace EggCommand.Core
             RngSlant = root.Stream("slant");
             RngElement = root.Stream("element");
             RngTrait = root.Stream("trait");
+            RngBattle = root.Stream("battle");
+            RngPalette = root.Stream("palette");
         }
     }
 
@@ -119,13 +157,11 @@ namespace EggCommand.Core
                 var egg = Nests.MakeEgg(game.RngEgg, first, EggOrigin.Defeated, ++game.Serial,
                     element: SpeciesTable.Roll(game.RngElement));
                 string id = $"c{game.Serial.ToString().PadLeft(3, '0')}";
-                StatKey strong, weak;
-                Nests.RollSlant(game.RngSlant, out strong, out weak);
-                // ⭐ 最初の3体は★1 なので特性を持たない。
-                //    ⚠️ ここが「始めた瞬間から読むものが多い」の入口だった
-                game.Storage = Storages.Accept(game.Storage,
-                    Nests.Hatch(game.RngHatch, egg, id, strong, weak,
-                        Traits.RollFor(game.RngTrait, egg.Rarity)));
+                StatKey best, strong, weak, worst;
+                Nests.RollSlant(game.RngSlant, out best, out strong, out weak, out worst);
+                // ⭐ 色は**孵るたび**に引く（巣の卵も配合の卵も同じ扱い）
+                int color = SpeciesTable.RollPalette(game.RngPalette, egg.SpeciesId);
+                Keep(game, Nests.Hatch(game.RngHatch, egg, id, strong, weak, best, worst, color));
             }
             Encounters.Refill(game, nowUnix);
             return game;
@@ -202,9 +238,37 @@ namespace EggCommand.Core
             game.Eggs.RemoveAt(index);
             string id = $"c{(++game.Serial).ToString().PadLeft(3, '0')}";
             var creature = Nests.Hatch(game.RngHatch, egg, id);
-            game.Storage = Storages.Accept(game.Storage, creature);
+            Keep(game, creature);
             return creature;
         }
+
+        /// <summary>⭐ **保管庫へ入れる唯一の口。**⚠️ <see cref="Storages.Accept"/> を
+        /// 直に呼ばない ── 呼ぶと図鑑に載らない個体ができる。
+        ///
+        /// ⚠️ 満杯なら <see cref="Storages.Accept"/> が投げる（ここでは握り潰さない）。</summary>
+        public static void Keep(Game game, Creature creature)
+        {
+            game.Storage = Storages.Accept(game.Storage, creature);
+            See(game, creature.SpeciesId);
+        }
+
+        /// <summary>その種族を図鑑に載せる。⚠️ 二重に足さない。</summary>
+        public static void See(Game game, string speciesId)
+        {
+            if (string.IsNullOrEmpty(speciesId)) return;
+            // ⚠️ **表に無い id を書き込まない。**⭐ 書くと、種族を消したときに
+            //    図鑑が「知らない何か」を1枠抱えたまま残る。
+            if (!SpeciesTable.Has(speciesId)) return;
+            if (game.SpeciesSeen.Contains(speciesId)) return;
+            game.SpeciesSeen.Add(speciesId);
+        }
+
+        /// <summary>その種族を手に入れたことがあるか。</summary>
+        public static bool HasSeen(Game game, string speciesId) =>
+            game.SpeciesSeen.Contains(speciesId);
+
+        /// <summary>図鑑に載っている数。⚠️ 分母は <see cref="SpeciesTable.All"/> の数。</summary>
+        public static int SeenCount(Game game) => game.SpeciesSeen.Count;
 
         public static void ReleaseCreature(Game game, string id)
         {
@@ -252,18 +316,54 @@ namespace EggCommand.Core
             var b = CreatureById(game, bId);
             // ⭐ 属性は親のどちらかから受け継ぐ。⚠️ 別の系統で引く（配合の列をずらさない）
             var element = game.RngElement.Chance(0.5) ? a.Element : b.Element;
-            // ⭐ 特性も同じく親から。⚠️ 片方が持たないなら持っているほうを継ぐ
-            //    （半分の確率で「特性の無い子」が生まれると、配合が特性を減らす手段になる）
-            var traitId = game.RngTrait.Chance(0.5)
-                ? a.TraitId ?? b.TraitId
-                : b.TraitId ?? a.TraitId;
-            var outcome = Fusion.Fuse(game.RngBreed, a, b, ++game.Serial,
-                element: element, traitId: traitId);
+            // ⚠️ **特性はここで引かない**（2026-08-21）。⭐ 子の種族が決まった時点で決まる
+            //    ── 配合で特性を狙うなら、狙うのは**種族**のほう。
+            var outcome = Fusion.Fuse(game.RngBreed, a, b, ++game.Serial, element: element);
             game.Eggs.Add(outcome.Egg);
 
             ReleaseCreature(game, aId);
             ReleaseCreature(game, bId);
             return outcome;
+        }
+
+        /// <summary>選んだ卵を**まとめて**1枠へ注ぐ。⭐ 「分解」と同じ形
+        /// （<see cref="Dissolve"/>）── 選んでから、最後に一度だけ実行する。
+        ///
+        /// ⚠️ 2026-08-21 まで**1個押すごとに即座にレベルが上がっていた**（作者の指摘）。
+        /// ⭐ 取り消せない操作を、押した回数だけ黙って重ねていたことになる。
+        ///
+        /// ⚠️ **入る順に入れて、入らなくなったらそこで止める。**⭐ 上限を超える卵は
+        /// 受け取らない（<see cref="FeedEggToSkill"/> と同じ約束）ので、
+        /// 10個選んで7個ぶんしか入らないこともある ── 画面はその数を先に出すこと。</summary>
+        /// <returns>実際に入ったポイントの合計。0 なら卵も減っていない。</returns>
+        public static int FeedEggsToSkill(Game game, string creatureId, int slot,
+            IReadOnlyList<string> eggIds)
+        {
+            int total = 0;
+            foreach (string eggId in eggIds) total += FeedEggToSkill(game, creatureId, slot, eggId);
+            return total;
+        }
+
+        /// <summary>その試練に勝ったことがあるか。</summary>
+        public static bool BeatTrial(Game game, string trialId) =>
+            game.TrialsBeaten.Contains(trialId);
+
+        /// <summary>勝った印を付ける。⚠️ 二重に足さない。</summary>
+        /// <returns>初めて勝ったなら true。</returns>
+        public static bool MarkTrial(Game game, string trialId)
+        {
+            if (!Trials.Has(trialId)) throw new ArgumentException($"試練 {trialId} は無い");
+            if (game.TrialsBeaten.Contains(trialId)) return false;
+            game.TrialsBeaten.Add(trialId);
+            return true;
+        }
+
+        /// <summary>いくつ勝ったか。⭐ 画面の見出しに出す。</summary>
+        public static int TrialsCleared(Game game)
+        {
+            int count = 0;
+            foreach (var trial in Trials.All) if (game.TrialsBeaten.Contains(trial.Id)) count++;
+            return count;
         }
 
         /// <summary>孵化前の卵を素材にして、スキルを1枠ぶん鍛える。

@@ -642,6 +642,19 @@ namespace EggCommand.Core
             }
         }
 
+        /// <summary>⭐ **あきらめる**（2026-08-22・作者の指示
+        /// 「戦闘が長引いて決着がつかないときに出られるように」）。
+        ///
+        /// ⚠️ **負けとして畳む。**⭐ 只で抜けられると、不利な戦いをいつでも
+        /// 無かったことにできてしまう ── 巣を引き直す・卵を失う、といった
+        /// 負けの後始末はそのまま通す。
+        /// ⚠️ 既に決着していたら何もしない（二重に畳まない）。</summary>
+        public static void Concede(BattleState state)
+        {
+            if (state == null || state.Result != null) return;
+            state.Result = Outcome.Enemy;
+        }
+
         /// <summary>1刻みでゲージがいくつ溜まるか。唯一の出所。</summary>
         public static int GaugeRate(int speed, double tempo = 1.0)
         {
@@ -1360,16 +1373,18 @@ namespace EggCommand.Core
         /// これで「スピードが高い個体＝弱化役」という役割が数字の上でも成立する
         /// （速度が行動回数にしか効かないと、弱化役を作る理由が薄い）。
         ///
-        /// ⚠️ 自分・味方に掛けるもの（回復・盾・ガッツ・免疫）は速度で動かさない。
-        /// 誰も抵抗していないのに速さで成否が変わるのは筋が通らない。
-        /// そこでは素の率がそのまま**賭け**になる（効き目が大きいぶん外れる）。
+        /// ⭐ **自分・味方に掛けるもの（回復・盾・ガッツ・免疫・蘇生）は必ず通る**
+        /// （2026-08-21・作者の指示「味方へのバフの確率は不要」）。
+        /// ⚠️ 誰も抵抗していないのに外れるのは筋が通らないし、
+        /// **外したときに消えるのが手番まるごと**なのは支える側だけの罰だった。
         ///
         /// ⚠️ 素の率から動かせる幅は ±<see cref="LandSwing"/> まで。
         /// ステ差だけで 0% や 100% にすると、命中に振ったかどうかが弱化の全部になってしまう。</summary>
         public static int LandChanceOf(Effect effect, Unit actor, Unit target)
         {
-            // 相手が抵抗しないものは、速度でも特性でも動かさない
-            if (!Skills.IsHarmful(effect)) return effect.Chance;
+            // ⭐ 相手が抵抗しないものは**必ず通る**。⚠️ ここで effect.Chance を返していた頃が
+            //    「味方へのバフが外れる」の実体（<see cref="Skills.Faults"/> が付け直しを止める）
+            if (!Skills.IsHarmful(effect)) return 100;
 
             // ⭐ 特性は「弱化の通しやすさ」だけに触る。狙い澄まし＝通す / 意地＝通させない
             int shift = 0;

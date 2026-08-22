@@ -340,28 +340,81 @@ namespace EggCommand.View
         /// （レビュー指摘 2026-08-19）。
         ///
         /// ⚠️ 押しどころは呼ぶ側が足す（押せない場面があるので、ここでは決めない）。</summary>
+        /// <param name="picked">⭐ **選ばれている升は黄**（押しどころの主導線と同じ約束）。
+        /// ⚠️ 色を掛けて示さない ── 掛けると「押せない」（灰）と見分けが付かない。</param>
         public static RectTransform EggCell(Transform parent, string name, Egg egg,
             string note, Color noteInk, float left, float top, float width, float height,
-            bool dim = false)
+            bool dim = false, bool picked = false)
         {
             var cell = Rect(name, parent);
             Place(cell, left, top, width, height);
             // ⭐ ★の枠を**升の後ろ**に敷く（縁だけが色で出る）
             RarityFrame(cell, "Rarity", egg.Rarity, width, height);
             var plate = cell.gameObject.AddComponent<Image>();
-            plate.sprite = SkinOf("panel");
+            plate.sprite = SkinOf(picked ? "button-lead" : "panel");
             plate.type = Image.Type.Sliced;
             plate.color = dim ? new Color(1f, 1f, 1f, 0.55f) : Color.white;
 
-            float art = Mathf.Min(width - 48f, height - 96f);
+            // ⭐ **誰の卵かを出す**（2026-08-22・作者の指示）。
+            // ⚠️ 卵の絵はどれも同じなので、名前が無いと**何が出るか分からない**。
+            //    ⭐ 種族は卵の時点で決まっているので、隠す理由が無い。
+            Label(cell, "Who", SpeciesTable.ById(egg.SpeciesId).Name, 22,
+                dim ? InkFaint : InkDim, TextAnchor.MiddleCenter, 0f, 4f, width, 26f);
+
+            float art = Mathf.Min(width - 48f, height - 122f);
             Pixel(cell, "Art", EggArt.Sprite, EggArt.Shell,
-                (width - art) / 2f, 14f, art);
+                (width - art) / 2f, 32f, art);
             Label(cell, "Stars", Rarities.StarsOf(egg.Rarity), 24,
                 dim ? InkFaint : AccentInk, TextAnchor.MiddleCenter,
                 0f, height - 76f, width, 32f);
             Label(cell, "Note", note, 26, dim ? InkFaint : noteInk,
                 TextAnchor.MiddleCenter, 0f, height - 44f, width, 36f);
             return cell;
+        }
+
+        /// <summary>⭐ **敵は左右反転で描く**（2026-08-21・作者の指示）。
+        ///
+        /// ⭐ 絵は全部おなじ向き（右向き）で描いてあるので、そのまま並べると
+        /// 敵も味方も同じほうを向く ── **どちらがどちらか、絵だけでは読めない。**
+        /// 反転すれば向かい合うので、盤の意味が絵に出る。
+        ///
+        /// ⚠️ **絵そのものの transform に掛ける。**札や器ごと反転させると、
+        /// 中の字まで裏返る（実際に一度やった ── HP の数字が鏡文字になる）。
+        /// ⚠️ 掛け算にしない（`x *= -1`）── 描き直すたびに向きが入れ替わる。
+        /// ⭐ 「敵なら負、味方なら正」と**言い切る**書き方にしてある。</summary>
+        public static void Face(RectTransform art, bool foe)
+        {
+            if (art == null) return;
+            // ⚠️ **軸を絵のまんなかへ先に寄せる。**⭐ 器の pivot は (0,1)（左上）なので、
+            //    そのまま x を負にすると**左端で折り返して枠の外へ出る**。
+            //    実測（2026-08-21・戦闘画面）: 器 x=0.31〜2.98 に対し 絵 x=0.31〜−1.35。
+            //    ⚠️ スクショでは「敵が2体並んでいる」ようにしか見えず、数で初めて分かった。
+            Center(art);
+            var scale = art.localScale;
+            float want = foe ? -Mathf.Abs(scale.x) : Mathf.Abs(scale.x);
+            if (Mathf.Approximately(scale.x, want)) return;
+            art.localScale = new Vector3(want, scale.y, scale.z);
+        }
+
+        /// <summary>pivot をまんなかへ寄せる。⚠️ **見た目は動かさない**
+        /// （寄せたぶんを anchoredPosition で埋め合わせる）。
+        ///
+        /// ⭐ 何度呼んでも同じ（既にまんなかなら素通り）。⚠️ 伸び縮みする器
+        /// （anchorMin ≠ anchorMax）は pivot で位置が変わらないので触らない
+        /// ── 埋め合わせるとそちらが動いてしまう。</summary>
+        private static void Center(RectTransform rect)
+        {
+            var pivot = rect.pivot;
+            if (Mathf.Approximately(pivot.x, 0.5f) && Mathf.Approximately(pivot.y, 0.5f)) return;
+            if (rect.anchorMin != rect.anchorMax)
+            {
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                return;
+            }
+            var size = rect.rect.size;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition += new Vector2(
+                (0.5f - pivot.x) * size.x, (0.5f - pivot.y) * size.y);
         }
 
         /// <summary>押せるもの。⭐ 角丸を使えるのはここだけ（今は面で表す）。

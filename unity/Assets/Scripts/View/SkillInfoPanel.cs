@@ -20,7 +20,11 @@ namespace EggCommand.View
 
         private static GameObject _open;
 
-        public static void Show(App app, Skill skill, int level)
+        /// <param name="slot">どの枠に入っているか。⚠️ **枠1（0）を渡すと CT を 0 で出す。**
+        /// ⭐ 枠1 の CT は常に 0 なので、技の表の数をそのまま出すと**画面が嘘をつく**
+        /// （実測 2026-08-22: BOX の札は「CT0」、長押しの詳細は「CT 3」と出ていた）。
+        /// ⚠️ -1 なら枠を問わない（図鑑）── そのときは技の表の数をそのまま出す。</param>
+        public static void Show(App app, Skill skill, int level, int slot = -1)
         {
             if (skill == null) return;
             Close();
@@ -36,7 +40,7 @@ namespace EggCommand.View
             dimButton.onClick.AddListener(Close);
 
             string power = SkillText.PowerOf(skill);
-            string growth = SkillText.StepsOf(skill);
+            string growth = SkillText.StepsOf(skill, slot);
             string body = SkillText.Describe(skill);
 
             // ⭐ 高さは中身から出す。⚠️ 決め打ちにすると、効果が増えた技で字がはみ出す
@@ -57,7 +61,8 @@ namespace EggCommand.View
             // ⭐ Lv・CT・威力を1行に。⚠️ 3行に割ると札より縦に長い覆いになる
             var meta = new System.Text.StringBuilder();
             meta.Append("Lv ").Append(level).Append(" / ").Append(Skills.MaxLevel);
-            meta.Append("　CT ").Append(skill.Ct);
+            // ⚠️ **枠1 は CT 0。**⭐ 技の表の数ではなく、その枠での実際を出す
+            meta.Append("　CT ").Append(slot == 0 ? 0 : skill.Ct);
             if (power.Length > 0) meta.Append("　威力 ").Append(power);
             Ui.Label(card, "Meta", meta.ToString(), 26, Ui.InkDim, TextAnchor.UpperLeft,
                 Pad, y, inner, 44f);

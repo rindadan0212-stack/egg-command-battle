@@ -78,7 +78,9 @@ namespace EggCommand.View
                 card.gameObject.SetActive(true);
                 card.name = $"Egg {i}";
                 var rect = (RectTransform)card.transform;
-                Ui.Place(rect, (i % PerRow) * CellW, (i / PerRow) * CellH, CellW - 8f, CellH - 8f);
+                // ⚠️ **器の中の字は 228 幅で作ってある。**224 で置くと右へ 4px はみ出す
+                //    （実測 2026-08-22: 「枠からはみ出し」12件 ── 4枚 × 3つの字）。
+                Ui.Place(rect, (i % PerRow) * CellW, (i / PerRow) * CellH, CellW - 4f, CellH - 8f);
                 card.Bind(egg, true, app.HatchSpeed, () => { Close(); onPick(egg); });
             }
 

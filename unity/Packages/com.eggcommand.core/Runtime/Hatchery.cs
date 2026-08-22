@@ -128,15 +128,17 @@ namespace EggCommand.Core
 
                 game.Incubating.RemoveAt(i);
                 string id = $"c{(++game.Serial).ToString().PadLeft(3, '0')}";
-                // ⚠️ 得意・不得意と特性は別の系統で引く。hatch の系統に混ぜると
+                // ⚠️ 偏りは別の系統で引く。hatch の系統に混ぜると
                 //    技のガチャの列がずれて、較正済みの検査が無効になる
-                StatKey strong, weak;
-                Nests.RollSlant(game.RngSlant, out strong, out weak);
-                // ⭐ 巣の卵＝**新しい特性を入れる唯一の入口**。配合の卵は既に持っている
-                // ⚠️ 特性は★の低い卵には付かない（序盤に読むものを増やさない）
-                var creature = Nests.Hatch(game.RngHatch, slot.Egg, id, strong, weak,
-                    Traits.RollFor(game.RngTrait, slot.Egg.Rarity));
-                game.Storage = Storages.Accept(game.Storage, creature);
+                StatKey best, strong, weak, worst;
+                Nests.RollSlant(game.RngSlant, out best, out strong, out weak, out worst);
+                // ⚠️ 特性は引かない ── 種族から決まる（2026-08-21・作者の指示）
+                // ⭐ **色はここで引く。**⚠️ 卵は色を持たない ── 巣で拾った卵も
+                //    配合の卵も、開けてみるまで色が分からない（2026-08-21・作者の指示）
+                int color = SpeciesTable.RollPalette(game.RngPalette, slot.Egg.SpeciesId);
+                var creature = Nests.Hatch(game.RngHatch, slot.Egg, id, strong, weak, best, worst, color);
+                // ⚠️ **`Storages.Accept` を直に呼ばない。**⭐ 図鑑に載せるのも同じ口
+                Games.Keep(game, creature);
                 return creature;
             }
             return null;

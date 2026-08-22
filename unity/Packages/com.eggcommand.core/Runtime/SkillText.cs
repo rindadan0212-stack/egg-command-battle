@@ -122,9 +122,12 @@ namespace EggCommand.Core
 
         /// <summary>Lv ごとに何が上がるか。⭐ **どの Lv で何が上がるか**まで並べる。
         /// ⚠️ 「→」で繋いだだけだと、何段目の話か数えないと分からない。</summary>
-        public static string StepsOf(Skill skill)
+        /// <param name="slot">どの枠に入っているか。⚠️ **枠1（0）では CT の段が消える**
+        /// （枠1 の CT は常に 0 なので、縮めても何も起きない）。
+        /// ⭐ -1 なら枠を問わない（図鑑がこれを出す）。</param>
+        public static string StepsOf(Skill skill, int slot = -1)
         {
-            var gains = Skills.GrowthOf(skill);
+            var gains = Skills.GrowthOf(skill, slot);
             if (gains.Count == 0) return "";
             var parts = new List<string>();
             for (int i = 0; i < gains.Count; i++)

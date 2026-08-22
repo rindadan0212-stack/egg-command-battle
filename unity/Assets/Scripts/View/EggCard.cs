@@ -15,6 +15,11 @@ namespace EggCommand.View
         [SerializeField] private Text _wait;
         [SerializeField] private Button _button;
 
+        /// <summary>種族の名前。⭐ **器（Prefab）には無いので、ここで足す。**
+        /// ⚠️ 卵の絵はどれも同じなので、名前が無いと**何が孵るか分からない**
+        /// （作者の指示 2026-08-22「たまごの名前はホームの孵化装置にセットするときも表示」）。</summary>
+        private Text _who;
+
         /// <summary><paramref name="speed"/> は所要時間の割る数。
         /// ⚠️ ここで割らないと、札の時計と実際の待ち時間が食い違う（画面が嘘をつく）。</summary>
         public void Bind(Egg egg, bool canBegin, int speed, Action onTap)
@@ -25,6 +30,16 @@ namespace EggCommand.View
                 _art.preserveAspect = true;
                 _art.color = canBegin ? Color.white : new Color(1f, 1f, 1f, 0.45f);
             }
+            // ⭐ **何の卵か。**⚠️ ★も素質も時計も「どれくらい」しか言わない ──
+            //    「何が」を言う字が1つも無かった。
+            if (_who == null)
+            {
+                var card = (RectTransform)transform;
+                _who = Ui.Label(transform, "Who", "", 24, Ui.Ink,
+                    TextAnchor.MiddleCenter, 0f, 240f, card.rect.width, 34f);
+            }
+            _who.text = SpeciesTable.ById(egg.SpeciesId).Name;
+
             if (_stars != null) _stars.text = Rarities.StarsOf(egg.Rarity);
             // ⭐ 素質は伏せない。手元にある卵なので、どれを先に温めるかの材料になる
             if (_wild != null) _wild.text = Stats.TotalOf(egg.Wild).ToString();

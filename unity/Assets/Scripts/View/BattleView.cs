@@ -232,7 +232,9 @@ namespace EggCommand.View
         /// ⚠️ 使えない技（CT 中・自分の手番でない）でも開ける ── 待っている間こそ読みたい。</param>
         public void Bind(BattleState state, Unit actor, Unit targetFoe, Unit targetAlly,
             Action<int> onSkill, Action onFinish, Action<Unit> onTap,
-            Action<Skill, int> onDetail = null)
+            // ⚠️ 引数は (技, Lv, **枠の番号**)。⭐ 枠1 の CT は常に 0 なので、
+            //    枠を渡さないと詳細だけ技の表の数（0 でない CT）を出してしまう。
+            Action<Skill, int, int> onDetail = null)
         {
             _byKey.Clear();
             bool done = state.Result != null;
@@ -409,7 +411,7 @@ namespace EggCommand.View
                 var hold = view.Button.GetComponent<LongPress>();
                 if (hold == null) hold = view.Button.gameObject.AddComponent<LongPress>();
                 hold.OnTap = usable && onSkill != null ? () => onSkill(captured) : (Action)null;
-                hold.OnHold = onDetail == null ? null : () => onDetail(chosen, level);
+                hold.OnHold = onDetail == null ? null : () => onDetail(chosen, level, captured);
             }
         }
     }

@@ -35,9 +35,14 @@ namespace EggCommand.View
 
         /// <summary>1行を置いて、使った高さを返す。
         /// ⚠️ 戻り値で次の位置を決めること（開閉で高さが変わる）。</summary>
+        /// <param name="room">この帯より下に使ってよい高さ。⭐ 開いた中身がここに
+        /// 収まらなければ、**中身を巻物に入れる**（2026-08-22・作者の指摘
+        /// 「ソート機能がスクロールできないため全体を操作できない」）。
+        /// ⚠️ 0 なら青天井（＝巻物にしない）。⭐ 呼ぶ側が実際の空きを渡すこと。</param>
         public static float Build(RectTransform parent, float left, float top, float width,
             FilterKey filter, SortKey sort, Action<FilterKey> onFilter, Action<SortKey> onSort,
-            Action repaint, SortBasis basis = SortBasis.Born, Action<SortBasis> onBasis = null)
+            Action repaint, SortBasis basis = SortBasis.Born, Action<SortBasis> onBasis = null,
+            float room = 0f)
         {
             // ── 畳んだ見出し ──
             // ⭐ **ここは状態を出す1行で、主役ではない。**⚠️ 塗ると画面で一番目立ってしまう
@@ -60,13 +65,33 @@ namespace EggCommand.View
             if (!_open) return ClosedHeight;
 
             // ── 開いた中身 ──
-            float y = top + ClosedHeight + Gap;
-            y += Row(parent, "絞る", left, y, width, Filters.Keys.Length,
+            // ⚠️ **先に高さを数える。**⭐ 収まらないときだけ巻物にしたいので、
+            //    置いてから測るのでは遅い（置き直しになる）。
+            float need = Deep(Filters.Keys.Length) + Gap + Deep(Storages.SortKeys.Length);
+            if (onBasis != null) need += Gap + Deep(Storages.Bases.Length);
+
+            float openTop = top + ClosedHeight + Gap;
+            float space = room > 0f ? room - ClosedHeight - Gap : need;
+            if (space < MinOpen) space = MinOpen;
+            bool scroll = need > space + 0.5f;
+
+            // ⭐ 収まらないときは巻物に入れる。⚠️ 入れないと下の段へ**指が届かない**
+            //    （実測 2026-08-22: 中身 870px に対し置き場所がそれより狭かった）。
+            RectTransform host = parent;
+            float y = openTop;
+            if (scroll)
+            {
+                host = Ui.Scroller(parent, "SortOpen", left, openTop, width, space, need);
+                y = 0f;
+                left = 0f;
+            }
+
+            y += Row(host, "絞る", left, y, width, Filters.Keys.Length,
                 i => Filters.LabelOf(Filters.Keys[i]),
                 i => Filters.Keys[i].Equals(filter),
                 i => { onFilter(Filters.Keys[i]); repaint(); }, "F");
             y += Gap;
-            y += Row(parent, "並べる", left, y, width, Storages.SortKeys.Length,
+            y += Row(host, "並べる", left, y, width, Storages.SortKeys.Length,
                 i => Storages.LabelOf(Storages.SortKeys[i]),
                 i => Storages.SortKeys[i].Equals(sort),
                 i => { onSort(Storages.SortKeys[i]); repaint(); }, "S");
@@ -76,13 +101,29 @@ namespace EggCommand.View
             if (onBasis != null)
             {
                 y += Gap;
-                y += Row(parent, "何の数で", left, y, width, Storages.Bases.Length,
+                y += Row(host, "何の数で", left, y, width, Storages.Bases.Length,
                     i => Storages.LabelOf(Storages.Bases[i]),
                     i => Storages.Bases[i].Equals(basis),
                     i => { onBasis(Storages.Bases[i]); repaint(); }, "B");
             }
-            return y - top;
+            return scroll ? ClosedHeight + Gap + space : y - top;
         }
+
+        /// <summary>巻物にするときの、最低限の見える高さ。
+        /// ⚠️ これを下回るほど狭いなら、そもそも置き場所の設計が違う。</summary>
+        private const float MinOpen = 320f;
+
+        /// <summary>札を <paramref name="count"/> 枚並べたときの、見出し込みの高さ。
+        /// ⚠️ <see cref="Row"/> と同じ数え方をここに書き写さない ── 折り返しの規則は
+        /// 下の `PerRow` が唯一の出所。</summary>
+        private static float Deep(int count)
+        {
+            int rows = Mathf.CeilToInt(count / (float)PerRow);
+            return 34f + rows * (RowH + Gap);
+        }
+
+        /// <summary>横に並べる枚数。⚠️ <see cref="Row"/> と <see cref="Deep"/> の共通の出所。</summary>
+        private const int PerRow = 4;
 
         /// <summary>見出し＋札の並び。⭐ 4枚ずつ折り返す（横に7枚並べると1枚が細くなりすぎる）。</summary>
         private static float Row(RectTransform parent, string title, float left, float top,
@@ -93,7 +134,6 @@ namespace EggCommand.View
                 left, top, width, 30f);
             float y = top + 34f;
 
-            const int PerRow = 4;
             float w = (width - Gap * (PerRow - 1)) / PerRow;
             int rows = Mathf.CeilToInt(count / (float)PerRow);
             for (int i = 0; i < count; i++)

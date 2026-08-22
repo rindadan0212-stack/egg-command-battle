@@ -77,26 +77,32 @@ namespace EggCommand.View
 
             // ⭐ **素質 ＋ 強化 ＝ 実値** になるように割る。
             // ⚠️ 素質側に種族基礎を含めないと、足しても戦闘で使う数にならない。
-            // ⚠️ 得意・不得意の ×1.15 / ×0.85 は最後に掛かるので、
+            // ⚠️ 偏りの増減は最後に掛かるので、
             //    「育てる前の実値」を出してから引く（掛けたあとで引かないと1ずれる）。
             var full = Creatures.StatsOf(creature);
             var born = Creatures.Slanted(
                 Stats.ActualStats(species.Base, creature.Wild, new StatBlock(0, 0, 0, 0)),
-                creature.Strong, creature.Weak);
+                creature);
 
             for (int i = 0; i < _stats.Length && i < Stats.Keys.Length; i++)
             {
                 var key = Stats.Keys[i];
                 var row = _stats[i];
                 if (row == null) continue;
-                var tint = key == creature.Strong ? Ui.GoodInk
-                    : key == creature.Weak ? Ui.DangerInk : Ui.Ink;
+                bool up = key == creature.Best || key == creature.Strong;
+                bool down = key == creature.Worst || key == creature.Weak;
+                var tint = up ? Ui.GoodInk : down ? Ui.DangerInk : Ui.Ink;
 
                 if (row.Label != null)
                 {
-                    // ⭐ 得意・不得意は行そのものに書く。⚠️ 別の行に「▲速度」と書くと、
+                    // ⭐ 偏りは行そのものに書く。⚠️ 別の行に「▲速度」と書くと、
                     //    表のどの行のことか目で探すことになる
-                    string mark = key == creature.Strong ? "▲" : key == creature.Weak ? "▼" : "";
+                    // ⭐ **大得意は印を2つ重ねる**（▲▲）。⚠️ 色を濃くするだけだと、
+                    //    ▲と▲▲が画面上で見分けられない（色は既に得意/不得意で使い切っている）。
+                    string mark = key == creature.Best ? "▲▲"
+                        : key == creature.Strong ? "▲"
+                        : key == creature.Weak ? "▼"
+                        : key == creature.Worst ? "▼▼" : "";
                     row.Label.text = mark + Stats.LabelOf(key);
                     row.Label.color = tint == Ui.Ink ? Ui.InkDim : tint;
                 }
@@ -133,6 +139,8 @@ namespace EggCommand.View
             }
 
             // ⭐ **技の札はその個体の属性の色**（戦闘と同じ約束・作者の指示 2026-08-19）。
+            // ⭐ 長押しで技の詳細（2026-08-21・作者の指示）。⚠️ 短く触っても何も起きない
+            //    ── この札は「押すもの」ではないので、触っただけで開くと誤爆する。
             // ⚠️ 灰色のままだと「押せない」に見え、3つとも沈んで読めなかった。
             var tone = ElementMark.ColorOf(creature.Element);
             var skills = Creatures.SkillsOf(creature);
@@ -162,7 +170,26 @@ namespace EggCommand.View
                     box.Ct.text = $"CT{Skills.EffectiveCt(i, skill, boost)}";
                     box.Ct.color = Ui.OnLead;
                 }
+
+                // ⚠️ **絵が無いと指を拾えない。**⭐ 地の Image があるのでそこに付ける
+                if (face == null || _onSkill == null) continue;
+                int held = Creatures.SkillLevelOf(creature, i);
+                var chosen = skill;
+                var hold = box.Root.GetComponent<LongPress>();
+                if (hold == null) hold = box.Root.AddComponent<LongPress>();
+                hold.OnTap = null;
+                int which = i;
+                hold.OnHold = () => _onSkill(chosen, held, which);
             }
         }
+
+        /// <summary>長押ししたときに開く先。⚠️ null なら長押しに反応しない
+        /// （配合の親札のように、詳細を開く先が無い画面がある）。</summary>
+        /// <summary>⚠️ 引数は (技, その個体での Lv, **枠の番号**)。
+        /// ⭐ 枠を渡すのは、枠1 の CT が 0 だから ── 渡さないと詳細だけ違う数を出す。</summary>
+        private System.Action<Skill, int, int> _onSkill;
+
+        /// <summary>長押しの行き先を差す。⭐ <see cref="Bind"/> の前に呼ぶこと。</summary>
+        public void OnSkillHeld(System.Action<Skill, int, int> open) => _onSkill = open;
     }
 }

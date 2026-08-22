@@ -107,7 +107,13 @@ namespace EggCommand.View
                 onFuse: () => FusePanel.Show(app, creature.Id),
                 onGrow: () => { Core.Idle.Spend(game.Idle, creature); app.Refresh(); },
                 basis: _basis,
-                onBasis: b => { _basis = b; app.Refresh(); });
+                onBasis: b => { _basis = b; app.Refresh(); },
+                // ⭐ 技の札を**長押し**すると詳細（2026-08-21・作者の指示）。
+                // ⚠️ 短く触っても開かない ── この札は押しどころではないので、
+                //    触っただけで開くと一覧を選ぶ指が誤爆する。
+                onSkillHeld: (skill, level, slot) => SkillInfoPanel.Show(app, skill, level, slot),
+                // ⭐ たまごで技を鍛える。⚠️ 分解とは**別の入口**（2026-08-22）
+                onTrain: () => SkillEggPanel.Show(app, creature.Id));
         }
     }
 }

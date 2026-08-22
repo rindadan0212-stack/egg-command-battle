@@ -28,7 +28,11 @@ namespace EggCommand.View
         private const float Settle = 0.72f;
         /// <summary>1秒に進める刻み。⭐ 速い者が先に満ちる様子が目で追える速さ。
         /// ⚠️ 上げすぎると結局パッと切り替わり、下げすぎると待たされる。</summary>
-        private const float TicksPerSecond = 14f;
+        /// ⚠️ **2026-08-22 に 14 → 10.5（0.75倍）**（作者の指示「ゲージが溜まる
+        /// スピードをゆっくりに」）。⭐ 溜まる様子を目で追える速さが要る。
+        /// ⚠️ これは**見せ方だけ**の数 ── 誰が先に動くかも、何手で決着するかも変わらない
+        /// （刻みの数は同じで、1秒あたりに進める刻みだけが減る）。
+        private const float TicksPerSecond = 10.5f;
 
         private enum Phase { Idle, Ready, Announcing, Settling }
 
@@ -39,6 +43,15 @@ namespace EggCommand.View
         /// 空いている真ん中へ寄せる（味方は右、相手は左）。</summary>
         private static Vector2 HeadOf(Unit unit) =>
             new Vector2(unit.Side == Side.Ally ? 130f : -160f, 170f);
+
+        /// <summary>⭐ **オートで戦うか**（2026-08-22・作者の指示）。
+        /// ⚠️ 自動になるのは**技の選択だけ** ── 狙い先は人が指したものを使う
+        /// （「オート中はターゲットだけ有効」）。</summary>
+        public bool Auto;
+
+        /// <summary>狙い先を聞く先。⭐ 画面が持っている「いま指している相手」を返す。
+        /// ⚠️ ここで狙い先を**覚えない** ── 覚えると画面と2か所になる。</summary>
+        public System.Func<Skill, Unit> TargetOf;
 
         private App _app;
         private BattleState _state;
@@ -172,6 +185,8 @@ namespace EggCommand.View
 
             if (next.Side == Side.Ally)
             {
+                // ⭐ **オート中は技だけ機械が選ぶ。**⚠️ 狙い先は人が指したまま
+                if (Auto) { AutoPlay(next); return; }
                 Actor = next;
                 _app.Refresh();
                 return;
@@ -181,6 +196,32 @@ namespace EggCommand.View
             //    何をされたのか分からないまま HP だけ減る
             int slot = Ai.ChooseAction(_state, next);
             Queue(next, slot, null, ready: true);
+        }
+
+        /// <summary>⭐ **いま待たせている手番を、その場でオートに引き取らせる。**
+        ///
+        /// ⚠️ `Auto` を立てるだけでは効かない（作者の指摘 2026-08-22
+        /// 「ONにした瞬間に始まるように」）── 手番は**もう人へ渡したあと**で、
+        /// 次に誰かのゲージが満ちるまで Driver はここを見に来ないため、
+        /// **一度だけ手で選ばされていた**。</summary>
+        public void Nudge()
+        {
+            if (!Auto || Busy || Actor == null) return;
+            if (_state == null || _state.Result != null) return;
+            AutoPlay(Actor);
+        }
+
+        /// <summary>技だけ機械が選んで打つ。⚠️ 狙い先は <see cref="TargetOf"/> 任せ
+        /// ── ここで決めない（画面と2か所になる）。</summary>
+        private void AutoPlay(Unit actor)
+        {
+            int mine = Ai.ChooseAction(_state, actor);
+            var pick = Core.Battle.SkillAt(actor, mine);
+            Unit aim = null;
+            if (pick != null && Core.Battle.NeedsTarget(pick) && TargetOf != null)
+                aim = TargetOf(pick);
+            // ⚠️ 敵と同じ3拍で打つ。⭐ 即座に済ませると何をしたか読めない
+            Queue(actor, mine, aim, ready: true);
         }
 
         /// <summary>名乗り。頭上に技名、足元に輪、体をひと突き。</summary>

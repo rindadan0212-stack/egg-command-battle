@@ -17,6 +17,11 @@ namespace EggCommand.View
         [SerializeField] private GameObject _ready;    // 孵る合図
         [SerializeField] private Button _button;
 
+        /// <summary>種族の名前。⭐ **器（Prefab）には無いので、ここで足す。**
+        /// ⚠️ 温めている間も、卵の絵はどれも同じ ── ★と時計は「どれくらい」しか
+        /// 言わないので、**何が孵るのか**を言う字が1つも無かった（2026-08-22）。</summary>
+        private Text _who;
+
         private float _fullWidth = -1f;
         private Incubation _slot;
         private Func<long> _clockSource;
@@ -60,6 +65,17 @@ namespace EggCommand.View
                 _art.preserveAspect = true;
             }
             if (_stars != null) _stars.text = Rarities.StarsOf(slot.Egg.Rarity);
+
+            // ⭐ **何を温めているか。**⚠️ 器の一番下の空きに置く（実測: 380 のうち
+            //    時計が 356 で終わる）── 上へ割り込ませると帯と時計が動く。
+            if (_who == null && _filled != null)
+            {
+                var frame = (RectTransform)transform;
+                _who = Ui.Label(_filled.transform, "Who", "", 22, Ui.InkDim,
+                    TextAnchor.MiddleCenter, 0f, 354f, frame.rect.width, 26f);
+            }
+            if (_who != null) _who.text = SpeciesTable.ById(slot.Egg.SpeciesId).Name;
+
             Retime(nowUnix);
         }
 

@@ -108,20 +108,18 @@ namespace EggCommand.View
                 _art.sprite = PixelSpriteTexture.ToSprite(
                     Creatures.SpeciesOf(unit.Creature).Sprite, Creatures.PaletteOf(unit.Creature));
                 _art.color = alive ? Color.white : new Color(1f, 1f, 1f, 0.25f);
+                // ⭐ 敵は左右反転。⚠️ 器ではなく**絵だけ**に掛ける（字が裏返らないように）
+                Ui.Face(_art.rectTransform, isFoe);
             }
 
             var tint = alive ? (isFoe ? Ui.Danger : Ui.Good) : Ui.InkFaint;
             float ratio = unit.MaxHp > 0 ? (float)unit.Hp / unit.MaxHp : 0f;
             Fill(_hpFill, ratio, _hpFullWidth, tint);
-            // ⭐ **丸は属性の色。**⚠️ 残りHPは帯の長さで読ませるので、数字は出さない
-            //    （数字と帯で同じことを2回言うと、どちらを見ればいいか決まらない）。
-            //    ⚠️ 倒れているときだけは薄い色に落とす（生死は帯より丸のほうが早く読める）。
-            if (_hpBadge != null)
-            {
-                _hpBadge.color = alive
-                    ? ElementMark.ColorOf(unit.Creature.Element)
-                    : Ui.InkFaint;
-            }
+            // ⚠️ **HP の帯の脇に属性の丸を出さない**（2026-08-22・作者の指示）。
+            //    ⭐ 属性は体の脇（`_elementMark`）が既に出している ── 同じことを
+            //    2か所で言うと、どちらを見ればいいか決まらない。
+            //    ⭐ 欄は残す（Prefab に置いてあるものを消すと、次に作り直すとき手で置き直しになる）。
+            if (_hpBadge != null) _hpBadge.gameObject.SetActive(false);
             if (_hpNumber != null) _hpNumber.gameObject.SetActive(false);
 
             // ⚠️ 組み直しのたびに出し直さない。前に出していた値から続ける

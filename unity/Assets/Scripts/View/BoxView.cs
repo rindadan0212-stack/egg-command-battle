@@ -27,6 +27,15 @@ namespace EggCommand.View
         /// <summary>一覧の元の位置と高さ。
         /// ⚠️ **覚えておかないと累積する** ── 開閉のたびに引き算して
         /// いくと、何度か開いただけで一覧が画面外へ落ちる。</summary>
+        /// <summary>並べ替えを開いている間も、一覧に必ず残す高さ。
+        ///
+        /// ⭐ **絞り方を変えた結果がその場で見える**ようにするための取り分。
+        /// ⚠️ 0 にすると開いた札が空き全部を食い、一覧が下の帯へ潜る
+        ///    （実測 2026-08-22: 一覧が y=-4.48〜-3.85、帯の上端は -3.79 ── 11件の重なり）。
+        /// ⚠️ ここを削るほど並べ替えの札は広くなるが、**巻物に入るので届かなくはならない**。
+        ///    一覧が見えなくなるほうが損。</summary>
+        private const float GridKeep = 190f;
+
         private float _gridTop;
         private float _gridHeight;
         private bool _gridSaved;
@@ -83,7 +92,8 @@ namespace EggCommand.View
         public void Bind(Game game, Creature creature, SortKey sort, IReadOnlyList<Creature> sorted,
             Action<SortKey> onSort, Action<string> onPick, Action onFuse, Action onGrow,
             SortBasis basis, Action<SortBasis> onBasis,
-            Action<FilterKey> onFilter, FilterKey filter, Action repaint)
+            Action<FilterKey> onFilter, FilterKey filter, Action repaint,
+            Action<Skill, int, int> onSkillHeld = null, Action onTrain = null)
         {
             bool has = creature != null;
             if (_detail != null) _detail.SetActive(has);
@@ -107,9 +117,17 @@ namespace EggCommand.View
             if (_sortTabs.Length > 0 && _sortTabs[0] != null)
             {
                 var at = (RectTransform)_sortTabs[0].transform;
+                // ⭐ **空きは「一覧のぶん」**。⚠️ 渡さないと、開いた中身が
+                //    画面からはみ出して下の段へ指が届かない（2026-08-22・作者の指摘）
                 float used = SortBar.Build((RectTransform)at.parent, at.anchoredPosition.x,
                     -at.anchoredPosition.y, Ui.W - Ui.Margin * 2f,
-                    filter, sort, onFilter, onSort, repaint, basis, onBasis);
+                    filter, sort, onFilter, onSort, repaint, basis, onBasis,
+                    // ⚠️ **空きは「タブ帯の上まで」。**⭐ 一覧の高さで測ってはいけない
+                    //    ── 一覧自身がタブ帯の下まで伸びているので、それを空きと数えると
+                    //    巻物にならず、下の段が帯へ潜る（実測 2026-08-22: 重なり11件）。
+                    // ⚠️ `_gridTop` は anchoredPosition.y（**負**）なので、上端として使わない。
+                    room: ((RectTransform)at.parent).rect.height
+                        - Ui.DockHeight - (-at.anchoredPosition.y) - GridKeep);
                 // ⚠️ **開いたぶんだけ一覧を下げる。**下げないと、
                 //    開いた札の下に升が潜り込んで押せなくなる。
                 if (box != null)
@@ -129,7 +147,12 @@ namespace EggCommand.View
             if (!has) return;
 
             // ⭐ 絵・見出し・ステ表・特性・技はすべて札が持つ。ここは押しどころだけ見る
-            if (_panel != null) _panel.Bind(creature);
+            if (_panel != null)
+            {
+                // ⭐ **差してから流す。**⚠️ Bind のあとに差すと、その回の札に付かない
+                _panel.OnSkillHeld(onSkillHeld);
+                _panel.Bind(creature);
+            }
 
             // ⭐ **押しどころは2つだけ。**（2026-08-18・作者判断）
             //    ⚠️ 以前は 出撃／餌にする／合成／そだてる／技を鍛える／逃がす の6つが並び、
@@ -143,6 +166,12 @@ namespace EggCommand.View
             //    （2026-08-19 に合成から置き換えたので、上限は入口の条件でなくなった）。
             Repurpose(0, "分解", true, false, onFuse);
 
+            // ⭐ **技を鍛えるを表に出した**（2026-08-22・作者の指示
+            //    「技を鍛えるが分解の中に入っているので表に出して分離」）。
+            // ⚠️ 分解の札の中のタブに隠れていたので、**個体を捨てる画面を開かないと
+            //    たまごを使えなかった** ── 別のことなのに同じ入口だった。
+            Repurpose(2, "技を鍛える", true, false, onTrain);
+
             // ⭐ 放置で溜めた EXP で育てる。1回で1レベル
             // ⚠️ **値段はその個体のいまの Lv で変わる**（作者の指示 2026-08-19）。
             //    一律の定数を出していた頃は、上げるほど重くなることが画面から読めなかった。
@@ -150,9 +179,11 @@ namespace EggCommand.View
             bool canGrow = !Levels.IsMaxed(creature) && game.Idle.Exp >= cost;
             // ⚠️ 「EXP が足りません」と書かない。⭐ 要る数を出せば足りる
             // ⭐ **何レベル上がるかを出す**（作者の指示 2026-08-19）。
-            Repurpose(1, $"レベルアップ ＋1  EXP {Ui.Digits(cost)}", canGrow, canGrow, onGrow);
+            // ⚠️ **短く。**⭐ 押しどころが3枚になって1枚 198 になったので、
+            //    「レベルアップ ＋1  EXP 122」（268 要る）は入らない（2026-08-22 実測）。
+            Repurpose(1, $"Lv ＋1　EXP {Ui.Digits(cost)}", canGrow, canGrow, onGrow);
 
-            for (int i = 2; i < _spend.Length; i++)
+            for (int i = 3; i < _spend.Length; i++)
             {
                 if (_spend[i] != null) _spend[i].gameObject.SetActive(false);
             }

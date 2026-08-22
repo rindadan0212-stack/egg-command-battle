@@ -42,9 +42,16 @@ namespace EggCommand.View
         /// <summary>一番外の車線までの横のずれ。⭐ 車線 ±<see cref="Trail.LaneEdge"/> がここ。
         /// ⚠️ 本数は毎回変わる（2〜4）ので、**端を決めて割る**形にしてある。</summary>
         private const float LaneStep = 396f;
-        /// <summary>関門の札の高さ。⭐ マスの上端に帯として重ねる。</summary>
-        private const float GateHigh = 64f;
         private const float GoalHeight = 176f;
+
+        /// <summary>関門を踏んだあと、余分に置く間（秒）。
+        /// ⭐ **重い所で一拍おく**と、そこが重く感じる（2026-08-21 の手ざわりの調べ）。
+        /// ⚠️ 長いと「詰まった」に見える。</summary>
+        private const float GateBeat = 0.26f;
+
+        /// <summary>卵まであと何マスから、行き先が脈打ちはじめるか。
+        /// ⚠️ 「あと少し！」と字で書かない（作者の指示・この画面に説明の文は置かない）。</summary>
+        private const int GoalNear = 6;
 
         private static readonly Color Board = new Color(0.04f, 0.06f, 0.10f, 0.55f);
         private static readonly Color Plate = new Color(1f, 1f, 1f, 0.88f);
@@ -74,6 +81,12 @@ namespace EggCommand.View
         /// <summary>歩いている最中。⚠️ この間は押させない。</summary>
         private static bool _walking;
 
+        /// <summary>⭐ **歩いている最中の、残りの歩数。**-1 なら歩いていない。
+        ///
+        /// ⚠️ 出目と進むマス数が合っているかを、**数えさせずに見せる**ための数
+        /// （2026-08-21）。以前この食い違いを疑われたとき、盤を見ても確かめようが無かった。</summary>
+        private static int _walkLeft = -1;
+
         /// <summary>巣を選んで潜入へ。⚠️ 道は <see cref="Trails.OfNest"/> ＝ **巣ごとに固定**。</summary>
         public static void Enter(App app, Nest nest)
         {
@@ -83,6 +96,7 @@ namespace EggCommand.View
             _rolling = false;
             _flagged = null;
             _shownAt = -1;
+            _walkLeft = -1;
             _open = null;
             _walking = false;
 
@@ -111,7 +125,31 @@ namespace EggCommand.View
             if (!ReferenceEquals(_flagged, raid))
             {
                 _handing = false; _rolling = false; _walking = false;
-                _shownAt = -1; _open = null;
+                _shownAt = -1; _walkLeft = -1; _open = null;
+                // ⚠️ **覚え直す。**⭐ 直さないと毎回ここへ落ちて、
+                //    この後で組んだ `_open` を次の組み直しが消し続ける（2026-08-21 監査）。
+                _flagged = raid;
+            }
+
+            // ⭐ **行ける先を並べるのは、ここの仕事。**
+            //
+            // ⚠️ <see cref="RaidStep.Choosing"/> に入る道は**1つではない**。
+            // 振ったあと（<see cref="RollNow"/>）だけでなく、
+            // ⭐ **関門で「N マス進む」を買ったときも** Choosing になる。
+            // ⚠️ 並べるのを RollNow の中だけでやっていたので、買った直後は
+            //    **光るマスが0・さいころの釦は例外**で、そこから何も押せなくなった
+            //    （2026-08-21 に実機で再現）。
+            // ⭐ 画面側の1か所に寄せておけば、Core が Choosing に入る道を増やしても壊れない。
+            if (!_handing && !_rolling && !_walking && _open == null
+                && raid.Result == null && raid.Step == RaidStep.Choosing)
+            {
+                var reach = Trails.Reach(raid, raid.Pending);
+                if (reach.Count == 0) Trails.Stuck(raid);
+                // ⚠️ **ここで return しない。**⭐ 返すと Header も盤も下の帯も描かれず、
+                //    次の組み直し（0.13秒後）まで**画面が空になる**（2026-08-21 監査）。
+                //    `Walk` が `_walking` を立てるので、この下の見張りは正しく働く。
+                else if (reach.Count == 1) Walk(app, raid, reach[0]);
+                else _open = reach;
             }
 
             float boardTop = HeaderHeight + GroupGap;
@@ -158,42 +196,69 @@ namespace EggCommand.View
                 Ui.Label(strip, "More", $"+{had - show}", 26, Faint,
                     TextAnchor.MiddleLeft, Ui.Margin + (Die + DieGap) * show, 20f, 90f, Die);
 
-            // ── 卵までの残りと、届く見込み ──────────────
-            // ⭐ まだ使っていない出目は、届く見込みに足す
-            int carried = raid.Step == RaidStep.Choosing ? raid.Pending : 0;
-            int left2 = Trails.Left(raid);
-            int odds = Trails.Odds(raid, carried);
+            // ── 卵までの残り ─────────────────────────
+            // ⭐ **最短マス数で出す**（2026-08-20・作者の指示
+            //    「％で表示するのではなく最短マス数を表示するように」）。
+            // ⚠️ %は「たぶん届く」という当てにならない数で、何をすれば良いか分からなかった。
+            //    ⭐ マス数なら、さいころの残りと直に見比べられる。
+            // ⚠️ **見せかけの居場所で数える。**⭐ `Trails.Go` は歩き始めに `raid.At` を
+            //    終点へ動かすので、本当の居場所で数えると**帯の数字だけが先に飛ぶ**
+            //    ── 残り歩数の札と真っ向から矛盾する（2026-08-21 監査）。
+            int left2 = Trails.LeftFrom(raid.Trail, _shownAt >= 0 ? _shownAt : raid.At);
             const float Wide = 300f;
             float right = Ui.W - Ui.Margin - Wide;
             Ui.Icon(strip, "GoalIcon", "goal", Faint, Ui.W - Ui.Margin - 42f, 20f, 42f);
-            Ui.Label(strip, "LeftNum", left2 < 0 ? "—" : left2.ToString(), 30, Faint,
+            Ui.Label(strip, "LeftUnit", "マス", 26, Faint,
                 TextAnchor.UpperRight, right, 22f, Wide - 52f, 40f);
-            var odd = Ui.Label(strip, "Odds", $"{odds}%", 50,
-                odds < 40 ? Ui.Accent : Color.white,
-                TextAnchor.UpperRight, right, 72f, Wide, 68f);
-            odd.horizontalOverflow = HorizontalWrapMode.Overflow;
+            Ui.Label(strip, "LeftNum", left2 < 0 ? "—" : left2.ToString(), 50,
+                left2 < 0 ? Faint : Color.white,
+                TextAnchor.UpperRight, right, 56f, Wide - 52f, 62f);
 
-            // ── 攻・HP・防（盤の関門と同じ絵） ──────────
-            float chip = (Ui.W - Ui.Margin * 2f - 24f) / 3f;
-            var gates = new[] { GimmickKind.Wall, GimmickKind.Damage, GimmickKind.Pressure };
-            for (int i = 0; i < gates.Length; i++)
+            Purse(strip, raid);
+        }
+
+        /// <summary>⭐ **いくら払えるか。**（2026-08-21 に戻した）
+        ///
+        /// ⚠️ **関門を消費にした当日に、残高の表示だけが画面から消えていた。**
+        /// ⭐ ステが払う物になった以上、手持ちが見えないと「払うか見送るか」を
+        /// 選びようがない ── 判断させる仕組みだけ作って、判断の材料を消していた。
+        ///
+        /// ⚠️ **字を置かない。**盤の関門と**同じ絵**（剣・心・盾）を使うので、
+        /// 「この数と、あの関門の数を見比べる」ことは説明しなくても分かる。
+        /// ⭐ 一時増減が効いている間は色が変わる ── ▲▼ のマスと同じ色。</summary>
+        private static void Purse(RectTransform strip, Raid raid)
+        {
+            const float Art = 48f, Row = 64f, Top = 132f, Gap = 8f;
+            var keys = new[] { StatKey.Atk, StatKey.Hp, StatKey.Def };
+            float wide = (Ui.W - Ui.Margin * 2f) / keys.Length;
+            for (int i = 0; i < keys.Length; i++)
             {
-                var key = Trails.StatOf(gates[i]);
-                int now = Trails.Usable(raid, key);
-                bool lifted = raid.TempLeft[key] > 0 && raid.Temp[key] > 0;
-                bool sunk = raid.TempLeft[key] > 0 && raid.Temp[key] < 0;
-                float at = Ui.Margin + (chip + 12f) * i;
-                var box = Ui.Plate(strip, $"Stat {i}", "pill",
-                    new Color(1f, 1f, 1f, lifted ? 0.24f : 0.12f), at, 142f, chip, 58f);
-                var tint = lifted ? Ui.Accent : sunk ? Ui.Danger : Color.white;
-                Ui.Icon(box, "I", IconOf(gates[i]), tint, 14f, 11f, 36f);
-                Ui.Label(box, "N", Ui.Digits(now), 28, tint,
-                    TextAnchor.MiddleLeft, 60f, 0f, chip - 68f, 58f);
-                // ⭐ 増減は矢印の絵で出す（「+60%」の符号を読ませない）
-                if (raid.TempLeft[key] > 0)
-                    Ui.Icon(box, "T", "arrow", tint, chip - 40f, 15f, 30f, lifted ? 90f : -90f);
+                var key = keys[i];
+                float left = Ui.Margin + wide * i;
+                // ⚠️ **`Usable` で出す。**⭐ 払ったぶんを引き、一時増減を掛けた
+                //    「いま実際に出せる額」でないと、関門の数と見比べられない。
+                int have = Trails.Usable(raid, key);
+                int pct = raid.TempLeft[key] > 0 ? raid.Temp[key] : 0;
+                var ink = pct > 0 ? Ui.GoodInk : pct < 0 ? Ui.DangerInk : Color.white;
+                Ui.Icon(strip, $"Purse {i}", IconOf(key), ink, left, Top + (Row - Art) / 2f, Art);
+                Ui.Label(strip, $"PurseN {i}", Ui.Digits(Shown(key, have)), 36, ink,
+                    TextAnchor.MiddleLeft, left + Art + Gap, Top, wide - Art - Gap * 2f, Row);
             }
         }
+
+        /// <summary>⭐ **画面に出す数。**⚠️ HP だけ桁が違う。
+        ///
+        /// ⚠️ 内側の HP は素の値で、⭐ 画面に出ている HP は **×<see cref="Battle.HpScale"/>**
+        /// （2026-08-19 の桁上げ）。素のまま出すと、HP を要求する関門だけが
+        /// **手持ちの 1/105 の数**に見え、「安い関門」だと誤解する。
+        /// ⚠️ 旧画面（<see cref="StealStage"/>）には同じ補正が入っていたのに、
+        /// すごろくへ載せ替えたときに落とした（2026-08-21 の討論で発覚）。</summary>
+        private static int Shown(StatKey key, int value) =>
+            key == StatKey.Hp ? value * Battle.HpScale : value;
+
+        /// <summary>関門が要求する量を、画面の単位で。</summary>
+        private static int Shown(GimmickKind kind, int price) =>
+            Shown(Trails.StatOf(kind), price);
 
         // ── 盤 ──────────────────────────────────────
 
@@ -216,6 +281,9 @@ namespace EggCommand.View
                 Ui.Margin, 8f, Ui.W - Ui.Margin * 2f, GoalHeight);
             Ui.Icon(goal, "I", "goal", Ui.OnLead,
                 (Ui.W - Ui.Margin * 2f - 110f) / 2f, (GoalHeight - 110f) / 2f, 110f);
+            // ⭐ **近づくと脈打つ。**⚠️ 「あと少し！」と字で書かない
+            int far = Trails.LeftFrom(trail, _shownAt >= 0 ? _shownAt : raid.At);
+            if (far >= 0 && far <= GoalNear) Throb.On(goal, 0.05f);
 
             // ── 道の線（マスより先に敷く） ────────────
             for (int i = 0; i < trail.Count; i++)
@@ -224,25 +292,14 @@ namespace EggCommand.View
                 for (int w = 0; w < sq.Ways.Count; w++)
                 {
                     var way = sq.Ways[w];
-                    bool open = !sq.IsJunction || Trails.CanPass(raid, way);
+                    // ⚠️ **通れない道はもう無い**（2026-08-21・関門は只で入れる）
                     bool took = sq.IsJunction && raid.Took.TryGetValue(i, out int t) && t == w;
-                    Link(view, spots[i], spots[way.To], $"L{i}-{w}",
-                        took ? Ui.Accent : open ? Road : RoadShut);
+                    Link(view, spots[i], spots[way.To], $"L{i}-{w}", took ? Ui.Accent : Road);
                 }
             }
 
             var cells = new RectTransform[trail.Count];
             for (int i = 0; i < trail.Count; i++) cells[i] = Cell(view, raid, i, spots[i]);
-
-            // ⭐ 関門の札は**入る先のマスの上端**に重ねる（どちらの道の関門か迷わない）
-            for (int i = 0; i < trail.Count; i++)
-            {
-                var sq = trail.Squares[i];
-                if (!sq.IsJunction) continue;
-                foreach (var way in sq.Ways)
-                    if (way.IsGated && cells[way.To] != null)
-                        Gate(cells[way.To], way, Trails.CanPass(raid, way));
-            }
 
             // ⭐ **行ける先を全部光らせ、そこを押させる。**
             // ⚠️ 押しどころはマスそのもの ── 別に釦を出すと、どこへ行くのか分からない。
@@ -258,8 +315,13 @@ namespace EggCommand.View
                     Ring(view, spots[end]);
                     var go = cells[end].gameObject.AddComponent<Button>();
                     go.transition = Selectable.Transition.None;
-                    var route = path;
-                    go.onClick.AddListener(() => Walk(app, raidNow, route));
+                    // ⚠️ **押した瞬間の出目で引き直す。**⭐ `_open` は組んだ時点の
+                    //    `Pending` で作った道筋なので、間に関門の「N マス進む」などが
+                    //    挟まると**古い長さのまま光り続ける**（作者の報告 2026-08-22
+                    //    「出た目に関わらず1マスしか進めないときがある」）。
+                    // ⚠️ 捕まえた `path` をそのまま渡すと、その古い長さで動いてしまう。
+                    int want = end;
+                    go.onClick.AddListener(() => Choose(app, raidNow, want));
                     Throb.On(cells[end], 0.06f);
                 }
             }
@@ -274,7 +336,13 @@ namespace EggCommand.View
                     / Mathf.Max(1f, content - height));
         }
 
-        /// <summary>マスの置き場所。⭐ **Core が持っている段と左右をそのまま読む。**</summary>
+        /// <summary>マスの置き場所。⭐ **Core が持っている段と左右をそのまま読む。**
+        ///
+        /// ⚠️ **揺らさない**（2026-08-21 に外した）。⭐ 段は「1段＝1歩」を運んでいる
+        /// 唯一の手がかりなので、段の揃いを崩すと**歩数が目で数えられなくなる**。
+        /// ⚠️ 横の揺らぎは、マスがほぼ接している（248px に対し隙間 16px）ので
+        /// 2〜10px しか動かず、狙った「列の不揃い」は起きなかった。
+        /// ⭐ 守るべきものを壊して、狙ったものは達成できていなかった。</summary>
         private static Spot[] Layout(Trail trail, out float tall)
         {
             int deep = trail.Depth;
@@ -292,6 +360,7 @@ namespace EggCommand.View
                     Y = GoalHeight + 28f + (deep - sq.Row) * RowStep,
                 };
             }
+
             return spots;
         }
 
@@ -300,9 +369,24 @@ namespace EggCommand.View
         {
             var trail = raid.Trail;
             var sq = trail.Squares[index];
-            if (sq.IsGoal) return ground;
+            if (sq.IsGoal)
+            {
+                // ⚠️ **`ground` を返してはいけない。**⭐ `Ui.Scroller` が返すのは
+                //    巻物の**中身そのもの**（盤ぜんぶ）。返すと、卵が行ける先に入った瞬間に
+                //    **盤全体に押しどころが付き、盤全体が拍動**した
+                //    （＝どこを押しても勝てる。成功する潜入では毎回通る道・2026-08-21 監査）。
+                // ⭐ 卵にも他と同じ大きさの当たり判定を1枚置く。絵は帯のほうが持っている。
+                var mark = Ui.Rect($"Cell {index}", ground);
+                Ui.Place(mark, at.X, at.Y, CellW, CellH);
+                var clear = mark.gameObject.AddComponent<Image>();
+                clear.color = new Color(0f, 0f, 0f, 0f);
+                return mark;
+            }
 
-            bool behind = raid.Took.ContainsKey(index) || index < raid.At;
+            // ⚠️ **添字で「通り過ぎた」を決めない。**⭐ 添字は（段, 列）の順なので、
+            //    同じ段で自分より左にあるマスまで暗く落ちていた（2026-08-21 監査）。
+            bool behind = raid.Took.ContainsKey(index)
+                || trail.Squares[index].Row < trail.Squares[raid.At].Row;
             var cell = Ui.Rect($"Cell {index}", ground);
             Ui.Place(cell, at.X, at.Y, CellW, CellH);
             // ⚠️ 素の四角を塗らない。⭐ 素材の器（丸角＋影）を敷く
@@ -312,13 +396,19 @@ namespace EggCommand.View
             face.pixelsPerUnitMultiplier = 1f;
             face.color = behind ? PlateGone : Plate;
 
-            // ⚠️ 関門の札のぶん、中身を下げる
-            float pad = GatedInto(trail, index) ? GateHigh : 0f;
-            float high = CellH - pad;
-            float midY = pad + high / 2f;
+            // ⚠️ 関門も**1マス**なので、他のマスと同じ大きさ・同じ中身の置き方をする
+            //    （2026-08-20・作者の指示「関門は1マスとしてカウントするので他のマスと
+            //    被らないように」）。以前はマスの上端に帯を重ねていた。
+            const float pad = 0f;
+            const float high = CellH;
+            const float midY = CellH / 2f;
 
             switch (sq.Kind)
             {
+                case SquareKind.Gate:
+                    Gate(cell, sq, face, behind);
+                    break;
+
                 case SquareKind.Mob:
                     bool beaten = raid.Beaten.Contains(index);
                     face.color = beaten ? PlateGone : Dark;
@@ -329,44 +419,45 @@ namespace EggCommand.View
 
                 case SquareKind.Boon:
                 case SquareKind.Bane:
-                    bool up = sq.Kind == SquareKind.Boon;
+                {
+                    var gift = sq.Face;
+                    if (gift == null) break;
+                    bool up = gift.Amount >= 0;
                     var ink = behind ? Ui.InkFaint : up ? Ui.GoodInk : Ui.DangerInk;
                     // ⭐ 矢印＋ステの絵＋数。⚠️ 「▲防+60%」の記号を字で書かない
                     // ⚠️ 数の枠は**要る幅より広く**取る。⭐ 「30%」で 109 要るのに 102 しか
                     //    無く、字が枠からはみ出していた（2026-08-20 に実測）
                     Ui.Icon(cell, "A", "arrow", ink, 10f, midY - 26f, 52f, up ? 90f : -90f);
-                    Ui.Icon(cell, "S", IconOf(sq.Stat), ink, 66f, midY - 26f, 52f);
-                    Ui.Label(cell, "N", $"{(sq.Percent < 0 ? -sq.Percent : sq.Percent)}%", 44, ink,
+                    Ui.Icon(cell, "S", IconOf(gift.Stat), ink, 66f, midY - 26f, 52f);
+                    int shown = gift.Amount < 0 ? -gift.Amount : gift.Amount;
+                    Ui.Label(cell, "N", $"{shown}%", 44, ink,
                         TextAnchor.MiddleLeft, 124f, pad, CellW - 132f, high);
                     break;
+                }
 
-                default:
-                    if (sq.IsJunction)
-                    {
-                        // ⭐ 分かれ道は丸い節。⚠️ 何も書かない
-                        Ui.Round(cell, "Hub", CellW / 2f - 44f, midY - 44f, 88f,
-                            behind ? Ui.InkFaint : Ui.Ink);
-                        break;
-                    }
+                case SquareKind.Plain:
+                    // ⚠️ **分かれ道に印を付けない**（2026-08-21・作者の指摘
+                    //    「黒丸のマスの役割もよくわからない」）。
+                    // ⭐ 分かれ道は**遊びに現れない**。マスを直接押す形にした 2026-08-20 から、
+                    //    プレイヤーが分かれ道で止まって道を選ぶ場面は無い。
+                    //    ⚠️ 印を残していたので、盤の4枚に1枚が**意味のない黒丸**になっていた。
                     Ui.Icon(cell, "I", "plain",
                         new Color(0f, 0f, 0f, behind ? 0.12f : 0.26f),
                         CellW / 2f - 32f, midY - 32f, 64f);
                     break;
+
+                default:
+                    // ⚠️ **知らない顔つきを黙って素通りにしない。**
+                    // ⭐ `default` が素通りを描いていた頃は、マスの種類を足した瞬間に
+                    //    **盤の上では素通りに化ける**（＝足したことに気づけない）。
+                    //    ⚠️ この画面は「絵で分からせる」規約なので、
+                    //    絵が無いマスは**仕様の穴**であって既定値ではない（2026-08-21 の討論）。
+                    Debug.LogError($"知らないマスの顔つき: {sq.Kind}（絵が決まっていません）");
+                    Ui.Label(cell, "N", "?", 64, Ui.DangerInk,
+                        TextAnchor.MiddleCenter, 0f, pad, CellW, high);
+                    break;
             }
             return cell;
-        }
-
-        /// <summary>そのマスに、関門つきの道で入ってくるか。⭐ 札を置く場所を空けるため。</summary>
-        private static bool GatedInto(Trail trail, int index)
-        {
-            for (int i = 0; i < index; i++)
-            {
-                var sq = trail.Squares[i];
-                if (!sq.IsJunction) continue;
-                foreach (var way in sq.Ways)
-                    if (way.To == index && way.IsGated) return true;
-            }
-            return false;
         }
 
         /// <summary>マスとマスを繋ぐ線。</summary>
@@ -386,49 +477,124 @@ namespace EggCommand.View
             image.raycastTarget = false;
         }
 
-        /// <summary>関門の札。⭐ **段の粒＋ステの絵＋数。通れないなら錠前。**
-        /// ⚠️ 「壁」「通れない」と書かない ── 絵が同じなら結び付けは説明が要らない。
+        /// <summary>関門のマス。⭐ **ステの絵＋要る量＋段の粒。**
         ///
-        /// ⭐ **段を粒で出す**（2026-08-20・作者の指示「固定値にして段をつけたら」）。
-        /// ⚠️ 数だけだと道どうしを見比べにくい ── 粒なら**一目で重い軽いが分かる**。</summary>
-        private static void Gate(RectTransform cell, Way way, bool open)
+        /// ⭐ **1マスとして描く**（2026-08-20・作者の指示「関門は1マスとしてカウントする
+        /// ので他のマスと被らないように」）。
+        /// ⚠️ 以前はマスの上に帯として重ねていたので、他のマスと重なる問題が付いて回った。
+        /// ⚠️ 「壁」「通れない」と書かない ── 絵が同じなら結び付けは説明が要らない。
+        /// ⚠️ 鍵の絵も出さない ── 行ける先は光るので、光らなければ行けない。</summary>
+        private static void Gate(RectTransform cell, Square sq, Image face, bool behind)
         {
-            var tag = Ui.Plate(cell, "Gate", "pill", open ? Ui.Accent : Dark,
-                0f, 0f, CellW, GateHigh);
-            var ink = open ? Ui.OnLead : new Color(1f, 1f, 1f, 0.62f);
-            Ui.Icon(tag, "I", IconOf(way.Gate), ink, 8f, 12f, 40f);
+            var toll = sq.Toll;
+            if (toll == null) return;
+            face.color = behind ? PlateGone : Ui.Accent;
+            var ink = behind ? new Color(1f, 1f, 1f, 0.45f) : Ui.OnLead;
+
+            // ⭐ **上が払う量、下がもらえる物。**（2026-08-21）
+            // ⚠️ 横に並べると数の枠が足りない（実測: 「+4」に 54 要るのに 40 しか無かった）。
+            // ⭐ 上下に分ければ、どちらも枠いっぱいまで使える。
+            const float Band = 66f, Art = 50f;
+            Ui.Icon(cell, "I", IconOf(toll.Kind), ink, 10f, 10f + (Band - Art) / 2f, Art);
+            // ⚠️ **`Shown` を通す。**素の値を出すと HP の関門だけ桁がずれる
+            Ui.Label(cell, "N", Ui.Digits(Shown(toll.Kind, toll.Price)), 34, ink,
+                TextAnchor.MiddleLeft, 68f, 10f, CellW - 78f, Band);
+
+            // ⚠️ 「払うと回数+1」と字で書かない ── さいころの絵か矢印と、数だけ。
+            var gift = sq.Face;
+            if (gift != null) Reward(cell, gift, ink, 10f, 84f, Band, CellW - 20f);
 
             // ⭐ 段の粒。⚠️ 満たない段は薄い粒で残す（何段中いくつかが読める）
-            // ⚠️ **数の枠を先に確保してから置く。**粒を大きくしすぎて数が 48px に痩せ、
-            //    「2,050」が枠からはみ出した（2026-08-20 に実測）
-            const float Pip = 9f, PipGap = 3f;
+            const float Pip = 11f, PipGap = 4f;
             float pips = Trail.GateGrades * (Pip + PipGap);
-            float pipsLeft = CellW - 8f - pips;
+            float from = (CellW - pips) / 2f;
             for (int g = 0; g < Trail.GateGrades; g++)
             {
-                var dot = Ui.Round(tag, $"G{g}", pipsLeft + g * (Pip + PipGap),
-                    GateHigh / 2f - Pip / 2f, Pip,
-                    g < way.Grade ? ink : new Color(ink.r, ink.g, ink.b, 0.22f));
-                dot.gameObject.name = $"Grade {g}";
+                Ui.Round(cell, $"Grade {g}", from + g * (Pip + PipGap), CellH - 22f, Pip,
+                    g < toll.Grade ? ink : new Color(ink.r, ink.g, ink.b, 0.24f));
             }
+        }
 
-            // ⚠️ **鍵の絵は出さない**（2026-08-20・作者の指摘
-            //    「光ってるマスにしか行けないので関門の鍵マークは不要」）。
-            //    ⭐ 行ける先は光る／行けない先は光らない ── それで足りている。
-            //    通れない関門は札の色が沈むので、そこでも読める。
-            Ui.Label(tag, "N", Ui.Digits(way.Requires), 30, ink,
-                TextAnchor.MiddleLeft, 54f, 0f, pipsLeft - 62f, GateHigh);
+        /// <summary>⭐ **払うともらえる物。**⚠️ 字で「回数+1」と書かない。
+        ///
+        /// ⭐ 回数は**さいころを個数だけ並べる** ── 上の帯（残り回数）と**まったく同じ文法**
+        /// なので、説明が要らない。⚠️ さいころの絵は無地なので、
+        /// 1つだけ置いても「四角」にしか見えなかった（実機で確認 2026-08-21）。
+        /// ⭐ 距離は**卵の絵＋数** ── これも上の帯（卵まで N マス）と同じ組み合わせ。</summary>
+        private static void Reward(Transform where, Gift gift, Color ink,
+            float left, float top, float high, float wide)
+        {
+            const float Art = 46f, Gap = 8f;
+            // ⚠️ **「回数でなければ距離」と決め打ちしない。**⭐ 前は `!= Rolls` で
+            //    振り分けていたので、もらえる物を1種類足した日から
+            //    **卵の絵で描かれる**（＝別物なのに同じ見た目）。2026-08-21 の討論の
+            //    「既定値で黙って通す」と同じ形なので、種類ごとに書き出す。
+            switch (gift.Kind)
+            {
+                case GiftKind.Rolls:
+                    // ⚠️ **無地の `die` を使わない。**単独で置くと「四角」にしか見えなかった
+                    //    （実機で確認 2026-08-21）。⭐ 目のある `die-3` なら1つでもさいころに見える。
+                    //    ⚠️ 上の帯は何個も並ぶので無地でも通じるが、ここは1〜3個しか出ない。
+                    int show = gift.Amount > 4 ? 4 : gift.Amount;
+                    for (int i = 0; i < show; i++)
+                        Ui.Icon(where, $"G{i}", "die-3", ink,
+                            left + i * (Art + Gap), top + (high - Art) / 2f, Art);
+                    return;
+
+                case GiftKind.Hop:
+                    Ui.Icon(where, "G", "goal", ink, left, top + (high - Art) / 2f, Art);
+                    Ui.Label(where, "GN", "+" + gift.Amount, 34, ink,
+                        TextAnchor.MiddleLeft, left + Art + Gap, top, wide - Art - Gap, high);
+                    return;
+
+                case GiftKind.Stat:
+                    Ui.Icon(where, "G", IconOf(gift.Stat), ink, left, top + (high - Art) / 2f, Art);
+                    Ui.Label(where, "GN", (gift.Amount >= 0 ? "+" : "") + gift.Amount + "%", 34, ink,
+                        TextAnchor.MiddleLeft, left + Art + Gap, top, wide - Art - Gap, high);
+                    return;
+
+                default:
+                    // ⚠️ `Fight` はここへ来ない（`Square.Gate` が弾く）。
+                    //    ⭐ 来たなら、絵が決まっていない新しい物。
+                    Debug.LogError($"絵の決まっていないもらい物: {gift.Kind}");
+                    Ui.Label(where, "GN", "?", 40, Ui.DangerInk,
+                        TextAnchor.MiddleLeft, left, top, wide, high);
+                    return;
+            }
         }
 
         /// <summary>いま居るマスに置く駒。⭐ **編成ぜんぶで1つ**（作者の決定）。</summary>
         private static void Piece(RectTransform cell, Raid raid)
         {
             if (cell == null) return;
-            const float Size = 112f;   // ⚠️ マスが2倍になったので駒も2倍
-            var disc = Ui.Round(cell, "Piece", 8f, CellH - Size - 8f, Size, Ui.Accent);
+            // ⭐ **左下の隅に小さく置く**（2026-08-21）。
+            // ⚠️ 112 で置いていた頃は、立っているマスの絵と数を半分隠していた。
+            // ⭐ ここなら**払う量（上の段）は必ず読める**。
+            //    もらう物（下の段）は隠れるが、そのときは下の札が同じものを出している。
+            // ⚠️ **関門と同じ橙にしない**（作者の指摘 2026-08-21「色が同じで見づらい」）。
+            //    ⭐ 駒は `Ui.Accent` で、関門のマスも `Ui.Accent` ── 同じ色なので、
+            //    関門の上に立った瞬間に駒が地に溶けていた。
+            // ⭐ **濃紺の縁 ＋ 白い地**にする。マスは 橙（関門）／濃紺（雑魚）／白（素通り）の
+            //    3種類しか無いので、この2色なら**どの上でも必ず浮く**。
+            const float Size = 84f, Edge = 5f;
+            var rim = Ui.Round(cell, "PieceRim", 6f - Edge, CellH - Size - 6f - Edge,
+                Size + Edge * 2f, Ui.Ink);
+            var disc = Ui.Round(rim, "Piece", Edge, Edge, Size, Color.white);
             if (raid.Party.Count > 0)
                 Ui.PixelOf(disc, "Art", raid.Party[0], Size * 0.14f, Size * 0.14f, Size * 0.72f);
-            Jolt.Play(disc, new Vector2(0f, 14f), 0.20f);
+            Jolt.Play(rim, new Vector2(0f, 14f), 0.20f);
+
+            // ⭐ **踏むたびに潰れて伸びる。**⚠️ 座標を動かすだけだと「滑って」いる
+            Squash.Play(rim, 0.22f);
+
+            // ⭐ **歩いている最中だけ、残りの歩数を出す。**
+            // ⚠️ 「出目のぶん進んでいない」と疑われたとき、盤を見ても確かめようが無かった
+            //    （2026-08-20 の指摘）。⭐ 6→5→4… と減れば、数えなくても合っていると分かる。
+            if (_walkLeft <= 0) return;
+            const float Tag = 54f;
+            var tag = Ui.Round(cell, "Left", Size - 10f, CellH - Size - 26f, Tag, Ui.Ink);
+            Ui.Label(tag, "N", _walkLeft.ToString(), 32, Color.white,
+                TextAnchor.MiddleCenter, 0f, 0f, Tag, Tag);
         }
 
         /// <summary>行き先の印。⚠️ マスより一回り大きく、後ろに敷いて縁だけ見せる。</summary>
@@ -437,7 +603,9 @@ namespace EggCommand.View
             const float Halo = 12f;
             var ring = Ui.Ring(ground, "Landing",
                 at.X - Halo, at.Y - Halo, CellW + Halo * 2f, CellH + Halo * 2f);
-            ring.SetAsFirstSibling();
+            // ⚠️ **一番下にしない。**⭐ 一番下にすると地（Ground）が前へ出て、
+            //    印が暗い面の**下**に沈む（2026-08-21 監査）。地の1つ上に置く。
+            ring.SetSiblingIndex(1);
         }
 
         // ── 下の操作帯 ──────────────────────────────
@@ -448,9 +616,16 @@ namespace EggCommand.View
             var dock = Ui.Block(body, "Dock", Board, 0f, top, Ui.W, DockHeight);
             float w = Ui.W - Ui.Margin * 2f;
 
-            if (raid.Result != null || raid.Step == RaidStep.Met || _rolling) return;
+            // ⚠️ **歩いている最中は何も出さない。**⭐ Core の段は歩き終わる前に
+            //    Moved へ戻っているので、見張らないと**駒が動いている最中に振れて**しまう。
+            if (raid.Result != null || raid.Step == RaidStep.Met || _rolling || _walking) return;
             // ⚠️ **道を選ぶ札はもう出さない**（2026-08-20・作者の指摘
             //    「マスを直接押すようになったので下の道を選ぶボタンはいらない」）。
+
+            if (raid.Step == RaidStep.Offered) { Till(app, dock, raid, w); return; }
+            // ⚠️ **振れるのは Moved のときだけ。**⭐ 他の段で釦を出すと、
+            //    押した瞬間に <see cref="Trails.Roll"/> が撥ねて進行不能に見える。
+            if (raid.Step != RaidStep.Moved) return;
 
             // ⭐ 押しどころはさいころの絵だけ。⚠️ 「さいころを振る」と書かない
             var button = Ui.Tappable(dock, "Roll", "", () => RollNow(app, raid),
@@ -459,43 +634,84 @@ namespace EggCommand.View
                 raid.Rolls > 0 ? Ui.OnLead : Ui.InkFaint, w / 2f - 44f, 31f, 88f);
         }
 
-        /// <summary>分かれ道での選択。⭐ **2つ並べて置くことが、そのまま問いになる。**
+        /// <summary>⭐ **払うか、払わないか。**（2026-08-21・作者の指示
+        /// 「対価を払えば有利になる」）
         ///
-        /// ⚠️ 「どちらの道を行く？」と書かない。
-        /// ⚠️ 「HPが270足りない」と書かない ── 錠前の絵と、押せない札で分かる。
-        /// ⚠️ 「敵×2」と書かない ── 髑髏を2つ置く。</summary>
-        /// <summary>その道に乗っている物を**絵で並べる**。⚠️ 数を字で書かない。</summary>
-        private static void Contents(RectTransform dock, Raid raid, Way way,
-            float left, float top, float wide, bool open)
+        /// ⚠️ **字で説明しない。**左が「払う量」、右が「もらえる物」。
+        /// ⭐ 払う側には**払うステの絵と数**、もらう側には**さいころか矢印と数**を置くだけで、
+        /// 交換だと分かる。⚠️ 「〇〇を払って△△を得ますか？」とは書かない。
+        ///
+        /// ⚠️ 押さない選択も**同じ大きさで**置く ── 小さくすると
+        /// 「押すのが正解」に見えて、判断そのものが消える。</summary>
+        private static void Till(App app, RectTransform dock, Raid raid, float w)
         {
-            const float Size = 34f, Gap = 6f;
-            float at = left;
-            int drawn = 0;
-            int cursor = way.To;
-            for (int n = 0; n < way.Length - 1 && drawn < 6; n++)
-            {
-                var sq = raid.Trail.Squares[cursor];
-                string icon = null;
-                Color tint = Color.white;
-                if (sq.Kind == SquareKind.Mob && !raid.Beaten.Contains(cursor))
-                { icon = "mob"; tint = Color.white; }
-                else if (sq.Kind == SquareKind.Boon) { icon = "arrow"; tint = Ui.Good; }
-                else if (sq.Kind == SquareKind.Bane) { icon = "arrow"; tint = Ui.Danger; }
+            var sq = raid.Trail.Squares[raid.At];
+            var toll = sq.Toll;
+            var gift = sq.Face;
+            if (toll == null || gift == null) { Trails.Pass(raid); app.Refresh(); return; }
 
-                if (icon != null && at + Size <= left + wide)
-                {
-                    float turn = icon != "arrow" ? 0f : sq.Kind == SquareKind.Boon ? 90f : -90f;
-                    Ui.Icon(dock, $"C{cursor}", icon,
-                        open ? tint : new Color(tint.r, tint.g, tint.b, 0.35f), at, top, Size, turn);
-                    at += Size + Gap;
-                    drawn++;
-                }
-                if (sq.Ways.Count == 0) break;
-                cursor = sq.Ways[0].To;
-            }
+            const float High = 150f, Gap = 16f;
+            float half = (w - Gap) / 2f;
+
+            // ── 払う ──────────────────────────────
+            var pay = Ui.Tappable(dock, "Pay", "", () =>
+            {
+                if (raid.Step != RaidStep.Offered) return;
+                Trails.Pay(raid);
+                Paid(app, raid);
+                app.Refresh();
+            }, Ui.Margin, 108f, half, High, lead: true);
+            // ⭐ 払う量（左）→ もらう物（右）。⚠️ 矢印は「交換」の合図。
+            // ⚠️ 数の枠は**要る幅より広く**取ること（「+2」に 54 要る）。
+            // ⚠️ **数を折り返させない。**⭐ 104 では「42,000」（font32 で約120要る）が
+            //    2行に折れていた（作者の指摘 2026-08-21）。HP の関門は ×105 されるので
+            //    6桁になりうる ── 180 まで広げ、さらに折り返しを切っておく。
+            const float Art = 52f, Num = 180f;
+            float step = (half - 40f - Art * 2f - Num) / 1f;   // 矢印のぶん
+            Ui.Icon(pay.transform, "S", IconOf(toll.Kind), Ui.OnLead, 18f, High / 2f - 26f, Art);
+            var price = Ui.Label(pay.transform, "N", Ui.Digits(Shown(toll.Kind, toll.Price)), 32,
+                Ui.OnLead, TextAnchor.MiddleLeft, 18f + Art + 4f, 0f, Num, High);
+            // ⚠️ **折り返しを切る。**⭐ 枠を広げても、桁が伸びれば同じことが起きる。
+            //    数は1行で読めることが先（はみ出すほうがまだ読める）。
+            price.horizontalOverflow = HorizontalWrapMode.Overflow;
+            Ui.Icon(pay.transform, "A", "arrow", new Color(1f, 1f, 1f, 0.55f),
+                18f + Art + Num + 8f, High / 2f - 18f, step > 36f ? 36f : step);
+            Reward(pay.transform, gift, Ui.OnLead,
+                half - Art - Num - 14f, 0f, High, Art + Num + 4f);
+
+            // ── 払わない ───────────────────────────
+            var skip = Ui.Tappable(dock, "Skip", "", () =>
+            {
+                if (raid.Step != RaidStep.Offered) return;
+                Trails.Pass(raid);
+                app.Refresh();
+            }, Ui.Margin + half + Gap, 108f, half, High);
+            Ui.Icon(skip.transform, "I", "arrow", Ui.Ink,
+                half / 2f - 30f, High / 2f - 30f, 60f, 0f);
         }
 
         // ── 進行 ────────────────────────────────────
+
+        /// <summary>⭐ **押されたマスへ、いまの出目で行く道筋を引き直して歩く。**
+        ///
+        /// ⚠️ 光らせた時点の道筋を覚えて渡さない ── 覚えると、
+        /// 間に出目が変わる出来事（関門の「N マス進む」）が挟まったときに
+        /// **古い長さで動く**（2026-08-22）。⭐ 行き先だけ覚えて、道は毎回引き直す。</summary>
+        private static void Choose(App app, Raid raid, int goal)
+        {
+            if (_walking || raid.Step != RaidStep.Choosing) return;
+            foreach (var path in Trails.Reach(raid, raid.Pending))
+            {
+                if (path[path.Count - 1] != goal) continue;
+                Walk(app, raid, path);
+                return;
+            }
+            // ⚠️ **黙って何もしないをしない。**⭐ 光っていたのに行けないのは、
+            //    盤か出目が押す前と変わったということ ── 組み直して光らせ直す。
+            Debug.LogError($"すごろく: マス {goal} へ行く道が無い（出目 {raid.Pending} / 居るマス {raid.At}）");
+            _open = null;
+            app.Refresh();
+        }
 
         /// <summary>駒を1マスずつ歩かせる。⭐ **行き先は既に決まっている**（Core が動かした）。
         ///
@@ -507,31 +723,150 @@ namespace EggCommand.View
             _open = null;
             _walking = true;
             _shownAt = path[0];
+            // ⭐ **出目そのものから始める**（2026-08-21）。⚠️ 1歩目で減らしてから描くと、
+            //    6 を振っても 5,4,3,2,1 としか出ず、**1つ足りなく見える**。
+            _walkLeft = path.Count;
             _flagged = raid;
 
+            var board = raid.Trail;
             // ⚠️ **先に動かしてから歩かせる。**⭐ Core が跡（通った道）を記録するので、
             //    歩きの見せ方と本当の居場所がずれない
-            Trails.Go(raid, path);
+            // ⚠️ **食い違いを黙って通さない。**⭐ Core が出目と歩数を突き合わせて投げるので、
+            //    ここで捕まえて**声を上げてから引き直す**（作者の報告 2026-08-22）。
+            //    ⚠️ 投げっぱなしにすると歩きが始まらず、潜入がそこで固まる。
+            try
+            {
+                Trails.Go(raid, path);
+            }
+            catch (System.InvalidOperationException error)
+            {
+                Debug.LogError($"すごろく: {error.Message}（居るマス {raid.At} / 出目 {raid.Pending}）");
+                // ⚠️ **Console だけに書かない。**⭐ 遊んでいる人の目に入らないと、
+                //    「1マスしか進まなかった」としか報告できない（2026-08-22）。
+                BannerView.Show(app.Overlay, $"進みがずれた（{error.Message}）", null);
+                var again = Trails.Reach(raid, raid.Pending);
+                if (again.Count == 0) { _walking = false; Trails.Stuck(raid); app.Refresh(); return; }
+                path = again[0];
+                _walkLeft = path.Count;
+                Trails.Go(raid, path);
+            }
             TrailWalk.Show(app.Overlay, path,
                 at =>
                 {
                     // ⚠️ 別の潜入に切り替わっていたら触らない
                     if (!ReferenceEquals(app.Raid, raid) || app.Showing != Screen.Trail) return;
                     _shownAt = at;
+                    _walkLeft--;
                     app.Refresh();
+                    // ⚠️ **`<= 1` で見る。**⭐ 札の数を出目から始めるために
+                    //    `_walkLeft` を1つ増やしたとき、ここの境目を直し忘れて
+                    //    **▲▼ の数字も雑魚の揺れも一度も出ていなかった**（2026-08-21 監査）。
+                    //    `onStep` は path.Count-1 回しか呼ばれないので、0 には落ちない。
+                    Landed(app, raid, at, _walkLeft <= 1);
                 },
                 () =>
                 {
                     _walking = false;
                     _shownAt = -1;
+                    _walkLeft = -1;
                     if (!ReferenceEquals(app.Raid, raid) || app.Showing != Screen.Trail) return;
                     app.Refresh();
-                });
+                },
+                // ⭐ **関門では一拍おく。**⚠️ ここが一番「払った甲斐」を感じるべき所なのに、
+                //    素通りのマスと同じ速さで抜けていた（2026-08-21 の手ざわりの調べ）。
+                at => board.Squares[at].IsGate ? GateBeat : 0f);
+        }
+
+        /// <summary>1マス踏んだ瞬間。⭐ **何が起きたかを、字でなく動きと数で出す。**
+        ///
+        /// ⚠️ 盤は1マスごとに組み直されるので、演出は<see cref="App.Overlay"/> と
+        /// 同じ「組み直されない層」（<see cref="Fx"/>）へ出すこと。
+        /// 盤の中に出すと、次の一歩で一緒に消える。</summary>
+        private static void Landed(App app, Raid raid, int index, bool last)
+        {
+            var sq = raid.Trail.Squares[index];
+            var cell = Find(app, $"Cell {index}");
+            if (cell == null) return;
+            var fx = Fx.Get(app.transform);
+            var at = fx.PointOf(cell, new Vector2(CellW / 2f, CellH / 2f));
+
+            switch (sq.Kind)
+            {
+                case SquareKind.Gate:
+                    // ⚠️ `last` を見ないと、**通り抜けただけの関門まで光る**（2026-08-21 監査）
+                    if (!last) break;
+                    // ⭐ 払える関門に**着いた**合図。⚠️ 「払えます」と書かない
+                    if (Trails.CanPay(raid, index))
+                    {
+                        fx.Ring(at, Ui.Accent, CellW * 0.5f, CellW * 1.25f, 0.34f);
+                        break;
+                    }
+                    // ⭐ 払い済みなら静かでよい ── もう用が無いマス
+                    if (raid.Paid.Contains(index)) break;
+                    // ⚠️ **足りないときも必ず何か返す。**⭐ 止まったのに何も起きないと、
+                    //    「壊れている」と読まれる ── 実際、討論で真っ先に挙がった
+                    //    （2026-08-21）。⭐ 縮む輪＋要る量が跳ねる ＝ 「届かなかった」。
+                    fx.Ring(at, Ui.DangerInk, CellW * 0.75f, CellW * 0.42f, 0.24f);
+                    var price = cell.Find("N") as RectTransform;
+                    if (price != null) Jolt.Play(price, new Vector2(14f, 0f), 0.20f);
+                    break;
+
+                case SquareKind.Boon:
+                case SquareKind.Bane:
+                {
+                    // ⚠️ 止まったマスだけが効く。⭐ 通り抜けたぶんは出さない
+                    var gift = sq.Face;
+                    if (!last || gift == null) break;
+                    bool up = gift.Amount >= 0;
+                    fx.Number(at, (up ? "+" : "") + gift.Amount + "%",
+                        up ? Ui.GoodInk : Ui.DangerInk, 58f);
+                    fx.Ring(at, up ? Ui.GoodInk : Ui.DangerInk, CellW * 0.4f, CellW, 0.30f);
+                    break;
+                }
+
+                case SquareKind.Mob:
+                    if (!last || raid.Beaten.Contains(index)) break;
+                    Shake.Play(app.Stage, 20f);
+                    break;
+
+                case SquareKind.Plain:
+                    // ⭐ 素通りは**静かでよい**。⚠️ ここに何か足すと、
+                    //    盤の3分の1で毎回鳴ることになる。
+                    break;
+
+                default:
+                    // ⚠️ **知らない顔つきを黙って素通り扱いにしない。**
+                    //    ⭐ `Cell` と同じ規則（2026-08-21）── 絵も演出も無いマスは
+                    //    既定値ではなく**仕様の穴**。
+                    Debug.LogError($"踏んだときの演出が決まっていないマス: {sq.Kind}");
+                    break;
+            }
+        }
+
+        /// <summary>いま出ている画面から、名前で1つ拾う。⚠️ 見つからなければ null。</summary>
+        private static RectTransform Find(App app, string name)
+        {
+            foreach (var rect in app.GetComponentsInChildren<RectTransform>(false))
+                if (rect.name == name) return rect;
+            return null;
+        }
+
+        /// <summary>払った瞬間。⭐ **払った甲斐を、字ではなく動きで出す。**</summary>
+        private static void Paid(App app, Raid raid)
+        {
+            var cell = Find(app, $"Cell {raid.At}");
+            if (cell == null) return;
+            var fx = Fx.Get(app.transform);
+            var at = fx.PointOf(cell, new Vector2(CellW / 2f, CellH / 2f));
+            fx.Ring(at, Ui.Accent, CellW * 0.4f, CellW * 1.4f, 0.36f);
+            fx.Impact(at, Ui.Accent);
+            Shake.Play(app.Stage, 16f);
         }
 
         private static void RollNow(App app, Raid raid)
         {
-            if (_rolling || raid.Rolls <= 0) return;
+            // ⚠️ 段を見ずに振ると <see cref="Trails.Roll"/> が撥ねる（最後の砦）
+            if (_rolling || raid.Rolls <= 0 || raid.Step != RaidStep.Moved) return;
             var nest = app.CurrentNest;
             if (nest == null) { app.Show(Screen.Nests); return; }
             _rolling = true;
@@ -583,8 +918,14 @@ namespace EggCommand.View
             _handing = true;
             _flagged = raid;
             bool won = raid.Result == StealOutcome.Success;
+            // ⚠️ **どちらの負け方かは、居るマスで分ける。**⭐ 敵に負けたなら、
+            //    そこは敵のマス。⚠️ 以前は「分かれ道に居るか」で見ていたが、
+            //    分かれ道かどうかは負け方と何の関係も無かった（2026-08-21 に直した）。
+            // ⚠️ 「どの道も通れない」はいまや**起きない**（どのマスからも関門でない
+            //    1段先がある）。安全網として残してあるだけ。
             bool stuck = raid.Result == StealOutcome.Blocked
-                && raid.Trail.Squares[raid.At].IsJunction;
+                && raid.Trail.Squares[raid.At].Kind != SquareKind.Mob;
+            if (!won) Shake.Play(app.Stage, 34f);
             var nest = app.CurrentNest;
             BannerView.Show(app.Overlay,
                 won ? "GET!" : stuck ? "どの道も通れない！" : "親に見つかった！", () =>
@@ -606,13 +947,19 @@ namespace EggCommand.View
         // ⭐ **ここが唯一の対応表。**上の帯・盤の関門・下の札が全部これを通るので、
         //    同じものには必ず同じ絵が出る（＝字で結び付けを説明しなくてよい）。
 
+        /// <summary>⚠️ **知らない関門を黙って「防」にしない。**
+        /// ⭐ 既定値で通すと、関門の種類を足したとき**盾の絵で出てしまう**
+        /// ── 払う先が違うのに見た目が同じ、が一番たちが悪い（2026-08-21 の討論）。</summary>
         private static string IconOf(GimmickKind gate)
         {
             switch (gate)
             {
                 case GimmickKind.Wall: return "stat-atk";
                 case GimmickKind.Damage: return "stat-hp";
-                default: return "stat-def";
+                case GimmickKind.Pressure: return "stat-def";
+                default:
+                    Debug.LogError($"知らない関門: {gate}（絵が決まっていません）");
+                    return "stat-def";
             }
         }
 
@@ -622,7 +969,10 @@ namespace EggCommand.View
             {
                 case StatKey.Atk: return "stat-atk";
                 case StatKey.Hp: return "stat-hp";
-                default: return "stat-def";
+                case StatKey.Def: return "stat-def";
+                default:
+                    Debug.LogError($"関門にできないステ: {key}");
+                    return "stat-def";
             }
         }
     }
