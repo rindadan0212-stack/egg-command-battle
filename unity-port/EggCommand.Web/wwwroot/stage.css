@@ -127,3 +127,8 @@ html, body {
   shape-rendering: crispEdges;
   display: block;
 }
+
+/* ⚠️ **敵は左右反転**（作者の指示 2026-08-21・すべての敵に適応）。
+   ⭐ Unity では pivot を中央へ寄せてから localScale.x を負にする2段構えが要ったが、
+   CSS は transform-origin の既定が中央なので1行で足りる。 */
+.n.pixel.foe { transform: scaleX(-1); }

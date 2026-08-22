@@ -23,7 +23,7 @@
         _html = LayoutDom.Render(layout, new DomFill
         {
             Count = key => key == "species" ? all.Count : 0,
-            At = i => at = i,
+            At = (key, i) => at = i,
 
             Text = key => key switch
             {

@@ -29,8 +29,11 @@ namespace EggCommand.View
         public Func<string, Action> Hold;
         /// <summary>`repeat=` → 何個あるか。</summary>
         public Func<string, int> Count;
-        /// <summary>⭐ 繰り返しの1件を組む直前に呼ばれる。⚠️ ここで「いま何番目」を控える。</summary>
-        public Action<int> At;
+        /// <summary>⭐ 繰り返しの1件を組む直前に呼ばれる（どの繰り返しの、何番目か）。
+        ///
+        /// ⚠️ **入れ子があるので、どの繰り返しかを渡す。**⭐ 番号1本だと、
+        /// 内側の繰り返しが外側の番号を潰す（段5枚 × 顔4体 が組めない）。</summary>
+        public Action<string, int> At;
         /// <summary>`when=` → 出すか。⚠️ null なら常に出す。</summary>
         public Func<string, bool> When;
     }
@@ -101,7 +104,7 @@ namespace EggCommand.View
 
             for (int i = 0; i < count; i++)
             {
-                if (fill != null && fill.At != null) fill.At(i);
+                if (fill != null && fill.At != null) fill.At(repeat, i);
                 float left = node.Left + (i % cols) * (node.Width + gap);
                 float top = node.Top + (i / cols) * step;
                 Single(node, parent, fill, left, top, i);

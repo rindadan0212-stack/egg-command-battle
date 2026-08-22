@@ -30,7 +30,7 @@ namespace EggCommand.View
             LayoutView.Build("book", body, new LayoutFill
             {
                 Count = key => key == "species" ? all.Count : 0,
-                At = i => at = i,
+                At = (key, i) => at = i,
 
                 Text = key =>
                 {

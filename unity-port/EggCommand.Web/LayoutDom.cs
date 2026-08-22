@@ -27,8 +27,9 @@ namespace EggCommand.Web
         public Func<string, bool> Tappable;
         /// <summary>`repeat=` → 何個あるか。</summary>
         public Func<string, int> Count;
-        /// <summary>⭐ 繰り返しの1件を組む直前に呼ばれる。</summary>
-        public Action<int> At;
+        /// <summary>⭐ 繰り返しの1件を組む直前に呼ばれる（どの繰り返しの、何番目か）。
+        /// ⚠️ 入れ子があるので、どの繰り返しかを渡す。</summary>
+        public Action<string, int> At;
         /// <summary>`when=` → 出すか。⚠️ null なら常に出す。</summary>
         public Func<string, bool> When;
     }
@@ -68,9 +69,10 @@ namespace EggCommand.Web
 
             for (int i = 0; i < count; i++)
             {
-                fill?.At?.Invoke(i);
+                fill?.At?.Invoke(repeat, i);
                 float left = node.Left + (i % cols) * (node.Width + gap);
                 float top = node.Top + (i / cols) * step;
+                // ⭐ 外側の番号も引き継ぐ（入れ子で id が衝突する）
                 Single(sb, node, fill, left, top, i, suffix);
             }
         }
@@ -79,7 +81,9 @@ namespace EggCommand.Web
             float left, float top, int index, string suffix)
         {
             // ⚠️ 空白で繋がない（Unity 版と同じ理由 ── 読み戻せなくなる）
-            string mine = index < 0 ? suffix : "#" + index;
+            // ⚠️ **外側の番号を捨てない。**⭐ 入れ子の繰り返しでは
+            //    `card#2` の中の `face#0` が5枚できて id が衝突する（実測 2026-08-22）。
+            string mine = index < 0 ? suffix : suffix + "#" + index;
             string name = node.Name + mine;
             string tag = node.Kind == "button" ? "button" : "div";
 
@@ -144,7 +148,8 @@ namespace EggCommand.Web
         {
             // ⭐ 正方形で描く（検査が「絵は正方形」を要求している）
             float size = Math.Min(node.Width, node.Height);
-            sb.Append("<svg class=\"n pixel\" viewBox=\"0 0 ")
+            sb.Append("<svg class=\"n pixel").Append(node.Option("foe") == "yes" ? " foe" : "")
+              .Append("\" viewBox=\"0 0 ")
               .Append(sprite.Width).Append(' ').Append(sprite.Height)
               .Append("\" style=\"left:0;top:0;width:").Append(Px(size))
               .Append(";height:").Append(Px(size)).Append("\">");

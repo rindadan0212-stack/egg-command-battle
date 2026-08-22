@@ -1,0 +1,15 @@
+# 試練 ── 手で組んだ敵編成と戦う5段
+#
+# ⭐ 入れ子の繰り返し: 段の札（repeat=trials）の中に、顔ぶれ4体（repeat=party）。
+# ⚠️ 段の札は巻物の中なので max= は要らない（溢れることが巻物の役目）。
+#
+#  名前    種類    左   上   幅   高    付け足し
+note      label   48   24   984  40    size=28 ink=dim anchor=left bind=note
+list      scroll  48   80   984  1376
+  card    card    0    0    984  300   repeat=trials rows=316 tap=trial
+    step  label   24   18   90   80    size=64 anchor=left bind=step
+    name  label   130  20   600  50    size=40 anchor=left bind=name
+    gist  label   130  74   820  36    size=26 ink=dim anchor=left bind=gist
+    won   label   730  20   230  40    size=28 ink=good anchor=right bind=won when=beaten
+    face  pixel   24   118  116  116   repeat=party cols=4 gap=16 rows=116 max=4 foe=yes bind=face
+    go    button  680  164  280  112   bind=go
