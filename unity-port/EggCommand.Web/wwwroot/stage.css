@@ -88,6 +88,10 @@ html, body {
 .n.label.a-upper-left   { justify-content: flex-start; align-items: flex-start; text-align: left; }
 .n.label.a-upper-center { justify-content: flex-start; align-items: center;     text-align: center; }
 
+/* ⭐ **折り返す字**（説明文）。⚠️ 既定は折り返さない
+   ── 1行の見出しが枠の都合で勝手に2行になると、上下の間隔が崩れる。 */
+.n.label.wrapped { white-space: pre-wrap; }
+
 .ink-dim    { color: var(--ink-dim); }
 .ink-faint  { color: var(--ink-faint); }
 .ink-accent { color: var(--accent-ink); }

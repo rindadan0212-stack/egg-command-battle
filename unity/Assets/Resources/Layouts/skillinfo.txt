@@ -1,0 +1,22 @@
+# 技1つの詳細 ── ⭐ **長押しで開く**
+#
+# ⚠️ 札の上に全部書かない。戦闘中の札は3枚並ぶので、説明文まで載せると名前が読めない。
+# ⭐ 札には名前・Lv・CT だけ。残りはここで読ませる。
+#
+# ⚠️ 言い回しは `SkillText` から取る。ここで書き直さない
+#    （同じ効果が画面ごとに別の言い方になる ── 実際3通りに割れていた）。
+#
+# ⭐ **高さは決め打ち。**⚠️ ただし記憶で決めない ── `node scripts/measure.mjs` で
+#    全47技を実物のフォントで測った結果（2026-08-22）:
+#      説明文  いちばん高くて 69（2行）→ 3行ぶんの 112 を取る
+#      伸び方  いちばん高くて 28（1行）→ 40
+#    ⚠️ 技を足したら測り直すこと。
+#
+#  名前    種類    左   上    幅   高    付け足し
+dim       veil    0    0     1080 1920
+card      card    72   714   936  492
+  name    label   32   32    872  56    size=40 anchor=upper-left bind=name
+  meta    label   32   88    872  44    size=26 ink=dim anchor=upper-left bind=meta
+  body    label   32   148   872  112   size=30 anchor=upper-left wrap=yes bind=body
+  steps   label   32   276   872  40    size=24 ink=faint anchor=upper-left wrap=yes bind=steps
+  close   button  208  348   520  112   size=34 tap=close text=閉じる

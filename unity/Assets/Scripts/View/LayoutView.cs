@@ -140,6 +140,9 @@ namespace EggCommand.View
                         node.Number("size", 26), InkOf(node, fill),
                         AnchorOf(node.Option("anchor")),
                         left, top, node.Width, node.Height);
+                    // ⭐ 折り返す字（説明文）。⚠️ 既定は折り返さない
+                    if (node.Option("wrap") == "yes")
+                        text.horizontalOverflow = HorizontalWrapMode.Wrap;
                     rect = (RectTransform)text.transform;
                     break;
                 }

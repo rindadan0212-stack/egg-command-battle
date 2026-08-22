@@ -116,6 +116,27 @@ const SCROLL_TRIALS = [
   },
 ]
 
+/** ⚠️ 折り返す字のある画面でだけ効く試験（`/skill`）。
+ *  ⭐ 「枠に何行入るか」は骨組みが決めているので、溢れたら本当の不備。 */
+const WRAP_TRIALS = [
+  {
+    name: '折り返す字が枠より高い',
+    want: '字が枠より高い',
+    wreck: () => {
+      const body = document.getElementById('body')
+      body.textContent = 'とても長い説明文がここに入る。'.repeat(20)
+    },
+  },
+  {
+    // ⚠️ **この検査が生きていることの確認。**⭐ `.wrapped` が1つも無ければ、
+    //    上の試験は「たまたま通った」だけで、道具は何も見ていない。
+    name: '折り返す字がそもそも在る',
+    want: null,
+    wreck: () => {},
+    check: () => document.querySelectorAll('#stage .n.label.wrapped').length,
+  },
+]
+
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
 let missed = 0
@@ -183,8 +204,26 @@ for (const t of SCROLL_TRIALS) {
   }
 }
 
+// ── 折り返す字のある画面 ──────────────────────────
+const wrapUrl = URL.replace(/\/$/, '') + '/skill?at=0'
+for (const t of WRAP_TRIALS) {
+  await page.goto(wrapUrl, { waitUntil: 'networkidle' })
+  await page.waitForFunction(() => !!document.getElementById('body')).catch(() => {})
+  if (t.check) {
+    const n = await page.evaluate(t.check)
+    if (n > 0) console.log(`⭐ ${t.name} → ${n} 個ある`)
+    else { missed++; console.log(`🔴 ${t.name} → **0個** ── 上の試験は何も見ていない`) }
+    continue
+  }
+  await page.evaluate(t.wreck)
+  const bad = await page.evaluate(audit)
+  const hit = bad.find(b => b.includes(t.want))
+  if (hit) console.log(`⭐ ${t.name} → 捕まえた: ${hit.slice(0, 66)}`)
+  else { missed++; console.log(`🔴 ${t.name} → **素通り**`) }
+}
+
 await browser.close()
 console.log(missed === 0
-  ? `\n⭐ 検査は効いている（試した ${TRIALS.length + VEIL_TRIALS.length + SCROLL_TRIALS.length} 件すべてが正しく動いた）`
+  ? `\n⭐ 検査は効いている（試した ${TRIALS.length + VEIL_TRIALS.length + SCROLL_TRIALS.length + WRAP_TRIALS.length} 件すべてが正しく動いた）`
   : `\n🔴 ${missed} 件が素通り ── この検査は、その分だけ嘘をつく`)
 process.exit(missed ? 1 : 0)

@@ -1,0 +1,43 @@
+@page "/skill"
+@using EggCommand.Core
+@using EggCommand.Web
+
+<div id="stage-wrap">
+  <div id="stage">@((MarkupString)_html)</div>
+</div>
+
+@code {
+    /// <summary>どの技を見るか（`Skills.All` の番号）。</summary>
+    [SupplyParameterFromQuery] public int At { get; set; }
+    /// <summary>どの枠に入っているか。⚠️ **枠1（0）は CT を 0 で出す。**
+    /// ⭐ 技の表の数をそのまま出すと画面が嘘をつく（実測 2026-08-22:
+    /// BOX の札は「CT0」、長押しの詳細は「CT 3」と出ていた）。</summary>
+    [SupplyParameterFromQuery] public int Slot { get; set; } = -1;
+    [SupplyParameterFromQuery] public int Level { get; set; } = 1;
+
+    private string _html = "";
+
+    protected override void OnParametersSet()
+    {
+        var all = Skills.All;
+        var skill = all[Math.Clamp(At, 0, all.Count - 1)];
+        var power = SkillText.PowerOf(skill);
+
+        _html = LayoutDom.Render(LayoutStore.Of("skillinfo"), new DomFill
+        {
+            Text = key => key switch
+            {
+                "name" => skill.Name,
+                // ⭐ Lv・CT・威力を1行に。⚠️ 3行に割ると札より縦に長い覆いになる
+                "meta" => $"Lv {Math.Max(1, Level)} / {Skills.MaxLevel}"
+                    + $"　CT {(Slot == 0 ? 0 : skill.Ct)}"
+                    + (power.Length > 0 ? $"　威力 {power}" : ""),
+                "body" => SkillText.Describe(skill),
+                // ⚠️ 「上げると強くなる」と書かない。⭐ Lv2→Lv5 の実数を並べる
+                "steps" => SkillText.StepsOf(skill, Slot),
+                _ => "",
+            },
+            Tappable = key => true,
+        });
+    }
+}

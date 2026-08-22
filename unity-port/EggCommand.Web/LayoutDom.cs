@@ -109,6 +109,9 @@ namespace EggCommand.Web
             if (node.Kind == "label")
             {
                 cls.Append(" a-").Append(node.Option("anchor") ?? "left");
+                // ⭐ 折り返す字（説明文）。⚠️ 既定は折り返さない ── 1行の見出しが
+                //    枠の都合で勝手に2行になると、上下の間隔が崩れる。
+                if (node.Option("wrap") == "yes") cls.Append(" wrapped");
                 string ink = node.Option("ink");
                 if (ink != null) cls.Append(" ink-").Append(ink);
                 string tint = has && fill?.Tint != null ? fill.Tint(bind) : null;

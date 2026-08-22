@@ -1,0 +1,37 @@
+@page "/measure"
+@using EggCommand.Core
+@using EggCommand.Web
+
+@* ⚠️ **遊びの画面ではありません。**⭐ 骨組みに書く高さを、記憶でなく実測で決めるための場所。
+
+   ⚠️ Unity には `Ui.Height`（採寸用の GameObject を作って測る）が在りましたが、
+   ⭐ web では**実際に描く道具そのもの**で測れます ── 同じフォント・同じ折り返し。
+
+   使い方: `node scripts/measure.mjs` が読む。 *@
+
+<div id="ruler" style="position:absolute;left:-9999px;top:0;
+     font-family:'Mochiy Pop One',system-ui,sans-serif;line-height:1.15;">
+  @foreach (var skill in Skills.All)
+  {
+    <div class="probe" data-kind="body" data-id="@skill.Id"
+         style="width:872px;font-size:30px;white-space:pre-wrap;">@SkillText.Describe(skill)</div>
+    <div class="probe" data-kind="steps" data-id="@skill.Id"
+         style="width:872px;font-size:24px;white-space:pre-wrap;">@SkillText.StepsOf(skill)</div>
+    <div class="probe" data-kind="meta" data-id="@skill.Id"
+         style="width:872px;font-size:26px;white-space:pre;">@Meta(skill)</div>
+  }
+  @foreach (var trait in Traits.All)
+  {
+    <div class="probe" data-kind="gist" data-id="@trait.Id"
+         style="width:920px;font-size:26px;white-space:pre-wrap;">@trait.Gist</div>
+  }
+</div>
+
+@code {
+    private static string Meta(Skill skill)
+    {
+        var power = SkillText.PowerOf(skill);
+        return $"Lv 1 / {Skills.MaxLevel}　CT {skill.Ct}"
+            + (power.Length > 0 ? $"　威力 {power}" : "");
+    }
+}

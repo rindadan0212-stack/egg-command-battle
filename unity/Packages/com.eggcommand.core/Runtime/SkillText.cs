@@ -116,6 +116,10 @@ namespace EggCommand.Core
                 case SkillGain.Percent: return $"割合+{Skills.GainHealPoints}pt";
                 case SkillGain.Count: return "個数+1";
                 case SkillGain.Amount: return "量+1";
+                // ⚠️ **2026-08-22 まで抜けていた。**⭐ パッシブ技を長押しすると
+                //    ここで落ちていた（`SkillGain.Innate` を足した日に、言い方だけ足し忘れ）。
+                //    ⚠️ 遊んで届く道です ── BOX と図鑑の長押しが通る。
+                case SkillGain.Innate: return $"効き目+{Skills.GainInnatePoints}pt";
                 default: throw new ArgumentOutOfRangeException(nameof(gain), gain, "名前の無い軸");
             }
         }

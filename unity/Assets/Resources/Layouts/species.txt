@@ -1,0 +1,39 @@
+# 種族1つの中身 ── ⭐ 特性と、技枠の抽選内容
+#
+# ⚠️ **属性は出さない。**属性は卵ごとに引くので、種族の性質ではない（書くと嘘になる）。
+# ⚠️ **★も出さない。**★は卵の側の話。
+#
+# ⭐ 技は**長押しで効果**。⚠️ 押すだけでは何も起きない ── ここは読む場所で、選ぶ場所ではない。
+#
+# ⭐ **`flow=down` の初実戦。**⚠️ 技の袋は 1〜5種と長さが変わるので、
+#    下の塊の位置を書けない。詰める親の中では `上` が「その上に空ける隙間」になる。
+#
+#  名前     種類    左   上    幅   高    付け足し
+dim        veil    0    0     1080 1920
+panel      card    48   150   984  1500
+  art      pixel   32   32    128  128   bind=art
+  name     label   184  40    768  60    size=46 anchor=upper-left bind=name
+  hint     label   184  104   768  34    size=24 ink=faint anchor=upper-left text=技を長押しすると効果が出ます
+
+  body     scroll  32   184   920  1140
+    stack  box     0    0     920  980   flow=down
+      thead  label  0   0     920  38    size=26 ink=faint anchor=left text=特性
+      tname  label  0   0     920  44    size=32 ink=accent anchor=left bind=tname
+      tgist  label  0   2     920  62    size=26 ink=dim anchor=upper-left wrap=yes bind=tgist
+
+      s1head label  0   36    920  38    size=26 ink=faint anchor=left text=枠1（この種族が必ず持つ）
+      s1chip card   0   0     298  112   repeat=slot1 cols=3 gap=12 rows=124 max=1 tap=skill1
+        s1name label 6  12    286  44    size=26 anchor=center bind=s1name
+        s1kind label 6  58    286  34    size=22 ink=faint anchor=center bind=s1kind
+
+      s2head label  0   36    920  38    size=26 ink=faint anchor=left bind=s2head
+      s2chip card   0   0     298  112   repeat=slot2 cols=3 gap=12 rows=124 max=5 tap=skill2
+        s2name label 6  12    286  44    size=26 anchor=center bind=s2name
+        s2kind label 6  58    286  34    size=22 ink=faint anchor=center bind=s2kind
+
+      s3head label  0   36    920  38    size=26 ink=faint anchor=left bind=s3head
+      s3chip card   0   0     298  112   repeat=slot3 cols=3 gap=12 rows=124 max=5 tap=skill3
+        s3name label 6  12    286  44    size=26 anchor=center bind=s3name
+        s3kind label 6  58    286  34    size=22 ink=faint anchor=center bind=s3kind
+
+  close    button  32   1356  920  112   size=34 tap=close text=閉じる

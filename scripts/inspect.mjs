@@ -42,6 +42,12 @@ const PAGES = args.length ? args : [
   '/party',               // 編成（巣）
   '/party?open=true',        // 編成（巣・開いた）
   '/party?idle=true',        // 編成（放置）
+  // ⚠️ 図鑑の中の2枚。⭐ **一番長いもの**を選んで見る
+  //    （技の袋は 1〜5種・説明文は 1〜2行）。
+  '/species?at=0',
+  '/species?at=7',
+  '/skill?at=0',
+  '/skill?at=12&slot=0',
 ]
 
 /** ⚠️ 実機の幅は 320〜430。⭐ 一番狭いところで測るのが要点（罠22・24・26）。 */

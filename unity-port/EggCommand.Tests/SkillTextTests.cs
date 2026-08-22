@@ -29,6 +29,39 @@ public class SkillTextTests
         }
     }
 
+    /// <summary>⚠️ 🔴 **長押しの本文にも検査が無かった。**
+    ///
+    /// ⭐ 2026-08-22 に <c>SkillGain.Innate</c>（パッシブ技の伸び代）を足した日、
+    /// <see cref="SkillText.GainOf"/> に言い方を書き忘れていて、
+    /// **パッシブ技を長押しすると例外で落ちていた**（BOX・図鑑の両方から届く道）。
+    ///
+    /// ⚠️ 上の「全ての技が説明文になる」は `Describe` しか通さないので、素通りしていた。
+    /// ⭐ 見つけたのは web の採寸ページ ── **全技を1度に通した**から出た。</summary>
+    [Fact]
+    public void 全ての技の伸び方が言葉になる()
+    {
+        foreach (var skill in Skills.All)
+        {
+            // ⭐ 枠を問わない（図鑑）と、枠1（CT の段が消える）の両方を通す
+            foreach (int slot in new[] { -1, 0, 1 })
+            {
+                string line = SkillText.StepsOf(skill, slot);
+                Assert.DoesNotContain("SkillGain", line);
+            }
+        }
+    }
+
+    /// <summary>⚠️ **軸を足した日に、ここが最初に落ちる。**
+    /// ⭐ 技に付いているかどうかに関わらず、全部の軸に言い方があること。</summary>
+    [Fact]
+    public void 伸びる軸に呼び名が無いものは無い()
+    {
+        foreach (SkillGain gain in System.Enum.GetValues(typeof(SkillGain)))
+        {
+            Assert.False(string.IsNullOrEmpty(SkillText.GainOf(gain)), $"{gain} に呼び名が無い");
+        }
+    }
+
     /// <summary>⭐ 効果の名前・狙い先の呼び名は、全種類そろっている。
     /// ⚠️ 揃っていないと図鑑の生成が例外で止まる（未知の値は throw する作り）。</summary>
     [Fact]

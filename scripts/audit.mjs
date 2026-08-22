@@ -71,6 +71,18 @@ export function audit() {
     }
   }
 
+  // ── ②b 折り返す字が枠より高い ──────────────
+  // ⚠️ **折り返す字だけ見る。**⭐ 1行の字は Unity がわざと枠の外へ描くので
+  //    （`VerticalWrapMode.Overflow`）、そこを数えると偽の警報になる。
+  //    ⭐ 折り返す字は「何行入るか」を骨組みが決めているので、溢れたら本当の不備。
+  for (const el of nodes) {
+    if (!el.classList.contains('wrapped') || !el.textContent.trim()) continue
+    if (el.scrollHeight > el.clientHeight + 1) {
+      push(`字が枠より高い: ${el.id}「${el.textContent.slice(0, 14)}」`
+        + ` 要る ${el.scrollHeight} / 枠 ${el.clientHeight}`)
+    }
+  }
+
   // ── ③ 親の枠からはみ出し ────────────────────────
   for (const el of nodes) {
     const parent = el.parentElement
