@@ -107,6 +107,7 @@ namespace EggCommand.Core
             "button",   // 押しどころ
             "scroll",   // 巻物（content= で中身の高さ）
             "round",    // 丸
+            "veil",     // ⭐ 覆い（地を暗くし、後ろを押させない）
         };
 
         /// <summary>押しどころとして指が触れる種類。⚠️ 高さの検査はこれだけに掛ける。</summary>
@@ -320,6 +321,17 @@ namespace EggCommand.Core
                 bool listed = false;
                 for (int i = 0; i < Options.Length; i++) if (Options[i] == pair.Key) { listed = true; break; }
                 if (!listed) problems.Add($"{id}/{node.Name}: 知らない付け足し「{pair.Key}=」");
+            }
+
+            // ⚠️ **覆いは画面いっぱいでなければ意味がない。**
+            //    ⭐ 隙間があると、そこから後ろが押せる（覆いの目的が消える）。
+            if (node.Kind == "veil"
+                && (Math.Abs(node.Width - ScreenWidth) > 0.5f
+                    || Math.Abs(node.Height - ScreenHeight) > 0.5f
+                    || Math.Abs(node.Left) > 0.5f || Math.Abs(node.Top) > 0.5f))
+            {
+                problems.Add($"{id}/{node.Name}: 覆いが画面いっぱいでない"
+                    + $"（{node.Left},{node.Top} {node.Width}x{node.Height}）── 隙間から後ろが押せる");
             }
 
             // ⚠️ **検査する枠と、実際に描かれる枠を食い違わせない**（#3）。

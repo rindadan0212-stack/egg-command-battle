@@ -170,6 +170,20 @@ namespace EggCommand.View
                     break;
                 }
 
+                case "veil":
+                {
+                    // ⭐ 地を暗くし、指を吸う。⚠️ ここを押しても閉じない
+                    var dim = Ui.Rect(name, parent);
+                    Ui.Place(dim, left, top, node.Width, node.Height);
+                    var paint = dim.gameObject.AddComponent<UnityEngine.UI.Image>();
+                    paint.color = new Color(0f, 0f, 0f, 0.62f);
+                    var block = dim.gameObject.AddComponent<Button>();
+                    block.transition = Selectable.Transition.None;
+                    block.targetGraphic = paint;
+                    rect = dim;
+                    break;
+                }
+
                 case "round":
                     rect = Ui.Round(parent, name, left, top,
                         Mathf.Min(node.Width, node.Height), InkOf(node, fill));

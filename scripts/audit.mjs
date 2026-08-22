@@ -28,6 +28,15 @@ export function audit() {
     !(a.right <= b.left + 0.5 || b.right <= a.left + 0.5 ||
       a.bottom <= b.top + 0.5 || b.bottom <= a.top + 0.5)
 
+  // ⭐ **層。**いちばん上の覆いより前か後ろか。
+  // ⚠️ 層をまたぐ比較は意味を持たない（同時に見えない）。
+  const veils = [...stage.querySelectorAll('.veil')]
+  const front = veils.length ? veils[veils.length - 1] : null
+  const above = (el) => {
+    if (!front) return true
+    return !!(front.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)
+  }
+
   // ── ⓪ 画面そのものが viewport から出ていないか ────
   // ⚠️ **これが無いと、他の検査が全部無意味になる。**
   //    2026-08-22 に実測: 中央寄せが効かず stage が left=345 に出ていたのに、
@@ -87,6 +96,9 @@ export function audit() {
   }
 
   // ── ⑤ 字の重なり（⭐ 実際に乗っている範囲どうし）──
+  // ⚠️ **層をまたいで比べない。**覆いの前と後ろは同時に見えないので、
+  //    重なっていても不備ではない（実測 2026-08-22: 覆いの下の「—」と
+  //    札の「あきらめますか」を重なりとして数えていた）。
   const inks = nodes
     .filter(e => e.classList.contains('label') && e.textContent.trim())
     .map(e => ({ el: e, ink: inkOf(e) }))
@@ -94,6 +106,8 @@ export function audit() {
   for (let i = 0; i < inks.length; i++) {
     for (let j = i + 1; j < inks.length; j++) {
       if (!hits(inks[i].ink, inks[j].ink)) continue
+      // ⭐ 層が違えば同時に見えない
+      if (above(inks[i].el) !== above(inks[j].el)) continue
       push(`字の重なり: ${inks[i].el.id}「${inks[i].el.textContent.slice(0, 10)}」`
         + ` × ${inks[j].el.id}「${inks[j].el.textContent.slice(0, 10)}」`)
     }
@@ -111,8 +125,12 @@ export function audit() {
   }
 
   // ── ⑦ 覆われて見えない（⭐ 実際の合成結果を見る）──
+  // ⚠️ **覆いより後ろは見ない。**覆いが出ていれば後ろが隠れるのは当たり前で、
+  //    そこを数えると本物の不備が 72件 の中に埋もれる（実測 2026-08-22）。
+  //    ⭐ Unity 版の「層」と同じ考え ── いちばん上の覆いから先だけを見る。
   for (const el of nodes) {
     if (!el.classList.contains('label') || !el.textContent.trim()) continue
+    if (!above(el)) continue
     const ink = inkOf(el)
     if (!ink) continue
     const cx = (ink.left + ink.right) / 2, cy = (ink.top + ink.bottom) / 2

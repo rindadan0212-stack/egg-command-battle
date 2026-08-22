@@ -1,0 +1,14 @@
+# 確かめる札 ── 「本当にやりますか」を一度だけ聞く
+#
+# ⭐ **取り返しがつかない操作にだけ挟む。**⚠️ 何にでも挟むと、
+#    読まずに押す癖が付いて、肝心なときに効かなくなる。
+#
+# ⚠️ 覆いを押しても閉じない ── 聞いている最中に、触っただけで消えるのは危ない。
+#
+#  名前   種類    左   上    幅    高    付け足し
+dim      veil    0    0     1080  1920
+panel    card    96   610   888   460
+  title  label   32   32    824   56    size=40 anchor=upper-left bind=title
+  body   label   32   104   824   140   size=28 ink=dim anchor=upper-left bind=body
+  stop   button  32   316   412   112   bind=stop tap=stop
+  go     button  460  316   412   112   bind=go tap=go lead=yes

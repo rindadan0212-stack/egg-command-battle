@@ -55,6 +55,11 @@ public class LayoutAssetTests
         float floor = Layouts.ScreenHeight - TopBarHeight - DockHeight;
 
         var layout = Layouts.Parse(id, File.ReadAllText(Path.Combine(Dir, id + ".txt")));
+        // ⭐ **覆いは下の帯の上に出るのが正しい**（帯も押させないため）。
+        //    ⚠️ 覆いを持つ骨組みは、そもそも下の帯が関わらない札なので丸ごと外す。
+        foreach (var node in layout.Roots)
+            if (node.Kind == "veil") return;
+
         foreach (var node in layout.Roots)
         {
             if (node.Option("dock") == "no") continue;

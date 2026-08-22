@@ -68,6 +68,26 @@ const TRIALS = [
   },
 ]
 
+/** ⚠️ 覆いのある画面でだけ効く試験。⭐ 「後ろは数えない・前は数える」を両方見る。 */
+const VEIL_TRIALS = [
+  {
+    name: '覆いの後ろは数えない',
+    want: null,   // ⭐ 何も出ないのが正しい
+    wreck: () => {},
+  },
+  {
+    name: '覆いの前を隠したら数える',
+    want: '覆われて見えない',
+    wreck: () => {
+      const d = document.createElement('div')
+      d.id = 'lid'
+      d.className = 'n card'
+      d.style.cssText = 'left:0;top:0;width:1080px;height:1920px;background:#000;position:absolute'
+      document.getElementById('stage').appendChild(d)
+    },
+  },
+]
+
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
 let missed = 0
@@ -92,6 +112,26 @@ for (const t of TRIALS) {
     missed++
     console.log(`🔴 ${t.name} → **素通り**（「${t.want}」が出るはず）`)
     for (const b of bad.slice(0, 2)) console.log(`     出たのは: ${b.slice(0, 70)}`)
+  }
+}
+
+// ── 覆いのある画面 ────────────────────────────────
+const veilUrl = URL.replace(/\/$/, '') + '/ask'
+for (const t of VEIL_TRIALS) {
+  await page.goto(veilUrl, { waitUntil: 'networkidle' })
+  await page.waitForFunction(() => !!document.getElementById('dim'))
+  await page.evaluate(t.wreck)
+  const bad = await page.evaluate(audit)
+  const hit = t.want ? bad.find(b => b.includes(t.want)) : null
+  if (t.want === null) {
+    const noise = bad.filter(b => b.includes('覆われて見えない'))
+    if (noise.length === 0) console.log(`⭐ ${t.name} → 数えていない`)
+    else { missed++; console.log(`🔴 ${t.name} → **${noise.length}件 数えた**: ${noise[0].slice(0,60)}`) }
+  } else if (hit) {
+    console.log(`⭐ ${t.name} → 捕まえた: ${hit.slice(0, 70)}`)
+  } else {
+    missed++
+    console.log(`🔴 ${t.name} → **素通り**`)
   }
 }
 
