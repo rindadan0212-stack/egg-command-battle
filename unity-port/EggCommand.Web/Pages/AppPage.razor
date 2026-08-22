@@ -16,15 +16,30 @@
   </div>
 </div>
 
+@if (_say.Length > 0)
+{
+  @* ⚠️ **黙って諦めない。**⭐ 保存できていないことに気づけないほうが困る。 *@
+  <div id="say" style="position:fixed;left:0;right:0;bottom:0;padding:10px 14px;
+       background:#c0303f;color:#fff;font:14px/1.5 system-ui;z-index:9">@_say</div>
+}
+
 @code {
+    /// <summary>始めるときの種。⚠️ **保存が在ればそちらが勝つ**（これは初回だけ効く）。
+    /// ⭐ 検査は決まった種で開く ── 毎回違う画面を撮ると、差が「直したから」なのか
+    /// 「引きが違うから」なのか分からなくなる。</summary>
+    [SupplyParameterFromQuery] public int? Seed { get; set; }
+
     private Shell _shell = default!;
+    private Vault _vault = default!;
     private DotNetObjectReference<AppPage>? _me;
-    private string _body = "", _frame = "";
+    private string _body = "", _frame = "", _say = "";
 
     protected override void OnInitialized()
     {
-        // ⚠️ いまは決まった中身から始める。⭐ 保存を繋ぐのはこの次（計画 §6）。
-        _shell = new Shell(Demo.Game(), Demo.Now);
+        // ⚠️ **読むまでは書かない。**⭐ 空の器を先に作って上書きすると、本物が消える。
+        _vault = new Vault(Js);
+        long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        _shell = new Shell(Games.NewGame(Seed ?? unchecked((int)now), now), now);
         Draw();
     }
 
@@ -33,16 +48,37 @@
         if (!first) return;
         _me = DotNetObjectReference.Create(this);
         await Js.InvokeVoidAsync("eggTap.listen", _me);
+
+        var found = await _vault.Open();
+        if (found != null) _shell.Game = found;
+        else if (_vault.Broken)
+            _say = "⚠️ 保存が読めませんでした。上書きしません（新しい版で開き直すと戻ることがあります）";
+        else if (!_vault.CanWrite)
+            _say = "⚠️ 別のタブが開いています。こちらは見るだけです（保存しません）";
+
+        foreach (var note in _vault.Notes) Console.WriteLine("保存の読み替え: " + note);
+        Draw();
+        StateHasChanged();
+        await Keep();
     }
 
     /// <summary>押しどころから呼ばれる。⚠️ 名前と番号だけが届く
     /// （どこを押したかは骨組みが知っている）。</summary>
     [JSInvokable]
-    public void Tapped(string what, string at)
+    public async Task Tapped(string what, string at)
     {
         _shell.Tap(what, at);
         Draw();
         StateHasChanged();
+        // ⭐ 触るたびに書く。⚠️ 実測 11KB なので、間引く理由が無い
+        //    （中身が変わっていなければ `Vault` が書かずに帰る）。
+        await Keep();
+    }
+
+    private async Task Keep()
+    {
+        try { await _vault.Keep(_shell.Game, _shell.Now); }
+        catch (Exception e) { _say = "⚠️ 保存に失敗しました: " + e.Message; }
     }
 
     private void Draw()

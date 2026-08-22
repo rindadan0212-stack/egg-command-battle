@@ -23,7 +23,11 @@ const say = (ok, what, extra = '') => {
   else { bad++; console.log(`🔴 ${what}${extra ? ' ── ' + extra : ''}`) }
 }
 
-await page.goto(URL + '/app')
+// ⚠️ **前回の保存を消してから始める。**⭐ 残っていると、
+//    同じ手順でも違う中身から始まり、落ちた理由が読めない。
+await page.goto(URL + '/app?seed=20260822')
+await page.evaluate(() => localStorage.clear())
+await page.reload()
 await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 3,
   null, { timeout: 30000 }).catch(() => {})
 
@@ -77,6 +81,37 @@ const filled = await page.evaluate(() =>
 say(filled, '配合で親を2体えらべる')
 const go = await page.evaluate(() => document.getElementById('go')?.disabled)
 say(go === false, '2体そろうと「配合する」が押せる', `disabled=${go}`)
+
+// ── 保存 ─────────────────────────────────────────
+// ⚠️ **閉じて開いても続きから始まるか。**
+// ⭐ 確かめ方: 別の種で開き直しても、**前の中身のまま**なら保存が勝っている。
+await page.evaluate(() => localStorage.clear())
+await page.goto(URL + '/app?seed=111')
+await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 3,
+  null, { timeout: 30000 }).catch(() => {})
+await page.click('[id="tab#3"]')
+await page.waitForTimeout(400)
+const who = () => page.evaluate(() => document.getElementById('detail-sub')?.textContent || '')
+const first = await who()
+const size = await page.evaluate(() => (localStorage.getItem('egg:save') || '').length)
+say(size > 1000, '触ると保存が書かれる', `${size} 字`)
+
+await page.goto(URL + '/app?seed=222')
+await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 3,
+  null, { timeout: 30000 }).catch(() => {})
+await page.click('[id="tab#3"]')
+await page.waitForTimeout(400)
+const again = await who()
+say(first !== '' && first === again, '開き直しても続きから', `${first} → ${again}`)
+
+// ⚠️ **読めない保存を上書きしない。**⭐ 上書きしたら直せなくなる。
+await page.evaluate(() => localStorage.setItem('egg:save', '{"Version":99}'))
+await page.goto(URL + '/app?seed=333')
+await page.waitForTimeout(3000)
+const kept = await page.evaluate(() => localStorage.getItem('egg:save'))
+say(kept === '{"Version":99}', '読めない保存を上書きしない', String(kept).slice(0, 30))
+const told = await page.evaluate(() => document.getElementById('say')?.textContent || '')
+say(told.includes('保存'), '黙って諦めず、画面に出す', told.slice(0, 40))
 
 await browser.close()
 console.log(bad === 0 ? '\n⭐ 触っても壊れない' : `\n🔴 ${bad} 件が期待どおりに動かない`)

@@ -29,6 +29,9 @@
   <ItemGroup>
     <Compile Include="..\EggCommand.Sim\SeriesRecord.cs" Link="SeriesRecord.cs" />
     <Compile Include="..\EggCommand.Sim\Determinism.cs" Link="Determinism.cs" />
+    <!-- ⭐ 保存を字にする手順。⚠️ **検査と同じものを使う**
+         （`SaveJsonTests` が実物の保存をこれで読んでいる）。 -->
+    <Compile Include="..\EggCommand.Sim\SaveJson.cs" Link="SaveJson.cs" />
   </ItemGroup>
 
   <!-- ⭐ 骨組みとフォント。⚠️ 唯一の出所は Unity 側（ここへ手で写さない）。
