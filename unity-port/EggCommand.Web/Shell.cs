@@ -8,6 +8,18 @@ public enum Sheet { Home, Nests, Breed, Box, Book, Fight, Raid, Trial }
 /// <summary>覆いで前に出る札。⚠️ 画面とは別に数える（後ろの画面は残る）。</summary>
 public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train, Ask, Keep }
 
+/// <summary>盤に1つ出す演出。⭐ **「何が起きたか」を字で説明しないための道具。**
+///
+/// ⚠️ 座標は持たない ── ⭐ 出す先は**体の名前**（`a0` `f2`）で言い、
+/// 実際の場所はブラウザがその体の枠から測る（`fx.js`）。
+/// ⚠️ ここで座標を計算すると、`Stands.Lay` の式と2か所になる。</summary>
+/// <param name="At">どの体の上に出すか（`a0` `f2`）。</param>
+/// <param name="Kind">出し方。`say` 字 / `shout` 名乗り / `ring` 輪 /
+/// `hit` 光 / `shock` 跳ね / `step` 踏み込み（`stepf` は左へ）。</param>
+/// <param name="Up">同じ体に重ねないための段（0 が頭の上）。</param>
+public readonly record struct Spark(
+    string At, string Kind, string Text, string? Tint, int Size, int Up);
+
 /// <summary>アプリ1つぶんの状態と、そこから出る画面。
 ///
 /// ⭐ **画面ごとの「どの値をどの差し口へ流すか」は、ここが唯一の出所。**
@@ -93,6 +105,28 @@ public sealed class Shell
     public string? AimFoe, AimAlly;
     /// <summary>オートで戦うか。⚠️ 戦闘をまたいで覚えておく。</summary>
     public bool Auto;
+
+    // ── 演出の拍（⭐ 数は `Core.Beats`）────────────────
+    /// <summary>1手をどこまで進めたか。</summary>
+    public Deeds.Stage Stage;
+    /// <summary>次の拍までの残り（秒）。⚠️ 0 より大きい間は**何も進めない**。</summary>
+    public double Wait;
+    /// <summary>時の進み方の倍率。⭐ **1 が遊ぶ速さ**（0.5 なら2倍速）。
+    ///
+    /// ⚠️ **検査を速く回すためだけに在る。**⭐ 起きることも順も1つも変わらない
+    /// ── **時計そのものを早送りする**ので、溜めもゲージも同じ比で縮む。
+    /// ⚠️ 拍ごとの数（`Core.Beats`）は触らない ── 触ると比が崩れる。
+    /// ⚠️ 遊ぶ道からは触れない（`/app?pace=` は検査の入口）。
+    /// ⚠️ **速さそのものは別に見張る** ── これで縮めた検査は「着くか」しか見ていない。</summary>
+    public double Pace = 1;
+    /// <summary>まだ進めていない端数の刻み。⚠️ 切り捨てると遅い者が永久に進まない。</summary>
+    public double Ticks;
+    /// <summary>名乗り済みで、まだ打っていない手。</summary>
+    public Unit? Cast;
+    public int CastSlot;
+    public Unit? CastAim;
+    /// <summary>盤へ出す演出。⭐ **描いた側が空にする**（一度出したら消える）。</summary>
+    public readonly List<Spark> Sparks = new();
     /// <summary>画面に出す一言。⚠️ 黙って変わらないことを防ぐ。</summary>
     public string? Say;
 

@@ -7,8 +7,12 @@ namespace EggCommand.Web;
 /// ⭐ **ここが「画面 → 規則」の唯一の口。**⚠️ 決めごとは Core が持つので、
 /// ここがするのは**呼ぶ順と、次にどの画面を出すか**だけ。
 ///
-/// ⚠️ 演出（さいころが転がる・駒が1マスずつ歩く・帯がじわじわ減る）は**まだ無い**。
-/// ⭐ 結果は同じところへ着くが、途中が飛ぶ。付けるときはこの外側の話。</summary>
+/// ⭐ **戦いの演出はここが持つ**（1手を3拍に割る・数は `Core.Beats`）。
+/// ⚠️ ただし**描かない** ── 出すものを `Spark` で言うだけで、
+/// 実際に盤へ差すのは `fx.js`（組み直しで消えないように、Blazor の外に置く）。
+///
+/// ⚠️ すごろくの演出（さいころが転がる・駒が1マスずつ歩く）は**まだ無い**。
+/// ⭐ 結果は同じところへ着くが、途中が飛ぶ。</summary>
 public static class Deeds
 {
     // ── 探索 ────────────────────────────────────────
@@ -151,28 +155,22 @@ public static class Deeds
         if (hp != null && cooldowns != null)
             EggCommand.Core.Battle.CarryIn(s.Fight_, hp, cooldowns);
         s.Now_Sheet = Sheet.Fight;
+        Rewind(s);
     }
 
-    /// <summary>技を選んだ。⚠️ 使えない枠は撥ねる（黙って別の技を撃たない）。</summary>
-    public static void Strike(Shell s, int slot)
+    /// <summary>拍を最初に戻す。⚠️ 🔴 **戦いの出入りで必ず呼ぶ。**
+    /// ⭐ 積んだままの手（`Cast`）は**前の戦いの体**を指しているので、
+    /// そのまま次の戦いへ持ち込むと、居ない者の技を打とうとする。</summary>
+    private static void Rewind(Shell s)
     {
-        var state = s.Fight_;
-        if (state == null || state.Result != null) return;
-        var actor = EggCommand.Core.Battle.NextActor(state);
-        if (actor == null || actor.Side != Side.Ally) return;
-        if (!EggCommand.Core.Battle.IsUsable(actor, slot)) return;
-
-        var skill = EggCommand.Core.Battle.SkillAt(actor, slot);
-        Unit? target = null;
-        if (skill != null && EggCommand.Core.Battle.NeedsTarget(skill))
-        {
-            // ⭐ 狙い先は**人が指したもの**。⚠️ 指していなければ最初の生き残り
-            bool ally = EggCommand.Core.Battle.TargetsAlly(skill);
-            target = Pick(state, ally ? Side.Ally : Side.Enemy, ally ? s.AimAlly : s.AimFoe);
-        }
-        EggCommand.Core.Battle.PerformAction(state, actor, slot, target);
-        Settle(s);
+        s.Stage = Stage.Idle;
+        s.Wait = 0;
+        s.Ticks = 0;
+        s.Cast = null;
+        s.CastAim = null;
+        s.Sparks.Clear();
     }
+
 
     /// <summary>あきらめる。⚠️ **負けとして畳む** ── 只で抜けられると、
     /// 不利な戦いをいつでも無かったことにできてしまう。
@@ -189,48 +187,300 @@ public static class Deeds
     /// <summary>1拍で何が起きたか。</summary>
     public enum Tick
     {
-        /// <summary>帯が伸びただけ。⭐ **画面を組み直さない。**</summary>
+        /// <summary>帯が伸びただけ／溜めの最中。⭐ **画面を組み直さない。**</summary>
         Filling,
-        /// <summary>誰かが打った。⭐ ここだけ組み直す。</summary>
+        /// <summary>誰かが打った（か、名乗った）。⭐ ここだけ組み直す。</summary>
         Acted,
         /// <summary>人の手番で止まったか、決着した。</summary>
         Stopped,
     }
 
-    /// <summary>時が進む。⭐ ゲージを溜め、相手の手番はその場で打つ。
+    /// <summary>1手をどこまで進めたか。⭐ **Unity 版 `BattleDriver.Phase` と同じ並び。**</summary>
+    public enum Stage
+    {
+        /// <summary>何も進めていない（ゲージのレース中）。</summary>
+        Idle,
+        /// <summary>満ちた。⭐ **帯が満タンになったことを目で確かめさせてから**名乗る。</summary>
+        Ready,
+        /// <summary>名乗った。⚠️ **まだ打っていない**（打つのは次の拍）。</summary>
+        Announcing,
+        /// <summary>打った。⭐ 数字が飛び切るまで次を始めない。</summary>
+        Settling,
+    }
+
+    /// <summary>時が進む。
+    ///
+    /// ⭐ **1手を3拍に割る**（Unity 版 `BattleDriver` と同じ・数は `Core.Beats`）:
+    /// 名乗り → 着弾 → 間。⚠️ **状態が変わるのは着弾の一度だけ。**
+    /// 拍ごとに触ると出所が2つになる。
+    ///
+    /// ⚠️ 割る前は押した瞬間に計算して即座に組み直していた。
+    /// ⭐ 結果しか残らないので「何が起きたか」を字で説明する羽目になる。
+    ///
     /// ⚠️ **人の手番では止まる** ── そこが「選ぶ」ところ。
     ///
     /// ⚠️ 🔴 **帯が伸びただけの拍で、画面を組み直さないこと。**
     /// ⭐ 組み直すと**押しどころが作り直されて触れなくなる**
-    /// （Unity 版の `UnitStand.Retick` が同じ理由で分けてある ──
-    /// 「毎フレーム組み直すと、押しどころが作り直されて触れなくなる」）。</summary>
-    public static Tick Beat(Shell s, int ticks)
+    /// （Unity 版の `UnitStand.Retick` が同じ理由で分けてある）。</summary>
+    /// <param name="seconds">前の拍からの間（秒）。</param>
+    public static Tick Beat(Shell s, double seconds)
     {
         var state = s.Fight_;
-        if (state == null || state.Result != null) return Tick.Stopped;
+        if (state == null) return Tick.Stopped;
         // ⚠️ **確かめている間は時が止まる。**⭐ 「あきらめますか」を読んでいるあいだに
         //    決着したら、答えた先が既に無い（それに、読む時間は考える時間でもある）。
         if (s.Open != Panel.None) return Tick.Stopped;
 
-        if (EggCommand.Core.Battle.AdvanceGauges(state, ticks) > 0) return Tick.Filling;
+        // ⭐ 拍の途中。⚠️ ここで組み直さない（演出が最初からやり直しになる）
+        if (s.Wait > 0) { s.Wait -= seconds; return Tick.Filling; }
+
+        switch (s.Stage)
+        {
+            case Stage.Ready:
+                // ⭐ 溜めが終わった。ここで初めて名乗る
+                Shout(s, s.Cast!, s.CastSlot);
+                s.Stage = Stage.Announcing;
+                s.Wait = Beats.Announce;
+                return Tick.Acted;
+
+            case Stage.Announcing:
+            {
+                // ⭐ **状態が変わるのはここだけ**
+                int before = state.Log.Count;
+                EggCommand.Core.Battle.PerformAction(state, s.Cast!, s.CastSlot, s.CastAim);
+                s.Cast = null;
+                s.CastAim = null;
+                Since(s, state, before);
+                s.Stage = Stage.Settling;
+                s.Wait = Beats.Settle;
+                return Tick.Acted;
+            }
+
+            case Stage.Settling:
+                s.Stage = Stage.Idle;
+                // ⚠️ **決着の後始末はここ。**⭐ 打った拍で畳むと、
+                //    最後の数字が飛ぶ前に画面が変わる
+                Settle(s);
+                return Tick.Acted;
+        }
+
+        // ⚠️ **決着は拍を通してから見る。**⭐ 先に見ると `Settling` へ来られず、
+        //    戦いが終わったのに画面が戦闘のまま止まる（実測 2026-08-23）。
+        if (state.Result != null) return Tick.Stopped;
+
+        // ⭐ ここが「ゲージのレース」。⚠️ 端数を切り捨てると遅い者が永久に進まない
+        s.Ticks += Beats.TicksPerSecond * seconds;
+        int whole = (int)s.Ticks;
+        // ⚠️ 🔴 **刻みが立たない拍では、何もしないで返す。**
+        //    ⭐ ここを素通りさせると `NextActor` まで毎拍降りてきて、
+        //    **画面を1秒に10回組み直す**ことになる（押しどころが触れなくなる）。
+        if (whole <= 0) return Tick.Filling;
+        s.Ticks -= whole;
+        if (EggCommand.Core.Battle.AdvanceGauges(state, whole) > 0) return Tick.Filling;
+
+        // ⚠️ **毒・リジェネはここで進む**（`NextActor` の中の `TickStatus`）。
+        //    ⭐ 拾わないと、HP は減っているのに数字が1つも出ない。
+        int ticked = state.Log.Count;
         var next = EggCommand.Core.Battle.NextActor(state);
-        if (next == null) { Settle(s); return Tick.Acted; }
+        bool noisy = state.Log.Count > ticked;
+        if (noisy) Since(s, state, ticked);
+
+        // ⚠️ 誰も満ちていない。⭐ 組み直す理由が無い（毒が入った拍だけは出す）
+        if (next == null) return noisy ? Tick.Acted : Tick.Filling;
 
         // ⭐ 味方の手番は人へ渡す（オートなら機械が選ぶ）
-        if (next.Side == Side.Ally && !s.Auto) return Tick.Stopped;
+        if (next.Side == Side.Ally && !s.Auto)
+            return s.Sparks.Count > 0 ? Tick.Acted : Tick.Stopped;
 
         int slot = Ai.ChooseAction(state, next);
         var skill = EggCommand.Core.Battle.SkillAt(next, slot);
-        Unit? target = null;
+        Unit? aim = null;
         if (skill != null && EggCommand.Core.Battle.NeedsTarget(skill))
         {
             bool ally = EggCommand.Core.Battle.TargetsAlly(skill);
-            var mine = next.Side == Side.Ally;
-            target = Pick(state, ally == mine ? Side.Ally : Side.Enemy, null);
+            bool mine = next.Side == Side.Ally;
+            // ⭐ 狙い先は**人が指したもの**（オート中も狙い先だけは人のまま）
+            aim = Pick(state, ally == mine ? Side.Ally : Side.Enemy,
+                mine ? (ally ? s.AimAlly : s.AimFoe) : null);
         }
-        EggCommand.Core.Battle.PerformAction(state, next, slot, target);
-        Settle(s);
+        Queue(s, next, slot, aim);
         return Tick.Acted;
+    }
+
+    /// <summary>手を積む。⚠️ **ここではまだ計算しない** ── 名乗りを出して、着弾は次の拍。
+    /// ⭐ 帯が満タンになったことを目で確かめさせてから名乗る。</summary>
+    private static void Queue(Shell s, Unit actor, int slot, Unit? aim)
+    {
+        s.Cast = actor;
+        s.CastSlot = slot;
+        s.CastAim = aim;
+        s.Stage = Stage.Ready;
+        s.Wait = Beats.Ready;
+    }
+
+    /// <summary>人が技を選んだ。⚠️ 使えない枠は撥ねる（黙って別の技を撃たない）。
+    /// ⭐ **押した瞬間に片付けない** ── 名乗りから始める。</summary>
+    public static void Strike(Shell s, int slot)
+    {
+        var state = s.Fight_;
+        if (state == null || state.Result != null || s.Stage != Stage.Idle) return;
+        var actor = EggCommand.Core.Battle.NextActor(state);
+        if (actor == null || actor.Side != Side.Ally) return;
+        if (!EggCommand.Core.Battle.IsUsable(actor, slot)) return;
+
+        var skill = EggCommand.Core.Battle.SkillAt(actor, slot);
+        Unit? aim = null;
+        if (skill != null && EggCommand.Core.Battle.NeedsTarget(skill))
+        {
+            // ⭐ 狙い先は**人が指したもの**。⚠️ 指していなければ最初の生き残り
+            bool ally = EggCommand.Core.Battle.TargetsAlly(skill);
+            aim = Pick(state, ally ? Side.Ally : Side.Enemy, ally ? s.AimAlly : s.AimFoe);
+        }
+        // ⭐ **溜めは要らない**（札が出て考える時間が、そのまま溜めになっている）
+        s.Cast = actor;
+        s.CastSlot = slot;
+        s.CastAim = aim;
+        Shout(s, actor, slot);
+        s.Stage = Stage.Announcing;
+        s.Wait = Beats.Announce;
+    }
+
+    /// <summary>名乗り。⭐ 頭上に技名、足元に輪、体をひと突き。</summary>
+    private static void Shout(Shell s, Unit actor, int slot)
+    {
+        string at = Where(s, actor);
+        var skill = EggCommand.Core.Battle.SkillAt(actor, slot);
+        if (skill != null) s.Sparks.Add(new Spark(at, "shout", skill.Name, null, 40, 0));
+        s.Sparks.Add(new Spark(at, "ring", "", Face.ElementCss(actor.Creature.Element), 0, 0));
+        // ⭐ 味方は右へ、敵は左へ踏み込む
+        s.Sparks.Add(new Spark(at, actor.Side == Side.Ally ? "step" : "stepf", "", null, 0, 0));
+    }
+
+    /// <summary>直前の手で起きたことを、当たった体の上に出す。
+    ///
+    /// ⭐ **ここが「説明文の代わり」。**⚠️ 増やすときは字数でなく**見え方**を足す。
+    /// ⚠️ 同じ体に2つ以上出ることがある（殴って毒を盛って CT を伸ばす、など）。
+    /// ⭐ 同じ場所に重ねると下の字が読めないので、1つ出すごとに上へ積む。
+    /// ⚠️ 「数を減らす」方向では直さない ── 起きたことを隠すことになる。</summary>
+    private static void Since(Shell s, BattleState state, int from)
+    {
+        var stacked = new Dictionary<string, int>();
+
+        for (int i = from; i < state.Log.Count; i++)
+        {
+            var e = state.Log[i];
+            string at = Named(state, e.Unit);
+            // ⭐ 「打った」は積まない（名乗りで既に出している）
+            int up = e.Kind == BattleEventKind.Act ? 0 : Stack(stacked, e.Unit);
+
+            switch (e.Kind)
+            {
+                case BattleEventKind.Damage:
+                    if (e.Absorbed > 0) Say(at, "◇", Ink, 54, up);
+                    else if (e.Amount > 0)
+                    {
+                        // ⭐ 光る → 数字 → 体が跳ねる。3つ同時だから「当たった」に見える
+                        // ⚠️ **光は明るいほう、数字は暗いほう。**⭐ Unity は両方 `Ui.Danger`
+                        //    だが、web の空（`--sky-battle`）は明るいので、
+                        //    同じ赤だと数字が地に沈む（縁取りだけで支えることになる）。
+                        s.Sparks.Add(new Spark(at, "hit", "", "var(--danger)", 0, 0));
+                        Say(at, Face.Digits(e.Amount), Danger, 56, up);
+                        s.Sparks.Add(new Spark(at, "shock", "", null, 0, 0));
+                    }
+                    break;
+                case BattleEventKind.Poison: Say(at, Face.Digits(e.Amount), "#b98cd8", 44, up); break;
+                case BattleEventKind.Heal:
+                case BattleEventKind.Regen:
+                    if (e.Amount > 0)
+                    {
+                        s.Sparks.Add(new Spark(at, "ring", "", Good, 0, 0));
+                        Say(at, "+" + Face.Digits(e.Amount), Good, 46, up);
+                    }
+                    break;
+                case BattleEventKind.Buff:
+                    Say(at, (e.Percent > 0 ? "▲" : "▼") + Stats.LabelOf(e.Stat),
+                        e.Percent > 0 ? Good : Danger, 34, up);
+                    break;
+                case BattleEventKind.Shield: s.Sparks.Add(new Spark(at, "ring", "", Ink, 0, 0)); break;
+                case BattleEventKind.Stun:
+                case BattleEventKind.Skipped: Say(at, "✖", Accent, 50, up); break;
+                case BattleEventKind.GutsSaved: Say(at, "1", Accent, 56, up); break;
+                case BattleEventKind.Blocked: Say(at, "◇", Dim, 44, up); break;
+                case BattleEventKind.Down: Say(at, "…", Faint, 48, up); break;
+
+                // ⚠️ 以下が出ないと「効いたのか外れたのか」が読めず、
+                //    弱化を持つ技が「何も起きない技」に見える。
+                case BattleEventKind.Missed: Say(at, "外れ", Dim, 40, up); break;
+                case BattleEventKind.Applied: Say(at, e.Label ?? "", Ink, 34, up); break;
+                case BattleEventKind.Ct:
+                    // ⚠️ **増える方が悪い**（待たされる）。符号ではなく色で読ませる
+                    Say(at, e.Delta > 0 ? $"CT+{e.Delta}" : $"CT{e.Delta}",
+                        e.Delta > 0 ? Danger : Good, 36, up);
+                    break;
+                case BattleEventKind.Taunt:
+                    Say(at, e.Hits > 0 ? $"挑発×{e.Hits}" : "挑発", Accent, 34, up); break;
+                case BattleEventKind.Guts: Say(at, "ガッツ", Accent, 34, up); break;
+                case BattleEventKind.Immune: Say(at, "免疫", Good, 34, up); break;
+                case BattleEventKind.Gauge:
+                    Say(at, e.Amount >= 0 ? "ゲージ↑" : "ゲージ↓",
+                        e.Amount >= 0 ? Good : Danger, 34, up);
+                    break;
+                case BattleEventKind.Sleep: Say(at, "眠り", Accent, 34, up); break;
+                case BattleEventKind.Woke: Say(at, "起きた", Dim, 34, up); break;
+                case BattleEventKind.Block: Say(at, "ブロック", Accent, 34, up); break;
+                case BattleEventKind.Blunted: Say(at, "通らない", Dim, 38, up); break;
+                case BattleEventKind.Dispelled: Say(at, e.Label ?? "解除", Accent, 34, up); break;
+                case BattleEventKind.Revived:
+                    s.Sparks.Add(new Spark(at, "ring", "", Good, 0, 0));
+                    Say(at, "+" + Face.Digits(e.Amount), Good, 46, up);
+                    break;
+            }
+        }
+
+        void Say(string at, string text, string tint, int size, int up) =>
+            s.Sparks.Add(new Spark(at, "say", text, tint, size, up));
+    }
+
+    // ⚠️ 色は `stage.css` の変数と同じ数。⭐ 字にする側が1つの名前で受け取れるように、
+    //    ここでは CSS の値そのものを使う（`Face.ElementCss` と同じ約束）。
+    private const string Ink = "var(--ink)";
+    private const string Dim = "var(--ink-dim)";
+    private const string Faint = "var(--ink-faint)";
+    private const string Good = "var(--good-ink)";
+    private const string Danger = "var(--danger-ink)";
+    private const string Accent = "var(--accent-ink)";
+
+    private static int Stack(Dictionary<string, int> seen, string key)
+    {
+        seen.TryGetValue(key, out int n);
+        seen[key] = n + 1;
+        return n;
+    }
+
+    /// <summary>Key から `a0` `f2` を引く。⚠️ 見つからなければ味方の1体目。</summary>
+    private static string Named(BattleState state, string key)
+    {
+        int a = 0, f = 0;
+        foreach (var u in state.Units)
+        {
+            string at = u.Side == Side.Ally ? "a" + a++ : "f" + f++;
+            if (u.Key == key) return at;
+        }
+        return "a0";
+    }
+
+    /// <summary>その体を指す名前（`a0` `f2`）。⚠️ **側も入れる**
+    /// ── 番号だけだと味方の1体目と敵の1体目が同じ名前になる。</summary>
+    private static string Where(Shell s, Unit who)
+    {
+        var state = s.Fight_!;
+        int a = 0, f = 0;
+        foreach (var u in state.Units)
+        {
+            string at = u.Side == Side.Ally ? "a" + a++ : "f" + f++;
+            if (ReferenceEquals(u, who) || u.Key == who.Key) return at;
+        }
+        return "a0";
     }
 
     /// <summary>いまの帯の伸び具。⭐ 組み直さずに、これだけを差し替える。</summary>
@@ -271,6 +521,7 @@ public static class Deeds
         bool won = state.Result == Outcome.Ally;
         var nest = s.Nest_;
         s.Fight_ = null;
+        Rewind(s);
 
         // ⭐ **試練は巣ではない。**⚠️ 卵は出ない ── 出すと「試練で卵を稼ぐ」が
         //    最短経路になり、潜入も配合も回らなくなる。返るのは勝った印だけ。

@@ -17,22 +17,12 @@ namespace EggCommand.View
     /// </summary>
     public sealed class BattleDriver : MonoBehaviour
     {
-        /// <summary>ゲージが満ちてから名乗るまでの溜め。
-        /// ⭐ 相手の番はここが無いと「満ちた瞬間に殴られた」になり、
-        /// 帯が満タンになったことを目が確かめる前に次が始まる。
-        /// ⚠️ 自分の番には要らない（札が出て考える時間がそのまま溜めになる）。</summary>
-        private const float Ready = 0.40f;
-        /// <summary>名乗りを読ませる時間。⭐ 技名が読める長さが下限。</summary>
-        private const float Announce = 0.72f;
-        /// <summary>着弾のあとの間。⭐ 数字が飛び切るまで次を始めない。</summary>
-        private const float Settle = 0.72f;
-        /// <summary>1秒に進める刻み。⭐ 速い者が先に満ちる様子が目で追える速さ。
-        /// ⚠️ 上げすぎると結局パッと切り替わり、下げすぎると待たされる。</summary>
-        /// ⚠️ **2026-08-22 に 14 → 10.5（0.75倍）**（作者の指示「ゲージが溜まる
-        /// スピードをゆっくりに」）。⭐ 溜まる様子を目で追える速さが要る。
-        /// ⚠️ これは**見せ方だけ**の数 ── 誰が先に動くかも、何手で決着するかも変わらない
-        /// （刻みの数は同じで、1秒あたりに進める刻みだけが減る）。
-        private const float TicksPerSecond = 10.5f;
+        // ⭐ **拍の数は `Core.Beats` が唯一の出所**（理由もそこに書いてある）。
+        // ⚠️ ここで別の数を持たない ── web 版（`Deeds`）と同じ戦いが2つの速さで動く。
+        private const float Ready = (float)Beats.Ready;
+        private const float Announce = (float)Beats.Announce;
+        private const float Settle = (float)Beats.Settle;
+        private const float TicksPerSecond = (float)Beats.TicksPerSecond;
 
         private enum Phase { Idle, Ready, Announcing, Settling }
 
@@ -398,6 +388,6 @@ namespace EggCommand.View
         }
 
         /// <summary>積むときの間隔。⭐ 字の高さより広く取る（縁が触れると読みにくい）。</summary>
-        private const float StackStep = 46f;
+        private const float StackStep = (float)Beats.StackStep;
     }
 }

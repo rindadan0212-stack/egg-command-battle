@@ -23,8 +23,10 @@ const say = (ok, what, extra = '') => {
   if (ok) console.log(`⭐ ${what}${extra ? ' ── ' + extra : ''}`)
   else { bad++; console.log(`🔴 ${what}${extra ? ' ── ' + extra : ''}`) }
 }
+// ⚠️ **拍を縮めて回す**（`pace`）。⭐ 起きることも順も変わらない ── 待つ時間だけ。
+//    ⚠️ 速さそのものは別に見張る（この検査は「最後まで行けるか」しか見ていない）。
 
-await page.goto(URL + '/app?seed=20260822')
+await page.goto(URL + '/app?seed=20260822&pace=0.12')
 await page.evaluate(() => localStorage.clear())
 await page.reload()
 await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 3,
@@ -75,17 +77,32 @@ say(await has('#roll'), 'さいころの釦が出ている')
 const autoOn = () => page.evaluate(() =>
   (document.getElementById('pick')?.textContent || '').includes('ON'))
 
+/** ⭐ **戦いが終わるまで待つ。**⚠️ 拍で数えない ── 1手は
+ *  溜め＋名乗り＋間（`Core.Beats`）で 2秒近く掛かるので、
+ *  歩数で切ると**演出を入れた日に必ず落ちる**（実測 2026-08-23）。 */
+const fight = async (limit = 90000) => {
+  // ⚠️ **掴まずに突く。**⭐ 戦いが動いている最中は部品が作り直されるので、
+  //    Playwright の「落ち着くまで待つ」では永久に押せない。
+  if (!(await autoOn())) { await poke('#pick'); await page.waitForTimeout(200) }
+  if (!(await autoOn())) return false
+  const until = Date.now() + limit
+
+  // ⚠️ 🔴 **「決着した」と「片付いた」は別の拍。**⭐ 技の札（`#hand`）は
+  //    決着した瞬間に消えるが、盤が畳まれるのは**間の拍のあと**
+  //    ── `#hand` で待つと、まだ戦闘の画面のまま次へ進んでしまう（実測 2026-08-23）。
+  //    ⭐ 戦闘の画面そのものが在るか（`#pick`）で待つ。
+  while (await has('#pick')) {
+    if (Date.now() > until) return false
+    await page.waitForTimeout(250)
+  }
+  return true
+}
+
 let rolls = 0, fought = false, done = false
 for (let step = 0; step < 60; step++) {
   const now = await title()
 
-  if (await has('#hand')) {
-    fought = true
-    // ⭐ オートは**一度だけ**入れる（入り切りの札なので、押すたび切り替わる）
-    if (!(await autoOn())) await tap('#pick')
-    await page.waitForTimeout(900)
-    continue
-  }
+  if (await has('#pick')) { fought = true; await fight(); continue }
   if (await has('#finish')) { await tap('#finish'); continue }
   if (await has('#pay')) { await tap('#pay'); continue }
 
@@ -131,18 +148,8 @@ say(await tap('[id="card#0"]'), 'もう一度挑める')
 //    押したときにしか書かない作りだと、勝った育ちが閉じた瞬間に消える。
 const saveWas = await page.evaluate(() => localStorage.getItem('egg:save'))
 
-let back = false
-for (let step = 0; step < 90; step++) {
-  if (await has('#finish')) { await tap('#finish'); continue }
-  if (await has('#hand')) {
-    if (!(await autoOn())) await tap('#pick')
-    await page.waitForTimeout(900)
-    continue
-  }
-  if ((await title()) === '試練') { back = true; break }
-  break
-}
-say(back, '決着したら試練の一覧へ帰る', await title())
+await fight()
+say((await title()) === '試練', '決着したら試練の一覧へ帰る', await title())
 const saveNow = await page.evaluate(() => localStorage.getItem('egg:save'))
 say(saveNow !== saveWas, '触っていなくても、進んだ分が書かれている')
 // ⚠️ **卵は出ない。**⭐ 出すと「試練で卵を稼ぐ」が最短経路になる

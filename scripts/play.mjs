@@ -26,7 +26,7 @@ const say = (ok, what, extra = '') => {
 
 // ⚠️ **前回の保存を消してから始める。**⭐ 残っていると、
 //    同じ手順でも違う中身から始まり、落ちた理由が読めない。
-await page.goto(URL + '/app?seed=20260822')
+await page.goto(URL + '/app?seed=20260822&pace=0.12')
 await page.evaluate(() => localStorage.clear())
 await page.reload()
 await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 3,
@@ -141,7 +141,7 @@ say(await page.evaluate(() => !document.getElementById('head-card')), '　閉じ
 // ── 配合する ─────────────────────────────────────
 // ⚠️ **始め直す。**⭐ 上で3体還したので、ここには親が2体残っていない。
 await page.evaluate(() => localStorage.clear())
-await page.goto(URL + '/app?seed=20260822')
+await page.goto(URL + '/app?seed=20260822&pace=0.12')
 await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 3,
   null, { timeout: 30000 }).catch(() => {})
 await tab(2)
@@ -271,9 +271,57 @@ await page.waitForTimeout(400)
 const again = await who()
 say(first !== '' && first === again, '開き直しても続きから', `${first} → ${again}`)
 
-// ── 控えの出し入れ（⭐ ブラウザの外へ出す唯一の口）────────
+// ── 演出の拍（⭐ **ここだけ遊ぶ速さで測る**）──────────────
+// ⚠️ 他の検査は `pace` で早送りしてある。⭐ 早送りは「着くか」しか見ていないので、
+//    **速さそのもの**はここで見る（1手＝名乗り→着弾→間・数は `Core.Beats`）。
 await page.evaluate(() => localStorage.clear())
 await page.goto(URL + '/app?seed=20260822')
+await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 3,
+  null, { timeout: 30000 }).catch(() => {})
+await page.evaluate(() => {
+  window.__beats = []
+  const eye = new MutationObserver(ms => {
+    for (const m of ms) for (const n of m.addedNodes) {
+      if (!n.classList || !n.classList.contains('egg-fx')) continue
+      window.__beats.push({ at: performance.now(), how: n.classList.contains('fx-shout') ? '名乗り'
+        : n.classList.contains('fx-say') ? '字' : n.classList.contains('fx-hit') ? '光' : '輪' })
+    }
+  })
+  eye.observe(document.getElementById('fx'), { childList: true })
+})
+await page.click('#trial')
+await page.waitForTimeout(200)
+await page.click('[id="card#0"]')
+await page.waitForTimeout(400)
+say(await page.evaluate(() => !!document.getElementById('pick')), '試練の戦いに入れる')
+// ⭐ 突いて入れる（掴むと、組み直しに追い越される）
+const at = await page.evaluate(() => {
+  const e = document.getElementById('pick'); const r = e.getBoundingClientRect()
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+})
+if (!(await page.evaluate(() => (document.getElementById('pick')?.textContent || '').includes('ON'))))
+  await page.mouse.click(at.x, at.y)
+await page.waitForTimeout(6000)
+
+const beats = await page.evaluate(() => window.__beats)
+const shout = beats.findIndex(b => b.how === '名乗り')
+const land = beats.findIndex((b, i) => i > shout && (b.how === '字' || b.how === '光'))
+say(shout >= 0, '名乗りが出る', beats.slice(0, 4).map(b => b.how).join(' → '))
+say(land > shout, '名乗ってから着弾する（順が逆にならない）',
+  beats.slice(0, 6).map(b => b.how).join(' → '))
+if (shout >= 0 && land > shout) {
+  // ⚠️ 拍は `Core.Beats.Announce` = 0.72秒。⭐ 器の都合で少しぶれる
+  const gap = Math.round(beats[land].at - beats[shout].at)
+  say(gap > 400 && gap < 1200, '　名乗りを読ませる間がある', `${gap}ms（拍は 720ms）`)
+}
+await page.evaluate(() => localStorage.clear())
+await page.goto(URL + '/app?seed=20260822&pace=0.12')
+await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 3,
+  null, { timeout: 30000 }).catch(() => {})
+
+// ── 控えの出し入れ（⭐ ブラウザの外へ出す唯一の口）────────
+await page.evaluate(() => localStorage.clear())
+await page.goto(URL + '/app?seed=20260822&pace=0.12')
 await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 3,
   null, { timeout: 30000 }).catch(() => {})
 await page.click('#keep')

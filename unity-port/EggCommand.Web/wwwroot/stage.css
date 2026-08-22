@@ -173,6 +173,90 @@ html, body {
 .n.bar-fill {
   position: absolute;
   background: var(--accent);
+  /* ⭐ **帯はじわっと動く。**⚠️ 差し替えは1秒に10回来るので、
+     それより少し長く取ると刻みが見えなくなる（Unity は毎フレーム描いていた）。
+     ⚠️ 色は変えない（孵化の橙→緑は「切り替わった」ことが伝わるべき瞬間）。 */
+  transition: width .14s linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .n.bar-fill { transition: none; }
+}
+
+/* ── 盤の演出 ────────────────────────────────────────
+   ⭐ **「何が起きたか」を字で説明しないための道具**（`fx.js` が差す）。
+   ⚠️ Blazor に描かせない ── 組み直すたびに最初からやり直しになる。 */
+.egg-fx {
+  position: absolute;
+  pointer-events: none;
+  z-index: 8;
+}
+/* 字 ── ⭐ 上へ昇りながら薄くなる。⚠️ 読める時間を残す（下限は技名が読める長さ） */
+.fx-say, .fx-shout {
+  text-align: center;
+  white-space: pre;
+  line-height: 1.1;
+  /* ⭐ 縁取りで、どんな地の上でも読める（絵の上に出るため） */
+  text-shadow: 0 2px 0 var(--paper), 0 -2px 0 var(--paper), 2px 0 0 var(--paper), -2px 0 0 var(--paper);
+  animation: fx-rise .9s ease-out forwards;
+}
+/* ⭐ 名乗りは**留まる**（読ませる時間が要る）。⚠️ 数字より長く、間より短く */
+.fx-shout { animation: fx-hold .72s ease-out forwards; }
+
+@keyframes fx-rise {
+  0%   { transform: translateY(10px) scale(.7); opacity: 0; }
+  18%  { transform: translateY(0) scale(1.08); opacity: 1; }
+  30%  { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-58px) scale(1); opacity: 0; }
+}
+@keyframes fx-hold {
+  0%   { transform: translateY(8px); opacity: 0; }
+  16%  { transform: translateY(0); opacity: 1; }
+  78%  { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-14px); opacity: 0; }
+}
+
+/* 輪 ── ⭐ 足元から広がって消える（名乗り・回復・盾） */
+.fx-ring {
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 8px var(--fx-tint);
+  animation: fx-spread .5s ease-out forwards;
+}
+@keyframes fx-spread {
+  0%   { transform: scale(.35); opacity: .9; }
+  100% { transform: scale(3.5); opacity: 0; }
+}
+
+/* 光 ── ⭐ 当たった瞬間に一度だけ弾ける */
+.fx-hit {
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--fx-tint) 0%, transparent 70%);
+  animation: fx-flash .3s ease-out forwards;
+}
+@keyframes fx-flash {
+  0%   { transform: scale(.5); opacity: .85; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+
+/* 体の動き ── ⭐ 踏み込み（横）と、当たった跳ね（下）
+   ⚠️ 🔴 **敵の絵は `scaleX(-1)` で裏返してある。**⭐ `transform` は後から書いたほうが
+   丸ごと勝つので、動きの中に**反転を書き足さないと敵が正面を向く**。
+   だから味方用と敵用を分けてある（`.foe` が付いているかで選ぶ）。 */
+.fx-step  { animation: fx-step  .5s ease-out; }
+.fx-shock { animation: fx-shock .22s ease-out; }
+.n.pixel.foe.fx-step  { animation: fx-stepf .5s ease-out; }
+.n.pixel.foe.fx-shock { animation: fx-shockf .22s ease-out; }
+@keyframes fx-step   { 0%,100% { transform: translateX(0); }  40% { transform: translateX(30px); } }
+@keyframes fx-shock  { 0%,100% { transform: translateY(0); }  45% { transform: translateY(14px); } }
+/* ⚠️ 反転が先なので、`translateX(+30)` は**画面の左**へ動く（敵の前へ出る向き） */
+@keyframes fx-stepf  { 0%,100% { transform: scaleX(-1) translateX(0); }  40% { transform: scaleX(-1) translateX(30px); } }
+@keyframes fx-shockf { 0%,100% { transform: scaleX(-1) translateY(0); }  45% { transform: scaleX(-1) translateY(14px); } }
+
+/* ⚠️ **動きを望まない人には出さない。**⭐ 何が起きたかは字と数で残す
+   （動きは読み取りやすさのためであって、情報の出所ではない）。 */
+@media (prefers-reduced-motion: reduce) {
+  .fx-say, .fx-shout { animation: fx-hold .9s linear forwards; }
+  .fx-ring, .fx-hit { display: none; }
+  .fx-step, .fx-stepf, .fx-shock { animation: none; }
 }
 
 /* icon ── ⭐ **絵を出して、その上から色を掛ける。**

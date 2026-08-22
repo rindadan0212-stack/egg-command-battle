@@ -19,6 +19,10 @@
        ⚠️ 本体の中に入れない ── 札は 1920 いっぱいを使うので、
        高さ 1556 の器の中では下が切れる。 *@
     @((MarkupString)_over)
+    @* ⭐ **演出の置き場。**⚠️ Blazor は自分で描いた節点しか触らないので、
+       ここへ差したものは組み直しで消えない（`fx.js` が出し入れする）。
+       ⚠️ 盤の中に置く ── 外に置くと倍率が掛からず、位置がずれる。 *@
+    <div id="fx" class="n" style="left:0;top:0;width:1080px;height:1920px;pointer-events:none"></div>
   </div>
 </div>
 
@@ -47,6 +51,12 @@
     /// （実測 2026-08-22: 技の詳細の `body` と、本体の器の `body`）。</summary>
     [SupplyParameterFromQuery] public string? Open { get; set; }
 
+    /// <summary>時の進み方の倍率。⭐ **1 が遊ぶ速さ**（0.12 なら約8倍速）。
+    /// ⚠️ 検査を速く回すためだけに在る ── **時計そのものを早送りする**ので、
+    /// 起きることも順も1つも変わらない。
+    /// ⚠️ **速さそのものは別に見張る**（縮めた検査は「着くか」しか見ていない）。</summary>
+    [SupplyParameterFromQuery] public double? Pace { get; set; }
+
     private Shell _shell = default!;
     private Vault _vault = default!;
     private DotNetObjectReference<AppPage>? _me;
@@ -60,6 +70,7 @@
         _vault = new Vault(Js);
         long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         _shell = new Shell(Games.NewGame(Seed ?? unchecked((int)now), now), now);
+        _shell.Pace = Pace is > 0 ? Pace.Value : 1;
         _shell.Now_Sheet = At switch
         {
             "nests" => Sheet.Nests, "breed" => Sheet.Breed, "box" => Sheet.Box,
@@ -83,7 +94,11 @@
 
     protected override async Task OnAfterRenderAsync(bool first)
     {
-        if (!first) return;
+        // ⚠️ 🔴 **演出は「描き終わってから」出す。**⭐ 体の枠を測って場所を決めるので、
+        //    組み直しの前に出すと**古い枠**の上に出るか、組み直しで消える
+        //    （踏み込みは絵そのものに掛けるため、作り直されると止まる）。
+        if (!first) { await Spill(); return; }
+
         _me = DotNetObjectReference.Create(this);
         await Js.InvokeVoidAsync("eggTap.listen", _me);
 
@@ -175,22 +190,26 @@
         if (_shell.Open != Panel.None) { _clock?.Dispose(); _clock = null; }
     }
 
+    /// <summary>拍と拍の間（ミリ秒）。⭐ `Core.Beats.TicksPerSecond` の逆数
+    /// ── 1秒に 10.5 刻み進めるので、1刻みは 95ms。
+    /// ⚠️ ここを変えると戦いの見え方だけが変わる（勝敗も手数も変わらない）。</summary>
+    private const int Every = (int)(1000 / Beats.TicksPerSecond);
+
     /// <summary>戦いの時計。⭐ **人の手番では止まる** ── そこが「選ぶ」ところ。
-    ///
-    /// ⚠️ 演出（名乗り・着弾・間の3拍）はまだ無い。⭐ いまは1拍ずつ進めるだけ。
-    /// ⚠️ Unity 版と同じ速さ（1秒に 10.5 拍）に合わせてある。</summary>
+    /// ⭐ 1手は3拍（名乗り・着弾・間）── 割り方と数は `Core.Beats`。</summary>
     private void Wind()
     {
         _clock?.Dispose();
         _clock = null;
         if (_shell.Fight_ == null) return;
-        _clock = new System.Threading.Timer(_ => InvokeAsync(Beat), null, 95, 95);
+        _clock = new System.Threading.Timer(_ => InvokeAsync(Beat), null, Every, Every);
     }
 
     private async Task Beat()
     {
         if (_shell.Fight_ == null) { Wind(); return; }
-        var how = Deeds.Beat(_shell, 1);
+        // ⭐ **時計そのものを早送りする**（`pace`）。⚠️ 拍の数は触らない
+        var how = Deeds.Beat(_shell, Every / 1000.0 / _shell.Pace);
 
         // ⚠️ 🔴 **帯が伸びただけなら組み直さない。**⭐ 組み直すと押しどころが
         //    作り直されて触れなくなる（Unity 版の `UnitStand.Retick` と同じ理由）。
@@ -213,6 +232,31 @@
         //    ⚠️ 中身が変わっていなければ `Keep` は書かないので、無駄打ちにはならない。
         await Keep();
     }
+
+    /// <summary>溜まった演出を盤へ出す。⚠️ **出したら空にする**
+    /// ── 残すと、次の拍で同じ数字がもう一度飛ぶ。
+    /// ⚠️ 帯を先に差し替えてから出す（Unity 版と同じ順 ── 減ってから数字が乗る）。</summary>
+    private async Task Spill()
+    {
+        // ⚠️ **戦いが終わったら出しかけを片付ける。**⭐ 残った数字が次の戦いに混ざる
+        if (_shell.Fight_ == null)
+        {
+            _shell.Sparks.Clear();
+            if (!_lit) return;
+            _lit = false;
+            await Js.InvokeVoidAsync("eggFx.clear");
+            return;
+        }
+        if (_shell.Sparks.Count == 0) return;
+        var sparks = _shell.Sparks.ToArray();
+        _shell.Sparks.Clear();
+        _lit = true;
+        await Js.InvokeVoidAsync("eggTap.bars", Deeds.Bars(_shell));
+        await Js.InvokeVoidAsync("eggFx.play", sparks);
+    }
+
+    /// <summary>盤に演出が出ているか。⚠️ 毎回片付けを呼ばないための札。</summary>
+    private bool _lit;
 
     private async Task Keep()
     {
