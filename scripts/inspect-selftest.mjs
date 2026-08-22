@@ -152,6 +152,8 @@ console.log(clean.length === 0
 for (const t of TRIALS) {
   await page.reload({ waitUntil: 'networkidle' })
   await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 0)
+  // ⚠️ 字が届く前に測らない（代替フォントの幅で答えが出る）
+  await page.evaluate(() => document.fonts.ready).catch(() => {})
   await page.evaluate(t.wreck)
   const bad = await page.evaluate(audit)
   const hit = bad.find(b => b.includes(t.want))

@@ -32,14 +32,14 @@ trait     card    22    318   416  44    ink=faint
   tbody   label   58    12    346  20    size=15 ink=accent anchor=left bind=trait
 
 s0        card    130   380   200  50    when=s0 bind=s0
-  s0name  label   0     2     200  26    size=19 anchor=center bind=s0name
-  s0lv    label   12    28    84   18    size=15 ink=dim anchor=left bind=s0lv
-  s0ct    label   104   28    84   18    size=15 ink=dim anchor=right bind=s0ct
+  s0name  label   0     0     200  26    size=19 anchor=center bind=s0name
+  s0lv    label   12    30    84   18    size=15 ink=dim anchor=left bind=s0lv
+  s0ct    label   104   30    84   18    size=15 ink=dim anchor=right bind=s0ct
 s1        card    22    442   200  50    when=s1 bind=s1
-  s1name  label   0     2     200  26    size=19 anchor=center bind=s1name
-  s1lv    label   12    28    84   18    size=15 ink=dim anchor=left bind=s1lv
-  s1ct    label   104   28    84   18    size=15 ink=dim anchor=right bind=s1ct
+  s1name  label   0     0     200  26    size=19 anchor=center bind=s1name
+  s1lv    label   12    30    84   18    size=15 ink=dim anchor=left bind=s1lv
+  s1ct    label   104   30    84   18    size=15 ink=dim anchor=right bind=s1ct
 s2        card    238   442   200  50    when=s2 bind=s2
-  s2name  label   0     2     200  26    size=19 anchor=center bind=s2name
-  s2lv    label   12    28    84   18    size=15 ink=dim anchor=left bind=s2lv
-  s2ct    label   104   28    84   18    size=15 ink=dim anchor=right bind=s2ct
+  s2name  label   0     0     200  26    size=19 anchor=center bind=s2name
+  s2lv    label   12    30    84   18    size=15 ink=dim anchor=left bind=s2lv
+  s2ct    label   104   30    84   18    size=15 ink=dim anchor=right bind=s2ct

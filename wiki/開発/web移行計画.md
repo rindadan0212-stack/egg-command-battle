@@ -511,7 +511,8 @@ Unity では GameObject 名が重なってよいので気づけない形です�
 | 8 | `BoxView.Spread()` | ✅ **消えた**（`width=share` は要らなかった ── 出す釦が3枚に固定されたので、位置を3つ書くだけで済む）|
 | 9 | FusePanel / SkillEggPanel | ✅ `fuse.txt` `skillegg.txt` + `eggchip.txt` |
 | Hosted | **BattleView / UnitStand** | ✅ `battle.txt` + `unit.txt`（⭐ `host` の初実戦）|
-| Hosted | TrailScreen の盤 / IdleStrip | 🔴 未 |
+| Hosted | **TrailScreen の盤** | ✅ `trail.txt` + `square.txt`（⭐ 2つ目の `host`）|
+| Hosted | IdleStrip | 🔴 未 |
 | Frozen | StealScreen | 移さない |
 
 ⭐ 部品として切り出したもの（**7枚**）:
@@ -519,7 +520,9 @@ Unity では GameObject 名が重なってよいので気づけない形です�
 `slot`（孵化器）/ `encounter`（巣の札）/ `eggcard` `eggchip`（卵）。
 ⚠️ 図鑑（`book.txt`）は 3-5 の節を見ること。
 
-**検査**: **31画面** × 3サイズ（320/390/430）で **不備 0 件**。
+**検査**: **33画面** × 3サイズ（320/390/430）で **不備 0 件**。
+⚠️ ただし 2026-08-22 までの「0件」は**代替フォントで測った 0件**だった
+（フォントが配られていなかった ── `罠と教訓.md`）。⭐ 実物で測り直して 60件 出、全部直した。
 ⚠️ 「開いた並べ替え」「親が居ない配合」「放置の編成」も**別の1枚として数えている**
 ── `when=` で中身が入れ替わるので、片側しか見ない検査は嘘をつく。
 

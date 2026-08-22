@@ -62,6 +62,13 @@ public static class Demo
         return state;
     }
 
+    /// <summary>決まった潜入を1つ組む。⚠️ 遊びの入口ではない ── 盤を見るための土台。</summary>
+    public static Raid Raid(Game game, int raids = 0)
+    {
+        var nest = Nests.ById("shallow-scale");
+        return Trails.Begin(Trails.OfNest(nest), Games.PartyOf(game), raids);
+    }
+
     /// <summary>棚に卵を積む（孵化器には入れない）。</summary>
     public static void Shelve(Game game, int howMany)
     {

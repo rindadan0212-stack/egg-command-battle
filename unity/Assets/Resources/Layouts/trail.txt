@@ -1,0 +1,35 @@
+# すごろく ── ⭐ 入口が下、卵が上。分かれ道で左右に膨らむ
+#
+# ⚠️ **下の帯を出さない画面**（‹ で抜けられると、親と戦う前に何度でもやり直せる）。
+#
+# ⭐ **盤は `host`。**⚠️ マスの位置は（段, 車線）から出すので座標を書き出せない。
+#    線・駒・輪も盤の中身なので、描く側がまとめて持つ。
+#
+# ⚠️ **字を置かない。**さいころの絵の数 ＝ あと何回振れるか。
+#    剣・心・盾 ＝ 攻撃・HP・防御で、**盤の関門と同じ絵**なので説明が要らない。
+#
+#  名前     種類    左   上    幅   高    付け足し
+# ⚠️ **帯は暗い板**（実物の `Board` 色）。⭐ 上に白い字と白い絵を置くので、
+#    白い札にすると**中身が丸ごと見えなくなる**（実測 2026-08-22）。
+head       box     0    0     1080 214   dock=no bind=board
+  die      icon    48   20    46   46    repeat=dice cols=12 gap=8 max=12 bind=die
+  more     label   696  20    44   46    size=26 ink=faint anchor=left when=more bind=more
+  # ⭐ 卵までの残りは**最短マス数**（%は「たぶん届く」で当てにならなかった）
+  goalpic  icon    990  20    42   42    pic=goal ink=faint
+  unit     label   748  22    232  34    size=26 ink=faint anchor=upper-right text=マス
+  # ⚠️ **56 だと字が触れる。**⭐ 枠は接していなくても、
+  #    実際に乗っている範囲で見ると重なる（実測 2026-08-22）。
+  num      label   748  64    232  62    size=50 anchor=upper-right bind=num
+  # ⭐ いくら払えるか。⚠️ 手持ちが見えないと「払うか見送るか」を選びようがない
+  purse    icon    48   140   48   48    repeat=purse cols=3 gap=280 max=3 bind=purse
+  # ⚠️ 隔たりは 328（絵 48 ＋ 隔し 8 ＋ 数 240 ＋ 余白）。⭐ 絵と同じ歩幅にする
+  pursen   label   104  132   240  64    size=36 anchor=left repeat=purse cols=3 gap=88 max=3 bind=pursen
+
+# ⚠️ **1画面に収めない**（作者の指示）。⭐ 縦に巻いて、駒が見える所へ寄せる。
+#    ⭐ 高さはマスの段数で決まるので、盤自体は `host`。
+board      scroll  0    228   1080 1164
+  ground   host    0    0     1080 1164
+
+foot       box     0    1396  1080 392   dock=no bind=board
+  roll     button  48   108   984  150   tap=roll lead=yes when=canroll
+    rollpic icon   448  31    88   88    pic=die ink=on-lead

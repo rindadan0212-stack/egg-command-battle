@@ -169,6 +169,34 @@ html, body {
   background: var(--accent);
 }
 
+/* icon ── ⭐ **絵を出して、その上から色を掛ける。**
+   ⚠️ Unity の `Image.color` は**掛け算**（白なら素のまま）。抱き合わせ（mask）だけにすると
+   **さいころの目が消える**（実測 2026-08-22: 濃紺の四角になった）。
+   ⭐ だから2枚重ねる ── 素の絵と、絵の形に切った色を「掛ける」で乗せる。 */
+.n.icon { color: var(--ink); }
+.n.icon-art {
+  position: absolute;
+  background-image: var(--pic);
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.n.icon-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  mix-blend-mode: multiply;
+  -webkit-mask-image: var(--pic);
+  mask-image: var(--pic);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
 /* host ── ⭐ **中は骨組みが知らないと宣言した枠。**
    ⚠️ 見た目は何も与えない ── 中を描く側が全部決める。 */
 .n.host { overflow: hidden; }

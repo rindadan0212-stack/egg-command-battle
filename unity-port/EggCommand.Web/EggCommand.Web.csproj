@@ -34,13 +34,25 @@
     <Compile Include="..\EggCommand.Sim\SaveJson.cs" Link="SaveJson.cs" />
   </ItemGroup>
 
-  <!-- ⭐ 骨組みとフォント。⚠️ 唯一の出所は Unity 側（ここへ手で写さない）。
-       ⭐ 同じ TTF を配るので、字送りが Unity と揃う。 -->
+  <!-- ⭐ 骨組み。⚠️ 唯一の出所は Unity 側（ここへ手で写さない）。 -->
   <ItemGroup>
     <!-- ⚠️ **配信の癖に頼らない。**dev サーバが 200/0 バイトを返す形があった。
          ⭐ 埋め込みなら、配信先が何であっても同じものが読める。 -->
     <EmbeddedResource Include="..\..\unity\Assets\Resources\Layouts\*.txt" Link="Layouts\%(Filename)%(Extension)" />
-    <Content Include="..\..\unity\Assets\Resources\Fonts\MochiyPopOne-Regular.ttf" Link="wwwroot\fonts\MochiyPopOne-Regular.ttf" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- 🔴 **素材は `wwwroot` の中に実体で置く。**
+       ⚠️ `Content Include` で外から `Link` すると**出力には入るが配られない**
+       （実測 2026-08-22: フォントも絵も 200 を返しながら 0 バイト
+       ── そのせいで、それまでの画面は全部**代替フォント**で描かれていた）。
+       ⭐ だから毎回コピーする。⚠️ 唯一の出所は Unity 側のままで、
+       `wwwroot/fonts` と `wwwroot/icon` は git から外してある。 -->
+  <Target Name="CopyArt" BeforeTargets="BeforeBuild">
+    <ItemGroup>
+      <Art Include="..\..\unity\Assets\Resources\Fonts\MochiyPopOne-Regular.ttf" Into="wwwroot\fonts" />
+      <Art Include="..\..\unity\Assets\Resources\UI\icon\*.png" Into="wwwroot\icon" />
+    </ItemGroup>
+    <Copy SourceFiles="@(Art)" DestinationFolder="%(Art.Into)" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

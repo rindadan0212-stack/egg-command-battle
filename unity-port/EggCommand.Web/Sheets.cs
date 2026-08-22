@@ -221,7 +221,82 @@ public static class Sheets
         Incubation? Slot(int i) => Hatchery.At(s.Game, i);
     }
 
-    // ── 戦闘 ────────────────────────────────────────
+    // ── すごろく ───────────────────────────────────
+
+    /// <summary>⭐ **2つ目の `host`。**⚠️ マスの位置は（段, 車線）から出すので、
+    /// 骨組みが持つのは枠だけ（`Board` が中を埋める）。</summary>
+    public static string Raid(Shell s)
+    {
+        var raid = s.Raid_;
+        if (raid == null) return "<!-- 潜っていない -->";
+
+        // ⚠️ 雑魚を倒すと回数が戻るので、最初の数より増えることがある
+        int had = Math.Max(raid.Rolls, raid.Given);
+        int show = Math.Min(had, 12);
+        // ⭐ **見せかけの居場所で数える**（本当の居場所は歩き始めに終点へ動く）
+        int left = Trails.LeftFrom(raid.Trail, raid.At);
+        var keys = new[] { StatKey.Atk, StatKey.Hp, StatKey.Def };
+        int die = 0, purse = 0;
+
+        return LayoutDom.Render(LayoutStore.Of("trail"), new DomFill
+        {
+            Count = key => key switch { "dice" => show, "purse" => keys.Length, _ => 0 },
+            At = (key, i) => { if (key == "dice") die = i; else purse = i; },
+
+            Inside = key => key == "ground" ? Board.Draw(raid) : "",
+
+            Text = key => key switch
+            {
+                "num" => left < 0 ? "—" : left.ToString(),
+                "more" => $"+{had - show}",
+                // ⚠️ **`Usable` で出す。**⭐ 払ったぶんを引き、一時増減を掛けた
+                //    「いま実際に出せる額」でないと、関門の数と見比べられない。
+                "pursen" => Face.Digits(Shown(keys[purse], Trails.Usable(raid, keys[purse]))),
+                _ => "",
+            },
+
+            // ⭐ さいころの絵の数 ＝ あと何回振れるか。使ったぶんは空のさいころに変わる
+            Pic = key => key switch
+            {
+                "die" => die < raid.Rolls ? "die" : "die-spent",
+                "purse" => Board.IconOf(keys[purse]),
+                _ => null,
+            },
+            Tint = key => key switch
+            {
+                // ⭐ 帯は暗い板（実物の `TrailScreen.Board`）
+                "board" => "rgba(10,15,26,.55)",
+                "die" => die < raid.Rolls ? "#ffffff" : "rgba(255,255,255,.26)",
+                "num" => left < 0 ? "rgba(255,255,255,.55)" : "#ffffff",
+                // ⭐ 一時増減が効いている間は色が変わる（▲▼ のマスと同じ色）
+                "purse" or "pursen" => Temp(raid, keys[purse]),
+                _ => null,
+            },
+
+            When = key => key switch
+            {
+                "more" => had > show,
+                // ⚠️ **振れるのは Moved のときだけ。**⭐ 他の段で釦を出すと、
+                //    押した瞬間に `Trails.Roll` が撥ねて進行不能に見える。
+                "canroll" => raid.Result == null && raid.Step == RaidStep.Moved,
+                _ => false,
+            },
+
+            Tappable = key => key != "roll" || raid.Rolls > 0,
+        });
+
+        static string Temp(Raid raid, StatKey key)
+        {
+            int pct = raid.TempLeft[key] > 0 ? raid.Temp[key] : 0;
+            return pct > 0 ? "#1e7a38" : pct < 0 ? "#c0303f" : "#ffffff";
+        }
+
+        // ⚠️ HP だけ桁が違う（画面に出る HP は ×105）
+        static int Shown(StatKey key, int value) =>
+            key == StatKey.Hp ? value * EggCommand.Core.Battle.HpScale : value;
+    }
+
+    // ── 戦闘 ──────────────────────────────────────────────
 
     /// <summary>⭐ **`host` の初実戦。**⚠️ 立ち位置は体数から逆算するので、
     /// 骨組みが持つのは枠だけ（`Stands` が中を埋める）。</summary>

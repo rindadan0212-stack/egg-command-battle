@@ -1,0 +1,26 @@
+@page "/raid"
+@using EggCommand.Core
+@using EggCommand.Web
+
+<div id="stage-wrap">
+  <div id="stage">
+    @* ⚠️ **すごろくも下の帯を出さない画面**（‹ で抜けられると何度でもやり直せる）。 *@
+    <div id="body" class="n" style="left:0;top:132px;width:1080px;height:1788px;overflow:hidden">
+      @((MarkupString)_html)
+    </div>
+  </div>
+</div>
+
+@code {
+    /// <summary>その巣から何回盗んだか。⭐ 増えるほど守りが固くなる。</summary>
+    [SupplyParameterFromQuery] public int Raids { get; set; }
+
+    private string _html = "";
+
+    protected override void OnParametersSet()
+    {
+        var shell = new Shell(Demo.Game(), Demo.Now);
+        shell.Raid_ = Demo.Raid(shell.Game, Raids);
+        _html = Sheets.Raid(shell);
+    }
+}

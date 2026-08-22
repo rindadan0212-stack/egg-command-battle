@@ -111,6 +111,7 @@ namespace EggCommand.Core
             "line",     // ⭐ 区切りの1本（⚠️ 一辺だけ・面と二重に使わない）
             "bar",      // ⭐ 割合で伸びる帯（孵化の残り・HP）
             "host",     // ⭐ **ここの中は骨組みが知らない**と宣言する枠
+            "icon",     // ⭐ 絵の印（`pic=` で名前。色は `ink=` か `bind=`）
         };
 
         /// <summary>⭐ **骨組みが中を知らない枠か。**
@@ -149,6 +150,8 @@ namespace EggCommand.Core
             "flow",     // ⭐ 兄弟を上から詰める（`flow=down`）
             "wrap",     // ⭐ 枠の幅で折り返す（`wrap=yes`）
             "dock",     // ⭐ 下の帯を跨いでよい（`dock=no`）── 帯そのものだけ
+            "pic",      // ⭐ 絵の名前（`Resources/UI/icon/<名前>.png`）
+            "turn",     // ⭐ 絵を回す度数（矢印を ±90 するのに使う）
         };
 
         /// <summary>⭐ **兄弟を上から詰めるか。**
@@ -429,6 +432,11 @@ namespace EggCommand.Core
                 problems.Add($"{id}/{node.Name}: host の中に子がある"
                     + $"（{node.Children.Count}個）── 書けるなら box にする");
 
+            // ⚠️ **絵の印には名前が要る。**⭐ `pic=` か `bind=`（描く側が選ぶ）。
+            //    ⚠️ どちらも無いと、**何も出ない四角**が黙って置かれる。
+            if (node.Kind == "icon" && node.Option("pic") == null && node.Option("bind") == null)
+                problems.Add($"{id}/{node.Name}: icon に pic= も bind= も無い（何の絵か言えていない）");
+
             // ⚠️ **`flow=` は down しか無い。**⭐ 綴り違いが黙って
             //    「詰めない」に落ちると、重なった画面がそのまま出る。
             if (node.Option("flow") != null && !Flows(node))
@@ -456,7 +464,7 @@ namespace EggCommand.Core
             // ⚠️ **検査する枠と、実際に描かれる枠を食い違わせない**（#3）。
             //    ⭐ 絵と丸は短いほうの辺で正方形に描かれるので、
             //    「幅984・高40」と書くと 40x40 が描かれるのに検査は 984x40 を見てしまう。
-            if ((node.Kind == "pixel" || node.Kind == "round")
+            if ((node.Kind == "pixel" || node.Kind == "round" || node.Kind == "icon")
                 && Math.Abs(node.Width - node.Height) > 0.5f)
             {
                 problems.Add($"{id}/{node.Name}: {node.Kind} は正方形で描かれる"

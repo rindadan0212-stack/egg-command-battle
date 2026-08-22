@@ -1,0 +1,22 @@
+# すごろくのマス1つ ── ⭐ **部品**（器は 248x192）
+#
+# ⚠️ **字は数（%）だけ。**⭐ 関門も贈り物も敵も「絵で分からせる」のがこの画面の規約。
+#    絵が無いマスは**仕様の穴**であって既定値ではない（2026-08-21 の討論）。
+#
+# ⚠️ 関門も**1マス**なので、他のマスと同じ大きさ・同じ中身の置き方をする
+#    （2026-08-20・作者の指示「関門は1マスとしてカウントするので被らないように」）。
+#
+# ⚠️ **数の枠は関門とそれ以外で別。**⭐ 関門は HP を ×105 して出すので6桁になりうる。
+#    2つを `when=gate` / `when=!gate` で入れ替える ── 1つの名前で言わないと、
+#    検査は「同時に出る2つが重なっている」としか読めない。
+#
+#  名前   種類    左   上    幅   高    付け足し
+plain    icon    92   64    64   64    when=plain pic=plain
+mob      icon    76   48    96   96    when=mob pic=mob
+# ⭐ 矢印＋ステの絵＋数。⚠️ 「▲防+60%」の記号を字で書かない
+arrow    icon    10   70    52   52    when=arrow bind=arrow
+stat     icon    66   70    52   52    when=stat bind=stat
+num      label   124  0     116  192   size=44 anchor=left when=!gate bind=num
+# ⭐ 関門は「払う量」を出す（払わなくても入れる ── 払うと有利になる）
+gstat    icon    10   70    52   52    when=gate bind=gstat
+gnum     label   70   0     170  192   size=40 anchor=left when=gate bind=gnum

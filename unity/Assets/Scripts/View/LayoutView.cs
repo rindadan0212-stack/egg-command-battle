@@ -38,6 +38,8 @@ namespace EggCommand.View
         public Func<string, bool> When;
         /// <summary>`bar` の伸び具（0〜1）。⚠️ null なら 0。</summary>
         public Func<string, float> Ratio;
+        /// <summary>⭐ `icon` の絵の名前。⚠️ null なら骨組みの `pic=` のまま。</summary>
+        public Func<string, string> Pic;
         /// <summary>⭐ `host` の枠ができたときに呼ばれる（名前と器）。
         /// ⚠️ 中を描くのは描く側の仕事 ── 骨組みは位置と大きさだけ持つ。</summary>
         public Action<string, RectTransform> Mount;
@@ -234,6 +236,18 @@ namespace EggCommand.View
                     rect = Ui.Round(parent, name, left, top,
                         Mathf.Min(node.Width, node.Height), InkOf(node, fill));
                     break;
+
+                case "icon":
+                {
+                    // ⭐ 絵の印。⚠️ 名前は `pic=` か、描く側が選ぶ（`Pic`）
+                    string pic = (fill != null && fill.Pic != null && node.Option("bind") != null
+                        ? fill.Pic(node.Option("bind")) : null) ?? node.Option("pic");
+                    if (pic == null) { rect = Ui.Rect(name, parent); Ui.Place(rect, left, top, node.Width, node.Height); break; }
+                    var art = Ui.Icon(parent, name, pic, InkOf(node, fill),
+                        left, top, Mathf.Min(node.Width, node.Height), node.Number("turn", 0));
+                    rect = art.rectTransform;
+                    break;
+                }
 
                 case "line":
                 {

@@ -17,14 +17,17 @@ sub       label   448   96    510  28    size=19 ink=faint anchor=left bind=sub
 
 # ⭐ **素質と育成を別の列に。**⚠️ 「41 (17+8)」と1つに詰めていた頃は、
 #    何体か見比べるときに桁が揃わず、どれが伸びているのか読めなかった。
-table     box     448   140   510  240
+# ⚠️ **行を 35 → 40 に広げた。**実物のフォント（Mochiy Pop One）は
+#    字の高さより行の箱が大きく、26pt が 35 に収まらない
+#    （実測 2026-08-22 ── それまでは**代替フォント**で測っていた）。
+table     box     448   140   510  275
   hwild   label   224   0     123  30    size=18 ink=faint anchor=right text=素質
   hgain   label   357   0     143  30    size=18 ink=faint anchor=right text=強化
   hline   line    0     28    510  2
-  rline   line    0     65    510  1     ink=faint repeat=lines rows=35 max=5
-  key     label   0     30    214  35    size=22 ink=dim anchor=left repeat=stats rows=35 max=6 bind=key
-  wild    label   224   30    123  35    size=26 anchor=right repeat=stats rows=35 max=6 bind=wild
-  gain    label   357   30    143  35    size=26 ink=accent anchor=right repeat=stats rows=35 max=6 bind=gain
+  rline   line    0     70    510  1     ink=faint repeat=lines rows=40 max=5
+  key     label   0     30    214  40    size=22 ink=dim anchor=left repeat=stats rows=40 max=6 bind=key
+  wild    label   224   30    123  40    size=26 anchor=right repeat=stats rows=40 max=6 bind=wild
+  gain    label   357   30    143  40    size=26 ink=accent anchor=right repeat=stats rows=40 max=6 bind=gain
 
 # ⚠️ 特性が無いときは「—」を入れる。⭐ 帯ごと消すと札に穴が空き、
 #    空のままだと壊れて見える（どちらも実測で確認）。「特性なし」とは書かない。

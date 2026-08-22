@@ -70,6 +70,9 @@ const PAGES = args.length ? args : [
   // ⭐ 戦闘。⚠️ 決着した枝も見る（札が入れ替わる）
   '/fight',
   '/fight?done=true',
+  // ⭐ すごろくの盤
+  '/raid',
+  '/raid?raids=2',
 ]
 
 /** ⚠️ 実機の幅は 320〜430。⭐ 一番狭いところで測るのが要点（罠22・24・26）。 */
@@ -94,6 +97,10 @@ for (const path of PAGES) {
     await page.goto(URL + path)
     await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 0,
       null, { timeout: 30000 }).catch(() => {})
+    // ⚠️ 🔴 **字が届く前に測らない。**⭐ 代替フォントの幅で答えが出るので、
+    //    **置きが温まっているかどうかで件数が変わる**（実測 2026-08-22:
+    //    同じ画面が、単独なら 0件・通しなら 10件）。
+    await page.evaluate(() => document.fonts.ready).catch(() => {})
     const bad = await page.evaluate(audit)
     const parts = await page.evaluate(() => document.querySelectorAll('#stage .n').length)
     total += bad.length

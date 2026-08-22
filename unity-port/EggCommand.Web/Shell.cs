@@ -3,7 +3,7 @@ using EggCommand.Core;
 namespace EggCommand.Web;
 
 /// <summary>いま出ている画面。⚠️ Unity 版 `App.Screen` と同じ並び。</summary>
-public enum Sheet { Home, Nests, Breed, Box, Book, Fight }
+public enum Sheet { Home, Nests, Breed, Box, Book, Fight, Raid }
 
 /// <summary>覆いで前に出る札。⚠️ 画面とは別に数える（後ろの画面は残る）。</summary>
 public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train }
@@ -39,6 +39,9 @@ public sealed class Shell
     /// <summary>いまの戦い。⚠️ 無ければ戦っていない。
     /// ⭐ 名前に `_` が付いているのは、Core の `Battle` と見分けるため。</summary>
     public BattleState? Fight_;
+
+    /// <summary>いまの潜入。⚠️ 無ければ潜っていない。</summary>
+    public Raid? Raid_;
 
     public Shell(Game game, long now) { Game = game; Now = now; }
 

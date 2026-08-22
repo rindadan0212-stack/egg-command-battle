@@ -19,7 +19,7 @@ panel      card    48   150   984  1500
     stack  box     0    0     920  980   flow=down
       thead  label  0   0     920  38    size=26 ink=faint anchor=left text=特性
       tname  label  0   0     920  44    size=32 ink=accent anchor=left bind=tname
-      tgist  label  0   2     920  62    size=26 ink=dim anchor=upper-left wrap=yes bind=tgist
+      tgist  label  0   10    920  62    size=26 ink=dim anchor=upper-left wrap=yes bind=tgist
 
       s1head label  0   36    920  38    size=26 ink=faint anchor=left text=枠1（この種族が必ず持つ）
       s1chip card   0   0     298  112   repeat=slot1 cols=3 gap=12 rows=124 max=1 hold=skill1

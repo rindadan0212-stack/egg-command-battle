@@ -34,6 +34,8 @@ namespace EggCommand.Web
         public Func<string, bool> When;
         /// <summary>`bar` の伸び具（0〜1）。⚠️ null なら 0。</summary>
         public Func<string, double> Ratio;
+        /// <summary>⭐ `icon` の絵の名前。⚠️ null なら骨組みの `pic=` のまま。</summary>
+        public Func<string, string> Pic;
         /// <summary>⭐ **`host` の中身**（名前 → そのまま差す HTML）。
         ///
         /// ⚠️ 骨組みが知らないと宣言した枠なので、描く側が全部決める。
@@ -137,7 +139,11 @@ namespace EggCommand.Web
                 string ink = node.Option("ink");
                 if (ink != null) cls.Append(" ink-").Append(ink);
                 string tint = has && node.Kind != "bar" && fill?.Tint != null ? fill.Tint(bind) : null;
-                if (tint != null) style.Append(";background:").Append(tint);
+                // ⚠️ **絵の印だけは `color`**── 地ではなく、抱き合わせを染める側
+                if (tint != null) style.Append(node.Kind == "icon" ? ";color:" : ";background:").Append(tint);
+                // ⭐ 絵を回す（矢印の ±90）。⚠️ 中心のまわり
+                int turn = node.Number("turn", 0);
+                if (turn != 0) style.Append(";transform:rotate(").Append(turn).Append("deg)");
             }
             if (node.Option("lead") == "yes") cls.Append(" lead");
 
@@ -172,7 +178,20 @@ namespace EggCommand.Web
             if (tag == "button" && !live && tap != null) sb.Append(" disabled");
             sb.Append('>');
 
-            if (node.Kind == "host")
+            if (node.Kind == "icon")
+            {
+                // ⭐ **絵は抱き合わせ（mask）で出して、色は地で与える。**
+                //    ⚠️ Unity は `Image.color` で染めているので、同じ振る舞いに合わせる。
+                string pic = (has && fill?.Pic != null ? fill.Pic(bind) : null) ?? node.Option("pic");
+                if (pic != null)
+                {
+                    // ⭐ 絵の場所は1回だけ言う（`--pic`）。⚠️ 素の絵と、
+                    //    その形に切った色の2枚が同じ絵を見るので、二重に書かない。
+                    sb.Append("<div class=\"n icon-art\" style=\"left:0;top:0;width:100%;height:100%;--pic:url(icon/")
+                      .Append(Esc(pic)).Append(".png)\"></div>");
+                }
+            }
+            else if (node.Kind == "host")
             {
                 // ⭐ **中は骨組みが知らない。**⚠️ ここだけは描く側の字をそのまま流す
                 sb.Append(fill?.Inside != null ? fill.Inside(node.Name) ?? "" : "");

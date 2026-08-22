@@ -10,5 +10,5 @@
 #  名前   種類    左   上    幅   高    付け足し
 who      label   0    4     216  26    size=22 ink=dim anchor=center bind=who
 art      pixel   84   32    48   48    bind=art
-stars    label   0    80    216  32    size=24 ink=accent anchor=center bind=stars
-note     label   0    112   216  36    size=26 anchor=center bind=note
+stars    label   0    78    216  30    size=24 ink=accent anchor=center bind=stars
+note     label   0    116   216  36    size=26 anchor=center bind=note

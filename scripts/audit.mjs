@@ -87,7 +87,11 @@ export function audit() {
   for (const el of nodes) {
     const parent = el.parentElement
     if (!parent || parent === stage) continue
+    // ⚠️ **中を知らないと宣言した枠（host）は、中身の高さも知らない。**
+    //    ⭐ 盤の高さはマスの段数で決まるので、骨組みには書けない
+    //    （その外側の巻物が溢れを受け止める）。
     const scrolls = getComputedStyle(parent).overflowY === 'auto'
+      || parent.classList.contains('host')
     const a = el.getBoundingClientRect(), p = parent.getBoundingClientRect()
     if (a.left < p.left - 0.5 || a.right > p.right + 0.5) {
       push(`親の枠から横へはみ出し: ${el.id}`)
@@ -121,6 +125,11 @@ export function audit() {
       const r = p.getBoundingClientRect()
       if (a.bottom <= r.top + 0.5 || a.top >= r.bottom - 0.5) return true
       if (a.right <= r.left + 0.5 || a.left >= r.right - 0.5) return true
+      // ⚠️ **半分だけ見えているものも数えない。**⭐ 覆いの検査は
+      //    真ん中の1点を見るので、真ん中が巻物の外なら判定できない
+      //    （実測 2026-08-22: 盤の下端のマスが「下の帯に覆われている」と出た）。
+      const cy = (a.top + a.bottom) / 2, cx = (a.left + a.right) / 2
+      if (cy < r.top || cy > r.bottom || cx < r.left || cx > r.right) return true
     }
     return false
   }
