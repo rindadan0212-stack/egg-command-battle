@@ -90,10 +90,15 @@ export function audit() {
     // ⚠️ **中を知らないと宣言した枠（host）は、中身の高さも知らない。**
     //    ⭐ 盤の高さはマスの段数で決まるので、骨組みには書けない
     //    （その外側の巻物が溢れを受け止める）。
-    const scrolls = getComputedStyle(parent).overflowY === 'auto'
-      || parent.classList.contains('host')
+    const style = getComputedStyle(parent)
+    const scrolls = style.overflowY === 'auto' || parent.classList.contains('host')
+    // ⚠️ **横へ溢れてよいのは、親が切っているときだけ。**
+    //    ⭐ 放置の地面は画面幅の2倍あり、左へ流して見せる ── 実物も
+    //    `RectMask2D` で切っている（「検査が画面外と言うのはこの帯のこと。意図どおり」）。
+    //    ⚠️ 切っていない親からはみ出したら、それは本当に見えない場所へ出ている。
+    const cuts = style.overflowX !== 'visible'
     const a = el.getBoundingClientRect(), p = parent.getBoundingClientRect()
-    if (a.left < p.left - 0.5 || a.right > p.right + 0.5) {
+    if (!cuts && (a.left < p.left - 0.5 || a.right > p.right + 0.5)) {
       push(`親の枠から横へはみ出し: ${el.id}`)
     }
     // ⭐ 巻物の中は縦に溢れてよい（それが巻物）
@@ -106,6 +111,11 @@ export function audit() {
   const s = stage.getBoundingClientRect()
   for (const el of nodes) {
     if (el.closest('.scroll') && el.closest('.scroll') !== el) continue
+    // ⚠️ **切られている中は「外」ではない。**⭐ 切る親（`host` の枠など）の中で
+    //    はみ出したものは、画面へは出てこない ── 実物の `RectMask2D` と同じ。
+    const cut = el.parentElement && el.parentElement !== stage
+      && getComputedStyle(el.parentElement).overflowX !== 'visible'
+    if (cut) continue
     const a = el.getBoundingClientRect()
     if (a.width === 0 || a.height === 0) continue
     if (a.left < s.left - 0.5 || a.right > s.right + 0.5) push(`画面の外（横）: ${el.id}`)
@@ -168,16 +178,79 @@ export function audit() {
   // ⚠️ **覆いより後ろは見ない。**覆いが出ていれば後ろが隠れるのは当たり前で、
   //    そこを数えると本物の不備が 72件 の中に埋もれる（実測 2026-08-22）。
   //    ⭐ Unity 版の「層」と同じ考え ── いちばん上の覆いから先だけを見る。
+  // ⚠️ **ここは⑧と同じ1回の当たり判定を使う。**⭐ `elementsFromPoint` は重いので、
+  //    2周すると画面が増えたときに検査そのものが終わらなくなる（実測 2026-08-22）。
+
+  // ── ⑧ 地に沈んで見えない ────────────────────────
+  //
+  // 🔴 **置いてあることと、見えることは別。**⚠️ 検査は⑦まで「配置」しか見ておらず、
+  //    すごろくの帯を白い札にしたとき、上の**白い字と白い絵が全部消えた**のに
+  //    0件と答えた（実測 2026-08-22）。
+  //
+  // ⭐ ここで見るのは**読めるかどうか**ではなく「**消えていないか**」。
+  //    ⚠️ この作品は薄墨（#636980）を白の上に置く場面が多く、
+  //    読みやすさの基準（4.5:1）で測ると本物でない指摘が並ぶ。
+  //    ⭐ だから線は 2.0:1 ── これを下回るものは**事実上見えない**。
+  const rgb = (s) => {
+    const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/.exec(s || '')
+    return m ? { r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : +m[4] } : null
+  }
+  const lum = (c) => {
+    const f = (v) => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4 }
+    return .2126 * f(c.r) + .7152 * f(c.g) + .0722 * f(c.b)
+  }
+  const over = (top, back) => ({          // ⭐ 半透明は下の色と混ぜてから比べる
+    r: top.r * top.a + back.r * (1 - top.a),
+    g: top.g * top.a + back.g * (1 - top.a),
+    b: top.b * top.a + back.b * (1 - top.a),
+    a: 1,
+  })
+  const ratio = (a, b) => {
+    const la = lum(a), lb = lum(b)
+    return (Math.max(la, lb) + .05) / (Math.min(la, lb) + .05)
+  }
+  const paper = rgb(getComputedStyle(document.body).backgroundColor) || { r: 255, g: 255, b: 255, a: 1 }
+
   for (const el of nodes) {
-    if (!el.classList.contains('label') || !el.textContent.trim()) continue
+    const isIcon = el.classList.contains('icon')
+    const isText = el.classList.contains('label') && el.textContent.trim()
+    if (!isIcon && !isText) continue
     if (!above(el) || clipped(el)) continue
-    const ink = inkOf(el)
-    if (!ink) continue
-    const cx = (ink.left + ink.right) / 2, cy = (ink.top + ink.bottom) / 2
-    const top = document.elementsFromPoint(cx, cy)[0]
-    if (!top) continue
-    if (top !== el && !el.contains(top) && !top.contains(el)) {
+
+    const box = isText ? inkOf(el) : el.getBoundingClientRect()
+    if (!box || box.right - box.left < 1 || box.bottom - box.top < 1) continue
+    const x = (box.left + box.right) / 2, y = (box.top + box.bottom) / 2
+
+    // ⭐ **当たり判定は1回だけ。**⚠️ ⑦（覆われている）と⑧（地に沈んでいる）で
+    //    別々に呼ぶと、画面が増えたときに検査そのものが終わらなくなる。
+    const stack = document.elementsFromPoint(x, y)
+    if (!stack.length) continue
+
+    // ── ⑦ 覆われて見えない ──
+    const top = stack[0]
+    if (isText && top !== el && !el.contains(top) && !top.contains(el)) {
       push(`覆われて見えない: ${el.id}「${el.textContent.slice(0, 12)}」← ${top.id || top.tagName}`)
+      continue                                // ⚠️ 隠れているものの明暗は問わない
+    }
+
+    // ── ⑧ 地に沈んで見えない ──
+    // ⚠️ 絵は `color` で染めた抱き合わせ。⭐ 字と同じく `color` を見ればよい
+    const ink = rgb(getComputedStyle(el).color)
+    if (!ink || ink.a === 0) continue
+    let ground = paper
+    const paints = []
+    for (const under of stack.slice(stack.indexOf(el) + 1)) {
+      const c = rgb(getComputedStyle(under).backgroundColor)
+      if (c && c.a > 0) paints.push(c)
+      if (c && c.a >= 1) break                // ⭐ 不透明に当たったらそこで止まる
+    }
+    for (let i = paints.length - 1; i >= 0; i--) ground = over(paints[i], ground)
+
+    const seen = ratio(over(ink, ground), ground)
+    if (seen < 2.0) {
+      push(`地に沈んで見えない: ${el.id}`
+        + (isText ? `「${el.textContent.slice(0, 10)}」` : '（絵）')
+        + ` 差 ${seen.toFixed(2)}:1`)
     }
   }
 

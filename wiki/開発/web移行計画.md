@@ -512,7 +512,7 @@ Unity では GameObject 名が重なってよいので気づけない形です�
 | 9 | FusePanel / SkillEggPanel | ✅ `fuse.txt` `skillegg.txt` + `eggchip.txt` |
 | Hosted | **BattleView / UnitStand** | ✅ `battle.txt` + `unit.txt`（⭐ `host` の初実戦）|
 | Hosted | **TrailScreen の盤** | ✅ `trail.txt` + `square.txt`（⭐ 2つ目の `host`）|
-| Hosted | IdleStrip | 🔴 未 |
+| Hosted | **IdleStrip** | ✅ `home.txt` の `idle` ＋ `walker.txt`（⭐ 3つ目の `host`）⚠️ 地面の流れと歩幅の揺れは**未**（止まった絵）|
 | Frozen | StealScreen | 移さない |
 
 ⭐ 部品として切り出したもの（**7枚**）:

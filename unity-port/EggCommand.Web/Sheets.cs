@@ -171,6 +171,8 @@ public static class Sheets
         int at = 0;
         return LayoutDom.Render(LayoutStore.Of("home"), new DomFill
         {
+            // ⭐ 3つ目の `host`。⚠️ 何体並ぶかは編成しだい
+            Inside = key => key == "idle" ? EggCommand.Web.Idle.Draw(s.Game) : "",
             Count = key => key == "slots" ? Hatchery.Slots : 0,
             At = (key, i) => at = i,
 

@@ -56,6 +56,17 @@ const TRIALS = [
     wreck: () => { document.getElementById('stage').style.transform = 'translate(0,0) scale(1)' },
   },
   {
+    // 🔴 **置いてあることと、見えることは別。**⭐ すごろくの帯を白い札にしたとき、
+    //    上の白い字と白い絵が全部消えたのに「0件」と答えた（実測 2026-08-22）。
+    name: '字を地と同じ色にする',
+    want: '地に沈んで見えない',
+    wreck: () => {
+      const el = document.querySelector('[id^="name#"]')
+      // ⭐ 札の地は白。⚠️ その上に白い字を置く
+      el.style.color = '#ffffff'
+    },
+  },
+  {
     name: '覆いを被せる',
     want: '覆われて見えない',
     wreck: () => {
@@ -134,6 +145,52 @@ const WRAP_TRIALS = [
     want: null,
     wreck: () => {},
     check: () => document.querySelectorAll('#stage .n.label.wrapped').length,
+  },
+]
+
+/** ⚠️ 絵の印のある画面でだけ効く試験（`/raid`）。
+ *  ⭐ **字だけ見ていると、消えた絵に気づけない** ── すごろくの帯で実際にそうなった。 */
+const ICON_TRIALS = [
+  {
+    name: '絵がそもそも在る',
+    want: null,
+    check: () => document.querySelectorAll('#stage .n.icon').length,
+  },
+  {
+    name: '絵を地と同じ色にする',
+    want: '地に沈んで見えない',
+    wreck: () => {
+      // ⭐ **実際に起きた形をそのまま作る**（2026-08-22）:
+      //    帯を白い札にした ── 上に置いてある白い絵が丸ごと消えた。
+      const el = document.querySelector('[id^="die#"]')
+      el.parentElement.style.background = '#ffffff'
+      el.style.color = '#ffffff'
+    },
+  },
+]
+
+/** ⚠️ 切る枠のある画面でだけ効く試験（`/home` の放置の帯）。
+ *  ⭐ 「切られている中ははみ出しでない」を**使っている場所が在る**ことを確かめる
+ *  ── 無ければ、その見逃しは**ただの穴**になる。 */
+const CUT_TRIALS = [
+  {
+    name: '切る枠から出ている物が、そもそも在る',
+    want: null,
+    check: () => {
+      const host = document.querySelector('#stage .n.host')
+      if (!host) return 0
+      const h = host.getBoundingClientRect()
+      return [...host.children].filter(c => c.getBoundingClientRect().right > h.right + 1).length
+    },
+  },
+  {
+    name: '切らない親からはみ出したら数える',
+    want: 'はみ出し',
+    wreck: () => {
+      // ⭐ 孵化器の升（切らない札）の中身を、枠より広げる
+      const el = document.querySelector('[id^="slot-who#"]')
+      el.style.width = '900px'
+    },
   },
 ]
 
@@ -224,8 +281,47 @@ for (const t of WRAP_TRIALS) {
   else { missed++; console.log(`🔴 ${t.name} → **素通り**`) }
 }
 
+// ── 絵の印のある画面 ──────────────────────────────
+const iconUrl = URL.replace(/\/$/, '') + '/raid'
+for (const t of ICON_TRIALS) {
+  await page.goto(iconUrl, { waitUntil: 'networkidle' })
+  await page.waitForFunction(() => !!document.querySelector('[id^="die#"]')).catch(() => {})
+  await page.evaluate(() => document.fonts.ready).catch(() => {})
+  if (t.check) {
+    const n = await page.evaluate(t.check)
+    if (n > 0) console.log(`⭐ ${t.name} → ${n} 個ある`)
+    else { missed++; console.log(`🔴 ${t.name} → **0個** ── 下の試験は何も見ていない`) }
+    continue
+  }
+  await page.evaluate(t.wreck)
+  const bad = await page.evaluate(audit)
+  const hit = bad.find(b => b.includes(t.want))
+  if (hit) console.log(`⭐ ${t.name} → 捕まえた: ${hit.slice(0, 66)}`)
+  else { missed++; console.log(`🔴 ${t.name} → **素通り**`) }
+}
+
+// ── 切る枠のある画面 ──────────────────────────────
+const cutUrl = URL.replace(/\/$/, '') + '/home?eggs=3'
+for (const t of CUT_TRIALS) {
+  await page.goto(cutUrl, { waitUntil: 'networkidle' })
+  await page.waitForFunction(() => !!document.querySelector('#stage .n.host')).catch(() => {})
+  await page.evaluate(() => document.fonts.ready).catch(() => {})
+  if (t.check) {
+    const n = await page.evaluate(t.check)
+    if (n > 0) console.log(`⭐ ${t.name} → ${n} 個ある`)
+    else { missed++; console.log(`🔴 ${t.name} → **0個** ── 見逃しの規則が、ただの穴になっている`) }
+    continue
+  }
+  await page.evaluate(t.wreck)
+  const bad = await page.evaluate(audit)
+  const hit = bad.find(b => b.includes(t.want))
+  if (hit) console.log(`⭐ ${t.name} → 捕まえた: ${hit.slice(0, 66)}`)
+  else { missed++; console.log(`🔴 ${t.name} → **素通り**`) }
+}
+
 await browser.close()
 console.log(missed === 0
-  ? `\n⭐ 検査は効いている（試した ${TRIALS.length + VEIL_TRIALS.length + SCROLL_TRIALS.length + WRAP_TRIALS.length} 件すべてが正しく動いた）`
+  ? `\n⭐ 検査は効いている（試した ${TRIALS.length + VEIL_TRIALS.length + SCROLL_TRIALS.length
+      + WRAP_TRIALS.length + ICON_TRIALS.length + CUT_TRIALS.length} 件すべてが正しく動いた）`
   : `\n🔴 ${missed} 件が素通り ── この検査は、その分だけ嘘をつく`)
 process.exit(missed ? 1 : 0)
