@@ -1,8 +1,11 @@
-using EggCommand.Core;
-
-namespace EggCommand.View
+namespace EggCommand.Core
 {
-    /// <summary>卵の意匠。⚠️ Core には置かない（遊びの規則ではなく見た目）。
+    /// <summary>卵の意匠。
+    ///
+    /// ⚠️ **2026-08-22 に View から Core へ移した。**
+    /// ⭐ 種族のドット絵は最初から Core（`Species.cs`）に在るので、
+    /// 卵だけ View に置く理由が無かった ── しかもそのせいで
+    /// **web 側から卵の絵を描けなかった**。
     ///
     /// ⚠️ **2026-08-22 に `StealStage.cs` から救い出した。**
     /// あのファイルは 956行のうち 931行が死蔵（弾いて飛ばす台。すごろくに置き換え済み）で、

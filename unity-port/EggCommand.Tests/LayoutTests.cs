@@ -553,6 +553,29 @@ row card 0 120 100 40 repeat=stats max=6")));
         Assert.Equal(new System.Collections.Generic.List<string>(), Layouts.Faults(fine));
     }
 
+    // ── host ── ⭐ 中を知らないと宣言する枠 ──────────────
+
+    /// <summary>⭐ **枠そのものは検査する。**⚠️ 「知らない」は「見ない」ではない。</summary>
+    [Fact]
+    public void 中を知らない枠も場所は検査する()
+    {
+        var bad = Layouts.Parse("t", "board host 900 0 400 300");
+        Assert.Contains(Layouts.Faults(bad), f => f.Contains("画面の外"));
+
+        var fine = Layouts.Parse("t", "board host 0 0 1080 470");
+        Assert.Equal(new System.Collections.Generic.List<string>(), Layouts.Faults(fine));
+    }
+
+    /// <summary>⚠️ **書けるなら host ではない。**⭐ 中を書いた時点で、
+    /// 「骨組みが知らない」という宣言が嘘になる。</summary>
+    [Fact]
+    public void 中を知らない枠に子を書いたら落とす()
+    {
+        var bad = Layouts.Parse("t", @"board host 0 0 400 300
+  a label 0 0 400 40");
+        Assert.Contains(Layouts.Faults(bad), f => f.Contains("host の中に子がある"));
+    }
+
     // ── text= ── ⭐ 動かない字は骨組みに置く ────────────
 
     /// <summary>⭐ **行末まで全部が字。**⚠️ 引用符もエスケープも要らない。</summary>

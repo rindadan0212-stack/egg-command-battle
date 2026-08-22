@@ -48,6 +48,10 @@ const PAGES = args.length ? args : [
   '/species?at=7',
   '/skill?at=0',
   '/skill?at=12&slot=0',
+  // ⭐ ホーム。⚠️ 空の枠と入っている枠を両方見る
+  '/home?eggs=3',
+  '/home?eggs=0',
+  '/home?eggs=6',
 ]
 
 /** ⚠️ 実機の幅は 320〜430。⭐ 一番狭いところで測るのが要点（罠22・24・26）。 */

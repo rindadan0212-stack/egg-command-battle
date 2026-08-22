@@ -32,6 +32,8 @@ namespace EggCommand.Web
         public Action<string, int> At;
         /// <summary>`when=` → 出すか。⚠️ null なら常に出す。</summary>
         public Func<string, bool> When;
+        /// <summary>`bar` の伸び具（0〜1）。⚠️ null なら 0。</summary>
+        public Func<string, double> Ratio;
     }
 
     /// <summary>骨組みを HTML に変える。⭐ **ここが唯一「座標を読む」場所。**
@@ -121,9 +123,10 @@ namespace EggCommand.Web
             {
                 // ⭐ 字でないものは、色を**地**に掛ける（丸＝属性の色・線＝薄墨）。
                 // ⚠️ Unity 版は `InkOf` が同じ役をしている（`Ui.Round` の色）。
+                // ⚠️ **帯だけは別**── 色が付くのは「伸びた分」であって、地ではない。
                 string ink = node.Option("ink");
                 if (ink != null) cls.Append(" ink-").Append(ink);
-                string tint = has && fill?.Tint != null ? fill.Tint(bind) : null;
+                string tint = has && node.Kind != "bar" && fill?.Tint != null ? fill.Tint(bind) : null;
                 if (tint != null) style.Append(";background:").Append(tint);
             }
             if (node.Option("lead") == "yes") cls.Append(" lead");
@@ -144,7 +147,21 @@ namespace EggCommand.Web
             if (tag == "button" && !live && tap != null) sb.Append(" disabled");
             sb.Append('>');
 
-            if (node.Kind == "pixel")
+            if (node.Kind == "bar")
+            {
+                // ⭐ **帯は「地」と「伸びた分」の2枚。**⚠️ 幅だけが割合で変わるので
+                //    骨組みには書けない（だから種類にしてある）。
+                double at = has && fill?.Ratio != null ? fill.Ratio(bind) : 0;
+                if (at < 0) at = 0;
+                if (at > 1) at = 1;
+                string paint = has && fill?.Tint != null ? fill.Tint(bind) : null;
+                sb.Append("<div class=\"n bar-fill\" style=\"left:0;top:0;height:100%;width:")
+                  .Append((at * 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))
+                  .Append('%');
+                if (paint != null) sb.Append(";background:").Append(paint);
+                sb.Append("\"></div>");
+            }
+            else if (node.Kind == "pixel")
             {
                 var sprite = has && fill?.Sprite != null ? fill.Sprite(bind) : null;
                 var palette = has && fill?.Palette != null ? fill.Palette(bind) : null;

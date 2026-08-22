@@ -36,6 +36,11 @@ namespace EggCommand.View
         public Action<string, int> At;
         /// <summary>`when=` → 出すか。⚠️ null なら常に出す。</summary>
         public Func<string, bool> When;
+        /// <summary>`bar` の伸び具（0〜1）。⚠️ null なら 0。</summary>
+        public Func<string, float> Ratio;
+        /// <summary>⭐ `host` の枠ができたときに呼ばれる（名前と器）。
+        /// ⚠️ 中を描くのは描く側の仕事 ── 骨組みは位置と大きさだけ持つ。</summary>
+        public Action<string, RectTransform> Mount;
     }
 
     /// <summary>骨組みを実際の部品に変える。⭐ **ここが唯一「座標を読む」場所。**
@@ -191,6 +196,37 @@ namespace EggCommand.View
                     block.transition = Selectable.Transition.None;
                     block.targetGraphic = paint;
                     rect = dim;
+                    break;
+                }
+
+                case "bar":
+                {
+                    // ⭐ **地と「伸びた分」の2枚。**⚠️ 幅だけが割合で変わる
+                    var track = Ui.Rect(name, parent);
+                    Ui.Place(track, left, top, node.Width, node.Height);
+                    var back = track.gameObject.AddComponent<UnityEngine.UI.Image>();
+                    back.raycastTarget = false;
+                    back.color = new Color(0f, 0f, 0f, 0.14f);
+                    string key = node.Option("bind");
+                    float at = key != null && fill != null && fill.Ratio != null
+                        ? Mathf.Clamp01(fill.Ratio(key)) : 0f;
+                    var grow = Ui.Rect("Fill", track);
+                    Ui.Place(grow, 0f, 0f, node.Width * at, node.Height);
+                    var paint = grow.gameObject.AddComponent<UnityEngine.UI.Image>();
+                    paint.raycastTarget = false;
+                    paint.color = InkOf(node, fill);
+                    rect = track;
+                    break;
+                }
+
+                case "host":
+                {
+                    // ⭐ **中は骨組みが知らないと宣言した枠。**
+                    // ⚠️ 枠だけ作って、中は描く側に渡す
+                    var pit = Ui.Rect(name, parent);
+                    Ui.Place(pit, left, top, node.Width, node.Height);
+                    if (fill != null && fill.Mount != null) fill.Mount(node.Name, pit);
+                    rect = pit;
                     break;
                 }
 

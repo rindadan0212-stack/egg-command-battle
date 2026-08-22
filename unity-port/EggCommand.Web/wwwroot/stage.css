@@ -155,6 +155,23 @@ html, body {
   box-shadow: inset 0 0 0 6px var(--accent);
 }
 
+/* bar ── ⭐ **割合で伸びる帯**（孵化の残り・HP）。
+   ⚠️ 幅だけがデータで変わるので、骨組みには書けない。
+   色は Prefab の実測（地 `#000` α.14 ── 伸びた分は差す側が決める）。 */
+.n.bar {
+  background: rgba(0, 0, 0, .14);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.n.bar-fill {
+  position: absolute;
+  background: var(--accent);
+}
+
+/* host ── ⭐ **中は骨組みが知らないと宣言した枠。**
+   ⚠️ 見た目は何も与えない ── 中を描く側が全部決める。 */
+.n.host { overflow: hidden; }
+
 /* ⭐ **覆い。**地を暗くして、後ろを押させない。
    ⚠️ ここを押しても閉じない ── 聞いている最中に、触っただけで消えるのは危ない
    （`AskPanel` の決めごとをそのまま持ち込む）。 */

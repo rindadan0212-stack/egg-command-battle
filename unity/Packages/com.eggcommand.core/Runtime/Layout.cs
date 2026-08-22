@@ -109,7 +109,18 @@ namespace EggCommand.Core
             "round",    // 丸
             "veil",     // ⭐ 覆い（地を暗くし、後ろを押させない）
             "line",     // ⭐ 区切りの1本（⚠️ 一辺だけ・面と二重に使わない）
+            "bar",      // ⭐ 割合で伸びる帯（孵化の残り・HP）
+            "host",     // ⭐ **ここの中は骨組みが知らない**と宣言する枠
         };
+
+        /// <summary>⭐ **骨組みが中を知らない枠か。**
+        ///
+        /// ⚠️ 放置の帯・盤・戦闘の場は、位置を**体数や時間から逆算**しているので、
+        /// 座標を書き出せない。⭐ それを「まだ移していない」と混ぜないための印。
+        ///
+        /// ⭐ **枠そのものは検査する**（大きさ・場所・重なり）。
+        /// ⚠️ 中に子を書いたら落とす ── 書けるなら host ではない。</summary>
+        public static bool IsHost(LayoutNode node) => node.Kind == "host";
 
         /// <summary>押しどころとして指が触れる種類。⚠️ 高さの検査はこれだけに掛ける。</summary>
         private static bool IsTappable(string kind) => kind == "button";
@@ -409,6 +420,12 @@ namespace EggCommand.Core
             // ⚠️ 字を出さない種類に text= を書いても**どこにも出ない**
             if (node.Option("text") != null && !IsText(node.Kind) && !IsTappable(node.Kind))
                 problems.Add($"{id}/{node.Name}: 「{node.Kind}」は字を出さないのに text= がある");
+
+            // ⚠️ **中を知らないと宣言した枠に、子を書かせない。**
+            //    ⭐ 書けるなら host ではなく、普通の入れ物（box）ですむ。
+            if (IsHost(node) && node.Children.Count > 0)
+                problems.Add($"{id}/{node.Name}: host の中に子がある"
+                    + $"（{node.Children.Count}個）── 書けるなら box にする");
 
             // ⚠️ **`flow=` は down しか無い。**⭐ 綴り違いが黙って
             //    「詰めない」に落ちると、重なった画面がそのまま出る。
