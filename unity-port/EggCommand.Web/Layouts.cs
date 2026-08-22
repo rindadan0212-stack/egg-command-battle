@@ -30,7 +30,8 @@ namespace EggCommand.Web
                 throw new FileNotFoundException($"骨組みが無い: {path}（在るもの: {had}）");
             }
             using var reader = new StreamReader(stream);
-            found = Core.Layouts.Parse(id, reader.ReadToEnd());
+            // ⭐ `use=` を先に差し替える（Unity 版と同じ約束）
+            found = Core.Layouts.Resolve(Core.Layouts.Parse(id, reader.ReadToEnd()), Of);
 
             // ⚠️ **読んだ場で検査する。**⭐ アセットだけ直してテストを回し忘れたときに拾う
             foreach (var line in Core.Layouts.Faults(found))

@@ -1,0 +1,20 @@
+# 絞り込みと並べ替えの帯 ── ⭐ **部品**（`use=sortbar` で差す）
+#
+# ⚠️ この骨組みは単体では画面にならない。BOX・配合・編成が差して使う。
+# ⭐ 差す側が位置を決める（この中は 0,0 からの相対）。
+#
+# ⭐ **開いた高さは定数**（746）。札の枚数がコンパイル時に決まるため:
+#    絞る 6枚 → 2段 / 並べる 8枚 → 2段 / 何の数で 2枚 → 1段
+#    Deep(n) = 34 + ceil(n/4) × (112 + 12)
+#
+#  名前     種類    左  上    幅   高    付け足し
+now        label   0   0     820  112   size=26 ink=dim anchor=left bind=now
+toggle     button  832 0     152  112   bind=toggle tap=toggle
+
+open       box     0   128   984  746   when=open
+  fhead    label   0   0     984  34    size=26 ink=faint anchor=left bind=fhead
+  fchip    button  0   34    234  112   repeat=filters cols=4 gap=12 rows=124 max=8 bind=fchip tap=filter
+  shead    label   0   294   984  34    size=26 ink=faint anchor=left bind=shead
+  schip    button  0   328   234  112   repeat=sorts cols=4 gap=12 rows=124 max=8 bind=schip tap=sort
+  bhead    label   0   588   984  34    size=26 ink=faint anchor=left bind=bhead
+  bchip    button  0   622   234  112   repeat=bases cols=4 gap=12 rows=124 max=4 bind=bchip tap=basis

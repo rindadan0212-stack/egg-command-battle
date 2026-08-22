@@ -63,7 +63,8 @@ namespace EggCommand.View
                 Debug.LogError($"骨組みが読めない: Assets/Resources/Layouts/{id}.txt");
                 return null;
             }
-            found = Layouts.Parse(id, asset.text);
+            // ⭐ `use=` を先に差し替える。⚠️ 検査も描画も、差し替えたあとの木を見る
+            found = Layouts.Resolve(Layouts.Parse(id, asset.text), Of);
             // ⚠️ **読んだ場で検査する。**⭐ テストでも同じものを見ているが、
             //    ここで見ておくと「アセットだけ直してテストを回し忘れた」を拾える。
             var problems = Layouts.Faults(found);

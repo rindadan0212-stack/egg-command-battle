@@ -1,0 +1,58 @@
+@page "/box"
+@using EggCommand.Core
+@using EggCommand.Web
+
+<div id="stage-wrap">
+  <div id="stage">@((MarkupString)_html)</div>
+</div>
+
+@code {
+    private string _html = "";
+
+    /// <summary>BOX。⭐ **`use=sortbar` の初実戦**（帯を部品として差す）。
+    /// ⚠️ 座標は1つも書かない ── `Layouts/box.txt` と `sortbar.txt` が持つ。</summary>
+    protected override void OnInitialized() => Draw(open: true);
+
+    private void Draw(bool open)
+    {
+        var layout = LayoutStore.Of("box");
+        var game = Games.NewGame(20260822, 1_700_000_000);
+        var kept = game.Storage.Creatures;
+
+        int one = 0, chip = 0;
+        _html = LayoutDom.Render(layout, new DomFill
+        {
+            Count = key => key switch
+            {
+                "box"     => kept.Count,
+                "filters" => Filters.Keys.Length,
+                "sorts"   => Storages.SortKeys.Length,
+                "bases"   => Storages.Bases.Length,
+                _ => 0,
+            },
+            At = (key, i) => { if (key == "box") one = i; else chip = i; },
+
+            Text = key => key switch
+            {
+                "count"  => $"{kept.Count} / {game.Storage.Slots}",
+                "now"    => "すべて　／　素質合計 順（素質だけ）",
+                "toggle" => open ? "▲" : "▼",
+                "fhead"  => "絞る",
+                "shead"  => "並べる",
+                "bhead"  => "何の数で",
+                "fchip"  => Filters.LabelOf(Filters.Keys[chip]),
+                "schip"  => Storages.LabelOf(Storages.SortKeys[chip]),
+                "bchip"  => Storages.LabelOf(Storages.Bases[chip]),
+                "lv"     => "Lv " + Levels.Of(kept[one]),
+                "star"   => Rarities.StarsOf(Nests.RarityOfWildTotal(Stats.TotalOf(kept[one].Wild))),
+                _ => "",
+            },
+
+            Sprite  = key => key == "art" ? SpeciesTable.ById(kept[one].SpeciesId).Sprite : null,
+            Palette = key => key == "art" ? SpeciesTable.ById(kept[one].SpeciesId).Palettes[0] : null,
+
+            When = key => key == "open" && open,
+            Tappable = key => true,
+        });
+    }
+}

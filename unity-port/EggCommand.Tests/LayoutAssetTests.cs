@@ -18,6 +18,18 @@ public class LayoutAssetTests
 {
     private static readonly string Dir = Path.Combine(AppContext.BaseDirectory, "layouts");
 
+    /// <summary>⭐ **`use=` を差し替えてから読む。**
+    /// ⚠️ 差し替える前の木を検査しても、実際に出るものを見ていない。</summary>
+    private static Layout Read(string id)
+    {
+        var raw = Layouts.Parse(id, File.ReadAllText(Path.Combine(Dir, id + ".txt")));
+        return Layouts.Resolve(raw, name =>
+        {
+            var path = Path.Combine(Dir, name + ".txt");
+            return File.Exists(path) ? Layouts.Parse(name, File.ReadAllText(path)) : null;
+        });
+    }
+
     public static IEnumerable<object[]> All()
     {
         foreach (var path in Directory.GetFiles(Dir, "*.txt"))
@@ -37,8 +49,7 @@ public class LayoutAssetTests
     [MemberData(nameof(All))]
     public void 不備がない(string id)
     {
-        var layout = Layouts.Parse(id, File.ReadAllText(Path.Combine(Dir, id + ".txt")));
-        Assert.Equal(new List<string>(), Layouts.Faults(layout));
+        Assert.Equal(new List<string>(), Layouts.Faults(Read(id)));
     }
 
     /// <summary>⚠️ **下の帯（232）に潜っていないか。**
@@ -54,7 +65,7 @@ public class LayoutAssetTests
         const float TopBarHeight = 132f;
         float floor = Layouts.ScreenHeight - TopBarHeight - DockHeight;
 
-        var layout = Layouts.Parse(id, File.ReadAllText(Path.Combine(Dir, id + ".txt")));
+        var layout = Read(id);
         // ⭐ **覆いは下の帯の上に出るのが正しい**（帯も押させないため）。
         //    ⚠️ 覆いを持つ骨組みは、そもそも下の帯が関わらない札なので丸ごと外す。
         foreach (var node in layout.Roots)

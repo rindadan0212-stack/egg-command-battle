@@ -131,6 +131,7 @@ namespace EggCommand.Core
             "max",      // 繰り返しの上限（⚠️ 巻物の外で繰り返すときは必須）
             "when",     // ⭐ 条件で出す／出さない（`when=有る` / `when=!有る`）
             "foe",      // ⭐ 左右反転して出す（敵はすべて反転・2026-08-21 の指示）
+            "use",      // ⭐ 別の骨組みを部品として差す（使い回し）
         };
 
         /// <summary>その部品を出す条件の名前。⚠️ null なら常に出す。
@@ -465,6 +466,51 @@ namespace EggCommand.Core
         private static bool Overlaps(LayoutNode a, LayoutNode b) =>
             !(a.Left + a.Width <= b.Left + 0.5f || b.Left + b.Width <= a.Left + 0.5f
               || a.Top + a.Height <= b.Top + 0.5f || b.Top + b.Height <= a.Top + 0.5f);
+
+        /// <summary>⭐ **`use=` を実物に差し替える。**
+        ///
+        /// ⚠️ 検査も描画も、**差し替えたあとの木**を見なければ意味がない。
+        /// ⭐ だから読み込みの直後に1度だけ通す（描く側で毎回やらない）。
+        ///
+        /// ⚠️ **輪を作らせない** ── `a` が `b` を、`b` が `a` を使うと止まらない。
+        /// </summary>
+        /// <param name="find">名前 → 骨組み。⚠️ 無ければ null を返すこと。</param>
+        public static Layout Resolve(Layout layout, Func<string, Layout> find)
+        {
+            if (layout == null) return null;
+            var seen = new List<string> { layout.Id };
+            var roots = new List<LayoutNode>();
+            foreach (var node in layout.Roots) roots.Add(Splice(layout.Id, node, find, seen));
+            return new Layout(layout.Id, roots);
+        }
+
+        private static LayoutNode Splice(string id, LayoutNode node,
+            Func<string, Layout> find, List<string> seen)
+        {
+            var kids = new List<LayoutNode>();
+
+            string use = node.Option("use");
+            if (use != null)
+            {
+                if (seen.Contains(use))
+                    throw new InvalidOperationException(
+                        $"{id}/{node.Name}: use= が輪になっている（{string.Join(" → ", seen)} → {use}）");
+
+                var part = find != null ? find(use) : null;
+                if (part == null)
+                    throw new InvalidOperationException($"{id}/{node.Name}: use=「{use}」が見つからない");
+
+                // ⚠️ **差し込む側の子は、差し込まれる中身の後ろ**に置く。
+                //    ⭐ 上に足したいものがあるとき、順番で言えるようにする。
+                var deeper = new List<string>(seen) { use };
+                foreach (var inner in part.Roots) kids.Add(Splice(use, inner, find, deeper));
+            }
+
+            foreach (var child in node.Children) kids.Add(Splice(id, child, find, seen));
+
+            return new LayoutNode(node.Name, node.Kind, node.Left, node.Top,
+                node.Width, node.Height, node.Options, kids);
+        }
 
         /// <summary>不備があれば投げる。⚠️ 起動時に1度呼んで、**黙って壊れた画面を出さない**。</summary>
         public static void Audit(Layout layout)

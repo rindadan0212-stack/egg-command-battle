@@ -384,6 +384,60 @@ box box    0 0 400 200
         Assert.Contains(Layouts.Faults(bad), p => p.Contains("when= の名前が空"));
     }
 
+    // ── `use=`（別の骨組みを部品として差す）────────────
+
+    private static Layout Find(string name, params (string id, string text)[] parts)
+    {
+        foreach (var p in parts) if (p.id == name) return Layouts.Parse(p.id, p.text);
+        return null;
+    }
+
+    [Fact]
+    public void 部品が差し込まれる()
+    {
+        var main = Layouts.Parse("main", "slot box 100 200 400 300 use=part");
+        var got = Layouts.Resolve(main, n => Find(n, ("part", @"a label 0 0 400 40
+b label 0 60 400 40")));
+
+        Assert.Single(got.Roots);
+        Assert.Equal("slot", got.Roots[0].Name);
+        // ⭐ 部品の中身が、差した枠の子になる
+        Assert.Equal(2, got.Roots[0].Children.Count);
+        Assert.Equal("a", got.Roots[0].Children[0].Name);
+    }
+
+    /// <summary>⭐ 差した枠の子は、部品の**後ろ**に並ぶ（順番で言える）。</summary>
+    [Fact]
+    public void 差した枠の子は部品の後ろに来る()
+    {
+        var main = Layouts.Parse("main", @"slot box 0 0 400 300 use=part
+  own label 0 200 400 40");
+        var got = Layouts.Resolve(main, n => Find(n, ("part", "inner label 0 0 400 40")));
+
+        var kids = got.Roots[0].Children;
+        Assert.Equal(2, kids.Count);
+        Assert.Equal("inner", kids[0].Name);
+        Assert.Equal("own", kids[1].Name);
+    }
+
+    /// <summary>⚠️ **輪を作らせない。**⭐ 止まらなくなるので、名前ごと叱る。</summary>
+    [Fact]
+    public void 輪になっていたら落とす()
+    {
+        var a = Layouts.Parse("a", "x box 0 0 100 100 use=b");
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            Layouts.Resolve(a, n => Find(n, ("b", "y box 0 0 100 100 use=a"))));
+        Assert.Contains("輪", ex.Message);
+    }
+
+    [Fact]
+    public void 無い部品を差したら落とす()
+    {
+        var a = Layouts.Parse("a", "x box 0 0 100 100 use=どこにも無い");
+        var ex = Assert.Throws<InvalidOperationException>(() => Layouts.Resolve(a, n => null));
+        Assert.Contains("見つからない", ex.Message);
+    }
+
     /// <summary>⚠️ 画面の大きさは View の `Ui` と同じ数でなければ、検査が嘘になる。</summary>
     [Fact]
     public void 画面の大きさがViewと揃っている()

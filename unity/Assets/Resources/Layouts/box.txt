@@ -1,0 +1,22 @@
+# BOX ── 保管庫（⭐ 帯は部品を差して使う）
+#
+# ⚠️ 一覧は開閉で高さが変わる。⭐ 札の枚数が固定なので、
+#    2つの巻物を `when=` で入れ替えるだけで足りる（`flow=down` は要らない）。
+#
+#  名前    種類    左   上    幅   高    付け足し
+head      label   48   16    984  44    size=28 ink=faint anchor=left bind=count
+bar       box     48   76    984  874   use=sortbar
+
+# ⭐ 閉じているとき ── 帯の下から下の帯まで
+gridA     scroll  48   204   984  1352  when=!open
+  cellA   card    0    0     236  260   repeat=box cols=4 gap=12 rows=272 tap=one
+    artA  pixel   59   20    118  118   bind=art
+    lvA   label   8    150   220  40    size=24 anchor=center bind=lv
+    starA label   8    196   220  34    size=20 ink=accent anchor=center bind=star
+
+# ⭐ 開いているとき ── 帯が 746 ぶん場所を取る
+gridB     scroll  48   966   984  590   when=open
+  cellB   card    0    0     236  260   repeat=box cols=4 gap=12 rows=272 tap=one
+    artB  pixel   59   20    118  118   bind=art
+    lvB   label   8    150   220  40    size=24 anchor=center bind=lv
+    starB label   8    196   220  34    size=20 ink=accent anchor=center bind=star
