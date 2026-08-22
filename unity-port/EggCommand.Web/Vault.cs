@@ -80,4 +80,26 @@ public sealed class Vault
     /// 効いているかを、画面から見えるようにするため。</summary>
     public async Task<int[]> Past(long nowUnix) =>
         await _js.InvokeAsync<int[]>("eggSave.past", nowUnix);
+
+    /// <summary>いまの保存の大きさ（字数）。⚠️ 0 なら**まだ1度も書かれていない**。</summary>
+    public async Task<int> Size() => await _js.InvokeAsync<int>("eggSave.size");
+
+    /// <summary>⭐ **外から1つ読み込む。**
+    ///
+    /// ⚠️ **読めなければ何もしない。**⭐ いま遊んでいる中身を、
+    /// 中身の分からないもので置き換えない ── 取り返しがつかない。
+    /// ⚠️ やめたときと読めなかったときを**区別して**返す（画面が何を言うか変わる）。</summary>
+    /// <returns>読めた中身。やめたら null。⚠️ 読めなかったときは投げる。</returns>
+    public async Task<Game?> Load()
+    {
+        string? json = await _js.InvokeAsync<string?>("eggSave.pick");
+        if (string.IsNullOrEmpty(json)) return null;   // ⭐ やめた
+
+        var game = SaveJson.Read(json, Notes)
+            ?? throw new InvalidOperationException("この控えは読めません（版が新しすぎるかもしれません）");
+        // ⭐ 読めたなら、こちらの「壊れている」は解ける（上書きしてよい）
+        Broken = false;
+        _was = null;
+        return game;
+    }
 }

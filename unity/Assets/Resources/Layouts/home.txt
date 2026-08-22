@@ -27,6 +27,9 @@ slot     card    70   616   300   380   repeat=slots cols=3 gap=20 rows=400 max=
 #    孵化枠 616〜1396 / **1420〜1532** / 帯 1556〜1788。
 #    ⚠️ 上へ重ねたら孵化枠と、下へ置いたら帯と重なる。
 # ⚠️ **下の帯より上位に見せない。**全幅の札にすると、ナビより大きくて階層が逆転する
-#    （レビュー指摘 2026-08-19）。⭐ 半分ずつ横に並べる。
-trial    button  48   1420  444   112   size=30 tap=trials bind=trials
-party    button  540  1420  492   112   size=30 tap=party text=パーティ編成
+#    （レビュー指摘 2026-08-19）。⭐ 3つに割って横に並べる。
+# ⭐ **輪の外にあるもの**を、ここ1行にまとめてある（試練・編成・控え）。
+#    ⚠️ 遊びの輪（探索→潜入→戦闘→帰還）は下の帯が持つ。混ぜない。
+trial    button  48   1420  316   112   size=30 tap=trials bind=trials
+party    button  382  1420  316   112   size=30 tap=party text=パーティ編成
+keep     button  716  1420  316   112   size=30 tap=keep text=保存の控え

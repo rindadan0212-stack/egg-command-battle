@@ -715,6 +715,43 @@ public static class Sheets
         }, crown: crown);
     }
 
+    // ── 保存の控え ──────────────────────────────────
+
+    /// <summary>⭐ **ブラウザの外へ出す唯一の口。**
+    /// ⚠️ 中の棚（localStorage）は容量が足りなくなると**まとめて**消えるので、
+    /// 世代を残しても一緒に消える ── 別の消え方をする場所は外にしかない。</summary>
+    public static string Keep(Shell s, string crown = "") =>
+        LayoutDom.Render(LayoutStore.Of("save"), new DomFill
+        {
+            Text = key => key switch
+            {
+                // ⚠️ **0 を「0字」と出さない。**⭐ まだ書かれていないのと、
+                //    空っぽなのは別のこと（読む人には同じに見える）
+                "where" => s.SaveSize > 0
+                    ? $"いまの保存　{Face.Digits(s.SaveSize)} 字"
+                    : "まだ書かれていません",
+                // ⚠️ **全部の古さを並べない。**⭐ 5本あると枠に入らない
+                //    （実測 926 対 824）。読む人が知りたいのは「何本・どこまで遡れるか」。
+                "gens" => s.SavePast.Length == 0 ? "この端末の控えはまだ在りません"
+                    : $"この端末の控え　{s.SavePast.Length}本　"
+                        + $"いちばん古いのは {Age(Oldest(s.SavePast))}",
+                _ => "",
+            },
+            // ⚠️ **読み込みは押し間違いが怖い。**⭐ 何も無いときは押させない
+            Tappable = key => key != "in" || s.SaveSize > 0 || s.SavePast.Length > 0,
+        }, crown: crown);
+
+    private static int Oldest(int[] seconds)
+    {
+        int most = 0;
+        foreach (int one in seconds) if (one > most) most = one;
+        return most;
+    }
+
+    /// <summary>控えの古さを読める字に。⭐ `Rarities.Clock` と同じ言い回しに揃える。</summary>
+    private static string Age(int seconds) =>
+        seconds < 60 ? "たった今" : Rarities.Clock(seconds) + "前";
+
     // ── 確かめる ────────────────────────────────────
 
     /// <summary>「本当にやりますか」を一度だけ聞く札。

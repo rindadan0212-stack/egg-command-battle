@@ -6,7 +6,7 @@ namespace EggCommand.Web;
 public enum Sheet { Home, Nests, Breed, Box, Book, Fight, Raid, Trial }
 
 /// <summary>覆いで前に出る札。⚠️ 画面とは別に数える（後ろの画面は残る）。</summary>
-public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train, Ask }
+public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train, Ask, Keep }
 
 /// <summary>アプリ1つぶんの状態と、そこから出る画面。
 ///
@@ -60,6 +60,12 @@ public sealed class Shell
     public int SkillSlot;
     /// <summary>その技のいまのレベル。</summary>
     public int SkillLevel = 1;
+
+    /// <summary>いまの保存の大きさ（字数）。⚠️ 0 なら**まだ1度も書かれていない**。
+    /// ⭐ 画面（`save.txt`）に出すためだけに持つ ── 遊びには関わらない。</summary>
+    public int SaveSize;
+    /// <summary>残っている控えの古さ（秒・新しい順）。</summary>
+    public int[] SavePast = Array.Empty<int>();
 
     /// <summary>いまの戦い。⚠️ 無ければ戦っていない。
     /// ⭐ 名前に `_` が付いているのは、Core の `Battle` と見分けるため。</summary>
@@ -187,6 +193,11 @@ public sealed class Shell
             case "set": Deeds.Team(this, i); break;
             case "seat": Deeds.Drop(this, i); break;
             case "done": Open = Under = Panel.None; break;
+
+            // ── 保存の控え ──────────────────────────
+            // ⚠️ **出し入れそのものは画面の外**（ブラウザに聞く）ので、
+            //    ここは開くだけ。⭐ 実際の読み書きは `AppPage` が持つ。
+            case "keep": Open = Panel.Keep; break;
 
             // ── 図鑑・試練 ──────────────────────────
             case "trials": Now_Sheet = Sheet.Trial; SortOpen = false; break;

@@ -92,6 +92,46 @@ window.eggSave = {
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   },
 
+  /** いまの保存の大きさ（字数）。⭐ 画面に出して「在ること」を見えるようにする。 */
+  size() {
+    try { return (localStorage.getItem(KEY) || '').length } catch { return 0 }
+  },
+
+  /** ⭐ **外から1つ読む。**⚠️ 読むだけ ── 中身を確かめるのは C# 側。
+   *
+   * ⚠️ 🔴 **やめられたときも必ず答える。**⭐ 答えないと C# の待ちが永久に返らず、
+   *   画面が黙って固まる（`change` は選ばなければ起きない）。
+   *   ⚠️ `cancel` を聞かないブラウザ向けに、窓が戻ってきた拍でも見に行く。
+   *
+   * @returns {Promise<string|null>} 中身。やめたら null */
+  async pick() {
+    return await new Promise((resolve) => {
+      let done = false
+      const end = (v) => { if (!done) { done = true; clean(); resolve(v) } }
+      const el = document.createElement('input')
+      el.type = 'file'
+      el.accept = '.json,application/json'
+      el.style.display = 'none'
+      const back = () => setTimeout(() => { if (!el.files || !el.files.length) end(null) }, 800)
+      const clean = () => {
+        window.removeEventListener('focus', back)
+        el.remove()
+      }
+      el.addEventListener('cancel', () => end(null))
+      el.addEventListener('change', () => {
+        const file = el.files && el.files[0]
+        if (!file) return end(null)
+        const reader = new FileReader()
+        reader.onload = () => end(String(reader.result))
+        reader.onerror = () => end(null)
+        reader.readAsText(file)
+      })
+      window.addEventListener('focus', back)
+      document.body.appendChild(el)
+      el.click()
+    })
+  },
+
   erase() {
     try { localStorage.removeItem(KEY); localStorage.removeItem(PAST) } catch { /* 無ければ何もしない */ }
   },

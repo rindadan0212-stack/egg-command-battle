@@ -15,7 +15,8 @@ import { chromium } from 'playwright'
 const URL = (process.argv[2] || 'http://localhost:5817').replace(/\/$/, '')
 
 const browser = await chromium.launch()
-const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
+// ⚠️ **落ちてくるものを受け取る**（控えの書き出しを、本当に落ちるところまで見る）
+const page = await browser.newPage({ viewport: { width: 390, height: 844 }, acceptDownloads: true })
 let bad = 0
 
 const say = (ok, what, extra = '') => {
@@ -269,6 +270,41 @@ await page.click('[id="tab#3"]')
 await page.waitForTimeout(400)
 const again = await who()
 say(first !== '' && first === again, '開き直しても続きから', `${first} → ${again}`)
+
+// ── 控えの出し入れ（⭐ ブラウザの外へ出す唯一の口）────────
+await page.evaluate(() => localStorage.clear())
+await page.goto(URL + '/app?seed=20260822')
+await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 3,
+  null, { timeout: 30000 }).catch(() => {})
+await page.click('#keep')
+await page.waitForTimeout(300)
+say(await page.evaluate(() => !!document.getElementById('out-card')), '保存の控えが開く')
+say(/\d/.test(await page.evaluate(() =>
+  document.getElementById('where-card')?.textContent || '')), '　いまの保存の大きさが出る',
+  await page.evaluate(() => document.getElementById('where-card')?.textContent || ''))
+
+// ⭐ 書き出す。⚠️ ブラウザの外へ出る唯一の道なので、**本当に落ちるか**まで見る
+const down = page.waitForEvent('download', { timeout: 15000 })
+await page.click('#out-card')
+const file = await down.catch(() => null)
+say(!!file, '書き出すと控えが落ちる', file ? await file.suggestedFilename() : '落ちてこない')
+if (file) {
+  const body = await (await import('node:fs/promises')).readFile(await file.path(), 'utf8')
+  say(body.includes('"Seed"'), '　中身は保存そのもの', body.slice(0, 40))
+}
+
+// ⭐ 読み込む。⚠️ **作者の実物**（Unity で遊んだ保存）を、画面から通す
+await page.click('#keep').catch(() => {})
+await page.waitForTimeout(200)
+const chooser = page.waitForEvent('filechooser', { timeout: 15000 })
+await page.click('#in-card')
+await (await chooser).setFiles('unity-port/records/save-unity.json')
+await page.waitForTimeout(800)
+const loaded = await page.evaluate(() => document.getElementById('say')?.textContent || '')
+say(loaded.includes('読み込み'), '控えから読み込める', loaded.slice(0, 30))
+await page.click('[id="tab#3"]')
+await page.waitForTimeout(300)
+say((await kids()) > 4, '　中身が入れ替わっている', `${await kids()} 体`)
 
 // ⚠️ **読めない保存を上書きしない。**⭐ 上書きしたら直せなくなる。
 await page.evaluate(() => localStorage.setItem('egg:save', '{"Version":99}'))

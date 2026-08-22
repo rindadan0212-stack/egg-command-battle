@@ -69,6 +69,7 @@
         {
             "party" => Panel.Party, "fuse" => Panel.Fuse, "train" => Panel.Train,
             "eggs" => Panel.Eggs, "ask" => Panel.Ask, "species" => Panel.Species,
+            "keep" => Panel.Keep,
             "skill" => Panel.Skill, _ => Panel.None,
         };
         // ⭐ 技の詳細は**種族の札の上に出る**（そこが重なる形）
@@ -104,12 +105,62 @@
     [JSInvokable]
     public async Task Tapped(string what, string at)
     {
+        // ⚠️ **保存の出し入れは画面の外**（ブラウザに聞く）ので、ここで受ける。
+        //    ⭐ `Shell` は遊びの状態しか持たない。
+        if (what is "out" or "in") { await Trade(what); return; }
+
         _shell.Tap(what, at);
         Draw();
         StateHasChanged();
         Wind();
         // ⭐ 触るたびに書く。⚠️ 実測 11KB なので、間引く理由が無い
         await Keep();
+        // ⭐ 札を開いた拍で、いまの保存の様子を読み直す
+        if (_shell.Open == Panel.Keep) { await Look(); Draw(); StateHasChanged(); }
+    }
+
+    /// <summary>控えの出し入れ。⚠️ **読み込みは、読めたときだけ差し替える。**
+    /// ⭐ 中身の分からないもので、いま遊んでいる盤を置き換えない。</summary>
+    private async Task Trade(string what)
+    {
+        try
+        {
+            if (what == "out")
+            {
+                await _vault.Export(_shell.Game);
+                _say = "控えを書き出しました";
+            }
+            else
+            {
+                var found = await _vault.Load();
+                // ⚠️ やめたときは**何も言わない**（何も起きていない）
+                if (found == null) return;
+                _shell.Game = found;
+                _shell.Picked = _shell.ParentA = _shell.ParentB = null;
+                _shell.Open = Panel.None;
+                _say = "控えから読み込みました";
+                await Keep();
+            }
+        }
+        catch (Exception e) { _say = "⚠️ " + e.Message; }
+
+        foreach (var note in _vault.Notes) Console.WriteLine("保存の読み替え: " + note);
+        await Look();
+        Draw();
+        StateHasChanged();
+    }
+
+    /// <summary>いまの保存の様子を読む。⚠️ 遊びには関わらない（札に出すだけ）。
+    /// ⚠️ **描き直しはしない** ── 呼んだ側が `Draw()` と `StateHasChanged()` を持つ
+    /// （ここで `Draw()` だけ呼んで、Blazor に伝え忘れて1度嵌まった）。</summary>
+    private async Task Look()
+    {
+        try
+        {
+            _shell.SaveSize = await _vault.Size();
+            _shell.SavePast = await _vault.Past(_shell.Now);
+        }
+        catch { /* ⚠️ 読めなくても遊びは続く */ }
     }
 
     /// <summary>**長押し**された。⭐ 押しどころとは別の道（`hold=`）。
@@ -152,11 +203,15 @@
         //    ⭐ 押した側は既に描き直している（`Tapped`）ので、ここで重ねると
         //    **押した直後に部品が入れ替わって触れなくなる**
         //    （実測 2026-08-22: 押そうとするたび要素が外れ、22回retryして諦めた）。
-        if (how == Deeds.Tick.Stopped) { _clock?.Dispose(); _clock = null; return; }
+        if (how == Deeds.Tick.Stopped) { _clock?.Dispose(); _clock = null; await Keep(); return; }
 
         Draw();
         StateHasChanged();
         if (_shell.Fight_ == null) Wind();
+        // ⚠️ 🔴 **時計が進めた分も書く。**⭐ 押していないので `Tapped` は通らない
+        //    ── オートで勝った育ちが、閉じた瞬間に丸ごと消えていた。
+        //    ⚠️ 中身が変わっていなければ `Keep` は書かないので、無駄打ちにはならない。
+        await Keep();
     }
 
     private async Task Keep()
@@ -200,6 +255,7 @@
         Panel.Train => Sheets.Train(_shell, suffix),
         Panel.Eggs => Sheets.Eggs(_shell, suffix),
         Panel.Ask => Sheets.Ask(_shell, suffix),
+        Panel.Keep => Sheets.Keep(_shell, suffix),
         Panel.Species => Sheets.Species(_shell, suffix),
         Panel.Skill => Sheets.SkillCard(_shell, suffix),
         _ => "",

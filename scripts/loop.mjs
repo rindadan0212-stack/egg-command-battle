@@ -127,6 +127,9 @@ say((await title()) === '試練', 'あきらめると負けとして畳まれる
 
 // ⭐ もう一度入って、今度は最後まで戦う
 say(await tap('[id="card#0"]'), 'もう一度挑める')
+// ⚠️ 🔴 **時計が進めた分も書かれるか。**⭐ オートで戦っているあいだ指は触らないので、
+//    押したときにしか書かない作りだと、勝った育ちが閉じた瞬間に消える。
+const saveWas = await page.evaluate(() => localStorage.getItem('egg:save'))
 
 let back = false
 for (let step = 0; step < 90; step++) {
@@ -140,6 +143,8 @@ for (let step = 0; step < 90; step++) {
   break
 }
 say(back, '決着したら試練の一覧へ帰る', await title())
+const saveNow = await page.evaluate(() => localStorage.getItem('egg:save'))
+say(saveNow !== saveWas, '触っていなくても、進んだ分が書かれている')
 // ⚠️ **卵は出ない。**⭐ 出すと「試練で卵を稼ぐ」が最短経路になる
 const said = await page.evaluate(() => document.getElementById('say')?.textContent || '')
 say(!said.includes('卵'), '　卵は出ない', said.slice(0, 30))

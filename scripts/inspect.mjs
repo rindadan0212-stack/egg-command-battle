@@ -66,6 +66,9 @@ const PAGES = args.length ? args : [
   '/fuse?empty=true',
   '/train?picked=3',
   '/train?picked=0&have=0',
+  // ⭐ 保存の控え。⚠️ **まだ1度も書かれていない形**も見る（字が丸ごと入れ替わる）
+  '/save?size=11024&past=5',
+  '/save?size=0&past=0',
   // ⭐ **外枠付きの本体**。⚠️ 上のバーと下の帯が乗った状態で見る
   // ⚠️ 種を固定する。⭐ 毎回違う画面を撮ると、差が「直したから」なのか
   //    「引きが違うから」なのか分からなくなる。
@@ -82,6 +85,7 @@ const PAGES = args.length ? args : [
   '/app?seed=20260822&open=fuse',
   '/app?seed=20260822&open=train',
   '/app?seed=20260822&open=eggs',
+  '/app?seed=20260822&open=keep',
   '/app?seed=20260822&at=book&open=species',
   '/app?seed=20260822&at=book&open=skill',
   // ⭐ 戦闘。⚠️ 決着した枝も見る（札が入れ替わる）

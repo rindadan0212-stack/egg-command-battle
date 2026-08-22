@@ -1,0 +1,19 @@
+# 保存の控え ── ⭐ **ブラウザの外へ出す唯一の口**
+#
+# ⚠️ ブラウザの中（localStorage）は、容量が足りなくなると**まとめて**消えます。
+#    ⭐ 世代を残しても同じ棚の上なので、一緒に消えます。
+#    ⚠️ だから「別の消え方をする場所」はブラウザの中には無く、**外に出す**しかない。
+#
+# ⚠️ **読み込むほうを主役にしない。**⭐ 押し間違いで、いま遊んでいる中身が消える。
+#    塗るのは「書き出す」だけ。
+#
+#  名前    種類    左   上    幅   高    付け足し
+dim       veil    0    0     1080 1920
+panel     card    96   560   888  800
+  title   label   32   32    824  56    size=40 anchor=upper-left text=保存の控え
+  body    label   32   104   824  112   size=28 ink=dim anchor=upper-left wrap=yes text=ブラウザの中の保存は、まとめて消えることがあります。控えを1つ、外に取っておいてください。
+  where   label   32   232   824  40    size=26 anchor=upper-left bind=where
+  gens    label   32   280   824  40    size=24 ink=faint anchor=upper-left bind=gens
+  out     button  32   344   824  112   size=34 tap=out lead=yes text=書き出す
+  in      button  32   472   824  112   size=34 tap=in text=読み込む
+  close   button  32   600   824  112   size=34 tap=close text=閉じる

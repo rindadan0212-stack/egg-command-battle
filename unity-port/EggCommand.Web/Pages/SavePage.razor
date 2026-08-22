@@ -1,0 +1,31 @@
+@page "/save"
+@using EggCommand.Core
+@using EggCommand.Web
+
+<div id="stage-wrap">
+  <div id="stage">@((MarkupString)_html)</div>
+</div>
+
+@code {
+    /// <summary>保存の大きさ（字）。⭐ **まだ1度も書かれていない形**も検査したい
+    /// ── そこだけ字が丸ごと入れ替わる。</summary>
+    // ⚠️ 問い合わせに無い値は型の既定で上書きされるので `int?` で受ける
+    [SupplyParameterFromQuery] public int? Size { get; set; }
+    /// <summary>控えを何本残しているか。</summary>
+    [SupplyParameterFromQuery] public int? Past { get; set; }
+
+    private string _html = "";
+
+    /// <summary>⚠️ **中身は `Sheets.Keep` が持つ**（遊ぶ頁と同じもの）。</summary>
+    protected override void OnParametersSet()
+    {
+        // ⭐ 世代の的（直近 / 5分 / 1時間 / 1日 / 1週間）に近い数を並べる
+        var ages = new[] { 12, 300, 3600, 86400, 604800 };
+        int many = Math.Clamp(Past ?? 5, 0, ages.Length);
+        _html = Sheets.Keep(new Shell(Demo.Game(), Demo.Now)
+        {
+            SaveSize = Size ?? 11024,
+            SavePast = ages[..many],
+        });
+    }
+}
