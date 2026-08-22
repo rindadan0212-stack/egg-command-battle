@@ -10,7 +10,7 @@ panel     card    48   180    984  1560
   title   label   24   24     936  56    size=40 anchor=left text=放置の編成
   note    label   24   84     936  40    size=24 ink=dim anchor=left bind=note
   head    label   24   150    936  32    size=26 anchor=left bind=head
-  pick    card    24   190    225  220   repeat=picks cols=4 gap=12 rows=232 max=4 tap=pick
+  seat    card    24   190    225  220   repeat=picks cols=4 gap=12 rows=232 max=4 tap=seat
     ring  card    0    0      225  220   lead=yes when=full
     part  pixel   57   16     110  110   bind=part when=full
     plv   label   0    166    225  32    size=24 anchor=center bind=plv when=full

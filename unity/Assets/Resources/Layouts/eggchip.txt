@@ -8,6 +8,9 @@
 #    名前が無いと**何が出るか分からない**。種族は卵の時点で決まっているので隠す理由が無い。
 #
 #  名前   種類    左   上    幅   高    付け足し
+# ⭐ **選んだ印は角丸の黄色い輪**（一覧の升 `cell.txt` と同じ約束）。
+# ⚠️ 印が無かった頃は、10個から選んでも**どれを選んだか画面に出ていなかった**。
+mark     card    0    0     216  156   lead=yes when=picked
 who      label   0    4     216  26    size=22 ink=dim anchor=center bind=who
 art      pixel   84   32    48   48    bind=art
 stars    label   0    78    216  30    size=24 ink=accent anchor=center bind=stars

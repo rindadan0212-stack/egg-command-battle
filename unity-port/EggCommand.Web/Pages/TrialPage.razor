@@ -7,54 +7,21 @@
 </div>
 
 @code {
-    private string _html = "";
-
     // ⚠️ **ページの型名を Core の型と重ねない。**`Trial` にすると
     //    `EggCommand.Core.Trial` が隠れる（`Layout` フォルダで踏んだのと同じ形）。
     //    ⭐ 画面は `～Page` で揃える。
 
-    /// <summary>試練。⭐ **入れ子の繰り返し**（段5枚 × 顔ぶれ4体）の初実戦。
-    /// ⚠️ 座標は1つも書かない ── `Layouts/trial.txt` が持つ。</summary>
-    protected override void OnInitialized()
+    /// <summary>いくつ勝った状態で描くか。⭐ 「勝った」の出方も検査したい。</summary>
+    [SupplyParameterFromQuery] public int? Won { get; set; }
+
+    private string _html = "";
+
+    /// <summary>⚠️ **中身は `Sheets.Trials_` が持つ**（遊ぶ頁と同じもの）。
+    /// ⭐ 入れ子の繰り返し（段5枚 × 顔ぶれ4体）の初実戦。</summary>
+    protected override void OnParametersSet()
     {
-        var layout = LayoutStore.Of("trial");
-        var trials = Trials.All;
-
-        // ⭐ どの繰り返しの何番目か。⚠️ 番号1本だと内側が外側を潰す
-        int step = 0, who = 0;
-        var beaten = new HashSet<string> { "bane", "halt" };   // 仮のデータ
-
-        Trial Now() => trials[step];
-        IReadOnlyList<Creature> Party() => Trials.PartyOf(Now());
-
-        _html = LayoutDom.Render(layout, new DomFill
-        {
-            Count = key => key switch
-            {
-                "trials" => trials.Count,
-                "party"  => Party().Count,
-                _ => 0,
-            },
-            At = (key, i) => { if (key == "trials") step = i; else if (key == "party") who = i; },
-
-            Text = key => key switch
-            {
-                "note" => $"勝った段　{beaten.Count} / {trials.Count}",
-                "step" => Trials.StepOf(Now().Id).ToString(),
-                "name" => Now().Name,
-                "gist" => Now().Gist,
-                "won"  => "勝った",
-                "go"   => beaten.Contains(Now().Id) ? "もう一度" : "挑む",
-                _ => "",
-            },
-
-            // ⚠️ **敵は左右反転で出す**（作者の指示 2026-08-21）
-            //    ⭐ web は CSS の scaleX(-1) で足りる（`.n.pixel.foe`）
-            Sprite  = key => key == "face" ? SpeciesTable.ById(Party()[who].SpeciesId).Sprite : null,
-            Palette = key => key == "face" ? SpeciesTable.ById(Party()[who].SpeciesId).Palettes[0] : null,
-
-            When = key => key == "beaten" && beaten.Contains(Now().Id),
-            Tappable = key => key == "trial",
-        });
+        var s = new Shell(Demo.Game(), Demo.Now);
+        Demo.Beat(s.Game, Won ?? 2);
+        _html = Sheets.Trials_(s);
     }
 }

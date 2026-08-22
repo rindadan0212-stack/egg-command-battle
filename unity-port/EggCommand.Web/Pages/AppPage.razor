@@ -14,6 +14,11 @@
       @((MarkupString)_body)
     </div>
     @((MarkupString)_frame)
+    @* ⚠️ **札は外枠より後。**⭐ 前に出るものが後ろの画面と帯を覆う
+       （覆いを敷いているので、後ろは押せない）。
+       ⚠️ 本体の中に入れない ── 札は 1920 いっぱいを使うので、
+       高さ 1556 の器の中では下が切れる。 *@
+    @((MarkupString)_over)
   </div>
 </div>
 
@@ -30,11 +35,17 @@
     /// 「引きが違うから」なのか分からなくなる。</summary>
     [SupplyParameterFromQuery] public int? Seed { get; set; }
 
+    /// <summary>最初に出す画面。⭐ **外枠付きで見るための入口**
+    /// ── 上のバーと下の帯は画面ごとに中身が変わる（‹ が出る／右肩が押しどころになる）ので、
+    /// ホームだけ見ていると**残りの形を誰も見ていない**ことになる。
+    /// ⚠️ 遊ぶ道はタブと右肩。⭐ ここは検査の入口であって近道ではない。</summary>
+    [SupplyParameterFromQuery] public string? At { get; set; }
+
     private Shell _shell = default!;
     private Vault _vault = default!;
     private DotNetObjectReference<AppPage>? _me;
     private System.Threading.Timer? _clock;
-    private string _body = "", _frame = "", _say = "";
+    private string _body = "", _frame = "", _over = "", _say = "";
     private int _tall = 1556;
 
     protected override void OnInitialized()
@@ -43,6 +54,11 @@
         _vault = new Vault(Js);
         long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         _shell = new Shell(Games.NewGame(Seed ?? unchecked((int)now), now), now);
+        _shell.Now_Sheet = At switch
+        {
+            "nests" => Sheet.Nests, "breed" => Sheet.Breed, "box" => Sheet.Box,
+            "book" => Sheet.Book, "trial" => Sheet.Trial, _ => Sheet.Home,
+        };
         Draw();
     }
 
@@ -132,6 +148,17 @@
             Sheet.Box => Sheets.Box(_shell),
             Sheet.Raid => Sheets.Raid(_shell),
             Sheet.Fight => Sheets.Fight(_shell),
+            Sheet.Book => Sheets.Book(_shell),
+            Sheet.Trial => Sheets.Trials_(_shell),
+            _ => "",
+        };
+        _over = _shell.Open switch
+        {
+            Panel.Party => Sheets.Party(_shell, _shell.IdleParty),
+            Panel.Fuse => Sheets.Fuse(_shell),
+            Panel.Train => Sheets.Train(_shell),
+            Panel.Eggs => Sheets.Eggs(_shell),
+            Panel.Ask => Sheets.Ask(_shell),
             _ => "",
         };
         _frame = _shell.Frame();

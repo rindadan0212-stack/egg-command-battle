@@ -23,6 +23,10 @@ namespace EggCommand.Web
         public Func<string, string> Tint;
         /// <summary>`bind=` → 薄くするか（0〜1）。⚠️ 伏せてあるものを沈めるのに使う。</summary>
         public Func<string, double?> Fade;
+        /// <summary>`bind=` → 主役に立てるか。⭐ **入切の札のため**
+        /// （Unity 版 `Ui.Tappable(..., lead: 入っているか)` と同じ役）。
+        /// ⚠️ 骨組みの `lead=yes` は消せない ── **足すだけ**。</summary>
+        public Func<string, bool> Lead;
         /// <summary>`tap=` → 押しどころにするか。</summary>
         public Func<string, bool> Tappable;
         /// <summary>`repeat=` → 何個あるか。</summary>
@@ -145,7 +149,8 @@ namespace EggCommand.Web
                 int turn = node.Number("turn", 0);
                 if (turn != 0) style.Append(";transform:rotate(").Append(turn).Append("deg)");
             }
-            if (node.Option("lead") == "yes") cls.Append(" lead");
+            if (node.Option("lead") == "yes"
+                || (has && fill?.Lead != null && fill.Lead(bind))) cls.Append(" lead");
 
             double? fade = has && fill?.Fade != null ? fill.Fade(bind) : null;
             if (fade.HasValue) style.Append(";opacity:")

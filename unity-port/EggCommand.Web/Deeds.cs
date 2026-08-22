@@ -174,6 +174,18 @@ public static class Deeds
         Settle(s);
     }
 
+    /// <summary>あきらめる。⚠️ **負けとして畳む** ── 只で抜けられると、
+    /// 不利な戦いをいつでも無かったことにできてしまう。
+    /// ⭐ 勝敗は画面側で作らない（Core が持つ）。</summary>
+    public static void Concede(Shell s)
+    {
+        s.Open = Panel.None;
+        var state = s.Fight_;
+        if (state == null || state.Result != null) return;
+        EggCommand.Core.Battle.Concede(state);
+        Settle(s);
+    }
+
     /// <summary>1拍で何が起きたか。</summary>
     public enum Tick
     {
@@ -196,6 +208,9 @@ public static class Deeds
     {
         var state = s.Fight_;
         if (state == null || state.Result != null) return Tick.Stopped;
+        // ⚠️ **確かめている間は時が止まる。**⭐ 「あきらめますか」を読んでいるあいだに
+        //    決着したら、答えた先が既に無い（それに、読む時間は考える時間でもある）。
+        if (s.Open != Panel.None) return Tick.Stopped;
 
         if (EggCommand.Core.Battle.AdvanceGauges(state, ticks) > 0) return Tick.Filling;
         var next = EggCommand.Core.Battle.NextActor(state);
@@ -256,6 +271,17 @@ public static class Deeds
         bool won = state.Result == Outcome.Ally;
         var nest = s.Nest_;
         s.Fight_ = null;
+
+        // ⭐ **試練は巣ではない。**⚠️ 卵は出ない ── 出すと「試練で卵を稼ぐ」が
+        //    最短経路になり、潜入も配合も回らなくなる。返るのは勝った印だけ。
+        if (s.Trial_ is Trial trial)
+        {
+            s.Trial_ = null;
+            if (won) { Games.GrowParty(Games.PartyOf(s.Game)); Games.MarkTrial(s.Game, trial.Id); }
+            s.Say = won ? $"{trial.Name} に勝った" : $"{trial.Name} に負けた";
+            s.Now_Sheet = Sheet.Trial;
+            return;
+        }
 
         // ⭐ 雑魚戦は潜入の途中。⚠️ 卵も巣の差し替えもここでは起きない
         if (s.Space >= 0)
@@ -321,5 +347,151 @@ public static class Deeds
         try { Hatchery.Begin(s.Game, egg.Id, s.Now, slot: s.Aim); }
         catch (Exception e) { s.Say = e.Message; }
         s.Open = Panel.None;
+    }
+
+    // ── 分解 ────────────────────────────────────────
+
+    /// <summary>分解の候補（⭐ **見ている本人を外した**並び）。
+    /// ⚠️ 出撃中も候補に出す ── 外していた頃は、手持ちが少ない序盤に
+    /// 1体も選べず何もできなかった。⭐ 出撃中は升に印で出す。</summary>
+    public static IReadOnlyList<Creature> Food(Shell s)
+    {
+        string? mine = s.PickedOne()?.Id;
+        var list = new List<Creature>();
+        foreach (var c in s.Sorted()) if (c.Id != mine) list.Add(c);
+        return list;
+    }
+
+    /// <summary>分解する個体を選んだ／外した。
+    /// ⚠️ **上限を超えたら黙って古いものを押し出さない** ── 選び直しだと分かるように撥ねる。</summary>
+    public static void Mark(Shell s, int at)
+    {
+        var pool = Food(s);
+        if (at < 0 || at >= pool.Count) return;
+        string id = pool[at].Id;
+        if (s.Melts.Remove(id)) return;
+        if (s.Melts.Count >= Games.PickAtOnce)
+        {
+            s.Say = $"一度に分解できるのは {Games.PickAtOnce} 体まで";
+            return;
+        }
+        s.Melts.Add(id);
+    }
+
+    /// <summary>分解する。⚠️ **戻せない**（＝「逃がす」の代わりでもある）。
+    /// ⭐ 数え方も削除も Core が1回で持つ（<see cref="Games.Dissolve"/>）。</summary>
+    public static void Melt(Shell s)
+    {
+        if (s.Melts.Count == 0) return;
+        int got = Games.Dissolve(s.Game, new List<string>(s.Melts));
+        // ⚠️ **消えた個体を指したままにしない。**⭐ 見る先だけでなく**配合の親**も外す
+        //    ── 残すと、次に「配合する」を押した瞬間に「保管庫にいない」で落ちる。
+        if (s.Picked != null && s.Melts.Contains(s.Picked)) s.Picked = null;
+        if (s.ParentA != null && s.Melts.Contains(s.ParentA)) s.ParentA = null;
+        if (s.ParentB != null && s.Melts.Contains(s.ParentB)) s.ParentB = null;
+        s.Melts.Clear();
+        s.Open = Panel.None;
+        s.Say = $"EXP ＋{Face.Digits(got)}";
+    }
+
+    // ── 技を鍛える ──────────────────────────────────
+
+    /// <summary>鍛える卵を選んだ／外した。⚠️ **上限を超える卵は受け取らない**
+    /// ── 受け取ると超えた分が黙って消える（2時間待った★5が蒸発する）。</summary>
+    public static void Feed_(Shell s, int at)
+    {
+        var eggs = s.Game.Eggs;
+        if (at < 0 || at >= eggs.Count) return;
+        string id = eggs[at].Id;
+        if (s.Feeds.Remove(id)) return;
+
+        var one = s.PickedOne();
+        if (one == null) return;
+        int points = one.SkillPoints[s.Slot_];
+        int room = SkillCosts.TotalFor(Skills.MaxLevel) - points;
+        int gain = 0;
+        foreach (var e in eggs) if (s.Feeds.Contains(e.Id)) gain += Rarities.PointsOf(e.Rarity);
+        int worth = Rarities.PointsOf(eggs[at].Rarity);
+
+        if (s.Feeds.Count >= Games.PickAtOnce)
+        {
+            s.Say = $"一度に入れられるのは {Games.PickAtOnce} 個まで";
+            return;
+        }
+        if (worth > room - gain) { s.Say = "その卵を入れると上限を超える"; return; }
+        s.Feeds.Add(id);
+    }
+
+    /// <summary>入れる。⭐ 入る順も削除も Core が1回で持つ
+    /// （<see cref="Games.FeedEggsToSkill"/>）。</summary>
+    public static void Feed(Shell s)
+    {
+        var one = s.PickedOne();
+        if (one == null || s.Feeds.Count == 0) return;
+        int got = Games.FeedEggsToSkill(s.Game, one.Id, s.Slot_, new List<string>(s.Feeds));
+        s.Feeds.Clear();
+        s.Open = Panel.None;
+        s.Say = got > 0 ? $"技が ＋{got}" : "入らなかった";
+    }
+
+    /// <summary>溜めた EXP で Lv を1つ上げる。⭐ **1回で1レベル**
+    /// ── 一気に上限まで入れると、上げ止めどころを選べない。</summary>
+    public static void Grow(Shell s)
+    {
+        var one = s.PickedOne();
+        if (one == null) return;
+        // ⚠️ **黙って何もしないをしない。**⭐ 足りないのか上限なのかを言う
+        if (Core.Idle.Spend(s.Game.Idle, one) > 0) { s.Say = $"Lv {Levels.Of(one)} になった"; return; }
+        s.Say = one.Earned >= Levels.GrowMax ? "これ以上は育たない"
+            : $"EXP が {Face.Digits(Levels.ExpToNext(one))} 要る";
+    }
+
+    // ── 配合 ────────────────────────────────────────
+
+    /// <summary>配合する。⚠️ **2体が卵に還る**（両親は失われる）。</summary>
+    public static void Breed(Shell s)
+    {
+        if (s.ParentA == null || s.ParentB == null) { s.Say = "親を2体えらぶ"; return; }
+        var born = Games.FusePair(s.Game, s.ParentA, s.ParentB);
+        s.ParentA = null;
+        s.ParentB = null;
+        // ⚠️ 見ていた個体が親だったなら、見る先も外す
+        s.Picked = null;
+        s.Say = $"{SpeciesTable.ById(born.Egg.SpeciesId).Name} の卵ができた"
+            + $"（{Rarities.StarsOf(born.Egg.Rarity)}）";
+    }
+
+    // ── 編成 ────────────────────────────────────────
+
+    /// <summary>巣の編成を切り替える。⚠️ 3つとも中身は別。</summary>
+    public static void Team(Shell s, int at)
+    {
+        if (at < 0 || at >= Games.NestPartySlots) return;
+        s.Game.NestParty = at;
+    }
+
+    /// <summary>選んでいる枠を押した ── ⭐ **外す**。
+    /// ⚠️ 空き枠は押しても何も起きない（一覧から入れるのが道）。</summary>
+    public static void Drop(Shell s, int at)
+    {
+        var kind = s.IdleParty ? PartyKind.Idle : PartyKind.Nest;
+        var roster = Games.RosterOf(s.Game, kind);
+        if (at < 0 || at >= roster.Count) return;
+        Games.TogglePartyMember(s.Game, roster[at], kind);
+    }
+
+    // ── 試練 ────────────────────────────────────────
+
+    /// <summary>試練へ挑む。⭐ **顔ぶれは毎回まったく同じ**。
+    /// ⚠️ 巣の欄を空にする ── 空にしないと決着のときに巣の後始末が動く。</summary>
+    public static void Trial(Shell s, int at)
+    {
+        var all = Trials.All;
+        if (at < 0 || at >= all.Count) return;
+        s.Nest_ = null;
+        s.Boss = false;
+        s.Space = -1;
+        s.Trial_ = all[at];
+        Begin(s, Trials.PartyOf(all[at]), null, null);
     }
 }

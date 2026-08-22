@@ -17,69 +17,15 @@
 
     private string _html = "";
 
+    /// <summary>⚠️ **中身は `Sheets.Train` が持つ**（遊ぶ頁と同じもの）。</summary>
     protected override void OnParametersSet()
     {
-        var game = Demo.Game();
-        var creature = Demo.Sorted(game)[0];
-        var skills = Creatures.SkillsOf(creature);
-
-        Demo.Shelve(game, Have ?? 8);
-        var eggs = game.Eggs;
-
-        int slot = Math.Clamp(Slot ?? 0, 0, skills.Length - 1);
-        bool usable = skills[slot] != null && !SkillCosts.IsMaxed(creature.SkillPoints[slot]);
-        int points = usable ? creature.SkillPoints[slot] : 0;
-        int picked = Math.Clamp(Picked ?? 3, 0, Math.Min(Games.PickAtOnce, eggs.Count));
-        int gain = eggs.Take(picked).Sum(e => Rarities.PointsOf(e.Rarity));
-
-        int row = 0, at = 0;
-
-        _html = LayoutDom.Render(LayoutStore.Of("skillegg"), new DomFill
-        {
-            Count = key => key switch
-            {
-                "slots" => skills.Length,
-                "eggs" => eggs.Count,
-                _ => 0,
-            },
-            At = (key, i) => { if (key == "slots") row = i; else at = i; },
-
-            Text = key => key switch
-            {
-                "who" => Creatures.SpeciesOf(creature).Name,
-                "rname" => skills[row]?.Name ?? "—",
-                "rlv" => $"Lv{SkillCosts.LevelOf(creature.SkillPoints[row])}",
-                // ⭐ あと何ポイントで次かを出す。⚠️ 上限は「上限」と書く（0 と出さない）
-                "rneed" => skills[row] == null ? ""
-                    : SkillCosts.IsMaxed(creature.SkillPoints[row]) ? "上限"
-                    : $"あと {SkillCosts.ToNext(creature.SkillPoints[row])}",
-                // ⭐ **入れたあとのレベルまで出す。**⚠️ ポイントだけだと人が計算することになる
-                "head" => !usable ? "この枠はもう鍛えられません"
-                    : gain > 0
-                        ? $"選んだ {picked}/{Games.PickAtOnce} 個で ＋{gain}　"
-                            + $"Lv{SkillCosts.LevelOf(points)} → Lv{SkillCosts.LevelOf(points + gain)}"
-                        : $"棚の卵 {eggs.Count}　（{Games.PickAtOnce} 個まで選べます）",
-                "chip-who" => SpeciesTable.ById(eggs[at].SpeciesId).Name,
-                "chip-stars" => Rarities.StarsOf(eggs[at].Rarity),
-                "chip-note" => "＋" + Rarities.PointsOf(eggs[at].Rarity),
-                "go" => picked > 0 ? $"強化する（＋{gain}）" : "強化する",
-                _ => "",
-            },
-
-            Sprite = key => key == "chip-art" ? EggArt.Sprite : null,
-            Palette = key => key == "chip-art" ? EggArt.Shell : null,
-
-            // ⭐ 選んでいる枠だけ塗る。⚠️ 鍛えられない枠は沈める
-            Tint = key => key == "row" && row == slot && usable ? "#f59e0b" : null,
-
-            // ⚠️ **上限を超える卵は選ばせない。**受け取ると超えた分が黙って消える
-            //    （2時間待った★5が蒸発する）。
-            Tappable = key => key switch
-            {
-                "row" => skills[row] != null && !SkillCosts.IsMaxed(creature.SkillPoints[row]),
-                "feed" => picked > 0,
-                _ => true,
-            },
-        });
+        var s = new Shell(Demo.Game(), Demo.Now);
+        Demo.Shelve(s.Game, Have ?? 8);
+        s.Slot_ = Math.Clamp(Slot ?? 0, 0, 2);
+        // ⭐ 選んだ状態は**規則を通して**作る（上限を越える組み合わせを作らない）
+        int want = Math.Clamp(Picked ?? 3, 0, Games.PickAtOnce);
+        for (int i = 0; i < s.Game.Eggs.Count && s.Feeds.Count < want; i++) Deeds.Feed_(s, i);
+        _html = Sheets.Train(s);
     }
 }

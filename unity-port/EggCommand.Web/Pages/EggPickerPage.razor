@@ -15,34 +15,11 @@
 
     private string _html = "";
 
+    /// <summary>⚠️ **中身は `Sheets.Eggs` が持つ**（遊ぶ頁と同じもの）。</summary>
     protected override void OnParametersSet()
     {
-        var game = Demo.Game();
-        Demo.Shelve(game, Have ?? 7);
-        var eggs = game.Eggs;
-        int at = 0;
-
-        _html = LayoutDom.Render(LayoutStore.Of("eggpicker"), new DomFill
-        {
-            Count = key => key == "eggs" ? eggs.Count : 0,
-            At = (key, i) => at = i,
-
-            Text = key => key switch
-            {
-                "count" => $"棚の卵 {eggs.Count}",
-                "egg-stars" => Rarities.StarsOf(eggs[at].Rarity),
-                // ⭐ 素質は伏せない。手元にある卵なので、どれを先に温めるかの材料になる
-                "egg-wild" => Stats.TotalOf(eggs[at].Wild).ToString(),
-                "egg-wait" => Rarities.Clock(Math.Max(1, Rarities.SecondsOf(eggs[at].Rarity))),
-                "egg-who" => SpeciesTable.ById(eggs[at].SpeciesId).Name,
-                _ => "",
-            },
-
-            Sprite = key => key == "egg-art" ? EggArt.Sprite : null,
-            Palette = key => key == "egg-art" ? EggArt.Shell : null,
-            Tint = key => key == "egg-elem" ? Face.ElementCss(eggs[at].Element) : null,
-
-            Tappable = key => true,
-        });
+        var s = new Shell(Demo.Game(), Demo.Now);
+        Demo.Shelve(s.Game, Have ?? 7);
+        _html = Sheets.Eggs(s);
     }
 }

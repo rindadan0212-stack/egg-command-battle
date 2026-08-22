@@ -9,42 +9,8 @@
 @code {
     private string _html = "";
 
-    /// <summary>⭐ **画面の中身は Unity 版の `BookScreen.cs` とほぼ同じ。**
-    /// ⚠️ 座標は1つも書かない ── `Layouts/book.txt` が持つ。</summary>
-    protected override void OnInitialized()
-    {
-        // ⭐ 骨組みは Unity と**同じファイル**（csproj が埋め込む）
-        var layout = LayoutStore.Of("book");
-
-        var all = SpeciesTable.All;
-        var seen = new HashSet<string> { "tamaru", "tsunoga", "haneru" };   // 仮のデータ
-        int at = 0;
-
-        _html = LayoutDom.Render(layout, new DomFill
-        {
-            Count = key => key == "species" ? all.Count : 0,
-            At = (key, i) => at = i,
-
-            Text = key => key switch
-            {
-                "count" => $"手に入れた種族　{seen.Count} / {all.Count}",
-                "name"  => seen.Contains(all[at].Id) ? all[at].Name : "？？？",
-                "trait" => Traits.Has(all[at].TraitId) ? Traits.ById(all[at].TraitId).Name : "—",
-                "hide"  => "—",
-                _ => "",
-            },
-
-            Sprite  = key => key == "art" ? all[at].Sprite : null,
-            Palette = key => key == "art" ? all[at].Palettes[0] : null,
-
-            // ⭐ 伏せてある種族は沈める（Unity 版の Tint と同じ役目）
-            Fade = key => key == "art" && !seen.Contains(all[at].Id) ? 0.28 : (double?)null,
-            Tint = key => key != "art" && !seen.Contains(all[at].Id) ? "var(--ink-faint)" : null,
-
-            Tappable = key => key == "species" && seen.Contains(all[at].Id),
-
-            // ⭐ `when=known` / `when=!known` で、特性名と伏せ字が入れ替わる
-            When = key => key == "known" && seen.Contains(all[at].Id),
-        });
-    }
+    /// <summary>⚠️ **中身は `Sheets.Book` が持つ**（遊ぶ頁と同じもの）。
+    /// ⭐ 座標は1つも書かない ── `Layouts/book.txt` が持つ。</summary>
+    protected override void OnInitialized() =>
+        _html = Sheets.Book(new Shell(Demo.Game(), Demo.Now));
 }

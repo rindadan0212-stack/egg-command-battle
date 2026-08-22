@@ -40,6 +40,26 @@ const tap = async (sel) => {
   await page.waitForTimeout(160)
   return true
 }
+/** ⭐ **指と同じやり方で押す** ── 場所を測って、そこを突く。
+ *
+ * ⚠️ オートで戦っているあいだ、画面は**1手ごとに丸ごと組み直る**（Unity 版も同じ）。
+ * ⭐ 遊ぶ人は困らない ── 拾うのは `document` の `pointerup` で、
+ *   離した瞬間に**その場所に在る物**を `closest` で辿るため。
+ * ⚠️ しかし Playwright の `click` は「掴んだ物が落ち着くまで」待つので、
+ *   組み直りが続くと**永久に押せない**（実測: 30秒 retry して諦めた）。
+ * ⭐ だから掴まずに座標を突く。**検査の都合で作りを曲げない。** */
+const poke = async (sel) => {
+  const box = await page.evaluate((s) => {
+    const el = document.querySelector(s)
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  }, sel)
+  if (!box) return false
+  await page.mouse.click(box.x, box.y)
+  await page.waitForTimeout(200)
+  return true
+}
 
 // ── 探索へ ──────────────────────────────────────
 await tap('[id="tab#1"]')
@@ -50,14 +70,19 @@ say((await title()) !== '探索', '潜入が始まる', await title())
 say(await has('#roll'), 'さいころの釦が出ている')
 
 // ── 一巡する ────────────────────────────────────
-let rolls = 0, fought = false, auto = false, done = false
+/** ⭐ **入っているかは画面に聞く。**⚠️ 自分で数えていた頃は、押した回数と
+ *  実際の状態がずれて、入れたり切ったりを繰り返して嵌まった。 */
+const autoOn = () => page.evaluate(() =>
+  (document.getElementById('pick')?.textContent || '').includes('ON'))
+
+let rolls = 0, fought = false, done = false
 for (let step = 0; step < 60; step++) {
   const now = await title()
 
   if (await has('#hand')) {
     fought = true
     // ⭐ オートは**一度だけ**入れる（入り切りの札なので、押すたび切り替わる）
-    if (!auto) { await tap('#pick'); auto = true }
+    if (!(await autoOn())) await tap('#pick')
     await page.waitForTimeout(900)
     continue
   }
@@ -80,6 +105,44 @@ say(done, '一巡して探索へ戻れた', `戦闘 ${fought ? 'あり' : 'な�
 // ── ホームへ戻れる ──────────────────────────────
 await tap('[id="tab#0"]')
 say((await title()) === 'EGG COMMAND', 'ホームへ戻れる', await title())
+
+// ── もう1つの輪: 試練 ───────────────────────────
+// ⚠️ **試練は巣ではない。**⭐ 勝っても負けても**試練の一覧へ帰る**のが決まり
+//    ── 巣の後始末（卵・引き直し）が動いたら、そこが混ざっている印。
+await tap('#trial')
+say((await title()) === '試練', '試練へ入れる', await title())
+say(await tap('[id="card#0"]'), '段の札を押せる')
+say((await title()) !== '試練', '戦いが始まる', await title())
+
+// ── あきらめる（⚠️ 取り返しがつかないので一度だけ確かめる）──────
+// ⚠️ ここは**戦いが動いている最中**に押す（`poke` を使う理由がこれ）
+say(await poke('#give'), '「あきらめる」を押せる')
+say(await has('#stop'), '　確かめが出る')
+// ⭐ 確かめている間は時が止まる（読む時間は考える時間でもある）
+await poke('#stop')
+say(!(await has('#stop')) && (await title()) !== '試練', '「やめる」で戦いへ戻る', await title())
+await poke('#give')
+await poke('#go')
+say((await title()) === '試練', 'あきらめると負けとして畳まれる', await title())
+
+// ⭐ もう一度入って、今度は最後まで戦う
+say(await tap('[id="card#0"]'), 'もう一度挑める')
+
+let back = false
+for (let step = 0; step < 90; step++) {
+  if (await has('#finish')) { await tap('#finish'); continue }
+  if (await has('#hand')) {
+    if (!(await autoOn())) await tap('#pick')
+    await page.waitForTimeout(900)
+    continue
+  }
+  if ((await title()) === '試練') { back = true; break }
+  break
+}
+say(back, '決着したら試練の一覧へ帰る', await title())
+// ⚠️ **卵は出ない。**⭐ 出すと「試練で卵を稼ぐ」が最短経路になる
+const said = await page.evaluate(() => document.getElementById('say')?.textContent || '')
+say(!said.includes('卵'), '　卵は出ない', said.slice(0, 30))
 
 await browser.close()
 console.log(bad === 0 ? '\n⭐ 遊びの輪が閉じている' : `\n🔴 ${bad} 件で止まる`)

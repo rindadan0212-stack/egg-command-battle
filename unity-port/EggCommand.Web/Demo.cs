@@ -69,6 +69,16 @@ public static class Demo
         return Trails.Begin(Trails.OfNest(nest), Games.PartyOf(game), raids);
     }
 
+    /// <summary>いくつかの試練に勝った状態にする。
+    /// ⚠️ **勝った段が1つも無いと `when=beaten` の枝を一度も描かない**
+    /// ── 検査が通っても「勝った」の出方は誰も見ていないことになる。</summary>
+    public static void Beat(Game game, int howMany)
+    {
+        var all = EggCommand.Core.Trials.All;
+        for (int i = 0; i < Math.Min(Math.Max(0, howMany), all.Count); i++)
+            Games.MarkTrial(game, all[i].Id);
+    }
+
     /// <summary>棚に卵を積む（孵化器には入れない）。</summary>
     public static void Shelve(Game game, int howMany)
     {

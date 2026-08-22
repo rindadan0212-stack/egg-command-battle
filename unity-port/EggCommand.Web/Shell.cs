@@ -3,10 +3,10 @@ using EggCommand.Core;
 namespace EggCommand.Web;
 
 /// <summary>いま出ている画面。⚠️ Unity 版 `App.Screen` と同じ並び。</summary>
-public enum Sheet { Home, Nests, Breed, Box, Book, Fight, Raid }
+public enum Sheet { Home, Nests, Breed, Box, Book, Fight, Raid, Trial }
 
 /// <summary>覆いで前に出る札。⚠️ 画面とは別に数える（後ろの画面は残る）。</summary>
-public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train }
+public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train, Ask }
 
 /// <summary>アプリ1つぶんの状態と、そこから出る画面。
 ///
@@ -36,6 +36,18 @@ public sealed class Shell
     /// <summary>配合の親2体。</summary>
     public string? ParentA, ParentB;
 
+    /// <summary>分解でえらんだ個体。⭐ **押した順に入る**（`Games.PickAtOnce` 体まで）。
+    /// ⚠️ 押した瞬間には減らさない ── 最後に「分解する」を押すまで戻せる。</summary>
+    public readonly List<string> Melts = new();
+    /// <summary>技を鍛えるでえらんだ卵。
+    /// ⚠️ **個体の側（<see cref="Melts"/>）と混ぜない** ── 別のものを数えている。</summary>
+    public readonly List<string> Feeds = new();
+    /// <summary>技を鍛えるで注ぐ先の枠。</summary>
+    public int Slot_;
+    /// <summary>編成の札が「放置」か。⚠️ **どちらかは開いた場所で決まる**
+    /// （2026-08-21・作者の指示）── 札の中に切り替えは無い。</summary>
+    public bool IdleParty;
+
     /// <summary>いまの戦い。⚠️ 無ければ戦っていない。
     /// ⭐ 名前に `_` が付いているのは、Core の `Battle` と見分けるため。</summary>
     public BattleState? Fight_;
@@ -45,6 +57,9 @@ public sealed class Shell
 
     /// <summary>いま挑んでいる巣。⚠️ ヌシのときは null。</summary>
     public Nest? Nest_;
+    /// <summary>いま挑んでいる試練。⚠️ 試練でないときは null
+    /// ── ⭐ 空にしておかないと、決着のときに巣の後始末（卵・引き直し）が動く。</summary>
+    public Trial? Trial_;
     /// <summary>ヌシとの戦いか。</summary>
     public bool Boss;
     /// <summary>雑魚戦のマス。⚠️ -1 なら雑魚戦ではない
@@ -100,7 +115,15 @@ public sealed class Shell
                 break;
 
             case "back": Open = Panel.None; Now_Sheet = Sheet.Home; break;
-            case "close": Open = Panel.None; break;
+            // ⚠️ **閉じたら選びかけも捨てる。**⭐ 残すと、次に開いたとき
+            //    身に覚えのない個体が選ばれていて、そのまま分解できてしまう
+            case "close": Open = Panel.None; Melts.Clear(); Feeds.Clear(); break;
+
+            // ⭐ **右肩は画面ごとに中身が変わる**（Unity 版 `App.ShowExtra`）
+            case "extra":
+                if (Now_Sheet == Sheet.Home) { Now_Sheet = Sheet.Book; SortOpen = false; }
+                else if (Now_Sheet == Sheet.Nests) { IdleParty = false; Open = Panel.Party; }
+                break;
 
             case "bar-toggle": SortOpen = !SortOpen; break;
             case "chips-filter": Filter = Filters.Keys[i]; break;
@@ -121,22 +144,61 @@ public sealed class Shell
             case "s2": Deeds.Strike(this, 2); break;
             case "pick": Auto = !Auto; break;
             case "finish": Now_Sheet = Sheet.Nests; break;
+            // ⭐ **取り返しがつかないので一度だけ確かめる**（押し間違いで負けにしない）
+            case "give": if (Fight_ != null) Open = Panel.Ask; break;
+            case "stop": Open = Panel.None; break;
+            case "go": Deeds.Concede(this); break;
 
             // ⭐ 空き枠を押したら、そのとき初めて卵の在庫が開く（棚を常に出しておかない）
             case "slot": Deeds.Slot(this, i); break;
             case "egg": Deeds.Warm(this, i); break;
-            case "train": Open = Panel.Train; break;
-            case "fuse": Open = Panel.Fuse; break;
+
+            // ── 育てる ──────────────────────────────
+            // ⚠️ 分解は**開くだけ**。⭐ 減るのは札の中の「分解する」を押したとき
+            case "fuse": Melts.Clear(); Open = Panel.Fuse; break;
+            case "melt": Deeds.Melt(this); break;
+            case "train": Feeds.Clear(); Slot_ = 0; Open = Panel.Train; break;
+            case "row": Slot_ = i; Feeds.Clear(); break;
+            case "chip": Deeds.Feed_(this, i); break;
+            case "feed": Deeds.Feed(this); break;
+            case "grow": Deeds.Grow(this); break;
+
+            // ── 配合 ────────────────────────────────
+            case "pa": ParentA = null; break;
+            case "pb": ParentB = null; break;
+            case "breed": Deeds.Breed(this); break;
+
+            // ── 編成 ────────────────────────────────
+            // ⭐ ホームからは放置の編成・探索の右肩からは巣の編成
+            case "party": IdleParty = true; Open = Panel.Party; break;
+            case "set": Deeds.Team(this, i); break;
+            case "seat": Deeds.Drop(this, i); break;
+            case "done": Open = Panel.None; break;
+
+            // ── 図鑑・試練 ──────────────────────────
+            case "trials": Now_Sheet = Sheet.Trial; SortOpen = false; break;
+            case "trial": Deeds.Trial(this, i); break;
         }
     }
 
-    /// <summary>一覧の升を押した。⭐ BOX は「見る」だけ・配合は親を出し入れする。</summary>
+    /// <summary>一覧の升を押した。
+    ///
+    /// ⚠️ **同じ升が、開いている札しだいで別のことをする。**
+    /// ⭐ 前に出ている札が先（後ろの画面は隠れているので押せない）。</summary>
     private void Choose(int i)
     {
+        // ⚠️ 分解の候補は**見ている本人を外した**並びなので、番号の意味が違う
+        if (Open == Panel.Fuse) { Deeds.Mark(this, i); return; }
+
         var list = Sorted();
         if (i < 0 || i >= list.Count) return;
         string id = list[i].Id;
 
+        if (Open == Panel.Party)
+        {
+            Games.TogglePartyMember(Game, id, IdleParty ? PartyKind.Idle : PartyKind.Nest);
+            return;
+        }
         if (Now_Sheet == Sheet.Breed)
         {
             if (id == ParentA) ParentA = null;
@@ -185,6 +247,7 @@ public sealed class Shell
             {
                 "title" => Title(),
                 "badge" => Badge(),
+                "extra" => Extra() ?? "",
                 "tname" => names[tab],
                 "tcount" => counts[tab],
                 _ => "",
@@ -197,6 +260,9 @@ public sealed class Shell
                 // ⚠️ **戦闘中と潜入中は戻れない** ── 抜けられると、
                 //    不利な盤面をいつでも無かったことにできてしまう。
                 "dock" => Now_Sheet is not (Sheet.Fight or Sheet.Raid),
+                // ⭐ タブに乗っていない画面（図鑑・試練）だけ ‹ を出す
+                "back" => Now_Sheet is Sheet.Book or Sheet.Trial,
+                "extra" => Extra() != null,
                 _ => false,
             },
             Tappable = key => true,
@@ -210,9 +276,21 @@ public sealed class Shell
         Sheet.Breed => "配合",
         Sheet.Box => "BOX",
         Sheet.Book => "図鑑",
+        Sheet.Trial => "試練",
         Sheet.Fight => Boss ? Nests.BossName : "戦闘",
         Sheet.Raid => Nest_ != null ? Nest_.Name : "強奪",
         _ => "",
+    };
+
+    /// <summary>右肩に出す入口。⚠️ **本体に置けなかったものだけ**が来る
+    /// （Unity 版 `App.ShowExtra` と同じ役目）。⭐ 無ければ右肩は字に戻る。</summary>
+    private string? Extra() => Now_Sheet switch
+    {
+        Sheet.Home => "図鑑",
+        // ⭐ **巣を選ぶ前に編成を決める。**⚠️ 潜ってから「違った」と気づいても戻れない。
+        //    ⚠️ 本体には置けない ── 巣の札が縦を埋めていて、どこに置いても重なる。
+        Sheet.Nests => "パーティ編成",
+        _ => null,
     };
 
     /// <summary>右肩の字。

@@ -21,7 +21,7 @@ panel     card    48   200   984  1520
 
   head    label   24   532   936  36    size=26 ink=dim anchor=upper-left bind=head
   eggs    scroll  24   580   936  656
-    chip  card    6    6     216  156   repeat=eggs cols=4 gap=12 rows=168 tap=egg use=eggchip
+    chip  card    6    6     216  156   repeat=eggs cols=4 gap=12 rows=168 tap=chip use=eggchip
 
   go      button  24   1260  936  112   size=34 tap=feed lead=yes bind=go
   close   button  24   1384  936  112   size=34 tap=close text=閉じる

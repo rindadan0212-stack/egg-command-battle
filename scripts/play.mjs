@@ -82,6 +82,115 @@ say(filled, '配合で親を2体えらべる')
 const go = await page.evaluate(() => document.getElementById('go')?.disabled)
 say(go === false, '2体そろうと「配合する」が押せる', `disabled=${go}`)
 
+// ── 分解 ─────────────────────────────────────────
+// ⚠️ **押しても何も起きない釦は、置いてあるだけで「在る」ことになってしまう。**
+//    ⭐ だから「数が動いたか」まで見る。
+const exp = () => page.evaluate(() =>
+  Number((document.getElementById('badge')?.textContent || '').replace(/\D/g, '')) || 0)
+const kids = () => page.evaluate(() =>
+  Number((document.querySelector('[id^="tcount#3"]')?.textContent || '0/0').split('/')[0]) || 0)
+
+await tab(3)
+// ⚠️ **一番弱いものを見た状態で分解する。**⭐ そうしないと Lv ＋1 に届かない
+//    ── 始めたての4体を全部還しても、強い個体の値段には足りない（実測 38 対 40）。
+//    ⚠️ これは検査の都合ではなく**遊びの形**（EXP の主な出所は放置のほう）。
+await page.click('[id="cellA#3"]')
+await page.waitForTimeout(120)
+const expWas = await exp(), kidsWas = await kids()
+await page.click('#bfuse')
+await page.waitForTimeout(150)
+say(await page.evaluate(() => !!document.getElementById('go')), '分解の札が開く')
+const food = await page.evaluate(() =>
+  [...document.querySelectorAll('[id^="cell#"]')].map(e => e.id))
+say(food.length === kidsWas - 1, '候補から「見ている本人」だけ外れる', `${food.length} 体`)
+for (const one of food) { await page.click(`[id="${one}"]`); await page.waitForTimeout(60) }
+const armed = await page.evaluate(() => document.getElementById('go')?.disabled)
+say(armed === false, 'えらぶと「分解する」が押せる', `disabled=${armed}`)
+await page.click('#go')
+await page.waitForTimeout(200)
+say((await exp()) > expWas, '分解で EXP が増える', `${expWas} → ${await exp()}`)
+say((await kids()) === kidsWas - food.length, '分解した個体は居なくなる',
+  `${kidsWas} → ${await kids()}`)
+
+// ── Lv ＋1 ───────────────────────────────────────
+const lv = () => page.evaluate(() => document.getElementById('detail-lv')?.textContent || '')
+const lvWas = await lv()
+say((await page.evaluate(() => document.getElementById('bgrow')?.disabled)) === false,
+  'EXP が足りると Lv ＋1 が押せる',
+  await page.evaluate(() => document.getElementById('bgrow')?.textContent || ''))
+await page.click('#bgrow')
+await page.waitForTimeout(200)
+say((await lv()) !== lvWas, 'Lv ＋1 で本当に上がる', `${lvWas} → ${await lv()}`)
+// ⚠️ **黙って何もしないをしない。**⭐ 足りなくなったら値段を出して押せなくする
+const priced = await page.evaluate(() => {
+  const e = document.getElementById('bgrow')
+  return { off: e?.disabled, text: e?.textContent || '' }
+})
+say(!priced.off || /EXP\s*[\d,]+/.test(priced.text),
+  '　足りないときは値段が札に出ている', priced.text)
+
+// ── 技を鍛える ───────────────────────────────────
+await page.click('#btrain')
+await page.waitForTimeout(150)
+say(await page.evaluate(() => !!document.getElementById('head')), '技を鍛える札が開く')
+await page.click('#close')
+await page.waitForTimeout(120)
+say(await page.evaluate(() => !document.getElementById('head')), '　閉じられる')
+
+// ── 配合する ─────────────────────────────────────
+// ⚠️ **始め直す。**⭐ 上で3体還したので、ここには親が2体残っていない。
+await page.evaluate(() => localStorage.clear())
+await page.goto(URL + '/app?seed=20260822')
+await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 3,
+  null, { timeout: 30000 }).catch(() => {})
+await tab(2)
+const kidsB = await kids()
+await page.click('[id="cellA#0"]')
+await page.waitForTimeout(80)
+await page.click('[id="cellA#1"]')
+await page.waitForTimeout(120)
+await page.click('#go')
+await page.waitForTimeout(200)
+say((await kids()) === kidsB - 2, '配合すると親2体が消える', `${kidsB} → ${await kids()}`)
+const born = await page.evaluate(() => document.getElementById('say')?.textContent || '')
+say(born.includes('卵'), '　卵ができたと言う', born.slice(0, 40))
+
+// ── 編成 ─────────────────────────────────────────
+await tab(0)
+await page.click('#party')
+await page.waitForTimeout(150)
+say(await page.evaluate(() => !!document.getElementById('done')), 'ホームから編成が開く')
+// ⚠️ **始めたての放置の編成は空**（「空き（自動で埋まる）」と出ている）。
+//    ⭐ だから「入れてから外す」の順で見る ── 逆にすると外すものが無い。
+const inParty = () => page.evaluate(() =>
+  document.querySelectorAll('#stage .n.card.lead[id^="ring"]').length)
+const seats = await inParty()
+await page.click('[id="cellA#0"]')
+await page.waitForTimeout(150)
+say((await inParty()) === seats + 1, '一覧から編成へ入れられる', `${seats} → ${await inParty()}`)
+await page.click('[id="seat#0"]')
+await page.waitForTimeout(150)
+say((await inParty()) === seats, '選んでいる枠を押すと外れる', `${await inParty()}`)
+await page.click('#done')
+await page.waitForTimeout(120)
+say((await title()) === 'EGG COMMAND', '「決定」で閉じる', await title())
+
+// ── 図鑑と試練（右肩とホームの入口）────────────────
+await page.click('#extra')
+await page.waitForTimeout(150)
+say((await title()) === '図鑑', '右肩から図鑑へ', await title())
+await page.click('#back')
+await page.waitForTimeout(150)
+say((await title()) === 'EGG COMMAND', '‹ でホームへ戻れる', await title())
+await page.click('#trial')
+await page.waitForTimeout(150)
+say((await title()) === '試練', 'ホームから試練へ', await title())
+// ⚠️ 試練は**巣ではない** ── 勝っても負けても試練の一覧へ帰るのが決まり
+await page.click('[id="card#0"]')
+await page.waitForTimeout(300)
+say((await title()) !== '試練', '段を押すと戦いが始まる', await title())
+await page.click('#back').catch(() => {})
+
 // ── 保存 ─────────────────────────────────────────
 // ⚠️ **閉じて開いても続きから始まるか。**
 // ⭐ 確かめ方: 別の種で開き直しても、**前の中身のまま**なら保存が勝っている。

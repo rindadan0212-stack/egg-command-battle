@@ -15,7 +15,11 @@
 top       box     0    0     1080 132
   back    button  12   10    112  112   size=44 tap=back when=back text=‹
   title   label   140  0     620  132   size=40 anchor=center bind=title
-  badge   label   780  0     252  132   size=28 ink=faint anchor=right bind=badge
+  badge   label   780  0     252  132   size=28 ink=faint anchor=right bind=badge when=!extra
+  # ⭐ **右肩は「本体に置けない入口」の口でもある**（Unity 版の `FrameView.ShowExtra`）。
+  # ⚠️ 字だけだと題名と見分けが付かないので、**札を敷く**（レビュー指摘 2026-08-19）。
+  # ⚠️ 右肩の字（EXP）とは**同時に出ない** ── 同じ場所を使うので `when` で入れ替える。
+  extra   button  780  10    252  112   size=28 tap=extra bind=extra when=extra
 
 dock      box     0    1688  1080 232   when=dock dock=no
   plate   card    0    0     1080 232

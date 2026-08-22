@@ -315,6 +315,18 @@ namespace EggCommand.Core
                 {
                     if (literal.Length == 0)
                         throw new ArgumentException($"{id}: {i + 1}行目 text= が空");
+                    // ⚠️ 🔴 **`text=` は行末まで飲む。**⭐ 後ろに付け足しを書くと、
+                    //    それが**字として画面に出る**（実測 2026-08-22:
+                    //    釦に「あきらめる when=!done」と出ていた）。
+                    //    ⚠️ 静かに壊れる形なので、ここで落とす。⭐ 直しは `when=` を前へ。
+                    foreach (var known in Options)
+                    {
+                        if (known == "text") continue;
+                        if (literal.IndexOf(" " + known + "=", StringComparison.Ordinal) < 0) continue;
+                        throw new ArgumentException(
+                            $"{id}: {i + 1}行目 text= の後ろに「{known}=」がある"
+                            + "（text= は行末まで全部・付け足しは text= より前へ）");
+                    }
                     // ⭐ **`\n` だけは行替えとして読む。**⚠️ 骨組みは1部品1行なので、
                     //    これが無いと2行の字（「空き／（自動で埋まる）」）が書けない。
                     //    ⭐ 規約はこれ1つだけ ── 他のエスケープは作らない。

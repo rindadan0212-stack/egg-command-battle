@@ -635,6 +635,26 @@ row card 0 120 100 40 repeat=stats max=6")));
         Assert.Contains("text= が空", ex.Message);
     }
 
+    /// <summary>⚠️ 🔴 **`text=` は行末まで飲む。**⭐ 後ろに付け足しを書くと、
+    /// それが**字として画面に出る**（実測 2026-08-22: 釦に「あきらめる when=!done」）。
+    /// ⚠️ 静かに壊れる形なので落とす。</summary>
+    [Fact]
+    public void textの後ろに付け足しを書いたら落とす()
+    {
+        var ex = Assert.Throws<ArgumentException>(() =>
+            Layouts.Parse("t", "a button 0 0 400 112 tap=x text=あきらめる when=!done"));
+        Assert.Contains("text= の後ろに", ex.Message);
+    }
+
+    /// <summary>⭐ **字の中の `=` は通す。**⚠️ 上の検査が広すぎると、
+    /// 「Lv=3」のような普通の字が書けなくなる。</summary>
+    [Fact]
+    public void 字の中の等号は通す()
+    {
+        var got = Layouts.Parse("t", "a label 0 0 400 40 text=たまご=3 こ");
+        Assert.Equal("たまご=3 こ", got.Roots[0].Option("text"));
+    }
+
     /// <summary>⚠️ **字の出所は1つ。**⭐ 2つあると、勝つほうを描く側が決めることになる。</summary>
     [Fact]
     public void 字の出所が2つあったら落とす()

@@ -21,5 +21,5 @@ panel     card    48   180   984  1560
     # ⚠️ 左は 2。⭐ 器が 936 なので 4列（932）の余りは 4 しか無い
     cell  card    2    0     224  200   repeat=box cols=4 gap=12 rows=212 tap=one use=cell
 
-  go      button  24   1300  936  112   size=34 tap=fuse lead=yes bind=go when=any
+  go      button  24   1300  936  112   size=34 tap=melt lead=yes bind=go when=any
   close   button  24   1424  936  112   size=34 tap=close text=閉じる

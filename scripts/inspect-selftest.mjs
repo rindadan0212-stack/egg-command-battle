@@ -194,6 +194,31 @@ const CUT_TRIALS = [
   },
 ]
 
+/** ⚠️ 🔴 **釦は既定で折り返す。**⭐ 折れた字は横にはみ出さないので
+ *  「字が枠より広い」に映らず、`wrap=yes` でもないので「字が枠より高い」にも映らない。
+ *  ── **どちらの検査にも映らない形**だった（実測 2026-08-22「オート  OFF」が2行）。
+ *  ⭐ `stage.css` が `.n.button { white-space: pre }` で塞いだ。
+ *  ⚠️ **塞いだことを、ここで見張る** ── 外れたら検査が黙って盲になる。 */
+const BUTTON_TRIALS = [
+  {
+    name: '釦がそもそも折り返していない',
+    want: null,
+    check: () => [...document.querySelectorAll('#stage button.n')].filter(e => {
+      const r = document.createRange()
+      r.selectNodeContents(e)
+      return e.textContent.trim() && r.getClientRects().length === 1
+    }).length,
+  },
+  {
+    name: '釦の字が枠より広い',
+    want: '字が枠より広い',
+    wreck: () => {
+      const e = document.getElementById('bfuse')
+      e.textContent = 'とてもとても長い釦の字がここに入る'
+    },
+  },
+]
+
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
 let missed = 0
@@ -319,9 +344,29 @@ for (const t of CUT_TRIALS) {
   else { missed++; console.log(`🔴 ${t.name} → **素通り**`) }
 }
 
+// ── 釦のある画面 ──────────────────────────────────
+const btnUrl = URL.replace(/\/$/, '') + '/box'
+for (const t of BUTTON_TRIALS) {
+  await page.goto(btnUrl, { waitUntil: 'networkidle' })
+  await page.waitForFunction(() => !!document.getElementById('bfuse')).catch(() => {})
+  await page.evaluate(() => document.fonts.ready).catch(() => {})
+  if (t.check) {
+    const n = await page.evaluate(t.check)
+    if (n > 0) console.log(`⭐ ${t.name} → ${n} 個ある`)
+    else { missed++; console.log(`🔴 ${t.name} → **0個** ── 釦が折り返している（検査が盲になる）`) }
+    continue
+  }
+  await page.evaluate(t.wreck)
+  const bad = await page.evaluate(audit)
+  const hit = bad.find(b => b.includes(t.want))
+  if (hit) console.log(`⭐ ${t.name} → 捕まえた: ${hit.slice(0, 66)}`)
+  else { missed++; console.log(`🔴 ${t.name} → **素通り**`) }
+}
+
 await browser.close()
 console.log(missed === 0
   ? `\n⭐ 検査は効いている（試した ${TRIALS.length + VEIL_TRIALS.length + SCROLL_TRIALS.length
-      + WRAP_TRIALS.length + ICON_TRIALS.length + CUT_TRIALS.length} 件すべてが正しく動いた）`
+      + WRAP_TRIALS.length + ICON_TRIALS.length + CUT_TRIALS.length
+      + BUTTON_TRIALS.length} 件すべてが正しく動いた）`
   : `\n🔴 ${missed} 件が素通り ── この検査は、その分だけ嘘をつく`)
 process.exit(missed ? 1 : 0)

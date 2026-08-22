@@ -181,6 +181,9 @@ public static class Sheets
                 // ⭐ **EXP と書く。**⚠️ 数だけ出していた頃は、丸い印の隣の数が
                 //    何の数なのか画面のどこにも書いていなかった。
                 "count" => $"EXP {Face.Digits(s.Game.Idle.Exp)}",
+                // ⭐ 16進なら8桁に収まり、口で伝えられる長さになる
+                "world" => "#" + s.Game.Seed.ToString("X8"),
+                "trials" => $"試練　{Games.TrialsCleared(s.Game)}/{Core.Trials.All.Count}",
                 "slot-stars" => Slot(at) is Incubation e ? Rarities.StarsOf(e.Egg.Rarity) : "",
                 // ⭐ 孵ったら「孵った」と出す。⚠️ 帯の色（橙→緑）だけでは、
                 //    取り出せるようになったことに気づけなかった
@@ -348,7 +351,10 @@ public static class Sheets
 
             Text = key => key switch
             {
-                "pick" => "オート",
+                // ⭐ **オートは入切の札。**⚠️ 「オート」とだけ書いていた頃は、
+                //    押しても**いまどちらなのか画面のどこにも出ていなかった**
+                //    （Unity 版は字と色の両方で出している）。
+                "pick" => s.Auto ? "オート  ON" : "オート  OFF",
                 "finish" => state.Result switch
                 {
                     Outcome.Ally => "勝った",
@@ -362,6 +368,9 @@ public static class Sheets
             // ⭐ CT の丸薬は濃紺・字は白。⚠️ 同じ色を2か所に書かない
             Tint = key => key.EndsWith("pill") ? "#2b3350"
                 : key.EndsWith("ct") ? "#ffffff" : null,
+
+            // ⭐ 入っているあいだは主役に立てる（字だけだと遠目に読めない）
+            Lead = key => key == "pick" && s.Auto,
 
             When = key => key switch
             {
@@ -583,5 +592,271 @@ public static class Sheets
             int whole = Encounters.SecondsFor(game.Encounters[i].Nest.Tier);
             return whole <= 0 ? 0 : Math.Clamp(left / (double)whole, 0, 1);
         }
+    }
+
+    // ── 確かめる ────────────────────────────────────
+
+    /// <summary>「本当にやりますか」を一度だけ聞く札。
+    /// ⚠️ **取り返しがつかない操作にだけ挟む** ── 何にでも挟むと、
+    /// 読まずに押す癖が付いて、肝心なときに効かなくなる。
+    ///
+    /// ⚠️ **札の字に印付けを混ぜない**（`**` や ⚠️ はコードの注釈の書き方であって、
+    /// 遊ぶ人の画面にそのまま出る）。</summary>
+    public static string Ask(Shell s) =>
+        LayoutDom.Render(LayoutStore.Of("ask"), new DomFill
+        {
+            Text = key => key switch
+            {
+                "title" => "あきらめますか",
+                "body" => "この戦いは負けになります。戻すことはできません。",
+                "stop" => "やめる",
+                "go" => "あきらめる",
+                _ => "",
+            },
+            Tappable = key => true,
+        });
+
+    // ── 卵を選ぶ ────────────────────────────────────
+
+    /// <summary>孵化器の空き枠に入れる卵を選ぶ覆い。
+    /// ⚠️ **画面いっぱいに出す** ── 本体の中に置くと、上の見出しと下の帯だけ
+    /// 明るいまま押せてしまう。</summary>
+    public static string Eggs(Shell s)
+    {
+        var eggs = s.Game.Eggs;
+        int at = 0;
+
+        return LayoutDom.Render(LayoutStore.Of("eggpicker"), new DomFill
+        {
+            Count = key => key == "eggs" ? eggs.Count : 0,
+            At = (key, i) => at = i,
+
+            Text = key => key switch
+            {
+                // ⚠️ 「卵がありません」と書かない。⭐ 数を言えば足りる
+                "count" => $"棚の卵 {eggs.Count}",
+                "egg-stars" => Rarities.StarsOf(eggs[at].Rarity),
+                // ⭐ 素質は伏せない。手元にある卵なので、どれを先に温めるかの材料になる
+                "egg-wild" => Stats.TotalOf(eggs[at].Wild).ToString(),
+                "egg-wait" => Rarities.Clock(Math.Max(1, Rarities.SecondsOf(eggs[at].Rarity))),
+                "egg-who" => SpeciesTable.ById(eggs[at].SpeciesId).Name,
+                _ => "",
+            },
+
+            Sprite = key => key == "egg-art" ? EggArt.Sprite : null,
+            Palette = key => key == "egg-art" ? EggArt.Shell : null,
+            Tint = key => key == "egg-elem" ? Face.ElementCss(eggs[at].Element) : null,
+
+            Tappable = key => true,
+        });
+    }
+
+    // ── 分解 ────────────────────────────────────────
+
+    /// <summary>⭐ **個体を EXP に還す札。**⚠️ 分解した個体は失われる。</summary>
+    public static string Fuse(Shell s)
+    {
+        var game = s.Game;
+        var eater = s.PickedOne();
+        var pool = Deeds.Food(s);
+        var cells = new Face[pool.Count];
+        int at = 0;
+
+        // ⭐ 押した順ではなく**並びの順**で数える（画面に出ている順と合わせる）
+        int exp = 0;
+        foreach (var c in pool) if (s.Melts.Contains(c.Id)) exp += Levels.DissolveExpOf(c);
+
+        return LayoutDom.Render(LayoutStore.Of("fuse"), new DomFill
+        {
+            Count = key => key == "box" ? pool.Count : 0,
+            At = (key, i) => at = i,
+
+            Text = key => key switch
+            {
+                "who" => eater == null ? ""
+                    : $"{Creatures.SpeciesOf(eater).Name}  "
+                        + $"Lv {Levels.Of(eater)}/{Levels.MaxOf(eater)}"
+                        + $"　　持っている EXP {Face.Digits(game.Idle.Exp)}",
+                "gain" => $"選んだ {s.Melts.Count}/{Games.PickAtOnce} 体で  EXP ＋{Face.Digits(exp)}",
+                "go" => s.Melts.Count > 0 ? $"分解する（EXP ＋{Face.Digits(exp)}）" : "分解する",
+                "cell-star" => Face.Star(pool[at]),
+                // ⭐ 一言は「分解したら何 EXP になるか」。
+                // ⚠️ **出撃中は分解する前に分かるようにする**（分解すると失われる）
+                "cell-note" => (Games.IsInParty(game, pool[at].Id) ? "出撃中  " : "")
+                    + $"EXP {Face.Digits(Levels.DissolveExpOf(pool[at]))}",
+                _ => "",
+            },
+
+            Sprite = key => key == "cell-art" ? Cell(at).Sprite : null,
+            Palette = key => key == "cell-art" ? Cell(at).Palette : null,
+
+            Tint = key => key switch
+            {
+                "cell-elem" => Face.ElementCss(pool[at].Element),
+                "cell-note" => Games.IsInParty(game, pool[at].Id) ? "#c0303f" : null,
+                _ => null,
+            },
+
+            When = key => key switch
+            {
+                "any" => pool.Count > 0,
+                "cell-picked" => s.Melts.Contains(pool[at].Id),
+                "cell-note" => true,
+                _ => false,
+            },
+
+            Tappable = key => key != "melt" || s.Melts.Count > 0,
+        });
+
+        Face Cell(int i) => cells[i] ??= new Face(pool[i]);
+    }
+
+    // ── 技を鍛える ──────────────────────────────────
+
+    /// <summary>⭐ **孵さない卵の唯一の出口。**
+    /// ⚠️ 選んでから、最後に「強化する」を押す ── 1個ずつ入ると取り消せない。</summary>
+    public static string Train(Shell s)
+    {
+        var game = s.Game;
+        var one = s.PickedOne();
+        var skills = one == null ? new Skill?[3] : Creatures.SkillsOf(one);
+        var eggs = game.Eggs;
+        int slot = Math.Clamp(s.Slot_, 0, skills.Length - 1);
+        bool usable = one != null && skills[slot] != null
+            && !SkillCosts.IsMaxed(one.SkillPoints[slot]);
+        int points = usable ? one!.SkillPoints[slot] : 0;
+        int gain = 0;
+        foreach (var e in eggs) if (s.Feeds.Contains(e.Id)) gain += Rarities.PointsOf(e.Rarity);
+        int row = 0, at = 0;
+
+        return LayoutDom.Render(LayoutStore.Of("skillegg"), new DomFill
+        {
+            Count = key => key switch
+            {
+                "slots" => skills.Length,
+                "eggs" => eggs.Count,
+                _ => 0,
+            },
+            At = (key, i) => { if (key == "slots") row = i; else at = i; },
+
+            Text = key => key switch
+            {
+                "who" => one == null ? "" : Creatures.SpeciesOf(one).Name,
+                "rname" => skills[row]?.Name ?? "—",
+                "rlv" => one == null ? "" : $"Lv{SkillCosts.LevelOf(one.SkillPoints[row])}",
+                // ⭐ あと何ポイントで次かを出す。⚠️ 上限は「上限」と書く（0 と出さない）
+                "rneed" => one == null || skills[row] == null ? ""
+                    : SkillCosts.IsMaxed(one.SkillPoints[row]) ? "上限"
+                    : $"あと {SkillCosts.ToNext(one.SkillPoints[row])}",
+                // ⭐ **入れたあとのレベルまで出す。**⚠️ ポイントだけだと人が計算することになる
+                "head" => !usable ? "この枠はもう鍛えられません"
+                    : gain > 0
+                        ? $"選んだ {s.Feeds.Count}/{Games.PickAtOnce} 個で ＋{gain}　"
+                            + $"Lv{SkillCosts.LevelOf(points)} → Lv{SkillCosts.LevelOf(points + gain)}"
+                        : $"棚の卵 {eggs.Count}　（{Games.PickAtOnce} 個まで選べます）",
+                "chip-who" => SpeciesTable.ById(eggs[at].SpeciesId).Name,
+                "chip-stars" => Rarities.StarsOf(eggs[at].Rarity),
+                "chip-note" => "＋" + Rarities.PointsOf(eggs[at].Rarity),
+                "go" => s.Feeds.Count > 0 ? $"強化する（＋{gain}）" : "強化する",
+                _ => "",
+            },
+
+            Sprite = key => key == "chip-art" ? EggArt.Sprite : null,
+            Palette = key => key == "chip-art" ? EggArt.Shell : null,
+
+            // ⭐ 選んでいる枠だけ塗る。⚠️ 鍛えられない枠は沈める
+            Tint = key => key == "row" && row == slot && usable ? "#f59e0b" : null,
+
+            When = key => key == "chip-picked" && s.Feeds.Contains(eggs[at].Id),
+
+            // ⚠️ **上限を超える卵は選ばせない。**受け取ると超えた分が黙って消える
+            Tappable = key => key switch
+            {
+                "row" => one != null && skills[row] != null
+                    && !SkillCosts.IsMaxed(one.SkillPoints[row]),
+                "feed" => s.Feeds.Count > 0,
+                _ => true,
+            },
+        });
+    }
+
+    // ── 図鑑 ────────────────────────────────────────
+
+    /// <summary>⭐ **見たことのある種族だけ名前が出る。**
+    /// ⚠️ 伏せた種族も枠は残す ── 何種類いるかは隠さない（集める的が見える）。</summary>
+    public static string Book(Shell s)
+    {
+        var all = SpeciesTable.All;
+        int at = 0;
+        bool Seen(int i) => Games.HasSeen(s.Game, all[i].Id);
+
+        return LayoutDom.Render(LayoutStore.Of("book"), new DomFill
+        {
+            Count = key => key == "species" ? all.Count : 0,
+            At = (key, i) => at = i,
+
+            Text = key => key switch
+            {
+                "count" => $"手に入れた種族　{Games.SeenCount(s.Game)} / {all.Count}",
+                "name" => Seen(at) ? all[at].Name : "？？？",
+                "trait" => Traits.Has(all[at].TraitId) ? Traits.ById(all[at].TraitId).Name : "—",
+                "hide" => "—",
+                _ => "",
+            },
+
+            Sprite = key => key == "art" ? all[at].Sprite : null,
+            Palette = key => key == "art" ? all[at].Palettes[0] : null,
+
+            Fade = key => key == "art" && !Seen(at) ? 0.28 : (double?)null,
+            Tint = key => key != "art" && !Seen(at) ? "var(--ink-faint)" : null,
+
+            Tappable = key => key == "species" && Seen(at),
+            When = key => key == "known" && Seen(at),
+        });
+    }
+
+    // ── 試練 ────────────────────────────────────────
+
+    /// <summary>⭐ **中身を先に見せる場所。**巣は隠すが、試練は逆 ──
+    /// 何が来るか分かったうえで**組み直して挑む**ので、顔ぶれも一言も出す。</summary>
+    public static string Trials_(Shell s)
+    {
+        var trials = Core.Trials.All;
+        int step = 0, who = 0;
+
+        Trial Now() => trials[step];
+        IReadOnlyList<Creature> Party() => Core.Trials.PartyOf(Now());
+        bool Beaten() => Games.BeatTrial(s.Game, Now().Id);
+
+        return LayoutDom.Render(LayoutStore.Of("trial"), new DomFill
+        {
+            Count = key => key switch
+            {
+                "trials" => trials.Count,
+                "party" => Party().Count,
+                _ => 0,
+            },
+            At = (key, i) => { if (key == "trials") step = i; else if (key == "party") who = i; },
+
+            Text = key => key switch
+            {
+                "note" => $"勝った段　{Games.TrialsCleared(s.Game)} / {trials.Count}",
+                "step" => Core.Trials.StepOf(Now().Id).ToString(),
+                "name" => Now().Name,
+                "gist" => Now().Gist,
+                "won" => "勝った",
+                "go" => Beaten() ? "もう一度" : "挑む",
+                _ => "",
+            },
+
+            // ⚠️ **敵は左右反転で出す**（作者の指示 2026-08-21）
+            Sprite = key => key == "face"
+                ? SpeciesTable.ById(Party()[who].SpeciesId).Sprite : null,
+            Palette = key => key == "face"
+                ? SpeciesTable.ById(Party()[who].SpeciesId).Palettes[0] : null,
+
+            When = key => key == "beaten" && Beaten(),
+            Tappable = key => key == "trial",
+        });
     }
 }

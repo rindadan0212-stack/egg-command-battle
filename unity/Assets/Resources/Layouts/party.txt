@@ -17,7 +17,7 @@ panel     card    48   180    984  1560
   set     card    24   150    304  112   repeat=sets cols=3 gap=12 rows=112 max=3 tap=set
     slab  label   0    0      304  112   size=24 ink=dim anchor=center bind=slab
   head    label   24   276    936  32    size=26 anchor=left bind=head
-  pick    card    24   316    225  220   repeat=picks cols=4 gap=12 rows=232 max=4 tap=pick
+  seat    card    24   316    225  220   repeat=picks cols=4 gap=12 rows=232 max=4 tap=seat
     ring  card    0    0      225  220   lead=yes when=full
     part  pixel   57   16     110  110   bind=part when=full
     plv   label   0    166    225  32    size=24 anchor=center bind=plv when=full

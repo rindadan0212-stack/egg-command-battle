@@ -15,43 +15,11 @@
     private string _screen = "";
     private string _panel = "";
 
+    /// <summary>⚠️ **中身は `Sheets` が持つ**（遊ぶ頁と同じもの）。</summary>
     protected override void OnInitialized()
     {
-        var all = SpeciesTable.All;
-        var seen = new HashSet<string> { "tamaru", "tsunoga", "haneru" };
-        int at = 0;
-
-        _screen = LayoutDom.Render(LayoutStore.Of("book"), new DomFill
-        {
-            Count = k => k == "species" ? all.Count : 0,
-            At = (k, i) => at = i,
-            Text = k => k switch
-            {
-                "count" => $"手に入れた種族　{seen.Count} / {all.Count}",
-                "name"  => seen.Contains(all[at].Id) ? all[at].Name : "？？？",
-                "trait" => Traits.Has(all[at].TraitId) ? Traits.ById(all[at].TraitId).Name : "—",
-                "hide"  => "—",
-                _ => "",
-            },
-            Sprite  = k => k == "art" ? all[at].Sprite : null,
-            Palette = k => k == "art" ? all[at].Palettes[0] : null,
-            Fade = k => k == "art" && !seen.Contains(all[at].Id) ? 0.28 : (double?)null,
-            Tint = k => k != "art" && !seen.Contains(all[at].Id) ? "var(--ink-faint)" : null,
-            When = k => k == "known" && seen.Contains(all[at].Id),
-            Tappable = k => k == "species" && seen.Contains(all[at].Id),
-        });
-
-        _panel = LayoutDom.Render(LayoutStore.Of("ask"), new DomFill
-        {
-            Text = k => k switch
-            {
-                "title" => "あきらめますか",
-                "body"  => "この戦いは負けになります。戻すことはできません。",
-                "stop"  => "やめる",
-                "go"    => "あきらめる",
-                _ => "",
-            },
-            Tappable = k => k == "stop" || k == "go",
-        });
+        var s = new Shell(Demo.Game(), Demo.Now);
+        _screen = Sheets.Book(s);
+        _panel = Sheets.Ask(s);
     }
 }

@@ -131,6 +131,12 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* ⚠️ 🔴 **折り返さない**（`.n.label` と同じ約束・Unity も折り返さない）。
+     ⭐ 既定の `normal` のままだと、入らない字が**黙って2行に折れる**
+     ── 折れた字は横にはみ出さないので「字が枠より広い」に映らず、
+     `wrap=yes` でもないので「字が枠より高い」にも映らない。
+     ⚠️ **どちらの検査にも映らない形**だった（実測 2026-08-22「オート  OFF」）。 */
+  white-space: pre;
 }
 .n.button.lead { background: var(--accent); }
 .n.button:disabled { background: #e8e9ee; color: var(--ink-faint); cursor: default; }
