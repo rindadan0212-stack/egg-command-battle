@@ -369,9 +369,13 @@ namespace EggCommand.Sim
             md.Append($"//    ⚠️ 1つの技を入れてよい袋は {Skills.SpreadMax} か所まで"
                 + "（どこで奪っても同じ、を避ける）。\n");
             md.Append("//    ⚠️ 枠2 と枠3 で同じ技を入れない。2つの袋で役割が1つに偏らない。\n");
-            md.Append("// ⚠️ 姿は16行×16文字。'.' が透明、'1'〜'4' が色の番号。\n");
-            md.Append("//    ⭐ 1=輪郭 2=体 3=差し色 4=目 という決めごとで描いてある。\n");
-            md.Append("// ⚠️ 色は1行に4つ。1行目が通常色で、2行目以降が変異色。\n");
+            md.Append("// ⚠️ 姿は **16行×16文字 か 64行×64文字**。'.' が透明、\n");
+            md.Append($"//    '{PixelSprite.Digits}' が色の番号（色の並びと同じ数だけ使えます）。\n");
+            md.Append("//    ⭐ 16×16 の10種族は 1=輪郭 2=体 3=差し色 4=目 で描いてある。\n");
+            md.Append("//    ⚠️ 64×64 のタマルはこの決めごとに従いません（色ごとに役が違います）。\n");
+            md.Append("// ⚠️ 色は1行が1組。1行目が通常色で、2行目以降が変異色。\n");
+            md.Append("//    ⭐ 数は種族ごとに決めてよい。⚠️ ただし**1件の中では揃える**\n");
+            md.Append("//    （通常色が11で変異色が4だと、変異させた瞬間に落ちます）。\n");
             md.Append($"// ⭐ どの1件にも「{MemoKey} = 〜」を足せる。何を書いてもよい。\n\n");
             return md.ToString();
         }
@@ -895,6 +899,10 @@ namespace EggCommand.Sim
 
                 string skill1 = b.One("枠1") ?? "";
                 if (!Known(skill1, sheetSkills)) problems.Add($"{at}: 枠1 の技 {skill1} が見つからない");
+                // ⚠️ 特性は種族に1つ（2026-08-21）。⭐ 抜けていると誰も持てない特性が増える
+                string traitId = b.One("特性") ?? "";
+                if (traitId.Length == 0) problems.Add($"{at}: 特性が書かれていない");
+                else if (!Traits.Has(traitId)) problems.Add($"{at}: 特性 {traitId} が見つからない");
 
                 if (!TryStats(b.One("基礎"), at, problems, out var stats)) continue;
                 int total = Stats.TotalOf(stats);   // ⭐ Stats.Keys は6本なので弱化2本も入る
@@ -941,7 +949,10 @@ namespace EggCommand.Sim
                 int biggest = 0;
                 foreach (var row in b.Grid)
                     foreach (char c in row)
-                        if (c > '0' && c <= '9' && c - '0' > biggest) biggest = c - '0';
+                    {
+                        int at2 = PixelSprite.IndexOf(c);
+                        if (at2 > biggest) biggest = at2;
+                    }
                 foreach (var pal in palettes)
                 {
                     if (biggest <= pal.Count) continue;
@@ -949,8 +960,8 @@ namespace EggCommand.Sim
                     break;
                 }
 
-                made.Add(new Species(b.Id, name, skill1, stats, sprite, palettes,
-                    pools[0]!, pools[1]!));
+                made.Add(new Species(b.Id, name, skill1, b.One("特性") ?? "",
+                    stats, sprite, palettes, pools[0]!, pools[1]!));
             }
             return made;
         }
@@ -1235,14 +1246,26 @@ namespace EggCommand.Sim
                     else if (!c.StartsWith("#")) break;   // ⭐ 末尾の覚え書きはここで切る
                     else problems.Add($"{at}: 色 {c} は #rrggbb の形で書く");
                 }
-                if (kept.Count != PaletteSize) problems.Add($"{at}: 色は1行に {PaletteSize} つ（{kept.Count} 個だった）");
+                // ⚠️ **数は決め打ちにしない**（2026-08-21）。⭐ 種族ごとに色数が違ってよい
+                //    （タマルは 11色・他は 4色）。⚠️ ただし**1件の中では揃える** ──
+                //    通常色が11で変異色が4だと、変異させた瞬間に落ちる。
+                if (kept.Count == 0)
+                {
+                    problems.Add($"{at}: 色が1つも書かれていない行がある");
+                }
+                else if (kept.Count > PixelSprite.MaxIndex)
+                {
+                    problems.Add($"{at}: 色が {kept.Count} 個（上限 {PixelSprite.MaxIndex}）");
+                }
+                else if (made.Count > 0 && kept.Count != made[0].Count)
+                {
+                    problems.Add($"{at}: 色の数が組ごとに違う（{made[0].Count} と {kept.Count}）"
+                        + " ── 変異させた瞬間に落ちる");
+                }
                 else made.Add(new Palette(kept.ToArray()));
             }
             return made;
         }
-
-        /// <summary>1組の色の数。⚠️ 姿の添字が 1〜これ に収まること。</summary>
-        public const int PaletteSize = 4;
 
         private static bool TryStats(string? line, string at, List<string> problems, out StatBlock made)
         {
@@ -1305,8 +1328,9 @@ namespace EggCommand.Sim
                 { problems.Add($"{at}: 姿の幅が揃っていない（{width} と {r.Length}）"); return false; }
                 foreach (char c in r)
                 {
-                    if (c == '.' || (c >= '0' && c <= '9')) continue;
-                    problems.Add($"{at}: 姿に '{c}' がある（'.' と '0'〜'9' だけ）");
+                    // ⭐ 読める文字は Core が決める（ここに書き写さない）
+                    if (PixelSprite.IndexOf(c) >= 0) continue;
+                    problems.Add($"{at}: 姿に '{c}' がある（'.' と '{PixelSprite.Digits}' だけ）");
                     return false;
                 }
             }
@@ -1457,7 +1481,7 @@ namespace EggCommand.Sim
             var palettes = PalettesOf(b, "", note.Stop);
             if (palettes.Count == 0) return null;
             return new Species(b.Id, b.One("名前") ?? "", b.One("枠1") ?? "",
-                stats, sprite, palettes, slot2, slot3);
+                b.One("特性") ?? "", stats, sprite, palettes, slot2, slot3);
         }
 
         /// <summary>帳面の1件（特性）を読む。⚠️ 読めなければ null。</summary>
@@ -1481,7 +1505,8 @@ namespace EggCommand.Sim
         public static string BlockOf(Species sp)
         {
             var md = new StringBuilder();
-            md.Append($"# 種族 {sp.Id}\n名前 = {sp.Name}\n枠1 = {sp.Skill1}\n基礎 = ");
+            md.Append($"# 種族 {sp.Id}\n名前 = {sp.Name}\n枠1 = {sp.Skill1}\n"
+                + $"特性 = {sp.TraitId}\n基礎 = ");
             for (int i = 0; i < Stats.Keys.Length; i++)
             {
                 var key = Stats.Keys[i];
@@ -1495,11 +1520,8 @@ namespace EggCommand.Sim
             for (int y = 0; y < sp.Sprite.Height; y++)
             {
                 md.Append("  ");
-                for (int x = 0; x < sp.Sprite.Width; x++)
-                {
-                    byte v = sp.Sprite.At(x, y);
-                    md.Append(v == 0 ? '.' : (char)('0' + v));
-                }
+                // ⭐ 添字 → 文字も Core を通す（規則を2か所に持たない）
+                for (int x = 0; x < sp.Sprite.Width; x++) md.Append(PixelSprite.CharOf(sp.Sprite.At(x, y)));
                 md.Append('\n');
             }
             foreach (var p in sp.Palettes) md.Append($"色 = {string.Join(" ", p.Colors)}\n");

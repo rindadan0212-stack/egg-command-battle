@@ -181,13 +181,18 @@ public class FusionTests
     public void 配合は両親が共に高いステへ寄る()
     {
         // 両親とも攻撃が高い。⭐ 子は攻撃へ寄るはず
-        var a = Make("a", 10, 30, 6, 4);
-        var b = Make("b", 8, 28, 8, 6);
+        // ⚠️ **育て切った親で見る**（2026-08-21）。尖りは「育てた分」に乗るようになったので、
+        //    育てていない親どうしだと伸びしろが 0 ＝ 平均されるだけになる。
+        //    ⭐ これは仕様（育てないと何も起きない）── 検査の入力を本番の使い方へ合わせた。
+        var a = Make("a", 10, 30, 6, 4, earned: Creatures.TrainMax);
+        var b = Make("b", 8, 28, 8, 6, earned: Creatures.TrainMax);
         var rng = new Rng(11);
         int sharper = 0;
         for (int i = 0; i < 50; i++)
         {
-            var child = Fusion.Fuse(rng, Make("a", 10, 30, 6, 4), Make("b", 8, 28, 8, 6), i).Egg.Wild;
+            var child = Fusion.Fuse(rng,
+                Make("a", 10, 30, 6, 4, earned: Creatures.TrainMax),
+                Make("b", 8, 28, 8, 6, earned: Creatures.TrainMax), i).Egg.Wild;
             double parentShare = (a.Wild[StatKey.Atk] + b.Wild[StatKey.Atk])
                 / (double)(Stats.TotalOf(a.Wild) + Stats.TotalOf(b.Wild));
             double childShare = child[StatKey.Atk] / (double)Stats.TotalOf(child);
@@ -325,5 +330,269 @@ public class FusionTests
             fused++;
         }
         Assert.True(game.Storage.Creatures.Count < 2, "配合し続けられてしまう");
+    }
+
+    // ── 上限は世代が押し上げる（2026-08-21・作者の指示）──────
+
+    /// <summary>⭐ **1代進むごとに上限が上がる。**⚠️ 野生（1代目）は素の上限。</summary>
+    [Fact]
+    public void 上限は世代で上がる()
+    {
+        Assert.Equal(Stats.WildStatMax, Stats.WildStatMaxFor(1));
+        Assert.Equal(Stats.WildStatMax + 1, Stats.WildStatMaxFor(2));
+        Assert.Equal(Stats.WildStatMax + Stats.GenerationCapSteps,
+            Stats.WildStatMaxFor(1 + Stats.GenerationCapSteps));
+        // ⚠️ 天井の先は伸びない
+        Assert.Equal(Stats.WildStatMaxFor(1 + Stats.GenerationCapSteps),
+            Stats.WildStatMaxFor(500));
+        // ⭐ 合計は常に3倍
+        for (int gen = 1; gen <= 25; gen++)
+            Assert.Equal(Stats.WildStatMaxFor(gen) * 3, Stats.WildTotalMaxFor(gen));
+    }
+
+    /// <summary>⭐ **作者の指示（2026-08-21）**:
+    /// 「弱い個体の配合では上限は上がるが実値は弱いまま」。
+    ///
+    /// ⚠️ ここが崩れると、配合を空打ちするだけで強くなる ── 育てる意味が消える。</summary>
+    [Fact]
+    public void 育てずに配合しても実値は増えない()
+    {
+        var rng = new Rng(2026_08_21).Stream("cap-test");
+        int serial = 0;
+        var one = Make("a0", 20, 20, 20, 0);
+        int startTotal = Stats.TotalOf(one.Wild);
+
+        // ⚠️ 変異は「その子だけ +2」の上振れなので、出たぶんは数に入れて許す
+        //    （それ以外に増える道が無いことを見たい）
+        int fromLuck = 0;
+        for (int i = 0; i < 12; i++)
+        {
+            var mate = Make($"b{i}", 20, 20, 20, 0);
+            var made = Fusion.Fuse(rng, one, mate, ++serial);
+            fromLuck += made.Mutations * Breeding.MutationStep;
+            one = Nests.Hatch(rng, egg: made.Egg, id: $"c{i}");
+        }
+
+        // ⭐ 枠は広がっている
+        Assert.True(Stats.WildTotalMaxFor(one.Generation) > Stats.WildTotalMax,
+            "世代を重ねても上限が上がっていない");
+        // ⚠️ **配合そのものでは増えない**（育てていないので）
+        Assert.True(Stats.TotalOf(one.Wild) <= startTotal + fromLuck,
+            $"育てずに配合したのに素質が {startTotal} → {Stats.TotalOf(one.Wild)}"
+            + $"（変異ぶんの上振れは {fromLuck} まで）");
+    }
+
+    /// <summary>⭐ **育てれば中身が増える。**⚠️ 増える量は育てた分の
+    /// <see cref="Fusion.Carry"/>（両親ぶん）。</summary>
+    [Fact]
+    public void 育ててから配合すると実値が増える()
+    {
+        var rng = new Rng(99).Stream("carry-test");
+        var a = Make("a", 20, 20, 20, 0, earned: Creatures.TrainMax);
+        var b = Make("b", 20, 20, 20, 0, earned: Creatures.TrainMax);
+        int before = Stats.TotalOf(a.Wild);
+
+        var egg = Fusion.Fuse(rng, a, b, 1).Egg;
+
+        int want = (int)System.Math.Floor(Creatures.TrainMax * 2 * Fusion.Carry + 0.5);
+        Assert.Equal(before + want, Stats.TotalOf(egg.Wild));
+    }
+
+    /// <summary>⭐ **同じ形どうしを掛けると、その形のまま濃くなる**（2026-08-21・作者の指摘）。
+    ///
+    /// ⚠️ 直す前は「決まった合計を (a+b)^1.6 の重みで**配り直す**」形だったので、
+    /// 同じ形の親どうしでも上位2本が3本目を食い、代を重ねるほど形が壊れた
+    /// （[40 40 30] → [46 46 28] → … → [60 60 0]）。
+    /// ⚠️ 「尖った個体を作りたいのに、同じ形どうしを掛けてはいけない」というあべこべだった。</summary>
+    [Fact]
+    public void 同じ形どうしを掛けると形が保たれる()
+    {
+        var rng = new Rng(2026_08_21).Stream("shape");
+        int serial = 0;
+        // ⭐ HP・攻撃・防御の3本だけに寄せた形
+        var shape = new[] { StatKey.Hp, StatKey.Atk, StatKey.Def };
+        var one = Make("s0", 20, 20, 20, 0, earned: Creatures.TrainMax);
+
+        for (int i = 0; i < 20; i++)
+        {
+            var mate = Made($"m{i}", one.Wild, Creatures.TrainMax);
+            var egg = Fusion.Fuse(rng, one, mate, ++serial).Egg;
+            // ⚠️ **形が崩れていないこと**を毎代見る（最後だけ見ると、途中の崩れを見逃す）
+            foreach (var key in Stats.Keys)
+            {
+                bool inShape = System.Array.IndexOf(shape, key) >= 0;
+                if (inShape) continue;
+                Assert.True(egg.Wild[key] <= 2,
+                    $"{i}代目: 形に無い {Stats.LabelOf(key)} が {egg.Wild[key]} になった");
+            }
+            one = Made($"c{i}", egg.Wild, Creatures.TrainMax, egg.Generation);
+        }
+
+        // ⭐ 3本とも上限まで濃くなっている（＝枠を埋め切れる）
+        foreach (var key in shape)
+        {
+            Assert.True(one.Wild[key] >= Stats.WildStatMax,
+                $"{Stats.LabelOf(key)} が {one.Wild[key]} までしか伸びていない");
+        }
+    }
+
+    /// <summary>⭐ **2本に尖らせた血統も、その2本のまま濃くなる。**
+    /// ⚠️ 3本目が勝手に生えない（生えると「尖らせた」ことにならない）。</summary>
+    [Fact]
+    public void 二本に尖らせた形も保たれる()
+    {
+        var rng = new Rng(7).Stream("shape2");
+        int serial = 0;
+        var one = Made("t0", new StatBlock(0, 30, 0, 30, 0, 0), Creatures.TrainMax);
+
+        for (int i = 0; i < 20; i++)
+        {
+            var mate = Made($"n{i}", one.Wild, Creatures.TrainMax);
+            var egg = Fusion.Fuse(rng, one, mate, ++serial).Egg;
+            one = Made($"d{i}", egg.Wild, Creatures.TrainMax, egg.Generation);
+        }
+
+        Assert.True(one.Wild[StatKey.Atk] >= Stats.WildStatMax, "攻撃が伸びていない");
+        Assert.True(one.Wild[StatKey.Spd] >= Stats.WildStatMax, "スピードが伸びていない");
+        Assert.True(one.Wild[StatKey.Hp] <= 2, $"HP が {one.Wild[StatKey.Hp]} に生えた");
+        Assert.True(one.Wild[StatKey.Def] <= 2, $"防御が {one.Wild[StatKey.Def]} に生えた");
+    }
+
+    /// <summary>素質と育成を指定した個体。⚠️ 配合の入力を組むためだけの道具。</summary>
+    private static Creature Made(string id, StatBlock wild, int earned, int generation = 1)
+    {
+        var c = new Creature(id, "tamaru", wild, new StatBlock(0, 0, 0, 0), 0, 0,
+            null, null, 0, null, null, generation);
+        if (earned > 0) Creatures.Grow(c, earned);
+        return c;
+    }
+
+    /// <summary>⚠️ **変異はもう上限を押し上げない**（2026-08-21）。
+    /// ⭐ 変異カウンタが高くても、世代が浅ければ上限は浅いまま。</summary>
+    [Fact]
+    public void 変異は上限を押し上げない()
+    {
+        var wide = new StatBlock(60, 60, 60, 60, 60, 60);
+        // 1代目・変異カウンタは関係しない
+        Assert.Equal(Stats.WildTotalMax, Stats.TotalOf(Stats.ApplyTotalCap(wide, 1)));
+        // 21代目なら天井まで入る
+        Assert.Equal(Stats.WildTotalMaxFor(21), Stats.TotalOf(Stats.ApplyTotalCap(wide, 21)));
+    }
+
+    // ── 偏り4本（2026-08-21・作者の指示）─────────────────
+
+    /// <summary>⭐ **孵ると4本とも別のステに乗る。**
+    /// ⚠️ 重なった組は <see cref="Creatures.Slanted(StatBlock, Creature)"/> が両方とも捨てるので、
+    /// 重なった個体だけ軸が1本消える（画面には▲が出たまま）。</summary>
+    [Fact]
+    public void 孵った個体の偏りは四本とも別のステ()
+    {
+        var game = Games.NewGame(4321);
+        var nest = Nests.ById("thicket-fang");
+        for (int i = 0; i < 200; i++)
+        {
+            var egg = Nests.MakeEgg(game.RngEgg, nest, EggOrigin.Defeated, ++game.Serial);
+            StatKey best, strong, weak, worst;
+            Nests.RollSlant(game.RngSlant, out best, out strong, out weak, out worst);
+            var born = Nests.Hatch(game.RngHatch, egg, $"h{i}", strong, weak, best, worst);
+
+            var keys = new HashSet<StatKey?> { born.Best, born.Strong, born.Weak, born.Worst };
+            Assert.Equal(4, keys.Count);
+        }
+    }
+
+    /// <summary>⚠️ **配合でも重ねない。**親から継ぐと、素で引くより重なりやすい
+    /// （両親の同じ欄が同じステを指していることがある）。</summary>
+    [Fact]
+    public void 配合の子の偏りも四本とも別のステ()
+    {
+        var rng = new Rng(99).Stream("slant-fuse");
+        int serial = 0;
+        for (int i = 0; i < 200; i++)
+        {
+            var a = Make($"a{i}", 20, 20, 20, 20, StatKey.Atk, StatKey.Def);
+            var b = Make($"b{i}", 20, 20, 20, 20, StatKey.Atk, StatKey.Def);
+            var egg = Fusion.Fuse(rng, a, b, ++serial).Egg;
+
+            var keys = new HashSet<StatKey?> { egg.Best, egg.Strong, egg.Weak, egg.Worst };
+            Assert.Equal(4, keys.Count);
+        }
+    }
+
+    /// <summary>⭐ **大得意は +30%・得意は +15%**（<see cref="Creatures.GreatSlant"/>）。
+    /// ⚠️ 掛ける順で答えが変わらないこと（別のステに乗るので、掛け算が交わらない）。</summary>
+    [Fact]
+    public void 大得意は得意のちょうど二倍動く()
+    {
+        var flat = new StatBlock(1000, 1000, 1000, 1000, 1000, 1000);
+        var made = Creatures.Slanted(flat, StatKey.Atk, StatKey.Def, StatKey.Hp, StatKey.Spd);
+
+        Assert.Equal(1300, made[StatKey.Hp]);    // 大得意 +30%
+        Assert.Equal(1150, made[StatKey.Atk]);   // 得意 +15%
+        Assert.Equal(850, made[StatKey.Def]);    // 不得意 −15%
+        Assert.Equal(700, made[StatKey.Spd]);    // 大不得意 −30%
+        Assert.Equal(1000, made[StatKey.Acc]);   // 何も付かない
+        Assert.Equal(1000, made[StatKey.Res]);
+    }
+
+    /// <summary>⚠️ **重なった組は両方とも捨てる。**⭐ 片方だけ効かせると、
+    /// 画面の▲と実際の数が食い違う（どちらが効いたのか読めない）。</summary>
+    [Fact]
+    public void 同じステに重なった偏りは両方とも効かない()
+    {
+        var flat = new StatBlock(1000, 1000, 1000, 1000, 1000, 1000);
+        // 大得意と大不得意が同じ → その組だけ捨て、得意/不得意は生きる
+        var made = Creatures.Slanted(flat, StatKey.Atk, StatKey.Def, StatKey.Hp, StatKey.Hp);
+        Assert.Equal(1000, made[StatKey.Hp]);
+        Assert.Equal(1150, made[StatKey.Atk]);
+        Assert.Equal(850, made[StatKey.Def]);
+    }
+
+    /// <summary>⭐ **2本のままの古い個体も、そのまま読める。**
+    /// ⚠️ 大得意を持たない個体（null）に ±30% を掛けない。</summary>
+    [Fact]
+    public void 大得意を持たない個体は今までどおり動く()
+    {
+        var flat = new StatBlock(1000, 1000, 1000, 1000, 1000, 1000);
+        var made = Creatures.Slanted(flat, StatKey.Atk, StatKey.Def);
+        Assert.Equal(1150, made[StatKey.Atk]);
+        Assert.Equal(850, made[StatKey.Def]);
+        Assert.Equal(1000, made[StatKey.Hp]);
+    }
+
+    /// <summary>⚠️ 保存して読み直しても4本とも残ること。</summary>
+    [Fact]
+    public void 偏り四本は保存して読み直しても残る()
+    {
+        var game = Games.NewGame(606);
+        var save = Snapshots.Save(game);
+        var back = Snapshots.Load(save);
+        Assert.NotNull(back);
+
+        for (int i = 0; i < game.Storage.Creatures.Count; i++)
+        {
+            var was = game.Storage.Creatures[i];
+            var now = back!.Storage.Creatures[i];
+            Assert.Equal(was.Best, now.Best);
+            Assert.Equal(was.Strong, now.Strong);
+            Assert.Equal(was.Weak, now.Weak);
+            Assert.Equal(was.Worst, now.Worst);
+        }
+    }
+
+    /// <summary>⚠️ **大得意より前の保存も読める。**⭐ 欄が無ければ「持たない」（-1）。</summary>
+    [Fact]
+    public void 大得意を知らない古いセーブも読める()
+    {
+        var game = Games.NewGame(607);
+        var save = Snapshots.Save(game);
+        foreach (var c in save.Creatures) { c.Best = -1; c.Worst = -1; }
+
+        var back = Snapshots.Load(save);
+        Assert.NotNull(back);
+        Assert.Null(back!.Storage.Creatures[0].Best);
+        Assert.Null(back.Storage.Creatures[0].Worst);
+        // ⭐ 得意・不得意はそのまま生きている
+        Assert.NotNull(back.Storage.Creatures[0].Strong);
     }
 }

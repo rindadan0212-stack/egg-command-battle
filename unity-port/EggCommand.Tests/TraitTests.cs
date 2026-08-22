@@ -134,16 +134,34 @@ public class TraitTests
             Battle.LandChanceOf(Effect.Poison(1, 3, 60), actor, target));
     }
 
-    /// <summary>⚠️ 自分・味方に掛けるものは速度でも特性でも動かない。
-    /// 誰も抵抗していないのに通しやすくなるのは筋が通らない。</summary>
+    /// <summary>⭐ **自分・味方に掛けるものは必ず通る**（2026-08-21・作者の指示）。
+    /// ⚠️ 特性でも速度でも属性でも動かない ── 動かす前に、そもそも外れない。
+    /// ⚠️ 素の率が 50 と書いてあっても 100 を返す（<see cref="Skills.Faults"/> が
+    /// 「味方に掛けるものへ確率を付ける」こと自体を止めるので、表には残らない）。</summary>
     [Fact]
-    public void 狙い澄ましは味方に掛けるものには効かない()
+    public void 味方に掛けるものは必ず通る()
     {
         var state = Fight(Make("a", Traits.Aim), Make("b", null));
         var actor = UnitOf(state, Side.Ally);
 
-        Assert.Equal(50, Battle.LandChanceOf(Effect.Shield(2, 50), actor, actor));
-        Assert.Equal(50, Battle.LandChanceOf(Effect.HealRatio(40, 50), actor, actor));
+        Assert.Equal(100, Battle.LandChanceOf(Effect.Shield(2, 50), actor, actor));
+        Assert.Equal(100, Battle.LandChanceOf(Effect.HealRatio(40, 50), actor, actor));
+    }
+
+    /// <summary>⚠️ **味方に掛ける技へ確率を付け直さない。**
+    /// ⭐ 註に書くだけだと、次に「・大」を足すときに同じ形で戻ってくる。</summary>
+    [Fact]
+    public void 味方に掛ける技に確率が付いていない()
+    {
+        foreach (var skill in Skills.All)
+        {
+            foreach (var effect in skill.Effects)
+            {
+                if (Skills.IsHarmful(effect)) continue;
+                Assert.True(effect.Chance == 100,
+                    $"{skill.Id}: 相手が抵抗しない効果に確率 {effect.Chance}% が付いている");
+            }
+        }
     }
 
     [Fact]
@@ -584,35 +602,89 @@ public class TraitTests
         return target.Hp - before;
     }
 
-    // ── 入手経路 ────────────────────────────────────
+    // ── 入手経路（2026-08-21: 種族に固定）──────────────
 
-    /// <summary>⭐ **始めたばかりの3体は特性を持たない。**
-    ///
-    /// ⚠️ 理由は強さではなく**覚えることの量**。まだ何も分かっていない人に
-    /// 種族・技3枠・属性・得意/不得意・素質に加えて特性まで出すと、読むものが多すぎる。
-    /// ⭐ 浅い巣からは低い★しか出ないので、序盤は自然に特性なしになる。</summary>
+    /// <summary>⭐ **特性は種族から決まる。**
+    /// ⚠️ 2026-08-21 まで個体ごとに引いていた（作者の指摘で戻した）。
+    /// ⭐ 引いていた頃は、同じツノガでも中身が14通りあり、顔を見ても何をする相手か読めなかった。</summary>
     [Fact]
-    public void 始めたばかりの3体は特性を持たない()
+    public void 特性は種族から決まる()
     {
-        var game = Games.NewGame(2026_08_17);
-        foreach (var creature in game.Storage.Creatures)
+        foreach (var species in SpeciesTable.All)
         {
-            Assert.Null(creature.TraitId);
+            Assert.True(Traits.Has(species.TraitId), $"{species.Id}: 特性 {species.TraitId} が表に無い");
+        }
+        SpeciesTable.Audit();
+    }
+
+    /// <summary>⚠️ **種族どうしで重ねない。**重ねたぶんだけ、どこからも手に入らない特性が増える。</summary>
+    [Fact]
+    public void 特性は種族どうしで重ならない()
+    {
+        var seen = new HashSet<string>();
+        foreach (var species in SpeciesTable.All)
+        {
+            Assert.True(seen.Add(species.TraitId), $"{species.Id}: {species.TraitId} が重なっている");
         }
     }
 
-    /// <summary>★の低い卵からは出ず、★の高い卵からは出る。⭐ 境目は <see cref="Traits.MinRarity"/>。</summary>
+    /// <summary>⭐ **生む経路が3つとも種族の特性を配る。**
+    ///
+    /// ⚠️ ここが要（かなめ）の検査。産地ごとに種族表を引き写すと、
+    /// 「巣の親は特性つき／道中の雑魚は無し」のような食い違いが**画面から読み取れない**。</summary>
     [Fact]
-    public void 特性は星の高い卵からだけ出る()
+    public void 生まれる個体はどの経路でも種族の特性を持つ()
     {
-        Assert.False(Traits.AppearsAt(Traits.MinRarity - 1));
-        Assert.True(Traits.AppearsAt(Traits.MinRarity));
+        var game = Games.NewGame(2026_08_21);
 
+        // 1) 始めたばかりの手持ち（孵化の経路）
+        foreach (var c in game.Storage.Creatures)
+        {
+            Assert.Equal(Creatures.TraitIdFor(c.SpeciesId), c.TraitId);
+        }
+
+        // 2) 巣の顔ぶれ（親・道中の雑魚）
+        var nest = Nests.ById("thicket-fang");
+        foreach (var c in Nests.MakeDefenders(new Rng(1), nest))
+        {
+            Assert.Equal(Creatures.TraitIdFor(c.SpeciesId), c.TraitId);
+        }
+        foreach (var c in Nests.MakeMobParty(new Rng(2), nest, 0))
+        {
+            Assert.Equal(Creatures.TraitIdFor(c.SpeciesId), c.TraitId);
+        }
+
+        // 3) ボス
+        foreach (var c in Nests.MakeBossParty())
+        {
+            Assert.Equal(Creatures.TraitIdFor(c.SpeciesId), c.TraitId);
+        }
+    }
+
+    /// <summary>⭐ 配合の子は**子の種族**の特性を持つ。
+    /// ⚠️ 親から継がない ── 特性を狙うなら、狙うのは種族のほう。</summary>
+    [Fact]
+    public void 配合の子は子の種族の特性を持つ()
+    {
+        var game = Games.NewGame(777);
+        var ids = new List<string>();
+        foreach (var c in game.Storage.Creatures) ids.Add(c.Id);
+
+        var outcome = Games.FusePair(game, ids[0], ids[1]);
+        var born = Nests.Hatch(game.RngHatch, outcome.Egg, "child");
+
+        Assert.Equal(Creatures.TraitIdFor(outcome.Egg.SpeciesId), born.TraitId);
+    }
+
+    /// <summary>⚠️ ★の低い卵でも特性は付く（★の下限は 2026-08-21 に外した）。
+    /// ⭐ 種族に固定した以上、同じ種族なのに持つ個体と持たない個体が居るほうが分かりにくい。</summary>
+    [Fact]
+    public void 星の低い卵からも特性が出る()
+    {
         for (int rarity = 1; rarity <= Rarities.Max; rarity++)
         {
             var born = HatchOfRarity(rarity);
-            if (rarity < Traits.MinRarity) Assert.Null(born.TraitId);
-            else Assert.True(Traits.Has(born.TraitId!), $"★{rarity}: 特性が付いていない");
+            Assert.Equal(Creatures.TraitIdFor(born.SpeciesId), born.TraitId);
         }
     }
 
@@ -631,67 +703,6 @@ public class TraitTests
         return born!;
     }
 
-    /// <summary>⭐ 配合は「持っているものを尖らせる」出口。
-    /// ⚠️ 特性を減らす手段にしない（両親が持っていれば子も必ず持つ）。</summary>
-    [Fact]
-    public void 配合では親のどちらかの特性を継ぐ()
-    {
-        var game = WithTraitedParents(777, out string aId, out string bId);
-        var parents = new HashSet<string?>
-        {
-            Games.CreatureById(game, aId).TraitId,
-            Games.CreatureById(game, bId).TraitId,
-        };
-
-        var outcome = Games.FusePair(game, aId, bId);
-        Assert.Contains(outcome.Egg.TraitId, parents);
-    }
-
-    /// <summary>⭐ **配合は★の下限を見ない。**
-    /// ⚠️ 親が持っているのに子が失うほうが分かりにくいので、継承は無条件。
-    /// ⭐ 序盤に特性を出さないのは「初めて手にする経路」を絞る話であって、
-    /// 既に持っているものを取り上げる話ではない。</summary>
-    [Fact]
-    public void 配合の継承は星の下限を見ない()
-    {
-        var game = WithTraitedParents(101, out string aId, out string bId);
-        var outcome = Games.FusePair(game, aId, bId);
-
-        Assert.True(outcome.Egg.Rarity < Traits.MinRarity || outcome.Egg.TraitId != null);
-        Assert.NotNull(outcome.Egg.TraitId);
-    }
-
-    /// <summary>⚠️ 配合で決まった特性を、孵すときに引き直さない。</summary>
-    [Fact]
-    public void 配合の卵は孵しても特性が変わらない()
-    {
-        var game = WithTraitedParents(43, out string aId, out string bId);
-        var outcome = Games.FusePair(game, aId, bId);
-
-        var born = Nests.Hatch(game.RngHatch, outcome.Egg, "child", null, null, Traits.Spite);
-        Assert.Equal(outcome.Egg.TraitId, born.TraitId);
-    }
-
-    /// <summary>特性を持つ親を2体そろえた状態。⚠️ 序盤の個体は持たないので、明示的に持たせる。</summary>
-    private static Game WithTraitedParents(int seed, out string aId, out string bId)
-    {
-        var game = Games.NewGame(seed);
-        var kept = new List<Creature>();
-        string[] traits = { Traits.Grit, Traits.Leech, Traits.Flurry };
-        for (int i = 0; i < game.Storage.Creatures.Count; i++)
-        {
-            var c = game.Storage.Creatures[i];
-            kept.Add(new Creature(c.Id, c.SpeciesId, c.Wild, c.Trained, c.Earned,
-                c.MutationCounter, c.Skill2, c.Skill3, c.PaletteIndex,
-                c.ParentA, c.ParentB, c.Generation, c.Strong, c.Weak, c.Element,
-                traits[i % traits.Length]));
-        }
-        game.Storage = new Storage(game.Storage.Slots, kept);
-        aId = kept[0].Id;
-        bId = kept[1].Id;
-        return game;
-    }
-
     // ── 保存 ────────────────────────────────────────
 
     [Fact]
@@ -708,32 +719,28 @@ public class TraitTests
         }
     }
 
-    /// <summary>⚠️ 表から消えた id で開かないセーブを作らない。空にして先へ進む。</summary>
+    /// <summary>⭐ **古い保存の特性は、読むときに種族のものへ直る。**
+    ///
+    /// ⚠️ そのまま読むと、個体ごとに引いていた頃の箱が残り続け、
+    /// 同じ種族なのに特性が14通りある状態が消えない。
+    /// ⭐ 育てた分を Lv から作り直すのと同じ約束（失うものが無いから作り直せる）。</summary>
     [Fact]
-    public void 表に無い特性のidは読み込みで空になる()
+    public void 古い保存の特性は種族のものに直る()
     {
         var game = Games.NewGame(11);
         var save = Snapshots.Save(game);
-        save.Creatures[0].Trait = "存在しない特性";
+        // ⚠️ 昔の保存を真似る ── でたらめな特性と、特性を知らない版（null）の両方
+        save.Creatures[0].Trait = Traits.Spite;
+        if (save.Creatures.Count > 1) save.Creatures[1].Trait = null;
 
         var notes = new List<string>();
         var back = Snapshots.Load(save, notes);
 
         Assert.NotNull(back);
-        Assert.Null(back!.Storage.Creatures[0].TraitId);
+        foreach (var c in back!.Storage.Creatures)
+        {
+            Assert.Equal(Creatures.TraitIdFor(c.SpeciesId), c.TraitId);
+        }
         Assert.NotEmpty(notes);
-    }
-
-    /// <summary>⚠️ 特性より前のセーブ（Trait が無い）も読めること。</summary>
-    [Fact]
-    public void 特性を知らない古いセーブも読める()
-    {
-        var game = Games.NewGame(13);
-        var save = Snapshots.Save(game);
-        foreach (var c in save.Creatures) c.Trait = null;
-
-        var back = Snapshots.Load(save);
-        Assert.NotNull(back);
-        Assert.Null(back!.Storage.Creatures[0].TraitId);
     }
 }

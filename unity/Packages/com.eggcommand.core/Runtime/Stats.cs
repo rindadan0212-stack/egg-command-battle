@@ -144,8 +144,20 @@ namespace EggCommand.Core
         /// ⚠️ 6本のうち3本なので、まだ半分は薄いまま ── 万能は作れない。</summary>
         public const int WildTotalMax = WildStatMax * 3;
 
-        /// <summary>変異が上限を押し上げられる回数。⚠️ ここが血統全体の天井になる。</summary>
-        public const int MutationCapSteps = 20;
+        /// <summary>世代が上限を押し上げられる回数。⚠️ ここが血統全体の天井になる。
+        ///
+        /// ⭐ **2026-08-21 に「変異」から「世代」へ渡した**（作者の判断）。
+        /// ⚠️ 変異だった頃は 2.5%×3回＝**7.31%** を引き当てる形で、天井まで
+        /// **約267回の配合**（★5 の卵は2時間・孵化枠6つで実時間 89時間が下限）だった。
+        /// ⭐ しかも**狙う手が1つも無い** ── 他の軸（種族・属性・偏り・配分・技）は
+        /// どれも「正しい親を作れば近づく」のに、変異だけは積み上げるしかなかった。
+        ///
+        /// ⭐ 世代なら**配合するたび確実に1つ上がる**ので、狙える。
+        /// ⚠️ **上限が上がるだけでは強くならない** ── 実値は「両親の平均 ＋
+        /// 育てた分の <see cref="Fusion.Carry"/>」でしか増えないので、
+        /// 育てずに配合を繰り返すと**枠だけ広がって中身は薄いまま**になる
+        /// （作者の指示 2026-08-21）。</summary>
+        public const int GenerationCapSteps = 20;
 
         public static string LabelOf(StatKey key)
         {
@@ -165,20 +177,23 @@ namespace EggCommand.Core
             }
         }
 
-        /// <summary>その個体の1ステ上限。変異1回につき +1。
-        /// ⚠️ 変異で押し上げたぶんが上限で即削られると、変異の価値が消える。</summary>
-        public static int WildStatMaxFor(int mutationCounter)
+        /// <summary>その個体の1ステ上限。⭐ **世代が1つ進むごとに +1**。
+        ///
+        /// ⚠️ 野生（1代目）は押し上げ 0 ＝ 素の <see cref="WildStatMax"/>。
+        /// ⭐ 上限は <see cref="GenerationCapSteps"/> 段で頭打ち（21代目で天井）。</summary>
+        public static int WildStatMaxFor(int generation)
         {
-            int clamped = mutationCounter < 0 ? 0 : mutationCounter;
-            if (clamped > MutationCapSteps) clamped = MutationCapSteps;
-            return WildStatMax + clamped;
+            int steps = generation - 1;
+            if (steps < 0) steps = 0;
+            if (steps > GenerationCapSteps) steps = GenerationCapSteps;
+            return WildStatMax + steps;
         }
 
         /// <summary>その個体の合計上限。⭐ 常に1ステ上限の3倍。
-        /// この比を保つことで「得意を3つ作れる」がどの変異段階でも崩れない。
-        /// ⚠️ 変異で1ステ上限が上がると合計も3倍で伸びる ── ここを2倍のまま置くと
-        /// 変異するほど「3つ伸ばす」が窮屈になり、変異が特化を殺す側に回る。</summary>
-        public static int WildTotalMaxFor(int mutationCounter) => WildStatMaxFor(mutationCounter) * 3;
+        /// この比を保つことで「得意を3つ作れる」がどの世代でも崩れない。
+        /// ⚠️ ここを2倍のまま置くと、世代を重ねるほど「3つ伸ばす」が窮屈になり、
+        /// 世代が特化を殺す側に回る。</summary>
+        public static int WildTotalMaxFor(int generation) => WildStatMaxFor(generation) * 3;
 
         public static int TotalOf(StatBlock stats)
         {
@@ -194,8 +209,10 @@ namespace EggCommand.Core
         ///
         /// 同値のステが複数あるときは順に1ずつ削る（片方だけを掘り下げて偏らせないため）。
         /// </summary>
-        public static StatBlock ApplyTotalCap(StatBlock wild, int mutationCounter = 0) =>
-            CapTo(wild, WildStatMaxFor(mutationCounter), WildTotalMaxFor(mutationCounter));
+        /// <param name="generation">何代目か。⭐ 既定の 1 は野生（押し上げ無し）。
+        /// ⚠️ **変異の回数を渡さない**（2026-08-21 に役が世代へ移った）。</param>
+        public static StatBlock ApplyTotalCap(StatBlock wild, int generation = 1) =>
+            CapTo(wild, WildStatMaxFor(generation), WildTotalMaxFor(generation));
 
         /// <summary>上限を外から渡す版。⭐ **削り方そのもの**はここ1箇所にある。
         ///

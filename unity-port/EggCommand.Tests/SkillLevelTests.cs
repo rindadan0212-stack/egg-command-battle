@@ -77,6 +77,52 @@ public class SkillLevelTests
         Assert.Equal(eggs - 1, game.Eggs.Count);
     }
 
+    /// <summary>⭐ **選んだぶんをまとめて注ぐ**（2026-08-21・作者の指示）。
+    /// ⚠️ 直す前は1個押すごとに入っていたので、10個入れるには10回押すことになり、
+    /// そのたびに裏でレベルが上がっていた。</summary>
+    [Fact]
+    public void 卵をまとめて食わせると合計が入る()
+    {
+        var game = Games.NewGame(2026_08_21);
+        var eater = game.Storage.Creatures[0];
+        var nest = Nests.ById("thicket-fang");
+        var ids = new List<string>();
+        int want = 0;
+        for (int i = 0; i < 5; i++)
+        {
+            var egg = Games.TakeEgg(game, nest, EggOrigin.Defeated);
+            ids.Add(egg.Id);
+            want += Rarities.PointsOf(egg.Rarity);
+        }
+        int eggs = game.Eggs.Count;
+
+        int gained = Games.FeedEggsToSkill(game, eater.Id, 1, ids);
+
+        Assert.Equal(want, gained);
+        Assert.Equal(want, eater.SkillPoints[1]);
+        Assert.Equal(eggs - ids.Count, game.Eggs.Count);
+    }
+
+    /// <summary>⚠️ **上限を超える卵はまとめてでも受け取らない。**
+    /// ⭐ 入る順に入れて、入らなくなったらそこで止まる ── 卵は棚に残る
+    /// （丸めて受け取ると、2時間待った★5 が黙って蒸発する）。</summary>
+    [Fact]
+    public void まとめて注いでも上限を超える卵は残る()
+    {
+        var game = Games.NewGame(2026_08_22);
+        var eater = game.Storage.Creatures[0];
+        var nest = Nests.ById("thicket-fang");
+        var ids = new List<string>();
+        for (int i = 0; i < 3; i++) ids.Add(Games.TakeEgg(game, nest, EggOrigin.Defeated).Id);
+
+        // ⭐ 上限の1つ手前まで埋めておく（どの卵も入らない状態にする）
+        eater.SkillPoints[1] = SkillCosts.TotalFor(Skills.MaxLevel) - 1;
+        int eggs = game.Eggs.Count;
+
+        Assert.Equal(0, Games.FeedEggsToSkill(game, eater.Id, 1, ids));
+        Assert.Equal(eggs, game.Eggs.Count);
+    }
+
     /// <summary>⚠️ 温め始めた卵は取り上げない。待った時間が黙って消える。</summary>
     [Fact]
     public void 孵化器の卵は食わせられない()

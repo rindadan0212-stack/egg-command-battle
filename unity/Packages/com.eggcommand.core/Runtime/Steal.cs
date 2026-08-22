@@ -296,8 +296,21 @@ namespace EggCommand.Core
             return GapWidth + (GapFloor - GapWidth) * t;
         }
 
-        /// <summary>隙間が走者より狭ければ、どう狙っても通れない ＝ その巣は死んでいる。</summary>
-        public static bool IsSealed(int raids) => GapWidthFor(raids) <= RunnerRadius * 2;
+        /// <summary>その巣が死んでいるか。⭐ **盗んだ回数だけで決まる。**
+        ///
+        /// ⚠️ **以前は「隙間が走者より狭いか」で見ていた**（<c>GapWidthFor(raids) &lt;=
+        /// RunnerRadius * 2</c>）。⭐ 弾いて飛ばす遊びの**幾何**であって、
+        /// いまの遊び（すごろく）はその盤を1マスも使っていない。
+        ///
+        /// ⚠️ 実測すると raids 0〜6 のすべてで答えは一致していた ── つまり
+        /// **たまたま正しかっただけ**（2026-08-21 の討論で発覚）。
+        /// ⭐ 余裕は薄い: 最後の隙間 <see cref="GapFloor"/> = 42 に対し走者の直径は 14。
+        /// ⚠️ 誰かが <see cref="GapFloor"/> を 14 未満へ詰めた日から、
+        /// **巣が1回早く封鎖される** ── しかも黙って。
+        ///
+        /// ⭐ だから回数で書く。⚠️ 幾何のほうが先に破綻していないかは
+        /// <c>InfiltrationTests.塞ぐ回数と隙間が閉じる回数が一致する</c> が見張る。</summary>
+        public static bool IsSealed(int raids) => raids >= RaidsToSeal;
 
         /// <summary>親の寄り。⭐ 隙間が必ず片方の壁に接する（親は反対側の端に固まる）。
         /// ⚠️ <see cref="Lean"/> は raids 0 のときのこの値。定数のほうは移植元の照合が踏んでいる。</summary>
@@ -722,9 +735,11 @@ namespace EggCommand.Core
             for (int i = 0; i < Games.PartySize; i++)
             {
                 int shape = i % shapes.Length;
+                // ⭐ **特性も持たせる**（2026-08-21）。⚠️ 参照編成だけ持たないと、
+                //    敵は種族の特性つき・こちらは無し、という**遊びに無い盤**で測ることになる。
                 var creature = new Creature($"ref{i}", species, Stats.ApplyTotalCap(shapes[shape]),
                     new StatBlock(0, 0, 0, 0), 0, 0, null, null, 0, null, null, 1,
-                    strong[shape], weak[shape]);
+                    strong[shape], weak[shape], null, Creatures.TraitIdFor(species));
                 // ⭐ 育てた分も持たせる。⚠️ 素の孵化直後で検査すると、想定より弱い相手で測ることになる
                 //    （段1 は速度合計 69 に対し必要 65 で、通る角度が 1度しか無かった）
                 Creatures.Grow(creature, Creatures.TrainMax);

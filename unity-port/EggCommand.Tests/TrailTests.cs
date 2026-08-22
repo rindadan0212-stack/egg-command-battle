@@ -75,6 +75,8 @@ public class TrailTests
                     break;
                 }
                 case RaidStep.Met: Trails.Beat(raid); break;
+                // ⭐ 払えるなら払う（2026-08-21）。⚠️ ここを handle しないと Roll が撥ねる
+                case RaidStep.Offered: Trails.Pay(raid); break;
                 default: Trails.Roll(rng, raid); break;
             }
         }
@@ -133,8 +135,9 @@ public class TrailTests
             {
                 var trail = Trails.Make(rng, tier);
 
-                // ⚠️ 分かれ道の数は段で決まる
-                Assert.Equal(Trail.JunctionsFor(tier), trail.Junctions.Count);
+                // ⚠️ 分かれ道の数は**成り行き**（2026-08-20・道をランダムにした）。
+                //    ⭐ 見るのは「在ること」だけ
+                Assert.True(trail.Junctions.Count > 0, "分かれ道が1つも無い");
 
                 for (int i = 0; i < trail.Count; i++)
                 {
@@ -145,64 +148,69 @@ public class TrailTests
                         Assert.True(way.To > i, $"道が後ろへ向いている: {i} → {way.To}");
 
                     if (!sq.IsJunction) continue;
-                    // ⭐ 分かれ道は 2〜4本（2026-08-20・作者の指示「4に縛らない」）
-                    Assert.InRange(sq.Ways.Count, Trail.WaysMin, Trail.WaysMax);
+                    // ⭐ 分かれ道の本数は成り行き（2026-08-20・作者の指示
+                    //    「もはや道は完全にランダムでもいいかもよ」）。
+                    // ⚠️ 上限は**列の数**。入口は真ん中からどの列へも開くので、
+                    //    そこだけ列の数いっぱいまで出る。
+                    Assert.InRange(sq.Ways.Count, 2, Trail.LanesMax);
+                }
 
-                    // ⭐ **最上位の決まり: 関門を通らない道が必ず1本、かつ一番長い。**
-                    int free = 0, longest = 0;
-                    foreach (var way in sq.Ways)
-                    {
-                        if (!way.IsGated) free++;
-                        if (way.Length > longest) longest = way.Length;
-                    }
-                    Assert.True(free == 1, $"関門を通らない道が {free} 本（1本でなければならない）");
-                    foreach (var way in sq.Ways)
-                    {
-                        if (way.IsGated)
-                        {
-                            Assert.True(way.Length < longest,
-                                "関門つきの道が、関門なしの道より短くない");
-                        }
-                        else
-                        {
-                            Assert.Equal(longest, way.Length);
-                        }
-                    }
+                // ⭐ **盤の形は、マスの種類を一切知らない**（2026-08-21）。
+                //    ⚠️ 以前はここに「関門を通らない道が残っているか」「関門で行き止まらないか」
+                //    という守りが3つ在った。⭐ 関門が**只で入れる**ようになったので、
+                //    形と中身が切れて、その3つがまとめて要らなくなった。
+                //    ⚠️ あの3つを守らせていたことが、詰みの不具合3件の出どころだった。
 
-                    // ⚠️ **要る量は段だけで決まる**（揺らぎを掛けない）
-                    foreach (var way in sq.Ways)
+                // ⭐ 関門は**マス**。⚠️ 入口と卵には置かない
+                Assert.False(trail.Squares[0].IsGate, "入口が関門");
+                Assert.False(trail.Squares[trail.Goal].IsGate, "卵が関門");
+                foreach (var sq in trail.Squares)
+                {
+                    var toll = sq.Toll;
+                    if (toll == null) continue;
+                    Assert.InRange(toll.Grade, 1, Trail.GateGrades);
+                    Assert.Equal(Trail.PriceOfGrade(toll.Kind, tier, toll.Grade), toll.Price);
+                    Assert.True(toll.Price % Trail.PriceRound == 0,
+                        $"払う量が {Trail.PriceRound} の倍数でない: {toll.Price}");
+                    // ⭐ **払えば必ず何かもらえる。**⚠️ 只働きの関門を作らない
+                    Assert.NotEmpty(sq.OnPay);
+                }
+
+                // ⭐ **線が×型に交わらない。**⚠️ 交わると、どのマスへ行けるのかを
+                //    目で追えなくなる（2026-08-21・`Untangle` で解いている）。
+                for (int i = 0; i < trail.Count; i++)
+                {
+                    var left = trail.Squares[i];
+                    for (int j = 0; j < trail.Count; j++)
                     {
-                        Assert.Equal(Trail.PriceOfGrade(way.Gate, tier, way.Grade), way.Requires);
-                        Assert.Equal(way.Grade > 0, way.IsGated);
-                        if (way.Grade > 0)
+                        var right = trail.Squares[j];
+                        if (right.Row != left.Row || right.Lane <= left.Lane) continue;
+                        foreach (var a in left.Ways)
                         {
-                            Assert.True(way.Requires % Trail.PriceRound == 0,
-                                $"要る量が {Trail.PriceRound} の倍数でない: {way.Requires}");
+                            var toA = trail.Squares[a.To];
+                            if (toA.Row - left.Row != 1) continue;
+                            foreach (var b in right.Ways)
+                            {
+                                var toB = trail.Squares[b.To];
+                                if (toB.Row - right.Row != 1) continue;
+                                Assert.False(toA.Lane > toB.Lane,
+                                    $"線が交わっている: {i}→{a.To} と {j}→{b.To}");
+                            }
                         }
                     }
                 }
 
-                // ⭐ **道の中では、マスが隣り合っている。**
-                // ⚠️ ここが崩れると「出目のぶん進んでいない」と見える。
-                //    ⭐ 長さの差は**合流の1本の繋ぎ**に寄せてあるので、
-                //    段が飛ぶのは「合流へ入る繋ぎ」だけ。
+                // ⭐ **どの繋ぎもちょうど1段だけ進む。**
+                //    ⚠️ ここが崩れると「1マス＝1歩」が崩れ、出目のぶん進んでいないように見える。
+                //    ⚠️ 段飛ばしの近道は 2026-08-21 に捨てた（関門が只になり、近道も只になったため）。
+                //    ⭐ 距離の伸び縮みは、いまはマスがくれる Hop が担う。
                 for (int i = 0; i < trail.Count; i++)
                 {
                     var from = trail.Squares[i];
                     foreach (var way in from.Ways)
                     {
                         int gap = trail.Squares[way.To].Row - from.Row;
-                        Assert.True(gap >= 1, $"{i} → {way.To} が前へ進んでいない");
-                        // ⚠️ 分かれ道から入るときと、合流へ出るときだけ段が飛んでよい。
-                        // ⭐ 合流は「次の分かれ道」か「卵」── 車線で見分けない
-                        //    （合流をいつも真ん中に置くのをやめた・2026-08-20）
-                        var into = trail.Squares[way.To];
-                        bool edge = from.IsJunction || into.IsJunction || into.IsGoal;
-                        if (!edge)
-                        {
-                            Assert.True(gap == 1,
-                                $"道の途中で {gap} 段ぶん飛んでいる（{i} → {way.To}）");
-                        }
+                        Assert.True(gap == 1, $"{i} → {way.To} が {gap} 段ぶん動いている");
                     }
                 }
 
@@ -217,29 +225,182 @@ public class TrailTests
     /// ⭐ ここが崩れると、どの道も通れない行き止まりが生まれる
     /// （払う形にしていたときは詰みが 63% 出た。2026-08-20 の実測）。</summary>
     [Fact]
-    public void 遠い道は薄いステでも通れる()
+    public void 関門を通らずに卵まで行ける()
     {
         var rng = new Rng(909);
         for (int tier = 1; tier <= 5; tier++)
         {
-            // ⭐ 1本に全振りした編成の、薄いほう（参照の 0.5倍）
-            var thin = new StatBlock(
-                Trail.RefStat(GimmickKind.Damage, tier) / 2,
-                Trail.RefStat(GimmickKind.Wall, tier) / 2,
-                Trail.RefStat(GimmickKind.Pressure, tier) / 2, 0);
+            // ⭐ 1本も払えない、すかすかの編成
+            var broke = new StatBlock(0, 0, 0, 0);
 
             for (int n = 0; n < 200; n++)
             {
                 var trail = Trails.Make(rng, tier);
-                var raid = new Raid(trail, Party(), rolls: 99, pool: thin);
-                foreach (var j in trail.Junctions)
+                // ⭐ **一文無しでも卵まで歩ける。**関門は道を塞がない（作者の指示 2026-08-21
+                //    「払わなくても入れる」）。⚠️ ここが崩れると潜入が途中で打ち切られる。
+                var raid = new Raid(trail, Party(), rolls: 999, pool: broke);
+                int guard = 0;
+                while (raid.At != trail.Goal)
                 {
-                    raid.At = j;
-                    Assert.True(Trails.OpenWays(raid) > 0,
-                        $"段{tier} のマス {j} で、どの道も通れない");
+                    Assert.True(guard++ < trail.Count, $"段{tier}: 歩き続けても卵に着かない");
+                    raid.Step = RaidStep.Choosing;
+                    raid.Pending = 1;
+                    var open = Trails.Reach(raid, 1);
+                    Assert.NotEmpty(open);
+                    Trails.Go(raid, open[0]);
+                    // ⚠️ 払えないので、払うか訊かれることは無い
+                    Assert.NotEqual(RaidStep.Offered, raid.Step);
+                    if (raid.Step == RaidStep.Met) Trails.Beat(raid);
                 }
+                Assert.Equal(StealOutcome.Success, raid.Result);
             }
         }
+    }
+
+    /// <summary>⭐ **どの段でも、必ず次の一手がある。**
+    ///
+    /// ⚠️ これが崩れると**進行不能**になる。2026-08-21 に実際に起きた:
+    /// 関門で「N マス進む」を買うと <see cref="RaidStep.Choosing"/> に戻るのに、
+    /// 画面は「振ったあと」しか行ける先を並べていなかったので、
+    /// **光るマスが0・さいころの釦は例外**で、そこから何も押せなくなった。
+    ///
+    /// ⭐ ここで押さえるのは Core 側の約束:
+    /// <list type="bullet">
+    ///   <item><see cref="RaidStep.Moved"/> なら**必ず振れる**（回数が残っている）</item>
+    ///   <item><see cref="RaidStep.Choosing"/> なら**必ず行ける先がある**</item>
+    ///   <item><see cref="RaidStep.Offered"/> なら**必ず払える**</item>
+    /// </list>
+    /// ⚠️ 呼び側（画面）は、この3つの段すべてに操作を出さなければならない。</summary>
+    [Fact]
+    public void どの段でも次の一手がある()
+    {
+        var rng = new Rng(9182);
+        for (int tier = 1; tier <= 5; tier++)
+            for (int n = 0; n < 60; n++)
+            {
+                var raid = Trails.Begin(Trails.Make(rng, tier), Party(spd: 60));
+                int guard = 0;
+                while (raid.Result == null)
+                {
+                    Assert.True(guard++ < 400, "潜入が終わらない");
+                    switch (raid.Step)
+                    {
+                        case RaidStep.Moved:
+                            Assert.True(raid.Rolls > 0,
+                                $"振れないのに Moved（段{tier}・マス {raid.At}）");
+                            Trails.Roll(rng, raid);
+                            break;
+
+                        case RaidStep.Choosing:
+                        {
+                            var open = Trails.Reach(raid, raid.Pending);
+                            Assert.True(open.Count > 0,
+                                $"行ける先が無いのに Choosing（段{tier}・マス {raid.At}"
+                                + $"・出目 {raid.Pending}）");
+                            Trails.Go(raid, open[rng.Int(0, open.Count)]);
+                            break;
+                        }
+
+                        case RaidStep.Offered:
+                            Assert.True(Trails.CanPay(raid, raid.At),
+                                $"払えないのに Offered（マス {raid.At}）");
+                            // ⭐ 払う／払わない を交互に試す
+                            if (guard % 2 == 0) Trails.Pay(raid); else Trails.Pass(raid);
+                            break;
+
+                        case RaidStep.Met:
+                            if (guard % 7 == 0) Trails.Lost(raid); else Trails.Beat(raid);
+                            break;
+
+                        default:
+                            throw new InvalidOperationException($"知らない段 {raid.Step}");
+                    }
+                }
+            }
+    }
+
+    // ── 授かり物の順（2026-08-21 の監査で出た穴）───────────────
+
+    /// <summary>⚠️ **戦闘の前に報酬を配らない。**
+    ///
+    /// ⚠️ 監査で実測: `OnLand = [Fight, Rolls+5]` にすると、**戦う前に +5 が入り、
+    /// 負けたあとも残って**いた。⭐ 倒してから配る物は <c>OnWin</c> に置く。</summary>
+    [Fact]
+    public void 戦闘に負けたら報酬はもらえない()
+    {
+        var trail = Line(20, new Dictionary<int, Square>
+        {
+            [1] = Square.Mob(new Gift(GiftKind.Rolls, 5)),
+        });
+        var raid = new Raid(trail, Party(), rolls: 9, pool: Rich());
+        raid.Step = RaidStep.Choosing;
+        raid.Pending = 1;
+
+        Assert.Equal(RaidStep.Met, Trails.Go(raid, new[] { 0, 1 }));
+        Assert.Equal(9, raid.Rolls);          // ⚠️ 戦う前に増えていないこと
+
+        Trails.Lost(raid);
+        Assert.Equal(StealOutcome.Blocked, raid.Result);
+        Assert.Equal(9, raid.Rolls);          // ⚠️ 負けたのに増えていないこと
+    }
+
+    /// <summary>⭐ 倒せば <c>OnWin</c> がもらえる。</summary>
+    [Fact]
+    public void 戦闘に勝てば報酬がもらえる()
+    {
+        var trail = Line(20, new Dictionary<int, Square>
+        {
+            [1] = Square.Mob(new Gift(GiftKind.Rolls, 5)),
+        });
+        var raid = new Raid(trail, Party(), rolls: 9, pool: Rich());
+        raid.Step = RaidStep.Choosing;
+        raid.Pending = 1;
+        Trails.Go(raid, new[] { 0, 1 });
+
+        Trails.Beat(raid);
+        // ⭐ 雑魚の払い戻し（+1）と OnWin（+5）の両方
+        Assert.Equal(9 + Trail.MobRefund + 5, raid.Rolls);
+    }
+
+    /// <summary>⚠️ **払いに戦闘は混ぜられない。**
+    /// ⭐ 混ぜられると、<c>Pay</c> が段を上書きして**戦闘が黙って起きない**。</summary>
+    [Fact]
+    public void 払いに戦闘は混ぜられない()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            Square.Gate(new Toll(GimmickKind.Wall, 100, 1), new Gift(GiftKind.Fight, 0)));
+    }
+
+    /// <summary>⚠️ **払っても何ももらえない関門は作れない。**</summary>
+    [Fact]
+    public void 只働きの関門は作れない()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            Square.Gate(new Toll(GimmickKind.Wall, 100, 1)));
+    }
+
+    /// <summary>⚠️ **どのマスにも入ってくる道がある。**
+    /// ⭐ 出ていく道しか見ていなかったので、<c>Untangle</c> を触ったときに
+    /// 孤立マスが出ても気づけなかった（2026-08-21 の監査）。</summary>
+    [Fact]
+    public void 孤立したマスができない()
+    {
+        var rng = new Rng(555);
+        for (int tier = 1; tier <= 5; tier++)
+            for (int n = 0; n < 100; n++)
+            {
+                var trail = Trails.Make(rng, tier);
+                var comes = new bool[trail.Count];
+                comes[0] = true;
+                foreach (var sq in trail.Squares)
+                    foreach (var way in sq.Ways) comes[way.To] = true;
+                for (int i = 0; i < trail.Count; i++)
+                {
+                    Assert.True(comes[i], $"段{tier}: マス {i} に入ってくる道が無い");
+                    Assert.True(trail.Squares[i].IsGoal || trail.Squares[i].Ways.Count > 0,
+                        $"段{tier}: マス {i} から出ていく道が無い");
+                }
+            }
     }
 
     /// <summary>⭐ 巣ごとに道が固定される（＝下見できる）。</summary>
@@ -256,12 +417,12 @@ public class TrailTests
             for (int i = 0; i < a.Count; i++)
             {
                 Assert.Equal(a.Squares[i].Kind, b.Squares[i].Kind);
+                Assert.Equal(a.Squares[i].Toll?.Price, b.Squares[i].Toll?.Price);
                 Assert.Equal(a.Squares[i].Ways.Count, b.Squares[i].Ways.Count);
                 for (int w = 0; w < a.Squares[i].Ways.Count; w++)
                 {
                     Assert.Equal(a.Squares[i].Ways[w].To, b.Squares[i].Ways[w].To);
-                    Assert.Equal(a.Squares[i].Ways[w].Requires, b.Squares[i].Ways[w].Requires);
-                    key += $"{a.Squares[i].Ways[w].To}:{a.Squares[i].Ways[w].Requires},";
+                    key += $"{a.Squares[i].Ways[w].To},";
                 }
             }
             seen.Add(key);
@@ -302,87 +463,126 @@ public class TrailTests
         }
     }
 
-    /// <summary>⚠️ 通れない道は、行ける先に**そもそも出てこない**。
-    /// ⭐ だから画面は「光っているマス」だけ出せばよく、鍵の絵が要らない。</summary>
+    /// <summary>⭐ **払えなくても入れる。**（作者の指示 2026-08-21）
+    ///
+    /// ⚠️ 2026-08-20 まではステが足りない関門は行ける先に出てこなかった。
+    /// ⭐ いまは只で入れて、払うかどうかだけがプレイヤーの判断になる。</summary>
     [Fact]
-    public void 通れない道は行ける先に出てこない()
+    public void 払えない関門にも入れる()
     {
         var trail = Ladder(gap: 0, shortLen: 1, longLen: 3, nearReq: 999_999, farReq: 1);
+        var raid = AtHub(trail, new StatBlock(1, 1, 1, 0));
+
+        int steep = trail.Squares[0].Ways[0].To;
+        bool found = false;
+        foreach (var path in Trails.Reach(raid, 1)) if (path[1] == steep) found = true;
+        Assert.True(found, "払えない関門が行ける先から外れている");
+
+        // ⭐ 入っても、払うかは訊かれない（払えないので）
+        Trails.Go(raid, new[] { raid.At, steep });
+        Assert.NotEqual(RaidStep.Offered, raid.Step);
+        Assert.Null(raid.Result);
+    }
+
+    /// <summary>⭐ **払えるときだけ訊かれる。**</summary>
+    [Fact]
+    public void 払えるときだけ訊かれる()
+    {
+        var trail = Ladder(gap: 0, shortLen: 1, longLen: 3, nearReq: 500, farReq: 1);
         var raid = AtHub(trail, Rich());
-        raid.Step = RaidStep.Choosing;
+        int gate = trail.Squares[0].Ways[0].To;
 
-        Assert.False(Trails.CanPass(raid, trail.Squares[0].Ways[0]));
-        Assert.True(Trails.CanPass(raid, trail.Squares[0].Ways[1]));
-        Assert.Equal(1, Trails.OpenWays(raid));
-
-        int blocked = trail.Squares[0].Ways[0].To;
-        foreach (var path in Trails.Reach(raid, 3))
-            Assert.DoesNotContain(blocked, path);
+        Assert.Equal(RaidStep.Offered, Trails.Go(raid, new[] { raid.At, gate }));
+        Assert.True(Trails.CanPay(raid, gate));
     }
 
-    /// <summary>⭐ 遊びの芯。**片方は攻撃が足りないが、もう片方は防御で通れる。**</summary>
+    /// <summary>⭐ **払うと減り、対価がもらえる。**⚠️ ここが 2026-08-21 の芯。</summary>
     [Fact]
-    public void 片方が通れなくてももう片方が通れる()
+    public void 払うとステが減って回数がもらえる()
     {
-        var trail = Ladder(gap: 0, shortLen: 1, longLen: 3,
-            nearReq: 1000, farReq: 300, nearGate: GimmickKind.Wall, farGate: GimmickKind.Pressure);
-
-        // ⭐ 攻撃が薄く、防御が厚い編成
-        var raid = AtHub(trail, new StatBlock(999, 400, 1500, 0));
-        Assert.False(Trails.CanPass(raid, trail.Squares[0].Ways[0]));   // 壁は無理
-        Assert.True(Trails.CanPass(raid, trail.Squares[0].Ways[1]));    // 重圧なら通れる
-
-        // ⚠️ 逆に寄せると、通れる道が入れ替わる
-        var other = AtHub(trail, new StatBlock(999, 1500, 200, 0));
-        Assert.True(Trails.CanPass(other, trail.Squares[0].Ways[0]));
-        Assert.False(Trails.CanPass(other, trail.Squares[0].Ways[1]));
-    }
-
-    /// <summary>⚠️ 関門を通っても**ステは減らない**。
-    ///
-    /// ⚠️ 払って減らす形にしていたら、2本とも関門付きなので払い切って行き止まりになり、
-    /// 詰みが 63% 出た。⭐ 分岐では**道の長さそのものが代価**（2026-08-20 の実測）。</summary>
-    [Fact]
-    public void 関門を通ってもステは減らない()
-    {
-        var trail = Ladder(gap: 0, shortLen: 1, longLen: 3, nearReq: 500, farReq: 100);
+        var trail = Ladder(gap: 0, shortLen: 1, longLen: 3, nearReq: 500, farReq: 1);
         var raid = AtHub(trail, Rich());
-        var before = raid.Pool;
-        Trails.Go(raid, new[] { raid.At, trail.Squares[raid.At].Ways[0].To });
-        Assert.Equal(before.Atk, raid.Pool.Atk);
-        Assert.Equal(before.Hp, raid.Pool.Hp);
-        Assert.Equal(before.Def, raid.Pool.Def);
+        int gate = trail.Squares[0].Ways[0].To;
+        int rolls = raid.Rolls;
+        int had = Trails.Usable(raid, StatKey.Atk);
+
+        Trails.Go(raid, new[] { raid.At, gate });
+        Trails.Pay(raid);
+
+        Assert.Equal(rolls + 1, raid.Rolls);
+        Assert.Equal(had - 500, Trails.Usable(raid, StatKey.Atk));
+        // ⚠️ 財布そのものは動かさない（使ったぶんは別に持つ）
+        Assert.Equal(9999, raid.Pool.Atk);
+        Assert.Equal(500, raid.Spent.Atk);
     }
 
-    /// <summary>⚠️ どの道も通れなければ、そこで見つかる。</summary>
+    /// <summary>⭐ **払わなければ、何も起きずに進む。**</summary>
     [Fact]
-    public void どの道も通れなければ見つかる()
+    public void 払わなければ何も起きない()
     {
-        var trail = Ladder(gap: 2, shortLen: 1, longLen: 3,
-            nearReq: 999_999, farReq: 999_999);
-        var raid = new Raid(trail, Party(), rolls: 9, pool: new StatBlock(1, 1, 1, 0));
-        Advance(raid, 2);
-        Assert.Equal(StealOutcome.Blocked, raid.Result);
-        Assert.Equal(RaidStep.Caught, raid.Step);
+        var trail = Ladder(gap: 0, shortLen: 1, longLen: 3, nearReq: 500, farReq: 1);
+        var raid = AtHub(trail, Rich());
+        int rolls = raid.Rolls;
+
+        Trails.Go(raid, new[] { raid.At, trail.Squares[0].Ways[0].To });
+        Assert.Equal(RaidStep.Moved, Trails.Pass(raid));
+        Assert.Equal(rolls, raid.Rolls);
+        Assert.Equal(0, raid.Spent.Atk);
+    }
+
+    /// <summary>⚠️ **同じ関門で二度は払えない。**</summary>
+    [Fact]
+    public void 同じ関門で二度は払えない()
+    {
+        var trail = Ladder(gap: 0, shortLen: 1, longLen: 3, nearReq: 500, farReq: 1);
+        var raid = AtHub(trail, Rich());
+        int gate = trail.Squares[0].Ways[0].To;
+        Trails.Go(raid, new[] { raid.At, gate });
+        Trails.Pay(raid);
+        Assert.False(Trails.CanPay(raid, gate));
+    }
+
+    /// <summary>⭐ **距離をもらうと、振らずにもう一度選べる。**
+    /// ⚠️ 画面に新しい仕掛けが要らないよう、行ける先を並べる段（Choosing）へ戻す。</summary>
+    [Fact]
+    public void 距離をもらうと振らずにもう一度進める()
+    {
+        var squares = new List<Square>();
+        for (int i = 0; i < 12; i++) squares.Add(new Square());
+        squares[1] = Hopper(GimmickKind.Wall, 100, hop: 3);
+        for (int i = 0; i + 1 < 12; i++) squares[i].Ways.Add(new Way(i + 1));
+        var trail = new Trail(squares, 1, new List<int>());
+
+        var raid = AtHub(trail, Rich());
+        int rolls = raid.Rolls;
+        Trails.Go(raid, new[] { 0, 1 });
+        Assert.Equal(RaidStep.Choosing, Trails.Pay(raid));
+        Assert.Equal(3, raid.Pending);
+        Assert.Equal(rolls, raid.Rolls);          // ⚠️ 回数は使っていない
+
+        Trails.Go(raid, Trails.Reach(raid, raid.Pending)[0]);
+        Assert.Equal(4, raid.At);                 // ⭐ 1 → 4 へ3マス
     }
 
     // ── 一時的な増減 ──────────────────────────────
 
-    /// <summary>⭐ ▲ は**閉じていた道を開ける**。⚠️ ここが遠回りの取り柄。</summary>
+    /// <summary>⭐ ▲ は**払えなかった関門を払えるようにする**。
+    /// ⚠️ ここが「▲ に止まりたい」の中身（2026-08-21）。</summary>
     [Fact]
-    public void 増減で通れる道が変わる()
+    public void 増減で払える関門が変わる()
     {
         var trail = Ladder(gap: 0, shortLen: 1, longLen: 3, nearReq: 1200, farReq: 100);
         var raid = AtHub(trail, new StatBlock(999, 1000, 999, 0));
-        Assert.False(Trails.CanPass(raid, trail.Squares[0].Ways[0]));
+        int gate = trail.Squares[0].Ways[0].To;
+        Assert.False(Trails.CanPay(raid, gate));
 
         raid.Temp = raid.Temp.With(StatKey.Atk, 30);
         raid.TempLeft = raid.TempLeft.With(StatKey.Atk, 3);
-        Assert.True(Trails.CanPass(raid, trail.Squares[0].Ways[0]));    // 1000 × 1.3 = 1300
+        Assert.True(Trails.CanPay(raid, gate));      // 1000 × 1.3 = 1300
 
-        // ⚠️ ▼ なら逆に閉じる
+        // ⚠️ ▼ なら逆に届かなくなる
         raid.Temp = raid.Temp.With(StatKey.Atk, -30);
-        Assert.False(Trails.CanPass(raid, trail.Squares[0].Ways[0]));
+        Assert.False(Trails.CanPay(raid, gate));
     }
 
     /// <summary>⚠️ 増減は振った回数で切れる。</summary>
@@ -391,7 +591,7 @@ public class TrailTests
     {
         var trail = Line(20, new Dictionary<int, Square>
         {
-            [1] = new Square(SquareKind.Boon, StatKey.Atk, 50, 2),
+            [1] = Swing(StatKey.Atk, 50, 2),
         });
         var raid = new Raid(trail, Party(), rolls: 20, pool: Rich());
 
@@ -412,8 +612,8 @@ public class TrailTests
     {
         var trail = Line(20, new Dictionary<int, Square>
         {
-            [1] = new Square(SquareKind.Boon, StatKey.Atk, 50, 5),
-            [2] = new Square(SquareKind.Boon, StatKey.Def, 50, 5),
+            [1] = Swing(StatKey.Atk, 50, 5),
+            [2] = Swing(StatKey.Def, 50, 5),
         });
         var raid = new Raid(trail, Party(), rolls: 20, pool: Rich());
         Advance(raid, 2);                      // 1 を通り抜けて 2 に止まる
@@ -427,7 +627,7 @@ public class TrailTests
     [Fact]
     public void 雑魚は呼び側が決着させる()
     {
-        var trail = Line(20, new Dictionary<int, Square> { [1] = new Square(SquareKind.Mob) });
+        var trail = Line(20, new Dictionary<int, Square> { [1] = Square.Mob() });
         var raid = new Raid(trail, Party(), rolls: 3, pool: Rich());
 
         Assert.Equal(RaidStep.Met, Advance(raid, 1));
@@ -447,7 +647,7 @@ public class TrailTests
     [Fact]
     public void 振り切ったあとの雑魚は倒せば続けられる()
     {
-        var trail = Line(20, new Dictionary<int, Square> { [3] = new Square(SquareKind.Mob) });
+        var trail = Line(20, new Dictionary<int, Square> { [3] = Square.Mob() });
         var raid = new Raid(trail, Party(), rolls: 1, pool: Rich());
 
         Assert.Equal(RaidStep.Met, Advance(raid, 3));
@@ -462,7 +662,7 @@ public class TrailTests
     [Fact]
     public void 雑魚に負けたら見つかる()
     {
-        var trail = Line(20, new Dictionary<int, Square> { [1] = new Square(SquareKind.Mob) });
+        var trail = Line(20, new Dictionary<int, Square> { [1] = Square.Mob() });
         var raid = new Raid(trail, Party(), rolls: 3, pool: Rich());
         Advance(raid, 1);
         Trails.Lost(raid);
@@ -528,21 +728,21 @@ public class TrailTests
 
     /// <summary>⭐ 画面に出す「あと何マス」。⚠️ **通れる道だけ**を数える。</summary>
     [Fact]
-    public void 残りマス数は通れる道だけで数える()
+    public void 残りマス数は関門を数に入れない()
     {
-        // 近い道 2マス（攻1200 が要る）／遠い道 4マス（防100）
+        // 近い道 2マス（払い 1200）／遠い道 4マス（払い 100）
         var trail = Ladder(gap: 0, shortLen: 1, longLen: 3, nearReq: 1200, farReq: 100,
             nearGate: GimmickKind.Wall, farGate: GimmickKind.Pressure);
 
+        // ⭐ **払えても払えなくても同じ数。**関門は道を塞がないので、
+        //    残りマス数は「盤の形」だけで決まる（2026-08-21）。
         var strong = AtHub(trail, new StatBlock(999, 1500, 999, 0));
-        Assert.Equal(2, Trails.Left(strong));       // ⭐ 近い道が通れるので 2
-
         var weak = AtHub(trail, new StatBlock(999, 100, 999, 0));
-        Assert.Equal(4, Trails.Left(weak));         // ⚠️ 遠い道しか無いので 4
+        Assert.Equal(2, Trails.Left(strong));
+        Assert.Equal(2, Trails.Left(weak));
 
-        // ⭐ 道ごとの残りも出る
-        Assert.Equal(2, Trails.LeftIfTake(strong, 0));
-        Assert.Equal(4, Trails.LeftIfTake(strong, 1));
+        Assert.Equal(1, Trails.LeftFrom(trail, trail.Squares[0].Ways[0].To));
+        Assert.Equal(3, Trails.LeftFrom(trail, trail.Squares[0].Ways[1].To));
     }
 
     /// <summary>⭐ 届く見込みの端。⚠️ 端が合っていないと嘘の札になる。</summary>
@@ -576,19 +776,14 @@ public class TrailTests
         Assert.Equal(100, last);
     }
 
-    /// <summary>⭐ 道ごとの見込みは、近いほうが高い。</summary>
+    /// <summary>⭐ 卵までの最短マス数が出る。⚠️ 画面はこれを出す（%ではなく）。</summary>
     [Fact]
-    public void 道ごとの見込みは近いほうが高い()
+    public void 卵までの最短マス数が出る()
     {
         var trail = Ladder(gap: 0, shortLen: 1, longLen: 3, nearReq: 1, farReq: 1);
-        var raid = AtHub(trail, Rich(), rolls: 3);
-        raid.Pending = 0;
-
-        int near = Trails.OddsIfTake(raid, 0);
-        int far = Trails.OddsIfTake(raid, 1);
-        Assert.True(near >= far, $"近い道のほうが低い: 近{near}% 遠{far}%");
-        Assert.InRange(near, 0, 100);
-        Assert.InRange(far, 0, 100);
+        // ⭐ 入口から: 近い道（1マス）→ 合流 ＝ 2
+        Assert.Equal(2, Trails.LeftFrom(trail, 0));
+        Assert.Equal(0, Trails.LeftFrom(trail, trail.Goal));
     }
 
     // ── 道具 ─────────────────────────────────────
@@ -633,13 +828,46 @@ public class TrailTests
         int join = squares.Count;
         squares.Add(new Square());
 
-        squares[hub].Ways.Add(new Way(nearHead, nearGate, nearReq, shortLen + 1));
-        squares[hub].Ways.Add(new Way(farHead, farGate, farReq, longLen + 1));
+        // ⭐ 関門は**マス**（2026-08-20）。⚠️ 道の先頭マスを関門にする
+        if (nearReq > 0) squares[nearHead] = Gated(nearGate, nearReq);
+        if (farReq > 0) squares[farHead] = Gated(farGate, farReq);
+        squares[hub].Ways.Add(new Way(nearHead));
+        squares[hub].Ways.Add(new Way(farHead));
         for (int i = 0; i < shortLen; i++)
             squares[nearHead + i].Ways.Add(new Way(i + 1 < shortLen ? nearHead + i + 1 : join));
         for (int i = 0; i < longLen; i++)
             squares[farHead + i].Ways.Add(new Way(i + 1 < longLen ? farHead + i + 1 : join));
 
-        return new Trail(squares, 1, new List<int> { hub });
+        var made = new Trail(squares, 1, new List<int> { hub });
+        // ⚠️ 段は検査が見るので、素直に振っておく
+        for (int i = 0; i < squares.Count; i++) squares[i].Row = Depth(made, i);
+        return made;
+    }
+
+    /// <summary>関門のマス。⭐ 払うと**振れる回数 +1**。</summary>
+    private static Square Gated(GimmickKind gate, int price, int grade = 1) =>
+        Square.Gate(new Toll(gate, price, grade), new Gift(GiftKind.Rolls, 1));
+
+    /// <summary>関門のマス。⭐ 払うと**その場で N マス進める**。</summary>
+    private static Square Hopper(GimmickKind gate, int price, int hop) =>
+        Square.Gate(new Toll(gate, price, 1), new Gift(GiftKind.Hop, hop));
+
+    /// <summary>▲ / ▼ のマス。</summary>
+    private static Square Swing(StatKey key, int percent, int turns) =>
+        Square.Swing(key, percent, turns);
+
+    /// <summary>入口からの段（一番短い辿り方）。</summary>
+    private static int Depth(Trail trail, int at)
+    {
+        var deep = new int[trail.Count];
+        for (int i = 0; i < trail.Count; i++) deep[i] = -1;
+        deep[0] = 0;
+        for (int i = 0; i < trail.Count; i++)
+        {
+            if (deep[i] < 0) continue;
+            foreach (var way in trail.Squares[i].Ways)
+                if (deep[way.To] < 0 || deep[i] + 1 < deep[way.To]) deep[way.To] = deep[i] + 1;
+        }
+        return deep[at] < 0 ? 0 : deep[at];
     }
 }

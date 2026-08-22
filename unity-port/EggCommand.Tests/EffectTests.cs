@@ -416,7 +416,7 @@ public class EffectTests
         Assert.Equal(60 + gap, vsEven);
     }
 
-    /// <summary>⚠️ 属性は**弱化にだけ**効く。回復や盾を属性で外させない。</summary>
+    /// <summary>⚠️ 属性は**弱化にだけ**効く。⭐ 回復や盾はそもそも外れない（2026-08-21）。</summary>
     [Fact]
     public void 属性は自分に掛けるものには効かない()
     {
@@ -427,7 +427,7 @@ public class EffectTests
         var foe = s.Units.Find(u => u.Side == Side.Enemy)!;
 
         var boon = Effect.Shield(2, chance: 70);
-        Assert.Equal(70, Battle.LandChanceOf(boon, me, foe));
+        Assert.Equal(100, Battle.LandChanceOf(boon, me, foe));
     }
 
     /// <summary>⚠️ 速度差と足し算で重なる。⭐ 床と天井を越えないこと。</summary>

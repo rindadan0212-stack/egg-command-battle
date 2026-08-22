@@ -88,6 +88,8 @@ namespace EggCommand.Sim
             // ⭐ 特性が割り込める場面
             Words(j, "whens", Traits.LabelOf, (TraitWhen[])Enum.GetValues(typeof(TraitWhen)));
 
+            // ⭐ ドットの色番号は Core が決める（画面に書き写さない）
+            j.Append("\"dotDigits\":").Append(Str(PixelSprite.Digits)).Append(',');
             j.Append("\"freeKind\":").Append(Str(Sheet.FreeKind)).Append(',');
             j.Append("\"memoKey\":").Append(Str(Sheet.MemoKey)).Append(',');
             j.Append("\"headSkill\":").Append(Str(Sheet.SkillHead())).Append(',');
@@ -438,9 +440,10 @@ label{display:block;font-size:12px;color:var(--dim);margin-bottom:3px}
 
 /* ドット */
 .dotwrap{display:flex;gap:22px;flex-wrap:wrap}
-#dot{display:grid;grid-template-columns:repeat(16,20px);gap:1px;background:var(--line);
+/* ⚠️ 列の数と升の大きさは JS が入れる（16 と 64 の両方が来るため） */
+#dot{display:grid;gap:1px;background:var(--line);
  padding:1px;width:max-content;touch-action:none}
-#dot i{width:20px;height:20px;display:block;cursor:crosshair}
+#dot i{display:block;cursor:crosshair}
 .pens{display:flex;flex-direction:column;gap:8px}
 .pen{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--dim);
  padding:3px 8px 3px 3px;border-radius:14px}
@@ -642,7 +645,7 @@ function toSpecies(b){
   //    左上16×16に切り詰められ、保存でそれが書かれていた（2026-08-19 の監査）。
   let sprite=b._grid.slice();
   const odd = sprite.length!==16 || sprite.some(r=>r.length!==16);
-  if(!sprite.length) sprite=Array.from({length:16},()=>'.'.repeat(16));
+  if(!sprite.length) sprite=Array.from({length:16},()=>'.'.repeat(16));   // ⭐ 新しい種族は 16×16 から
   const pals=many(b,'色').map(v=>v.split(/ +/).filter(x=>x.startsWith('#')));
   return {id:b.id, name:one(b,'名前',''), skill1:one(b,'枠1',''), base:base,
     slot2:pool(one(b,'枠2','')), slot3:pool(one(b,'枠3','')),
@@ -1213,21 +1216,26 @@ function drawSpecies(){
   const wrap=el('div','dotwrap');
   const grid=el('div'); grid.id='dot';
   const pal=p.palettes[0]||['#000','#888','#ccc','#fff'];
+  // ⭐ **大きさは絵から読む**（16 と 64 の両方が来る）。⚠️ 16 を焼き付けない
+  const N=p.sprite.length, CELL=Math.max(6,Math.floor(320/N));
+  const DIG=D.dotDigits||'123456789abcdef';
+  grid.style.gridTemplateColumns='repeat('+N+','+CELL+'px)';
   let pen=window.__pen===undefined?2:window.__pen;
   let down=false, dirty=false;
   const cells=[];
-  const tint=ch=>ch==='.'?'var(--bg)':(pal[+ch-1]||'#f0f');
+  const tint=ch=>ch==='.'?'var(--bg)':(pal[DIG.indexOf(ch)]||'#f0f');
   const paint=(x,y)=>{
-    const ch=pen===0?'.':String(pen);
+    const ch=pen===0?'.':DIG[pen-1];
     if(p.sprite[y][x]===ch) return;
     const r=p.sprite[y].split(''); r[x]=ch; p.sprite[y]=r.join('');
-    cells[y*16+x].style.background=tint(ch);
+    cells[y*N+x].style.background=tint(ch);
     dirty=true; drawPrev();
   };
   function redrawDot(){
     grid.innerHTML=''; cells.length=0;
-    for(let y=0;y<16;y++) for(let x=0;x<16;x++){
+    for(let y=0;y<N;y++) for(let x=0;x<N;x++){
       const i=el('i');
+      i.style.width=CELL+'px'; i.style.height=CELL+'px';
       i.style.background=tint(p.sprite[y][x]);
       i.onpointerdown=ev=>{ev.preventDefault();down=true;paint(x,y);};
       i.onpointerenter=()=>{if(down)paint(x,y);};
@@ -1237,8 +1245,12 @@ function drawSpecies(){
   }
   document.onpointerup=()=>{ down=false; if(dirty){dirty=false;draw();} };
   const pens=el('div','pens');
-  [[0,'透明','var(--bg)'],[1,'輪郭',pal[0]],[2,'体',pal[1]],[3,'差し色',pal[2]],[4,'目',pal[3]]]
-   .forEach(([n,lab,col])=>{
+  // ⭐ **筆は色の数だけ並べる**（4色の種族は4本・11色の種族は11本）。
+  // ⚠️ 名前が付くのは 16×16 の決めごと（1=輪郭 2=体 3=差し色 4=目）の4本まで
+  const NAMED=['輪郭','体','差し色','目'];
+  const penList=[[0,'透明','var(--bg)']];
+  for(let n=1;n<=pal.length;n++) penList.push([n,NAMED[n-1]||DIG[n-1],pal[n-1]]);
+  penList.forEach(([n,lab,col])=>{
     const b=el('div','pen'); b.setAttribute('aria-pressed',pen===n?'true':'false');
     const sw=el('s'); sw.style.background=col; if(n===0)sw.style.boxShadow='inset 0 0 0 2px var(--line)';
     b.append(sw,document.createTextNode(lab));
@@ -1246,23 +1258,25 @@ function drawSpecies(){
     pens.append(b);
   });
   const side=el('div');
-  const pv=el('canvas'); pv.id='prev'; pv.width=16; pv.height=16;
+  const pv=el('canvas'); pv.id='prev'; pv.width=N; pv.height=N;
   function drawPrev(){
-    const g2=pv.getContext('2d'); g2.clearRect(0,0,16,16);
-    for(let y=0;y<16;y++) for(let x=0;x<16;x++){
+    const g2=pv.getContext('2d'); g2.clearRect(0,0,N,N);
+    for(let y=0;y<N;y++) for(let x=0;x<N;x++){
       const ch=p.sprite[y][x]; if(ch==='.') continue;
-      g2.fillStyle=pal[+ch-1]||'#f0f'; g2.fillRect(x,y,1,1);
+      g2.fillStyle=pal[DIG.indexOf(ch)]||'#f0f'; g2.fillRect(x,y,1,1);
     }
   }
   const tools=el('div'); tools.style.marginTop='10px';
   const clr=el('button','mini'); clr.textContent='全部消す';
-  clr.onclick=()=>{p.sprite=Array.from({length:16},()=>'.'.repeat(16));draw();};
+  clr.onclick=()=>{p.sprite=Array.from({length:N},()=>'.'.repeat(N));draw();};
   const flip=el('button','mini'); flip.textContent='左右反転'; flip.style.marginLeft='6px';
   flip.onclick=()=>{p.sprite=p.sprite.map(r=>r.split('').reverse().join(''));draw();};
   tools.append(clr,flip);
   side.append(pv,tools);
   wrap.append(grid,pens,side); c3.append(wrap);
-  const hint=el('p','hint'); hint.textContent='⭐ 1=輪郭 2=体 3=差し色 4=目。色は下の1組目が塗りに使われます';
+  const hint=el('p','hint');
+  hint.textContent=N+'×'+N+'・色'+pal.length+'。⭐ 色は下の1組目が塗りに使われます'
+    +(pal.length===4?'（1=輪郭 2=体 3=差し色 4=目）':'');
   c3.append(hint); m.append(c3);
   redrawDot();
 
@@ -1281,6 +1295,7 @@ function drawSpecies(){
     r.append(lab,rm); c4.append(r);
   });
   const addp=el('button','mini'); addp.textContent='＋ 色を足す';
+  // ⚠️ **1組目と同じ長さで足す。**⭐ 数が揃っていないと、変異させた瞬間に落ちる
   addp.onclick=()=>{p.palettes.push([...(p.palettes[0]||['#000000','#888888','#cccccc','#ffffff'])]);draw();};
   c4.append(addp); m.append(c4);
 

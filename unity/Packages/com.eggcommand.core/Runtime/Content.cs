@@ -26,6 +26,7 @@ namespace EggCommand.Core
             Nests.Audit();
             Encounters.Audit();
             Traits.Audit();
+            Trials.Audit();
         }
     }
 }

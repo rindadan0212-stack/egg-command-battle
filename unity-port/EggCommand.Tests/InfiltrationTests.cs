@@ -19,6 +19,28 @@ public class InfiltrationTests
 
     private static int SpdOf(Creature c) => Creatures.StatsOf(c).Spd;
 
+    // ── 巣の寿命 ─────────────────────────────────
+    /// <summary>⚠️ **塞ぐ回数と、隙間が閉じる回数がずれていないか。**
+    ///
+    /// ⭐ <see cref="Steal.IsSealed"/> は 2026-08-21 まで**隙間の幾何**で決まっていた
+    /// （弾いて飛ばす遊びの数）。⚠️ すごろくはその盤を1マスも使わないのに、
+    /// 巣の寿命という**遊びの芯**がそこにぶら下がっていた。
+    ///
+    /// ⭐ 回数で書き直したので、いまはこの検査が「幾何のほうも壊れていないか」を見る。
+    /// ⚠️ 落ちたら、弾いて飛ばす遊びのほうで**塞ぐ前に通れなくなっている**
+    /// （＝そちらが遊べない）。⭐ 数を戻すのではなく、どちらが正か決めてから直すこと。</summary>
+    [Fact]
+    public void 塞ぐ回数と隙間が閉じる回数が一致する()
+    {
+        for (int raids = 0; raids <= Steal.RaidsToSeal + 2; raids++)
+        {
+            bool shut = Steal.GapWidthFor(raids) <= Steal.RunnerRadius * 2;
+            Assert.True(shut == raids >= Steal.RaidsToSeal,
+                $"盗んだ回数 {raids}: 隙間 {Steal.GapWidthFor(raids):0.0} / 走者 "
+                + $"{Steal.RunnerRadius * 2:0.0} ── 幾何と回数が食い違っている");
+        }
+    }
+
     // ── 飛距離が個体ごとになった ─────────────────────
 
     /// <summary>⭐ 課題「3体ぶんの速さで1体が飛ぶ理屈が画面から読めない」への答え。</summary>

@@ -157,6 +157,45 @@ public class SnapshotTests
         Assert.Equal(a, b);
     }
 
+    /// <summary>⚠️ **乱数の系統を足しても、古い保存が読めるか。**
+    ///
+    /// ⭐ 系統は前から4語ずつ当てて、足りなくなったら止める作りなので、
+    /// **末尾に足すかぎり**古い保存もそのまま読める（足した系統は初期状態のまま）。
+    /// ⚠️ 途中へ挿すと、そこから後ろの系統が**全部ずれる** ── 卵の続きが巣の続きになる。
+    ///
+    /// ⭐ 2026-08-21 に `RngBattle` を足したときの決まりを、ここで押さえる。</summary>
+    [Fact]
+    public void 乱数の系統を足しても古い保存が読める()
+    {
+        var game = Played();
+        var save = Snapshots.Save(game);
+        // ⭐ 古い保存を真似る ── 末尾の1系統ぶん（4語）を削る
+        Assert.True(save.Rng.Count >= 8);
+        save.Rng.RemoveRange(save.Rng.Count - 4, 4);
+
+        var back = Snapshots.Load(save);
+        Assert.NotNull(back);
+        Assert.Equal(game.Seed, back!.Seed);
+        Assert.Equal(game.Storage.Creatures.Count, back.Storage.Creatures.Count);
+        // ⚠️ 削らなかった系統は今までどおり続きから引ける
+        Assert.Equal(game.RngEgg.U32Value(), back.RngEgg.U32Value());
+    }
+
+    /// <summary>⭐ **戦闘の運は、卵や巣と混ざらない。**
+    /// ⚠️ 混ざると、戦っただけで次に出る卵が変わる。</summary>
+    [Fact]
+    public void 戦闘の乱数は他の系統と別々に進む()
+    {
+        var game = new Game(1234);
+        uint eggBefore = game.RngEgg.U32Value();
+        for (int i = 0; i < 50; i++) game.RngBattle.U32Value();
+
+        var same = new Game(1234);
+        same.RngEgg.U32Value();
+        Assert.Equal(game.RngEgg.U32Value(), same.RngEgg.U32Value());
+        Assert.NotEqual(eggBefore, game.RngBattle.U32Value());
+    }
+
     [Fact]
     public void 保存しないと同じ卵が出てしまう()
     {

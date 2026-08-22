@@ -24,6 +24,18 @@ namespace EggCommand.Core
         public readonly string Name;
         /// <summary>種族固定のスキル枠1。</summary>
         public readonly string Skill1;
+
+        /// <summary>⭐ **この種族の特性**（<see cref="Traits"/> の id）。
+        ///
+        /// ⚠️ 2026-08-21 まで**個体ごとに引いていた**（作者の指摘で戻した）。
+        /// 引いていた頃の問題は、種族が「見た目と骨格」でしかなくなること ──
+        /// 同じツノガでも中身が14通りあるので、⭐ **顔を見ても何をする相手か分からない**。
+        /// 特性を種族に貼ると、巣を選ぶ理由（どの技袋が欲しいか）に
+        /// 「どの特性が欲しいか」が重なって、1つの判断になる。
+        ///
+        /// ⚠️ **null にしない。**持たない種族を作ると、そこだけ特性の軸が消える。
+        /// ⚠️ 種族どうしで**重ねない**（<see cref="Faults"/> が落とす）。</summary>
+        public readonly string TraitId;
         /// <summary>⚠️ 合計は <see cref="SpeciesTable.BaseTotal"/> に揃える。差は配分で出す。</summary>
         public readonly StatBlock Base;
         public readonly PixelSprite Sprite;
@@ -34,12 +46,13 @@ namespace EggCommand.Core
         /// <summary>枠3 に出うる技。⚠️ 枠2 と**別の型**にする（同じ型だと分けた意味が無い）。</summary>
         public readonly SkillPool Slot3;
 
-        public Species(string id, string name, string skill1, StatBlock baseStats,
+        public Species(string id, string name, string skill1, string traitId, StatBlock baseStats,
             PixelSprite sprite, IReadOnlyList<Palette> palettes, SkillPool slot2, SkillPool slot3)
         {
             Id = id;
             Name = name;
             Skill1 = skill1;
+            TraitId = traitId;
             Base = baseStats;
             Sprite = sprite;
             Palettes = palettes;
@@ -88,6 +101,7 @@ namespace EggCommand.Core
     /// |---|---|
     /// | 見た目（ドット + パレット） | ステの野生レベル |
     /// | スキル1（種族固定枠） | **属性**（3すくみ） |
+    /// | **特性**（2026-08-21・作者の指示） | 得意・不得意 |
     /// | 基礎値の**配分** | スキル2・3 |
     /// | | 育てた分 |
     ///
@@ -123,6 +137,28 @@ namespace EggCommand.Core
         /// ⚠️ 専用の系統（RngElement）で引くこと。既にある系統に混ぜると列がずれる。</summary>
         public static Element Roll(Rng rng) => Elements[rng.Int(0, Elements.Length)];
 
+        /// <summary>変わった色が出る確率。⭐ **卵1つにつき1回**（2026-08-21・作者の指示）。
+        ///
+        /// ⚠️ 2026-08-21 まで「配合で変異が出たときだけ」だった。⭐ そのため
+        /// **巣で拾った卵は一生ふつうの色**で、色が配合の副産物でしかなかった。
+        /// ⭐ 孵るたびに引くようにすると、拾った卵にも「開けてみるまで分からない」が乗る。
+        ///
+        /// ⚠️ 代（世代）とは関係しない ── 深い血統ほど出る、にはしない。
+        /// 深いほど出るなら、それは結局「配合の副産物」に戻る。</summary>
+        public const double VariantChance = 0.05;
+
+        /// <summary>その種族の色を1つ引く。⭐ 0 は通常色、1以降が変わった色。
+        ///
+        /// ⚠️ **専用の系統（RngPalette）で引くこと。**⭐ 孵化の系統に混ぜると
+        /// 技のガチャの列がずれて、較正済みの検査が無効になる。</summary>
+        public static int RollPalette(Rng rng, string speciesId)
+        {
+            var species = ById(speciesId);
+            if (species.Palettes.Count < 2) return 0;
+            if (!rng.Chance(VariantChance)) return 0;
+            return rng.Int(1, species.Palettes.Count);
+        }
+
         /// <summary>有利を取る相手。炎 → 木 → 水 → 炎。</summary>
         public static Element Beats(Element element)
         {
@@ -154,25 +190,83 @@ namespace EggCommand.Core
         // 文字の格子で持つ。テキストのまま人が手で直せる。
         // 1=輪郭 2=体 3=差し色 4=目
 
-        /// <summary>タマル — 丸い。殻を思わせる。</summary>
+        /// <summary>タマル — 殻をかぶった緑の子。⭐ **作者が描いたもの**（2026-08-21 に差し替え）。
+        ///
+        /// ⚠️ ここだけ **64×64・11色**。他の10種族は 16×16・4色のまま。
+        /// ⭐ 画面はどれも同じ枠に伸ばして描くので、大きさが違っても並びは崩れない
+        /// ── 変わるのは細かさだけ。
+        ///
+        /// ⚠️ **手で直さない。**元の絵（`S__4055055.jpg` / 512×512・8px 格子）から
+        /// 落としたもの。直すなら元の絵を直して、また落とすこと。
+        ///
+        /// 添字: 1=体 2=殻 3=体の陰 4=殻の斑 5=殻の中間 6=印
+        ///       7=刃 8=柄 9=背びれ a=目 b=光</summary>
         private static readonly PixelSprite TamaruSprite = PixelSprite.Parse(new[]
         {
-            "................",
-            "................",
-            ".....111111.....",
-            "...1122222211...",
-            "..112222222211..",
-            ".11332222222211.",
-            ".12332222222221.",
-            ".12222222222221.",
-            ".12244222244221.",
-            ".12244222244221.",
-            ".12222222222221.",
-            ".11222222222211.",
-            "..112222222211..",
-            "...1122222211...",
-            "....11111111....",
-            "................",
+            "............................22222222222222......................",
+            "..........................222222222222222222....................",
+            "........................222242222222224422222...................",
+            ".......................22224442222222444222222..................",
+            "......................2222244422222224422222222.................",
+            ".....................222224444222222222222266622................",
+            "....................22222244422222222222222666222...............",
+            "...................2222222222222222222222666666622..............",
+            "..................222222222222222222222226666666222.............",
+            "..................222442222222222222222226666666222.............",
+            "..................2244422222222242222222222666222224............",
+            ".................222444422222224422222222226662222442...........",
+            ".................222244422222222222222222222222222442...........",
+            ".................222244422222222222222224422222222442...........",
+            ".................222222222222242222222244422222222222...........",
+            ".................222222222222444222222224222222222222...........",
+            ".................442222222224444222222222222244222222...........",
+            ".................44422222222444423222222232244422222............",
+            "..................4442233222444333322222333244423222............",
+            "..................444233322224333333222331334423332.............",
+            "...................4233133222333113332331113323133..............",
+            "...................23311133233111111aa311111331aa3..............",
+            "....................311111333111111aaaa11111113333333...........",
+            "....................1111111111111111aa1111133311111113..........",
+            "....................11111111111111111111133111111111113.........",
+            "....................111111111111111111113111113311113113........",
+            "...................9111131111111111111111111111131131113........",
+            "..................99111131111111111111111111111111111113........",
+            "...................9111131111133111111111111111111111113........",
+            "....................111133111111311111111111111111111113........",
+            "....................111133111111131111111111111111111113........",
+            "...................9111133111111113111111111111111111113........",
+            "..................991111331111111131111b1111111111111113........",
+            "...................9111133111111111311bb1111111111111113........",
+            "....................111133111111111311bb1111111111111113........",
+            "....................11113311111111133333333333333111113.........",
+            "....................1111111111111111111111111111133333..........",
+            "...................91111113311111111111111111111111113..........",
+            "..................99111111133333333333333333333333333...........",
+            "...................9111111113333333333335555555555..............",
+            "....................111111113111111111112222222222..............",
+            "....................111111131111311111115552222555..............",
+            "....................111111311113311111112225555222..............",
+            "....3............991111113111133111111112222222222..............",
+            "...313...........911111113111331111111112222222222..............",
+            "...3113..........111111131111331111111112222222222..............",
+            "...31113..9...991111111131111331111771115552222555..............",
+            "....3111399...911111111131111331111177112225555222..............",
+            "....3111111333111111111113111133111177712222222222..............",
+            "....3311111111111111111131111133111177712222222222..............",
+            "....3311111111111111111311111113311177712222222222..............",
+            ".....33111111111888888831111111388887788555222255...............",
+            ".....3311111111388888883111111138888778822255552................",
+            "......331111111333333333311111333333777122222222................",
+            "......33111111111111111113111333113377722222222.................",
+            ".......331111111111111113133333111137772222222..................",
+            "........3311111111111111311111111113775552222...................",
+            ".........331111111111111331111111117722225555...................",
+            "..........3311111111112523111111111352222222....................",
+            "...........33111111522225331111111335222222.....................",
+            "............33332222522252331111113555555.......................",
+            ".............3355555555555333111133333333.......................",
+            ".........................333311111133333333.....................",
+            "..........................333111111113333333....................",
         });
 
         /// <summary>キバネ — 尖った耳と、下に覗く牙。止める側の顔。</summary>
@@ -392,12 +486,17 @@ namespace EggCommand.Core
             "................",
         });
 
+        /// <summary>タマルの色。⚠️ **11色ぶん**（意匠が 64×64 になったため）。
+        ///
+        /// ⭐ 変異色は通常色の**色相を回しただけ**（蒼 +162° / 紅 +259° / 金 +47°）。
+        /// ⚠️ 無彩色（目の黒・光の白・刃の灰）は回さない ── 回すと目が色づいて顔が濁る。
+        /// ⭐ 手で置き直してよいが、**11色すべて**揃えること（足りないと描いた瞬間に落ちる）。</summary>
         private static readonly Palette[] TamaruPalettes =
         {
-            new Palette("#2e2418", "#8fc96e", "#c8eaa8", "#1a1410"), // 通常
-            new Palette("#1c2436", "#6e9ec9", "#a8cbea", "#101418"), // 変異・蒼
-            new Palette("#361c22", "#c96e7f", "#eaa8b4", "#181012"), // 変異・紅
-            new Palette("#2e2a18", "#c9bd6e", "#eae0a8", "#1a1810"), // 変異・金
+            new Palette("#00fe01", "#fefc01", "#00c862", "#8c8504", "#c3bc01", "#ff7e00", "#7f807f", "#553e00", "#b31a00", "#000000", "#fefeff"), // 通常
+            new Palette("#b300fe", "#014ffe", "#c800a2", "#04348c", "#0142c3", "#00cdff", "#7f807f", "#003155", "#00b397", "#000000", "#fffffe"), // 変異・蒼
+            new Palette("#fe5200", "#fe01af", "#c8a200", "#8c0467", "#c3018c", "#d000ff", "#7f807f", "#550051", "#5300b3", "#000000", "#fefffe"), // 変異・紅
+            new Palette("#00fec7", "#3bfe01", "#0092c8", "#298c04", "#33c301", "#b9ff00", "#7f807f", "#2a5500", "#b3a600", "#000000", "#fffeff"), // 変異・金
         };
 
         private static readonly Palette[] KibanePalettes =
@@ -487,13 +586,13 @@ namespace EggCommand.Core
             // ⭐ 型を種族の看板にすると、巣を選ぶ理由が「どの型が欲しいか」になる。
             // ⚠️ 型は技に手で書かない（Skills.TypeOf が効果から導く）。ここで嘘を書くと Audit が落とす。
 
-            new Species("tamaru", "タマル", "attack-def", // 防御スケール
+            new Species("tamaru", "タマル", "attack-def", Traits.Grit, // 防御スケール
                 new StatBlock(120, 90, 110, 80, 90, 110), TamaruSprite, TamaruPalettes,
                 // 守り ── 固めて、癒す
                 new SkillPool("shield", "guts", "harden"),
                 new SkillPool("regen", "heal-big")),
 
-            new Species("tsunoga", "ツノガ", "attack", // 攻撃スケール・単体
+            new Species("tsunoga", "ツノガ", "attack", Traits.Pursuit, // 攻撃スケール・単体
                 new StatBlock(110, 120, 90, 80, 120, 80), TsunogaSprite, TsunogaPalettes,
                 // 攻め ── 殴って、崩す
                 new SkillPool("attack-heavy", "attack-def", "attack-def-twice", "attack-all"),
@@ -502,7 +601,7 @@ namespace EggCommand.Core
             // ⚠️ 枠1 は "attack-all" だった。⭐ **枠1＝通常攻撃**と定めたので差し替えた（2026-08-17）。
             //    全体攻撃が CT 0 で毎手番飛ぶのは通常攻撃ではないし、実害も出た
             //    （「手数」の特性が対象数ぶん効いて、毎行動 CT が3ずつ減っていた）。
-            new Species("haneru", "ハネル", "attack-twice", // 速さで手数を稼ぐ
+            new Species("haneru", "ハネル", "attack-twice", Traits.Aim, // 速さで手数を稼ぐ
                 new StatBlock(100, 90, 80, 130, 120, 80), HaneruSprite, HaneruPalettes,
                 // 撹乱 ── 止めて、逃げる
                 new SkillPool("spd-down", "atk-down", "ct-long", "taunt", "bulwark"),
@@ -511,7 +610,7 @@ namespace EggCommand.Core
             // ── 増やしたぶん（2026-08-17）。⚠️ 絵は仮 ─────────────
             // ⭐ 基礎値の合計は全種族 120 で揃える（差は配分だけ）。
 
-            new Species("nobiru", "ノビル", "attack-twice", // 多段・攻撃スケール
+            new Species("nobiru", "ノビル", "attack-twice", Traits.Flurry, // 多段・攻撃スケール
                 new StatBlock(90, 110, 80, 120, 110, 90), NobiruSprite, NobiruPalettes,
                 // 削り ── 手数で押して、自分を速くする
                 new SkillPool("attack-thrice", "pierce-strike", "venom-fang"),
@@ -519,19 +618,19 @@ namespace EggCommand.Core
 
             // ⚠️ 最初は枠1を防御スケールにしていたら、総合勝率 81.1% で突出した。
             //    防御寄りの配分と防御スケールが重なって**防御を二重に得**にしていた。
-            new Species("hirabe", "ヒラベ", "attack", // 攻撃スケール。硬いが攻めは細い
+            new Species("hirabe", "ヒラベ", "attack", Traits.Stubborn, // 攻撃スケール。硬いが攻めは細い
                 new StatBlock(130, 70, 130, 70, 70, 130), HirabeSprite, HirabePalettes,
                 // 壁 ── 立て直して、耐える
                 new SkillPool("heal-big", "revive"),
                 new SkillPool("shield-wall", "guts-deep", "immune-long")),
 
-            new Species("togeru", "トゲル", "attack", // 削って待つ
+            new Species("togeru", "トゲル", "attack", Traits.Surge, // 削って待つ
                 new StatBlock(100, 120, 100, 80, 130, 70), TogeruSprite, TogeruPalettes,
                 // 毒 ── 弱らせて、抜く
                 new SkillPool("venom-heavy", "curse", "sleep", "stun-heavy", "gauge-drain"),
                 new SkillPool("attack-twice", "crush", "venom-fang")),
 
-            new Species("marumi", "マルミ", "attack", // 素直。支える側
+            new Species("marumi", "マルミ", "attack", Traits.Opener, // 素直。支える側
                 new StatBlock(120, 80, 90, 110, 80, 120), MarumiSprite, MarumiPalettes,
                 // 支え ── 癒して、剥がす
                 new SkillPool("heal-ratio", "heal-miracle", "regen"),
@@ -543,19 +642,19 @@ namespace EggCommand.Core
             // ⭐ それぞれ、盤面を見る新しい特性のどれかと噛み合う顔にしてある:
             //    キバネ＝止める（不意打ち）/ イワオ＝崩れてから（遺志）/ ホムラ＝速さを配る
 
-            new Species("kibane", "キバネ", "attack-twice", // 手数で通す
+            new Species("kibane", "キバネ", "attack-twice", Traits.Ambush, // 手数で通す
                 new StatBlock(90, 110, 80, 120, 130, 70), KibaneSprite, KibanePalettes,
                 // 止める ── 眠らせ、痺れさせ、縛る
                 new SkillPool("stun-strike", "taunt-long", "poison-all", "stun", "sleep"),
                 new SkillPool("strip-strike", "pierce-strike")),
 
-            new Species("iwao", "イワオ", "attack-def", // 硬さがそのまま火力
+            new Species("iwao", "イワオ", "attack-def", Traits.Legacy, // 硬さがそのまま火力
                 new StatBlock(140, 85, 115, 60, 90, 110), IwaoSprite, IwaoPalettes,
                 // 重い ── 一撃が遠く、代わりに深い
                 new SkillPool("pierce-strike-heavy", "attack-all-twice", "attack-heavy", "crush"),
                 new SkillPool("guts", "harden", "def-up", "shield")),
 
-            new Species("homura", "ホムラ", "attack", // 素直に速い
+            new Species("homura", "ホムラ", "attack", Traits.Parting, // 素直に速い
                 new StatBlock(110, 95, 80, 115, 95, 105), HomuraSprite, HomuraPalettes,
                 // 配る ── 速さとゲージを味方へ
                 new SkillPool("tailwind", "gauge-boost-heavy", "def-up"),
@@ -564,7 +663,7 @@ namespace EggCommand.Core
             // ⚠️ ボス専用。巣は持たないので卵からは出ない
             // ⚠️ 枠1は CT が無いので、大技を置くと毎回撃ててしまう。
             //    震撼（CT7 の全体大技）は枠2へ回し、ここは中程度に留める。
-            new Species("nushi", "ヌシ", "attack-def",
+            new Species("nushi", "ヌシ", "attack-def", Traits.Desperation,
                 new StatBlock(130, 100, 120, 50, 100, 100), NushiSprite, NushiPalettes,
                 new SkillPool("attack-all-heavy"),
                 new SkillPool("spd-down", "taunt")),
@@ -626,6 +725,34 @@ namespace EggCommand.Core
         {
             var problems = new List<string>();
 
+            // ⭐ **特性は種族に1つずつ。**⚠️ 重ねない ── 重ねると、そのぶん
+            //    どこからも手に入らない特性が増える（気づけないまま死蔵する）。
+            var traitOwner = new Dictionary<string, string>();
+            foreach (var species in table)
+            {
+                if (!Traits.Has(species.TraitId))
+                {
+                    problems.Add($"{species.Id}: 特性 {species.TraitId} が表に無い");
+                    continue;
+                }
+                string? owner;
+                if (traitOwner.TryGetValue(species.TraitId, out owner))
+                    problems.Add($"{species.Id}: 特性 {species.TraitId} は {owner} と重なっている");
+                else traitOwner.Add(species.TraitId, species.Id);
+            }
+
+            // ⚠️ **配れていない特性を黙って増やさない。**⭐ 技の Undistributed と同じ約束
+            //    （表にあるのに誰も持てないものは、名指しで宣言しておく）。
+            foreach (var trait in Traits.All)
+            {
+                bool owned = traitOwner.ContainsKey(trait.Id);
+                bool parked = Traits.IsUnassigned(trait.Id);
+                if (!owned && !parked)
+                    problems.Add($"特性 {trait.Id} を持つ種族が無い（Traits.Unassigned にも無い）");
+                if (owned && parked)
+                    problems.Add($"特性 {trait.Id} は {traitOwner[trait.Id]} が持つのに未配布に載っている");
+            }
+
             foreach (var species in table)
             {
                 int total = Stats.TotalOf(species.Base);
@@ -655,10 +782,34 @@ namespace EggCommand.Core
                 {
                     problems.Add($"{species.Id}: パレットが無い");
                 }
-                if (species.Sprite.Width != 16 || species.Sprite.Height != 16)
+                // ⭐ **大きさは決め打ちの2つだけ**（2026-08-21 に 64 を足した）。
+                // ⚠️ 何でも通すと、次に描いた人が 24 や 40 を持ち込み、画面のどこで
+                //    どう伸びるかが種族ごとに変わる。⭐ 画面は**同じ枠に伸ばして**描くので、
+                //    変わるのは細かさだけ ── だから2段階に留める。
+                if (species.Sprite.Width != species.Sprite.Height
+                    || (species.Sprite.Width != 16 && species.Sprite.Width != 64))
                 {
                     problems.Add(
-                        $"{species.Id}: 意匠が {species.Sprite.Width}×{species.Sprite.Height}（16×16 に揃える）");
+                        $"{species.Id}: 意匠が {species.Sprite.Width}×{species.Sprite.Height}"
+                        + "（16×16 か 64×64 に揃える）");
+                }
+                // ⚠️ **姿の添字が色数を超えていないか。**⭐ 超えると、その色を描いた瞬間に
+                //    Palette.ColorOf が投げる（帳面側と同じ検査をここにも置く）。
+                int deepest = 0;
+                for (int y = 0; y < species.Sprite.Height; y++)
+                {
+                    for (int x = 0; x < species.Sprite.Width; x++)
+                    {
+                        int at = species.Sprite.At(x, y);
+                        if (at > deepest) deepest = at;
+                    }
+                }
+                foreach (var palette in species.Palettes)
+                {
+                    if (deepest <= palette.Count) continue;
+                    problems.Add(
+                        $"{species.Id}: 姿が色 {deepest} 番を使っているのに、色が {palette.Count} つしかない");
+                    break;
                 }
 
                 // ⚠️ 枠1は CT が無いので毎回撃てる。大技を置くと壊れる。

@@ -35,7 +35,8 @@ namespace EggCommand.Core
         public readonly string SpeciesId;
         public readonly StatBlock Wild;
         public readonly int MutationCounter;
-        public readonly int PaletteIndex;
+        // ⚠️ **色の欄は 2026-08-21 に外した。**⭐ 色は「孵るとき」に引くので、
+        //    卵が運ぶ必要が無い（運ばせると、引く場所が2つになる）。
         public readonly string? ParentA;
         public readonly string? ParentB;
         public readonly int Generation;
@@ -58,30 +59,34 @@ namespace EggCommand.Core
         public readonly StatKey? Strong;
         public readonly StatKey? Weak;
 
+        /// <summary>生まれつきの大得意・大不得意。⭐ <see cref="Strong"/> と同じ約束。</summary>
+        public readonly StatKey? Best;
+        public readonly StatKey? Worst;
+
         /// <summary>孵ったときの属性。⭐ 卵の時点で決まっている（孵るまでの楽しみは希少さと素質）。</summary>
         public readonly Element Element;
 
-        /// <summary>持って生まれる特性。⭐ null なら孵すときに引く（野生の卵）。
-        /// ⚠️ <see cref="HasSkills"/>・<see cref="Strong"/> と同じ約束。
-        /// 配合で親から継いだものを孵化時に引き直さない。</summary>
-        public readonly string? TraitId;
+        // ⚠️ **特性の欄は 2026-08-21 に外した。**⭐ 種族から決まるので、卵が運ぶ必要が無い
+        //    （<see cref="Creatures.TraitIdFor"/>）。運ばせていた頃は、配合で継ぐ／孵化で引く
+        //    という2つの経路があり、片方だけ直すと黙って食い違った。
 
-        public Egg(string id, string speciesId, StatBlock wild, int mutationCounter, int paletteIndex,
+        public Egg(string id, string speciesId, StatBlock wild, int mutationCounter,
             string? parentA, string? parentB, int generation, EggOrigin how,
             bool hasSkills, string? skill2, string? skill3, int rarity = 1,
             StatKey? strong = null, StatKey? weak = null, Element? element = null,
-            string? traitId = null)
+            StatKey? best = null, StatKey? worst = null)
         {
-            TraitId = traitId;
             Element = element ?? Migrations.ElementOf(speciesId);
             Rarity = rarity < 1 ? 1 : rarity > Rarities.Max ? Rarities.Max : rarity;
             Strong = strong;
             Weak = weak;
+            Best = best;
+            Worst = worst;
             Id = id;
             SpeciesId = speciesId;
             Wild = wild;
             MutationCounter = mutationCounter;
-            PaletteIndex = paletteIndex;
+
             ParentA = parentA;
             ParentB = parentB;
             Generation = generation;
@@ -205,8 +210,11 @@ namespace EggCommand.Core
 
             return new List<Creature>
             {
+                // ⭐ **敵も種族の特性を持つ**（2026-08-21）。⚠️ 持たせていなかった頃は、
+                //    特性が味方だけの一方通行で、顔ぶれを見ても何をしてくる相手か読めなかった。
                 new Creature($"{nest.Id}-0", nest.SpeciesId, wild, new StatBlock(0, 0, 0, 0), 0,
-                    0, skill2, skill3, 0, null, null, 1, null, null, element),
+                    0, skill2, skill3, 0, null, null, 1, null, null, element,
+                    Creatures.TraitIdFor(nest.SpeciesId)),
             };
         }
 
@@ -244,7 +252,7 @@ namespace EggCommand.Core
                 RollSkills23(rng, speciesId, species.Skill1, out skill2, out skill3);
                 party.Add(new Creature($"{nest.Id}-m{mob}-{i}", speciesId, wild,
                     new StatBlock(0, 0, 0, 0), 0, 0, skill2, skill3, 0, null, null, 1,
-                    null, null, element));
+                    null, null, element, Creatures.TraitIdFor(speciesId)));
             }
             return party;
         }
@@ -267,7 +275,7 @@ namespace EggCommand.Core
                 $"e{serial.ToString().PadLeft(3, '0')}",
                 nest.SpeciesId,
                 SpreadWild(rng, total),
-                0, 0, null, null, 1, how,
+                0, null, null, 1, how,
                 hasSkills: false, skill2: null, skill3: null, // 野生の卵。孵すときにガチャ
                 rarity: rarity, element: element);
         }
@@ -330,7 +338,7 @@ namespace EggCommand.Core
                 $"e{serial.ToString().PadLeft(3, '0')}",
                 nest.SpeciesId,
                 SpreadWild(rng, total),
-                0, 0, null, null, 1, how,
+                0, null, null, 1, how,
                 hasSkills: true, skill2: skill2, skill3: skill3,
                 rarity: rarity, element: element);
         }
@@ -351,11 +359,16 @@ namespace EggCommand.Core
 
         /// <summary>孵す。⭐ 野生の卵はここでスキル2・3のガチャを引く。
         /// 配合の卵は既に決まっているのでそのまま使う。</summary>
-        /// <summary><paramref name="strong"/>/<paramref name="weak"/>/<paramref name="traitId"/> は
-        /// 卵が持っていないときの引き直し結果。⚠️ ここで乱数を引かない — 引くと既にある hatch の
-        /// 系統がずれて、較正済みの検査が無効になる。呼び側が別の系統で引いて渡す。</summary>
+        /// <summary>偏り4本は、卵が持っていないときの引き直し結果。
+        /// ⚠️ ここで乱数を引かない — 引くと既にある hatch の系統がずれて、
+        /// 較正済みの検査が無効になる。呼び側が別の系統で引いて渡す。
+        /// ⚠️ **特性は受け取らない。**⭐ 種族から決まる（2026-08-21・作者の指示）。</summary>
+        /// <param name="paletteIndex">⭐ **色**（2026-08-21）。0 は通常色。
+        /// ⚠️ ここで引かない ── 呼び側が専用の系統（<c>RngPalette</c>）で引いて渡す
+        /// （<see cref="SpeciesTable.RollPalette"/>）。</param>
         public static Creature Hatch(Rng rng, Egg egg, string id,
-            StatKey? strong = null, StatKey? weak = null, string? traitId = null)
+            StatKey? strong = null, StatKey? weak = null,
+            StatKey? best = null, StatKey? worst = null, int paletteIndex = 0)
         {
             var species = SpeciesTable.ById(egg.SpeciesId);
             string? skill2 = egg.Skill2;
@@ -366,19 +379,26 @@ namespace EggCommand.Core
             }
 
             return new Creature(id, egg.SpeciesId, egg.Wild, new StatBlock(0, 0, 0, 0), 0,
-                egg.MutationCounter, skill2, skill3, egg.PaletteIndex,
+                egg.MutationCounter, skill2, skill3, paletteIndex,
                 egg.ParentA, egg.ParentB, egg.Generation,
                 egg.Strong ?? strong, egg.Weak ?? weak, egg.Element,
-                egg.TraitId ?? traitId);
+                Creatures.TraitIdFor(egg.SpeciesId), egg.Best ?? best, egg.Worst ?? worst);
         }
 
-        /// <summary>得意・不得意を引く。⚠️ 同じステにならないよう2つ別々に取る。</summary>
-        public static void RollSlant(Rng rng, out StatKey strong, out StatKey weak)
+        /// <summary>偏りを4本引く。⚠️ 6ステから**別々に**4つ取る（重ならない）。
+        ///
+        /// ⭐ **引き方は今までどおり1回の切り直し**（<c>Shuffle</c>）。
+        /// 前は先頭2枚だけ見ていたのを4枚見るようにしただけなので、
+        /// ⚠️ 乱数を引く回数は変わらない ── 較正済みの列がずれない。</summary>
+        public static void RollSlant(Rng rng, out StatKey best, out StatKey strong,
+            out StatKey weak, out StatKey worst)
         {
             var keys = new List<StatKey>(Stats.Keys);
             rng.Shuffle(keys);
-            strong = keys[0];
-            weak = keys[1];
+            best = keys[0];
+            strong = keys[1];
+            weak = keys[2];
+            worst = keys[3];
         }
 
         // ── ボス ─────────────────────────────────────────
@@ -401,15 +421,21 @@ namespace EggCommand.Core
         /// ⭐ 震撼（全体強攻撃）は枠2へ。枠1は CT が無いので、大技はここに置いて CT を効かせる。</summary>
         public static List<Creature> MakeBossParty()
         {
-            const int mutation = 4;
+            // ⚠️ 2026-08-21 に**上限を押し上げる役が世代へ移った**。
+            //    ⭐ 素質は 1ステ上限 44（40+4段）で移植元とまったく同じ数になる。
+            //    ⚠️ 変異カウンタ 4 はそのまま持たせる ── 移植元が記録している値で、
+            //    いまは**色と見た目の由来**でしかないが、動かすと照合が壊れる。
+            const int generation = 5;
+            const int mutationCounter = 4;
             // ⭐ 抵抗を厚く持たせる。⚠️ ここが 0 だと、弱化を積むだけで
             //    ヌシが一度も動かないまま終わる（速度3の個体は元々そうなりやすい）。
             //    ⚠️ 命中は低め ── ヌシの弱化まで通ると、事故で一方的になる。
-            var wild = Stats.ApplyTotalCap(new StatBlock(16, 22, 21, 3, 8, 24), mutation);
+            var wild = Stats.ApplyTotalCap(new StatBlock(16, 22, 21, 3, 8, 24), generation);
             return new List<Creature>
             {
                 new Creature("boss-0", "nushi", wild, new StatBlock(0, 0, 0, 0), 0,
-                    mutation, "attack-all-heavy", "spd-down", 0, null, null, 1),
+                    mutationCounter, "attack-all-heavy", "spd-down", 0, null, null, generation,
+                    null, null, null, Creatures.TraitIdFor("nushi")),
             };
         }
 

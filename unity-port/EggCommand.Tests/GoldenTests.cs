@@ -81,7 +81,10 @@ public class StatsGoldenTests
         var golden = Golden.Load("stats");
         // ⭐ 1ステの上限は動かしていない
         Assert.Equal(golden.GetProperty("wildStatMax").GetInt32(), Stats.WildStatMax);
-        Assert.Equal(golden.GetProperty("mutationCapSteps").GetInt32(), Stats.MutationCapSteps);
+        // ⚠️ **押し上げの段数は同じ 20 のまま。**⭐ 2026-08-21 に「何が押し上げるか」だけを
+        //    変異 → 世代へ渡した（<see cref="Stats.GenerationCapSteps"/>）。
+        //    式そのもの（40 + 段数 / 合計はその3倍）は移植元のまま。
+        Assert.Equal(golden.GetProperty("mutationCapSteps").GetInt32(), Stats.GenerationCapSteps);
 
         // ⚠️ 合計上限だけ意図して変えた（×2 → ×3）
         Assert.Equal(Stats.WildStatMax * 2, golden.GetProperty("wildTotalMax").GetInt32());
@@ -89,12 +92,19 @@ public class StatsGoldenTests
 
         foreach (var entry in golden.GetProperty("maxFor").EnumerateArray())
         {
-            int mutation = entry.GetProperty("mutation").GetInt32();
-            // 1ステ上限は移植元のまま
-            Assert.Equal(entry.GetProperty("statMax").GetInt32(), Stats.WildStatMaxFor(mutation));
+            // ⚠️ **ゴールデンは「変異n回」で記録してある。**⭐ いまは「n代目」が押し上げるので、
+            //    1代目＝押し上げ0 に合わせて **n → n+1 代** で読み替える。
+            //    ⚠️ ゴールデンは作り直さない ── 式が移植元と同じであることの証明はここで生きる。
+            int steps = entry.GetProperty("mutation").GetInt32();
+            int generation = steps + 1;
+            // 1ステ上限は移植元のまま（押し上げの段数が同じなら同じ数になる）
+            Assert.Equal(entry.GetProperty("statMax").GetInt32(), Stats.WildStatMaxFor(generation));
             // ⭐ 合計は常に「1ステ上限 × 3」であること
-            Assert.Equal(Stats.WildStatMaxFor(mutation) * 3, Stats.WildTotalMaxFor(mutation));
+            Assert.Equal(Stats.WildStatMaxFor(generation) * 3, Stats.WildTotalMaxFor(generation));
         }
+        // ⭐ **野生（1代目）は押し上げ 0。**⚠️ ここがずれると、巣の卵が急に強くなる
+        Assert.Equal(Stats.WildStatMax, Stats.WildStatMaxFor(1));
+        Assert.Equal(Stats.WildTotalMax, Stats.WildTotalMaxFor(1));
     }
 
     /// <summary>⭐ **移植元の4本は、並びも位置も1つも動いていない。**
@@ -139,10 +149,12 @@ public class StatsGoldenTests
         foreach (var entry in golden.GetProperty("applyTotalCap").EnumerateArray())
         {
             var wild = Golden.Block(entry.GetProperty("wild"));
-            int mutation = entry.GetProperty("mutation").GetInt32();
+            // ⚠️ ゴールデンは「変異n回」で記録。⭐ いまは「n代目」が押し上げるので n+1 代で読む
+            //    （<see cref="上限の定数が一致する"/> と同じ読み替え）。
+            int generation = entry.GetProperty("mutation").GetInt32() + 1;
             var expected = Golden.Block(entry.GetProperty("out"));
 
-            int statMax = Stats.WildStatMaxFor(mutation);
+            int statMax = Stats.WildStatMaxFor(generation);
             var actual = Stats.CapTo(wild, statMax, statMax * PortedTotalRatio);
             Assert.Equal(expected, actual);
             Assert.Equal(entry.GetProperty("total").GetInt32(), Stats.TotalOf(actual));
@@ -153,17 +165,17 @@ public class StatsGoldenTests
     /// 得意を2つまで → 3つまで、に広げたのがこの数字1つ。</summary>
     private const int PortedTotalRatio = 2;
 
-    /// <summary>⭐ 変えたのは倍率だけ ── どの変異段階でも比が保たれていることを見る。</summary>
+    /// <summary>⭐ 変えたのは倍率だけ ── どの段でも比が保たれていることを見る。</summary>
     [Fact]
     public void 合計上限は倍率だけが違う()
     {
         var golden = Golden.Load("stats");
         foreach (var entry in golden.GetProperty("maxFor").EnumerateArray())
         {
-            int mutation = entry.GetProperty("mutation").GetInt32();
-            int statMax = Stats.WildStatMaxFor(mutation);
+            int generation = entry.GetProperty("mutation").GetInt32() + 1;
+            int statMax = Stats.WildStatMaxFor(generation);
             Assert.Equal(entry.GetProperty("totalMax").GetInt32(), statMax * PortedTotalRatio);
-            Assert.Equal(statMax * 3, Stats.WildTotalMaxFor(mutation));
+            Assert.Equal(statMax * 3, Stats.WildTotalMaxFor(generation));
         }
 
         // ⭐ 削りの結果も「倍率を戻せば移植元に戻る」ことを1件で押さえる
@@ -543,6 +555,21 @@ public class SkillsGoldenTests
 
 public class SpeciesGoldenTests
 {
+    /// <summary>⭐ **作者が描き直した意匠。**ここに書いたものだけ、絵と色の照合を飛ばす。
+    ///
+    /// ⚠️ **ゴールデンは作り直さない**（移植が正しいことの証拠なので、消したら二度と戻せない）。
+    /// ⭐ 代わりに「誰を、いつ、なぜ外したか」をここに書く ── 残りの10種族は今までどおり
+    /// 移植元と1画素ずつ照合され続ける。
+    ///
+    /// ⚠️ 外した種族は、**大きさ・色数・添字の収まり**を <see cref="SpeciesTable.Faults()"/>
+    /// が見ている（照合が無くなっても、描き間違いは落ちる）。</summary>
+    private static readonly Dictionary<string, string> Redrawn = new Dictionary<string, string>
+    {
+        // ⚠️ 2026-08-21・作者の指示「これをタマルの画像に差し替えて」。
+        //    ⭐ 元の絵は 512×512 の描き下ろし。64×64・11色へ落としてある。
+        { "tamaru", "2026-08-21 作者が描いた 64×64・11色へ差し替え" },
+    };
+
     /// <summary>意図して移植元から変えた枠1。⭐ **ここに書いたものだけが許される。**
     /// ⚠️ 枠1 に CT が無いのは「行動できない手番を作らない」ためで、大技だからではない。
     /// 全体攻撃や状態異常付きが毎手番飛ぶのは通常攻撃ではないので差し替えた。</summary>
@@ -646,6 +673,38 @@ public class SpeciesGoldenTests
         }
     }
 
+    /// <summary>⚠️ **照合を外した種族が、外れたまま壊れていないか。**
+    ///
+    /// ⭐ ゴールデンから外すと、その種族だけ見張りがゼロになる。
+    /// ここで「表の決まり（大きさ・色数・添字の収まり）」だけは必ず通す。</summary>
+    [Fact]
+    public void 描き直した種族も表の決まりは満たす()
+    {
+        Assert.NotEmpty(Redrawn);
+        foreach (var id in Redrawn.Keys)
+        {
+            var species = SpeciesTable.ById(id);
+            Assert.True(species.Sprite.Width == species.Sprite.Height,
+                $"{id}: 正方形でない");
+            Assert.True(species.Sprite.Width == 16 || species.Sprite.Width == 64,
+                $"{id}: 大きさが {species.Sprite.Width}");
+
+            int deepest = 0;
+            for (int y = 0; y < species.Sprite.Height; y++)
+                for (int x = 0; x < species.Sprite.Width; x++)
+                    if (species.Sprite.At(x, y) > deepest) deepest = species.Sprite.At(x, y);
+
+            foreach (var palette in species.Palettes)
+            {
+                Assert.True(deepest <= palette.Count,
+                    $"{id}: 姿が色 {deepest} 番を使うのに、色が {palette.Count} つしかない");
+                // ⚠️ 変異は色の差し替えなので、組ごとに数が違うと落ちる
+                Assert.Equal(species.Palettes[0].Count, palette.Count);
+            }
+        }
+        SpeciesTable.Audit();
+    }
+
     /// <summary>⭐ 添字色そのものを比べる。ここがずれると変異のパレットスワップが崩れる。</summary>
     [Fact]
     public void ドット絵の添字色が一致する()
@@ -654,6 +713,7 @@ public class SpeciesGoldenTests
         foreach (var entry in golden.GetProperty("list").EnumerateArray())
         {
             var species = SpeciesTable.ById(entry.GetProperty("id").GetString()!);
+            if (Redrawn.ContainsKey(species.Id)) continue;
             var sprite = species.Sprite;
 
             Assert.Equal(entry.GetProperty("spriteWidth").GetInt32(), sprite.Width);
@@ -664,6 +724,9 @@ public class SpeciesGoldenTests
             for (int y = 0; y < sprite.Height; y++)
             {
                 var actual = new StringBuilder(sprite.Width);
+                // ⚠️ **ここは Core の書き方に寄せない。**⭐ ゴールデンは移植元（TS）の綴りで、
+                //    透明を '0' と書く。Core は '.'（<see cref="PixelSprite.CharOf"/>）。
+                //    証拠側に合わせるのが正しい ── 揃えた瞬間に照合が意味を失う。
                 for (int x = 0; x < sprite.Width; x++) actual.Append((char)('0' + sprite.At(x, y)));
                 Assert.Equal(rows[y], actual.ToString());
             }
@@ -677,6 +740,7 @@ public class SpeciesGoldenTests
         foreach (var entry in golden.GetProperty("list").EnumerateArray())
         {
             var species = SpeciesTable.ById(entry.GetProperty("id").GetString()!);
+            if (Redrawn.ContainsKey(species.Id)) continue;
             var palettes = entry.GetProperty("palettes");
             Assert.Equal(palettes.GetArrayLength(), species.Palettes.Count);
 

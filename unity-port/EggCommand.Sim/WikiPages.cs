@@ -56,13 +56,13 @@ namespace EggCommand.Sim
             md.Append("# 種族一覧\n\n");
             Stamp(md);
 
-            md.Append("種族が決めるのは**見た目・基礎ステの配分・枠1の技・卵ガチャの中身**です。\n");
+            md.Append("種族が決めるのは**見た目・基礎ステの配分・枠1の技・特性・卵ガチャの中身**です。\n");
             md.Append("⚠️ **基礎ステの合計は全種族で同じ**なので、種族に当たり外れはありません。");
             md.Append("違うのは配分だけです。\n\n");
 
             md.Append("## 一覧\n\n");
-            md.Append("| 種族 | HP | 攻撃 | 防御 | 速度 | 弱化命中 | 弱化耐性 | 枠1（通常攻撃） |\n");
-            md.Append("|---|---|---|---|---|---|---|---|\n");
+            md.Append("| 種族 | HP | 攻撃 | 防御 | 速度 | 弱化命中 | 弱化耐性 | 枠1（通常攻撃） | 特性 |\n");
+            md.Append("|---|---|---|---|---|---|---|---|---|\n");
             foreach (var s in SpeciesTable.All)
             {
                 var b = s.Base;
@@ -70,13 +70,21 @@ namespace EggCommand.Sim
                 //    という読み違いを起こすので印を付ける
                 string boss = s.Id == Encounters.BossSpeciesId ? " ⚠️ボス専用" : "";
                 md.Append($"| {s.Name}{boss} | {b.Hp} | {b.Atk} | {b.Def} | {b.Spd} | ")
-                  .Append($"{b.Acc} | {b.Res} | {Skills.ById(s.Skill1).Name} |\n");
+                  .Append($"{b.Acc} | {b.Res} | {Skills.ById(s.Skill1).Name} | ")
+                  .Append($"{Traits.ById(s.TraitId).Name} |\n");
             }
             md.Append($"\n基礎ステの合計はどの種族も **{SpeciesTable.BaseTotal}** です。\n");
             md.Append("⚠️ **ボス専用の種族は手に入りません。**巣を持たないので卵から出ません。\n");
             md.Append("⚠️ **弱化命中と弱化耐性にも基礎値があります**（2026-08-19 から）。\n");
             md.Append($"⭐ この2本だけの合計は全種族 {SpeciesTable.DebuffBaseTotal} で、ここも揃っています。");
             md.Append("攻める種族は命中寄り、守る種族は耐性寄りです。\n\n");
+
+            md.Append("## 特性\n\n");
+            md.Append("⭐ **特性は種族ごとに1つ、固定です。**同じ種族なら、"
+                + "どこで手に入れても・何代目でも同じ特性を持ちます。\n");
+            md.Append("⚠️ **引き直せません。**欲しい特性があるなら、"
+                + "それを持つ種族の巣へ行ってください。\n");
+            md.Append("⭐ 何をするかは[特性](特性.md)で読めます。\n\n");
 
             md.Append("## 枠1（通常攻撃）\n\n");
             md.Append("⭐ 枠1 は**その種族の通常攻撃**で、CT がありません（いつでも撃てます）。\n");
@@ -312,7 +320,8 @@ namespace EggCommand.Sim
             md.Append("# 特性\n\n");
             Stamp(md);
 
-            md.Append("個体は特性を**1つだけ**持ちます。⭐ 技の3枠とは別枠なので、技を圧迫しません。\n\n");
+            md.Append("特性は**種族ごとに1つ**決まっています。⭐ 技の3枠とは別枠なので、技を圧迫しません。\n\n");
+            md.Append("⭐ **手に入れた種族のぶんは[図鑑](図鑑.md)でも読めます**（ホームの右肩）。\n\n");
             md.Append("⚠️ **眠っている間は特性が働きません**（[効果の種類](効果の種類.md)）。\n\n");
             md.Append("⚠️ **特性は技そのものを強くしません。**強くするのは「動き」のほうです。\n");
             md.Append("だから**噛み合う技を持っていないと、持っていても何も起きません**。\n\n");
@@ -354,19 +363,31 @@ namespace EggCommand.Sim
             md.Append("⚠️ **追い打ちは弱化の有無だけを見ます。**重ねても増えません。\n");
             md.Append("⚠️ **畳み掛けと遺志は1戦闘に1回だけです。**\n");
 
-            md.Append($"\n## いつから出るか\n\n");
-            md.Append($"⭐ **★{Traits.MinRarity} 以上の卵からしか出ません。**\n");
-            md.Append("浅い巣からは低い★しか出ないので、始めたばかりの個体は特性を持ちません。\n\n");
-            md.Append("⚠️ **配合の継承はこの下限を見ません。**");
-            md.Append("親が持っていれば、子は★に関係なく受け継ぎます。\n");
+            md.Append("\n## 誰が持つか\n\n");
+            md.Append("⭐ **特性は種族ごとに決まっています。**同じ種族なら、"
+                + "どこで手に入れても・何代目でも同じ特性です。\n");
+            md.Append("⚠️ **引き直せません。**欲しい特性があるなら、"
+                + "それを持つ種族の巣へ行ってください。\n\n");
+            md.Append("| 種族 | 特性 |\n|---|---|\n");
+            foreach (var sp in SpeciesTable.All)
+            {
+                md.Append($"| {sp.Name} | {Traits.ById(sp.TraitId).Name} |\n");
+            }
+            var parked = new List<string>();
+            foreach (var id in Traits.Unassigned) parked.Add(Traits.ById(id).Name);
+            if (parked.Count > 0)
+            {
+                md.Append($"\n🚧 ⚠️ **{string.Join("・", parked)}** は、"
+                    + "まだどの種族も持っていません（表にはありますが手に入りません）。\n");
+            }
 
             md.Append("\n## どこで見えるか\n\n");
             md.Append("**BOX** の詳細に、名前とすることが1行で出ます。\n\n");
-            md.Append("⭐ 一覧の升では、持っている個体の**右上に丸い印**が付きます。\n");
-            md.Append("⚠️ 升には名前を出しません（狭いので）。");
-            md.Append("何を持っているかは詳細で読んでください。\n");
+            md.Append("⚠️ 一覧の升には出ません。⭐ 全員が持っているので、"
+                + "升に印を付けても探す手がかりになりません。\n");
+            md.Append("⭐ 姿が分かれば特性も分かります（同じ種族はいつも同じ特性です）。\n");
 
-            md.Append("\n## 関連\n\n- [レアリティ](レアリティ.md)\n- [技一覧](技一覧.md)\n")
+            md.Append("\n## 関連\n\n- [種族一覧](種族一覧.md)\n- [技一覧](技一覧.md)\n")
               .Append("- [配合](配合.md)\n");
             return md.ToString();
         }

@@ -48,16 +48,31 @@ namespace EggCommand.Core
         public readonly StatKey? Strong;
         public readonly StatKey? Weak;
 
+        /// <summary>⭐ **大得意・大不得意**（2026-08-21・作者の指示）。
+        ///
+        /// ⚠️ 足した理由は強さではなく**厳選の目盛り**。得意1・不得意1だけだと、
+        /// 6ステのうち2本しか個体差が出ず、⭐ 引き直す面白さが薄かった。
+        /// 4本（大得意・得意・不得意・大不得意）なら、同じ素質合計でも形が
+        /// <c>6*5*4*3 = 360</c> 通りに割れる（2本のときは 30 通り）。
+        ///
+        /// ⚠️ **4つとも別のステ。**同じステに重なると打ち消し合って軸が消える。
+        /// ⚠️ null は「持たない」（<see cref="Strong"/> と同じ約束）。
+        /// 古い保存と、較正済みの検査が作る個体はここが null のまま。</summary>
+        public readonly StatKey? Best;
+        public readonly StatKey? Worst;
+
         /// <summary>3すくみの属性。⭐ **種族ではなく個体が持つ**。
         /// 炎のタマルも水のタマルも生まれる。配合では親のどちらかから受け継ぐ。</summary>
         public readonly Element Element;
 
         /// <summary>1つだけ持つ特性。⭐ **技の3枠を奪わない**（表は <see cref="Traits"/>）。
         ///
-        /// ⭐ 特性は技そのものを強くせず「動き」を強くするので、
-        /// 「この個体には低確率の大技を持たせる」という**組み合わせの判断**が生まれる。
-        /// ⚠️ null は「持たない」。移植元にはこの概念が無いので、
-        /// 較正済みの検査が作る個体は null のまま＝従来と1ビットも変わらない。</summary>
+        /// ⚠️ **遊びの中では必ず種族のもの**（<see cref="Species.TraitId"/>）が入る。
+        /// 2026-08-21 まで個体ごとに引いていたのをやめた（作者の指示）。
+        /// ⭐ 欄として残してあるのは、戦闘が「特性を持たない個体」も扱えるようにするため
+        /// ── 移植元の照合（goldens）と、特性ひとつぶんを測る検査がここに乗る。
+        /// ⚠️ **生む側で null のまま通さない。**孵化・配合・巣の顔ぶれは
+        /// <see cref="Creatures.TraitIdFor"/> を通す（種族から引く唯一の口）。</summary>
         public readonly string? TraitId;
 
         /// <summary>枠ごとに注ぎ込んだスキルポイント。⭐ **レベルは導出する**（保存しない）。
@@ -71,11 +86,13 @@ namespace EggCommand.Core
             int mutationCounter, string? skill2, string? skill3, int paletteIndex,
             string? parentA, string? parentB, int generation,
             StatKey? strong = null, StatKey? weak = null, Element? element = null,
-            string? traitId = null)
+            string? traitId = null, StatKey? best = null, StatKey? worst = null)
         {
             TraitId = traitId;
             Strong = strong;
             Weak = weak;
+            Best = best;
+            Worst = worst;
             // ⚠️ 指定が無ければ、その種族が昔持っていた属性にする。
             //    属性を個体へ移す前のセーブと、移植元との照合が、これで動かずに済む
             Element = element ?? Migrations.ElementOf(speciesId);
@@ -239,21 +256,48 @@ namespace EggCommand.Core
         /// ⚠️ 大きくすると「得意なステだけ見ればいい」になり、素質の意味が薄れる。</summary>
         public const double Slant = 0.15;
 
+        /// <summary>大得意・大不得意の増減。⭐ ±30%（得意のちょうど2倍）。
+        ///
+        /// ⭐ 2倍にしたのは、**表の▲▲と▲が別物だと数で分かる**ようにするため。
+        /// 1.5倍だと画面で並べても差が読めず、目盛りを増やした意味が出ない。
+        /// ⚠️ 4本の増減を足すと <c>+30 +15 -15 -30 = 0</c> ── ⭐ **合計は動かない。**
+        /// 増えるのは「どこに寄っているか」だけで、良い個体の総量は変えていない。</summary>
+        public const double GreatSlant = 0.30;
+
         /// <summary>実値。唯一の出所は <see cref="Stats"/>。ここは種族基礎を渡すだけ。
         /// ⭐ 最後に得意・不得意を掛ける。⚠️ 持っていない個体（移植元と同じ作り）は素通り。</summary>
         public static StatBlock StatsOf(Creature creature)
         {
             var actual = Stats.ActualStats(SpeciesOf(creature).Base, creature.Wild, creature.Trained);
-            return Slanted(actual, creature.Strong, creature.Weak);
+            return Slanted(actual, creature);
         }
 
-        /// <summary>得意を上げ、不得意を下げる。⚠️ 同じキーなら何もしない（打ち消し合う）。</summary>
-        public static StatBlock Slanted(StatBlock stats, StatKey? strong, StatKey? weak)
+        /// <summary>その個体の偏りを掛ける。⭐ **画面もここを通す**（掛け方を写さない）。</summary>
+        public static StatBlock Slanted(StatBlock stats, Creature creature) =>
+            Slanted(stats, creature.Strong, creature.Weak, creature.Best, creature.Worst);
+
+        /// <summary>得意を上げ、不得意を下げる。
+        ///
+        /// 4本（大得意・大不得意 ±30% / 得意・不得意 ±15%）を**別々に掛ける**。
+        /// 同じキーに重なった組は**両方とも捨てる**（掛けても打ち消し合うだけで、
+        /// どちらが効いたのか画面と食い違う）。生む側が4本を別ステで配るので、
+        /// ここに来るのは古い保存と、偏りを持たない個体だけ。</summary>
+        public static StatBlock Slanted(StatBlock stats, StatKey? strong, StatKey? weak,
+            StatKey? best = null, StatKey? worst = null)
         {
-            if (strong == null || weak == null || strong.Value == weak.Value) return stats;
-            var work = stats
-                .With(strong.Value, Scale(stats[strong.Value], 1.0 + Slant))
-                .With(weak.Value, Scale(stats[weak.Value], 1.0 - Slant));
+            var work = stats;
+            if (best != null && worst != null && best.Value != worst.Value)
+            {
+                work = work
+                    .With(best.Value, Scale(work[best.Value], 1.0 + GreatSlant))
+                    .With(worst.Value, Scale(work[worst.Value], 1.0 - GreatSlant));
+            }
+            if (strong != null && weak != null && strong.Value != weak.Value)
+            {
+                work = work
+                    .With(strong.Value, Scale(work[strong.Value], 1.0 + Slant))
+                    .With(weak.Value, Scale(work[weak.Value], 1.0 - Slant));
+            }
             return work;
         }
 
@@ -272,7 +316,7 @@ namespace EggCommand.Core
         public static Creature WithElement(Creature c, Element element) => new Creature(
             c.Id, c.SpeciesId, c.Wild, c.Trained, c.Earned, c.MutationCounter,
             c.Skill2, c.Skill3, c.PaletteIndex, c.ParentA, c.ParentB, c.Generation,
-            c.Strong, c.Weak, element, c.TraitId);
+            c.Strong, c.Weak, element, c.TraitId, c.Best, c.Worst);
 
         /// <summary>その枠のスキルレベル。⭐ ポイントから**導出**する（第2の出所を作らない）。</summary>
         public static int SkillLevelOf(Creature creature, int slot) =>
@@ -289,11 +333,16 @@ namespace EggCommand.Core
             return Skills.BoostOf(skill, SkillLevelOf(creature, slot), slot);
         }
 
-        /// <summary>その個体の特性。⚠️ 持たなければ null（表を引かない）。
-        /// ⚠️ **まだ誰も呼んでいない。**特性を出す画面が無いため
-        /// （課題「特性が画面に一度も出ていない」）。画面ができたらここを引く。</summary>
+        /// <summary>その個体の特性。⚠️ 持たなければ null（表を引かない）。</summary>
         public static Trait? TraitOf(Creature creature) =>
             creature.TraitId == null ? null : Traits.ById(creature.TraitId);
+
+        /// <summary>⭐ **その種族が持つ特性。生む側はここだけを通す。**
+        ///
+        /// ⚠️ 産地ごとに <c>SpeciesTable.ById(id).TraitId</c> と書き写さない ──
+        /// 写した数だけ「1か所だけ直し忘れる」余地ができる（巣の親は特性つき、
+        /// 道中の雑魚は無し、のような食い違いは画面から読み取れない）。</summary>
+        public static string TraitIdFor(string speciesId) => SpeciesTable.ById(speciesId).TraitId;
 
         /// <summary>その個体のパレット。添字が範囲外なら黙って通常色にせず投げる。</summary>
         public static Palette PaletteOf(Creature creature)

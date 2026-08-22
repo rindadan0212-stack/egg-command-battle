@@ -23,8 +23,8 @@ namespace EggCommand.Core
     /// |---|---|
     /// | 種族 | 50% でどちらかの親。スキル1 はその種族のもの（連動） |
     /// | ステ | 各ステ独立にロール。高いほうの親が 55% |
-    /// | 変異 | 2.5% を3回振る。当たるごとに +2 と変異カウンタ +1 |
-    /// | ブレーキ | 親どちらも変異カウンタ 20 以上なら変異しない |
+    /// | 変異 | 2.5% を3回振る。⭐ 出るとその子の素質が +2（⚠️ 色とは無関係）|
+    /// | 上限 | ⭐ **世代**が押し上げる（配合するたび +1・<see cref="Stats.GenerationCapSteps"/> で頭打ち）|
     /// | スキル2・3 | 両親の4枠から2つ抽選（枠1と重なるものは除く） |
     /// | 合計上限 | 変異ぶん押し上げた上限で、超過は低いステから削る |
     ///
@@ -45,16 +45,26 @@ namespace EggCommand.Core
         public const int MutationRolls = 3;
         public const double MutationChance = 0.025;
 
-        /// <summary>1回の変異で上がるレベル。</summary>
+        /// <summary>1回の変異で上がるレベル。⚠️ **その子だけ**。
+        /// ⭐ 積み上がらない（次の代は両親の平均から数え直す）。</summary>
         public const int MutationStep = 2;
 
-        /// <summary>⚠️ 無限強化のブレーキ。省略禁止。
-        /// 親のどちらかがこの値未満でなければ、子に変異は出ない。</summary>
+        /// <summary>⚠️ **もう「無限強化のブレーキ」ではない**（2026-08-21）。
+        ///
+        /// ⚠️ 変異が上限を押し上げていた頃は、ここが無いと無限に強くなった。
+        /// ⭐ いまは上限を決めるのは世代（<see cref="Stats.GenerationCapSteps"/> で頭打ち）で、
+        /// 変異が足す +2 もその枠の中で削られるので、**暴走しようがない**。
+        ///
+        /// ⭐ **数はそのまま 20 で置いてある。**移植元が記録している定数なので動かさない
+        /// （ゴールデンが見ている）。⚠️ ここに届くのは 7.31% を20回引いたあと＝
+        /// **約267回の配合**なので、遊びの中でぶつかることはまず無い。
+        /// ⭐ いまのここの役は「色が変わらなくなる上限」だけ。</summary>
         public const int MutationCounterLimit = 20;
 
         public static bool CanBreed(Creature a, Creature b) => a.Id != b.Id;
 
-        /// <summary>変異が出うるか。</summary>
+        /// <summary>変異が出うるか。⭐ **いつでも出る**（2026-08-21 に止めるのをやめた）。
+        /// ⚠️ 欄は残す ── 呼び側を全部書き換えると、止めたくなった日に戻せない。</summary>
         public static bool MutationAllowed(Creature a, Creature b) =>
             a.MutationCounter < MutationCounterLimit || b.MutationCounter < MutationCounterLimit;
 
@@ -90,21 +100,18 @@ namespace EggCommand.Core
             }
 
             int mutationCounter = Math.Max(a.MutationCounter, b.MutationCounter) + mutations;
+            int generation = Math.Max(a.Generation, b.Generation) + 1;
 
-            // ⚠️ 上限は変異ぶん押し上げたうえで掛ける。
-            //    素の上限で掛けると、変異で足した +2 が即削られて価値が消える
-            var capped = Stats.ApplyTotalCap(wild, mutationCounter);
+            // ⚠️ 上限は**世代**で押し上げる（2026-08-21 に変異から渡した）。
+            //    ⭐ 変異が足した +2 はその世代の枠の中で効く。
+            var capped = Stats.ApplyTotalCap(wild, generation);
 
-            // ── 色: 変異が出たらパレットが変わる
-            int paletteIndex = mutations > 0 && childSpecies.Palettes.Count > 1
-                ? rng.Int(1, childSpecies.Palettes.Count)
-                : PickParentPalette(rng, a, b, childSpecies.Id);
+            // ⚠️ **色はここで決めない**（2026-08-21）。孵るときに引く。
 
             // ⭐ 配合の卵はここで技が決まる。孵すときに引き直さない
             string? skill2, skill3;
             InheritSkills(rng, a, b, childSpecies.Skill1, childSpecies.Id, out skill2, out skill3);
 
-            int generation = Math.Max(a.Generation, b.Generation) + 1;
             // ⭐ 重ねた世代ぶん孵るのが遅くなる。深い血統ほど時間を払う、という形にする。
             //    ⚠️ 乱数ではなく世代と変異から決める（同じ親からは同じ重さになる）
             int childRarity = rarity > 0
@@ -116,7 +123,6 @@ namespace EggCommand.Core
                 childSpecies.Id,
                 capped,
                 mutationCounter,
-                paletteIndex,
                 a.Id, b.Id,
                 generation,
                 EggOrigin.Bred,
@@ -163,20 +169,6 @@ namespace EggCommand.Core
             all.AddRange(extra);
             skill2 = all.Count > 0 ? all[0] : null;
             skill3 = all.Count > 1 ? all[1] : null;
-        }
-
-        /// <summary>変異が出なかったときの色。同じ種族の親から引き継ぐ。</summary>
-        private static int PickParentPalette(Rng rng, Creature a, Creature b, string speciesId)
-        {
-            var sameSpecies = new List<Creature>();
-            if (a.SpeciesId == speciesId) sameSpecies.Add(a);
-            if (b.SpeciesId == speciesId) sameSpecies.Add(b);
-            if (sameSpecies.Count == 0) return 0;
-
-            var source = sameSpecies.Count == 1 ? sameSpecies[0] : rng.Pick(sameSpecies);
-            int index = source.PaletteIndex;
-            int palettes = SpeciesTable.ById(speciesId).Palettes.Count;
-            return index < palettes - 1 ? index : palettes - 1;
         }
 
         /// <summary>画面で「この2体を配合すると何が起こりうるか」を見せるための要約。</summary>

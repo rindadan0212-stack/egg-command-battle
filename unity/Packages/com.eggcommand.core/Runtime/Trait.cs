@@ -45,7 +45,10 @@ namespace EggCommand.Core
         AllyDown,
     }
 
-    /// <summary>個体が1つ持つ特性。⭐ **技の3枠とは別枠**（枠を奪わない）。
+    /// <summary>**種族**が1つ持つ特性。⭐ **技の3枠とは別枠**（枠を奪わない）。
+    ///
+    /// ⚠️ 2026-08-21 まで**個体ごとに引いていた**（作者の指摘で種族固定へ戻した）。
+    /// ⭐ 貼り先は <see cref="Species.TraitId"/>。ここでは引かない。
     ///
     /// ⭐ これがある理由: 技を選ぶ側（個体）に個性が無いと、
     /// どの個体にどの技を付けても同じように働いてしまい、**判断が生まれない**。
@@ -220,33 +223,23 @@ namespace EggCommand.Core
 
         public static IReadOnlyList<Trait> All => List;
 
-        /// <summary>1つ引く。⭐ **全員が必ず1つ持つ**（属性・得意/不得意と同じ扱い）。
+        /// <summary>⭐ **まだどの種族にも貼っていない特性。**
         ///
-        /// ⭐ 一部だけが持つ形にしなかったのは、持たない個体が「特性という軸が無い個体」になり、
-        /// 厳選の目盛りが1本増えるどころか濁るため。全員が持つなら、どの個体も
-        /// 「どの特性と技を噛み合わせるか」という同じ問いの上に乗る。
+        /// ⚠️ 表は14件、種族は11件なので、⭐ **3件はどうやっても余る。**
+        /// 余りを黙って置くと「繋がっているのに誰も持てない」状態が見えなくなるので、
+        /// ここに名指しで置き、<see cref="SpeciesTable.Faults(IReadOnlyList{Species}, IReadOnlyList{Skill})"/>
+        /// が表と突き合わせる（技の Undistributed と同じ約束）。
         ///
-        /// ⚠️ 専用の系統（RngTrait）で引くこと。既にある系統に混ぜると列がずれて、
-        /// 較正済みの検査が無効になる。</summary>
-        public static string Roll(Rng rng) => rng.Pick(List).Id;
+        /// ⚠️ **戦闘の繋ぎ込みは生きている。**⭐ 種族を足すか、この3件を削るかは作者の判断。
+        /// ⚠️ ここを増やして逃げない ── 増えるほど「表にあるのに手に入らない」が普通になる。</summary>
+        private static readonly HashSet<string> Parked = new HashSet<string>
+        {
+            Spite, Leech, Tenacity,
+        };
 
-        /// <summary>これ未満の★の卵からは特性が出ない。
-        ///
-        /// ⭐ **理由は強さではなく、覚えることの量。**
-        /// 始めたばかりの人に「種族・技3枠・属性・得意/不得意・素質」に加えて特性まで出すと、
-        /// まだ何も分かっていないうちに読むものが増えて、そこで離れてしまう。
-        /// ⭐ 浅い巣からは低い★しか出ないので、**序盤は自然に特性なし**になる。
-        /// 深い巣へ行けるようになった頃 ── つまり他を覚えた頃 ── に初めて出てくる。
-        ///
-        /// ⚠️ 配合の継承はこの下限を見ない。⭐ 親が持っているのに子が失うほうが分かりにくい。
-        /// ⚠️ 「弱いから出さない」ではない。効き目の釣り合いは別途取る話で、ここと混同しない。</summary>
-        public const int MinRarity = 3;
+        public static IEnumerable<string> Unassigned => Parked;
 
-        /// <summary>その★の卵に特性が付くか。</summary>
-        public static bool AppearsAt(int rarity) => rarity >= MinRarity;
-
-        /// <summary>★に応じて引く。⚠️ 低い★では null（＝持たない）。</summary>
-        public static string? RollFor(Rng rng, int rarity) => AppearsAt(rarity) ? Roll(rng) : null;
+        public static bool IsUnassigned(string id) => Parked.Contains(id);
 
         public static bool Has(string id)
         {

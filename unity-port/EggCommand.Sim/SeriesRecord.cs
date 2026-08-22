@@ -144,7 +144,8 @@ namespace EggCommand.Sim
                 rows.Add($"{{\"seed\":{seed},\"mutations\":{outcome.Mutations},"
                     + $"\"species\":\"{outcome.Egg.SpeciesId}\",\"wild\":{Block(outcome.Egg.Wild)},"
                     + $"\"mutationCounter\":{outcome.Egg.MutationCounter},"
-                    + $"\"palette\":{outcome.Egg.PaletteIndex},\"generation\":{outcome.Egg.Generation},"
+                    // ⚠️ 卵は色を持たなくなった（2026-08-21・色は孵るときに引く）
+                    + $"\"generation\":{outcome.Egg.Generation},"
                     + $"\"skills\":{Skills23(outcome.Egg.Skill2, outcome.Egg.Skill3)}}}");
             }
             return rows;

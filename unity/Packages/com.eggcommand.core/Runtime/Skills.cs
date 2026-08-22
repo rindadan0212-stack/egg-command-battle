@@ -203,12 +203,16 @@ namespace EggCommand.Core
         /// 「効き目は小さいが必ず通る」と「効き目は大きいが半分外す」を、
         /// 同じ効果の種類のまま**別の技として並べられる**。技を増やす軸がこれで1本増える。
         ///
-        /// ⚠️ 確率が付くのは **ダメージと強化以外**（弱化・状態異常・回復・盾・挑発・ガッツ・免疫・CT）。
-        /// ダメージに外れを作ると、攻撃役の出力が運で決まってしまう。
-        /// 強化（自分に掛ける側）は外す意味が無い。
+        /// ⚠️ **確率が付くのは、相手が抵抗するものだけ**（<see cref="Skills.IsHarmful"/>）。
+        /// ⭐ 味方・自分に掛けるもの（回復・盾・ガッツ・免疫・リジェネ・ゲージ・蘇生）は
+        /// **必ず通る**（2026-08-21・作者の指示「味方へのバフの確率は不要」）。
         ///
-        /// ⚠️ **相手に掛けるもの**だけ、実際の率が命中と抵抗の差で上下する（<see cref="Battle.LandChanceOf"/>）。
-        /// 自分・味方に掛けるものは速度と関係なく、素の率がそのまま「賭け」になる。
+        /// ⚠️ 外していた頃の形は「効き目は大きいが半分外す」という博打札だった。
+        /// ⭐ やめた理由は、**押した手番が丸ごと消える**のが支える側だけに起きること ──
+        /// 攻撃側はダメージが必ず入るので、同じ「外れ」でも損の重さが揃っていなかった。
+        /// ⚠️ ダメージにも外れは無い（攻撃役の出力が運で決まってしまう）。
+        ///
+        /// ⚠️ 相手に掛けるものは、実際の率が命中と抵抗の差で上下する（<see cref="Battle.LandChanceOf"/>）。
         ///
         /// ⚠️ **100 のときは乱数を引かない。** これで移植した21技の試合は
         /// 1手も変わらず、較正済みの照合がそのまま生きる。</summary>
@@ -1225,16 +1229,18 @@ namespace EggCommand.Core
             //    どちらを枠に入れるかが**編成ごとに変わる判断**になる。
             // ⚠️ 上に並んでいる移植ぶんが「確実side」の役を兼ねているので、
             //    ここは主に博打sideを足している。
-            // ⚠️ 自分・味方に掛けるものは速度で率が動かない。素の率がそのまま賭けになる。
+            // ⚠️ **軸が効くのは相手に掛ける札だけ**（2026-08-21・作者の指示）。
+            //    味方に掛ける「・大」は確率を外したので、⭐ いまは同じ種類の**濃い側**
+            //    ── 大きく効くぶん CT が長い、という値段の付き方に一本化されている。
 
-            new Skill("heal-miracle", "HP割合回復・特大", "味方1体を全快させる。半分は失敗する", SkillType.Heal, Target.AllyOne,
-                Effect.HealRatio(100, chance: 50)),
-            new Skill("shield-wall", "シールド・大", "味方1体に盾を4枚張る。3回に1回は失敗する", SkillType.Support, Target.AllyOne,
-                Effect.Shield(4, chance: 65)),
-            new Skill("guts-deep", "ガッツ・長", "味方1体が長く粘れる。掛かるかは五分", SkillType.Support, Target.AllyOne,
-                Effect.Guts(6, chance: 50)),
-            new Skill("immune-long", "免疫・長", "味方1体に長く効く免疫。4割は失敗する", SkillType.Support, Target.AllyOne,
-                Effect.Immune(6, chance: 60)),
+            new Skill("heal-miracle", "HP割合回復・特大", "味方1体を全快させる", SkillType.Heal, Target.AllyOne,
+                Effect.HealRatio(100)),
+            new Skill("shield-wall", "シールド・大", "味方1体に盾を4枚張る", SkillType.Support, Target.AllyOne,
+                Effect.Shield(4)),
+            new Skill("guts-deep", "ガッツ・長", "味方1体が長く粘れる", SkillType.Support, Target.AllyOne,
+                Effect.Guts(6)),
+            new Skill("immune-long", "免疫・長", "味方1体に長く効く免疫", SkillType.Support, Target.AllyOne,
+                Effect.Immune(6)),
 
             // ⚠️ 相手に掛ける側は（命中 − 抵抗）÷2 ポイント動く。命中に振った個体が使うと通りやすい
             new Skill("stun-heavy", "スタン・大", "2回ぶん手番を飛ばす。よく外す", SkillType.Debuff, Target.EnemyOne,
@@ -1307,12 +1313,12 @@ namespace EggCommand.Core
                 Effect.Damage(PowerTier.Small, DamageScale.Atk),
                 Effect.Dispel(1, chance: 70)),
 
-            // ⭐ 濃さと確率のトレードオフ。毒・大（2重・65%）の回復側の鏡
-            new Skill("regen-heavy", "リジェネ・大", "リジェネを2重に掛ける。やや外れやすい", SkillType.Heal, Target.AllyOne,
-                Effect.Regen(2, 4, chance: 65)),
-            // ⭐ ゲージ上昇（30%・確実）の博打側。⚠️ 味方に掛けるので素の率がそのまま賭け
-            new Skill("gauge-boost-heavy", "ゲージ上昇・大", "味方1体のゲージを大きく進める。半分は失敗する", SkillType.Support, Target.AllyOne,
-                Effect.Gauge(60, chance: 50)),
+            // ⭐ 毒・大（2重）の回復側の鏡。⚠️ こちらは味方に掛けるので外れない
+            new Skill("regen-heavy", "リジェネ・大", "リジェネを2重に掛ける", SkillType.Heal, Target.AllyOne,
+                Effect.Regen(2, 4)),
+            // ⭐ ゲージ上昇（30%）の濃い側。⚠️ 味方に掛けるので外れない
+            new Skill("gauge-boost-heavy", "ゲージ上昇・大", "味方1体のゲージを大きく進める", SkillType.Support, Target.AllyOne,
+                Effect.Gauge(60)),
             // ⭐ 挑発（3回・確実・CT3）の長持ち側。置き土産・背水の「わざと受ける」相方
             new Skill("taunt-long", "挑発・長", "敵1体を長く釘付けにする。3割は外す", SkillType.Debuff, Target.EnemyOne,
                 Effect.Taunt(5, chance: 70)),
@@ -1324,9 +1330,9 @@ namespace EggCommand.Core
             new Skill("attack-all-twice", "全体連撃", "敵全体に小さな一撃を2回。盾を広く剥がす", SkillType.Attack, Target.EnemyAll,
                 Effect.Damage(PowerTier.Small, DamageScale.Atk, 2)),
 
-            // ⭐ 蘇生（40%・確実）の博打側。⚠️ 外すと1手が丸ごと消える
-            new Skill("revive-heavy", "蘇生・大", "倒れた味方を手厚く呼び戻す。4割は失敗する", SkillType.Heal, Target.AllyDown,
-                Effect.Revive(70, chance: 60)),
+            // ⭐ 蘇生（40%）の手厚い側。⚠️ そのぶん次が遠い
+            new Skill("revive-heavy", "蘇生・大", "倒れた味方を手厚く呼び戻す", SkillType.Heal, Target.AllyDown,
+                Effect.Revive(70)),
             // ⭐ 複合（スピードUP＋ゲージ上昇）。⚠️ 複合は名前で両方言えないので短い名
             new Skill("tailwind", "追い風", "味方1体のスピードを上げ、ゲージも進める", SkillType.Support, Target.AllyOne,
                 Effect.Buff(StatKey.Spd, 1, 3),
@@ -1599,6 +1605,16 @@ namespace EggCommand.Core
                 if (skill.Name.Length == 0) problems.Add($"{skill.Id}: 名前が空");
                 if (skill.Gist.Length == 0) problems.Add($"{skill.Id}: 画面に出す短い説明が空");
                 if (skill.Ct < 0) problems.Add($"{skill.Id}: CT が {skill.Ct}");
+                // ⚠️ **味方に掛けるものへ確率を付け直さない**（2026-08-21・作者の指示）。
+                //    ⭐ 註に書くだけだと、次に「・大」を足すときに同じ形で戻ってくる。
+                foreach (var effect in skill.Effects)
+                {
+                    if (effect.Chance < 100 && !IsHarmful(effect))
+                    {
+                        problems.Add($"{skill.Id}: 相手が抵抗しない効果に確率 {effect.Chance}% が付いている"
+                            + "（味方・自分に掛けるものは必ず通す）");
+                    }
+                }
                 // ⚠️ **上限は約束ごと。**注釈に書いてあるだけだと、次に技を足す人が踏む
                 int cap = IsHeavyCt(skill) ? CtHeavy : CtCap;
                 if (skill.Ct > cap)
