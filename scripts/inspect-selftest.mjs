@@ -137,6 +137,6 @@ for (const t of VEIL_TRIALS) {
 
 await browser.close()
 console.log(missed === 0
-  ? '\n⭐ 検査は効いている（わざと壊した5件すべてを捕まえた）'
+  ? `\n⭐ 検査は効いている（試した ${TRIALS.length + VEIL_TRIALS.length} 件すべてが正しく動いた）`
   : `\n🔴 ${missed} 件が素通り ── この検査は、その分だけ嘘をつく`)
 process.exit(missed ? 1 : 0)
