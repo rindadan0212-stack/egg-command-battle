@@ -1,0 +1,13 @@
+# 図鑑 ── 手に入れた種族の一覧
+#
+# ⭐ 座標はここにしか無い。コードは bind に値を差すだけ。
+# ⚠️ 字そのものはここに書かない（bind で受け取る）── 引用符の問題を作らないため、
+#    そして字の出所を1つに保つため。
+#
+#  名前   種類    左  上  幅   高    付け足し
+head     label   48  16  984  44    size=28 ink=faint anchor=left bind=count
+grid     scroll  48  76  984  1432
+  cell   card    0   0   317  304   repeat=species cols=3 gap=16 rows=320 tap=species
+    art  pixel   78  24  160  160   bind=art
+    name label   8   196 301  40    size=30 anchor=center bind=name
+    kind label   8   240 301  34    size=24 ink=accent anchor=center bind=trait

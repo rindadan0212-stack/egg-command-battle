@@ -39,4 +39,17 @@
     <None Include="..\goldens\*.json" Link="goldens\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- 画面の骨組み。⭐ 唯一の出所は Unity 側の Resources。
+       ⚠️ ここへ写さない（写した瞬間に2つに割れる）。
+       ⭐ これが在るおかげで、重なり・はみ出しの検査が**エンジン無しで**回る。 -->
+  <ItemGroup>
+    <None Include="..\..\unity\Assets\Resources\Layouts\*.txt" Link="layouts\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- ⚠️ **コンパイルしない。読むだけ。**画面の元を、
+       「座標をコードに書いていないか」の検査（LayoutRuleTests）が見る。 -->
+  <ItemGroup>
+    <None Include="..\..\unity\Assets\Scripts\View\*.cs" Link="view\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
