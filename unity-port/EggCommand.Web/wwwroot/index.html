@@ -1,32 +1,50 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EggCommand.Web</title>
+    <!-- ⚠️ 拡大を止める。⭐ 遊びの画面は外枠の倍率で写すので、二重にずらさない -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>卵強奪バトル</title>
     <base href="/" />
-    <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
-    <link rel="stylesheet" href="css/app.css" />
-    <link rel="icon" type="image/png" href="favicon.png" />
-    <link href="EggCommand.Web.styles.css" rel="stylesheet" />
+    <link rel="stylesheet" href="stage.css" />
+    <style>
+      /* ⭐ フォントは同梱。⚠️ CDN に頼らない ── 落ちると字送りが変わり、
+         Unity で詰めた座標の前提が崩れる。 */
+      @font-face {
+        font-family: "Mochiy Pop One";
+        src: url("fonts/MochiyPopOne-Regular.ttf") format("truetype");
+        font-display: block;
+      }
+      #app { height: 100%; }
+      .loading { position: fixed; inset: 0; display: grid; place-items: center;
+                 color: #cfd6ea; font: 16px/1.6 system-ui, sans-serif; }
+    </style>
 </head>
 
 <body>
-    <div id="app">
-        <svg class="loading-progress">
-            <circle r="40%" cx="50%" cy="50%" />
-            <circle r="40%" cx="50%" cy="50%" />
-        </svg>
-        <div class="loading-progress-text"></div>
-    </div>
+    <div id="app"><div class="loading">読み込んでいます…</div></div>
 
-    <div id="blazor-error-ui">
-        An unhandled error has occurred.
-        <a href="." class="reload">Reload</a>
-        <span class="dismiss">🗙</span>
+    <div id="blazor-error-ui" style="display:none;position:fixed;bottom:0;left:0;right:0;
+         background:#c0303f;color:#fff;padding:12px;font:14px system-ui">
+        何かが壊れました。<a href="." class="reload" style="color:#fff">読み直す</a>
+        <span class="dismiss" style="float:right;cursor:pointer">🗙</span>
     </div>
     <script src="_framework/blazor.webassembly.js"></script>
+    <script>
+      // ⭐ **設計 1080x1920 を、外枠の拡大縮小だけで実機へ写す。**
+      // ⚠️ 作者の決定（絶対座標のまま）の帰結。20:9 では上下に帯が出る（課題 §9-7）。
+      function fit() {
+        const s = document.getElementById('stage');
+        if (!s) return;
+        const k = Math.min(innerWidth / 1080, innerHeight / 1920);
+        s.style.transform = 'translate(-50%, -50%) scale(' + k + ')';
+        document.documentElement.style.setProperty('--u', k + 'px');
+      }
+      addEventListener('resize', fit);
+      new MutationObserver(fit).observe(document.documentElement, {childList: true, subtree: true});
+      fit();
+    </script>
 </body>
 
 </html>

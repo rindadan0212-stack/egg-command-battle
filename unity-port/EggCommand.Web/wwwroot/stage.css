@@ -1,0 +1,129 @@
+/* 画面の意匠。⭐ 色は `unity/Assets/Scripts/View/Ui.cs` から転記した12定数。
+   ⚠️ ここで新しい色を作らない ── 増やすなら Ui.cs 側と両方。 */
+
+:root {
+  --ink:        #2b3350;
+  --paper:      #f7f7f9;
+  --ink-dim:    #4c536b;
+  --ink-faint:  #636980;
+  --on-lead:    #2b3350;
+  --accent:     #f59e0b;
+  --accent-ink: #b45309;
+  --danger:     #e04f5f;
+  --good:       #2fa84a;
+  --good-ink:   #1e7a38;
+  --danger-ink: #c0303f;
+
+  /* 空。⚠️ Ui.SkyOf と同じ数 */
+  --sky-home:   #8fd8f7;
+  --sky-nest:   #bdebff;
+  --sky-battle: #a7dcf0;
+  --sky-breed:  #ffdfe8;
+
+  /* ⭐ 設計の1px。器の幅を 1080 に写す倍率。JS が入れる */
+  --u: 1px;
+}
+
+/* ⚠️ 作者の決定（2026-08-22）: 絶対座標のまま。
+   ⭐ 1080x1920 を、外枠の拡大縮小だけで実機へ写す。
+   ⚠️ 引き受けた代償: 20:9 の端末で上下に帯が出る（課題 §9-7）。 */
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #0d1220;
+  overflow: hidden;
+  /* ⭐ 同じ TTF を配るので、字送りは Unity と揃う */
+  font-family: "Mochiy Pop One", system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ⚠️ **格子の中央寄せに頼らない。**中身（1080）が器より広いとき、
+   溢れ方は当てにならない（実測 2026-08-22: stage が viewport の外 left=345 に出た）。
+   ⭐ 中心を明示して、そこから縮める。 */
+#stage-wrap {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* ⭐ **設計上の画面。**中身は全部この中の絶対座標。 */
+#stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1080px;
+  height: 1920px;
+  /* ⭐ 中心を合わせてから縮める。⚠️ JS が scale を足す（translate は残す） */
+  transform-origin: center center;
+  transform: translate(-50%, -50%);
+  background: var(--sky-nest);
+  overflow: hidden;
+  /* ⚠️ 端末の縁（ノッチ・ホームバー）に潜らせない */
+  box-shadow: 0 0 0 1px rgba(0,0,0,.15);
+}
+
+/* 骨組みが作る部品。⚠️ ここに座標は書かない（ローダーが差す） */
+.n {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+/* label ── ⚠️ Unity は枠より高い字を枠の外へ描く（VerticalWrapMode.Overflow）ので、
+   ここも切らない。⭐ 切ると「収まっているのに見えない」が生まれる。 */
+.n.label {
+  display: flex;
+  white-space: pre;
+  color: var(--ink);
+  line-height: 1.15;
+}
+.n.label.a-left    { justify-content: flex-start; align-items: center; }
+.n.label.a-center  { justify-content: center;     align-items: center; }
+.n.label.a-right   { justify-content: flex-end;   align-items: center; }
+.n.label.a-upper-left   { justify-content: flex-start; align-items: flex-start; }
+.n.label.a-upper-center { justify-content: center;     align-items: flex-start; }
+
+.ink-dim    { color: var(--ink-dim); }
+.ink-faint  { color: var(--ink-faint); }
+.ink-accent { color: var(--accent-ink); }
+.ink-danger { color: var(--danger-ink); }
+.ink-good   { color: var(--good-ink); }
+.ink-on-lead{ color: var(--on-lead); }
+
+/* card ── ⭐ 面（明度差）で区切る。⚠️ 角丸は押せる要素だけ（画面の作法） */
+.n.card {
+  background: var(--paper);
+  border-radius: 0;
+  box-shadow: 0 1px 0 rgba(43,51,80,.08);
+}
+
+/* button ── ⭐ 押せるものだけ角丸 */
+.n.button {
+  border: 0;
+  border-radius: 18px;
+  background: #dfe3ee;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.n.button.lead { background: var(--accent); }
+.n.button:disabled { background: #e8e9ee; color: var(--ink-faint); cursor: default; }
+
+/* scroll ── ⭐ CSS に任せる。⚠️ Unity では ScrollRect を組んでいた所 */
+.n.scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.n.round { border-radius: 50%; }
+
+/* pixel ── ⚠️ **整数倍でなくてもボケさせない。**
+   ⭐ ドット絵は必ず crisp に（罠23: 小数倍で拡大するとボケる） */
+.n.pixel {
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
+  display: block;
+}

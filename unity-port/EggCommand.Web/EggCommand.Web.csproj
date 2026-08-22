@@ -28,6 +28,16 @@
        ⚠️ Sim を丸ごと参照しない ── Sim は Console や File を触るものを含む。 -->
   <ItemGroup>
     <Compile Include="..\EggCommand.Sim\SeriesRecord.cs" Link="SeriesRecord.cs" />
+    <Compile Include="..\EggCommand.Sim\Determinism.cs" Link="Determinism.cs" />
+  </ItemGroup>
+
+  <!-- ⭐ 骨組みとフォント。⚠️ 唯一の出所は Unity 側（ここへ手で写さない）。
+       ⭐ 同じ TTF を配るので、字送りが Unity と揃う。 -->
+  <ItemGroup>
+    <!-- ⚠️ **配信の癖に頼らない。**dev サーバが 200/0 バイトを返す形があった。
+         ⭐ 埋め込みなら、配信先が何であっても同じものが読める。 -->
+    <EmbeddedResource Include="..\..\unity\Assets\Resources\Layouts\*.txt" Link="Layouts\%(Filename)%(Extension)" />
+    <Content Include="..\..\unity\Assets\Resources\Fonts\MochiyPopOne-Regular.ttf" Link="wwwroot\fonts\MochiyPopOne-Regular.ttf" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

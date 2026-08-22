@@ -1,6 +1,4 @@
-@page "/"
-@using System.Text
-@using EggCommand.Core
+@page "/check"
 @using EggCommand.Sim
 
 <h3>決定性の検査</h3>
@@ -10,123 +8,8 @@
 @code {
     private string _report = "測っています…";
 
-    protected override void OnInitialized()
-    {
-        var sb = new StringBuilder();
-
-        // ⭐ ① 遊びの系列まるごと。⚠️ desktop の records/series.json と**バイト比較**する。
-        //    Rng / Species / Nests / Encounter / Breeding / Creatures / Stats / Traits /
-        //    Ai / Battle を1本で踏む。
-        string series = SeriesRecord.Build();
-        sb.Append("SERIES-LEN ").Append(series.Length).Append('\n');
-        sb.Append("SERIES-SHA ").Append(Sha(series)).Append('\n');
-
-        // ⭐ ② series.json が踏まない3つ。⚠️ ここが libm 依存の本命。
-        sb.Append("STEAL-SHA  ").Append(Sha(StealProbe())).Append('\n');
-        sb.Append("FUSION-SHA ").Append(Sha(FusionProbe())).Append('\n');
-        sb.Append("TRAIL-SHA  ").Append(Sha(TrailProbe())).Append('\n');
-
-        // ⭐ ③ 超越関数そのもの。⚠️ 1ULP の差はここで最初に見える。
-        sb.Append("LIBM       ").Append(Libm()).Append('\n');
-
-        _report = sb.ToString();
-    }
-
-    /// <summary>⚠️ 依存を足さないための素朴な指紋。⭐ 一致・不一致が言えれば足りる。</summary>
-    private static string Sha(string text)
-    {
-        var bytes = Encoding.UTF8.GetBytes(text);
-        ulong a = 1469598103934665603UL;
-        foreach (var b in bytes) { a ^= b; a *= 1099511628211UL; }
-        return a.ToString("x16") + "/" + bytes.Length;
-    }
-
-    /// <summary>⚠️ **`Math.Sin/Cos/Atan2` を踏む唯一の場所。**
-    /// ⭐ `StealGoldenTests` は軌跡を1つも比べていないので、ここが初めての見張り。</summary>
-    private static string StealProbe()
-    {
-        var sb = new StringBuilder();
-        for (int tier = 1; tier <= 5; tier++)
-        {
-            foreach (var side in new[] { FieldSide.Left, FieldSide.Right })
-            {
-                var rng = new Rng(20260822).Stream($"steal:{tier}:{side}");
-                var field = Steal.MakeValidatedField(tier, side, 0, rng);
-                for (int deg = -80; deg <= 80; deg++)
-                {
-                    var run = Steal.Launch(field, deg * Math.PI / 180.0, 2000);
-                    sb.Append(tier).Append(',').Append(side).Append(',').Append(deg).Append(',')
-                      .Append(run.Outcome).Append(',')
-                      .Append(run.Traveled.ToString("R", System.Globalization.CultureInfo.InvariantCulture))
-                      .Append(',').Append(run.Path.Count).Append('\n');
-                }
-            }
-        }
-        return sb.ToString();
-    }
-
-    /// <summary>⚠️ `Math.Pow(paired, 1.6)` を踏む。⭐ 直後の `Floor` が境界に乗ると ±1 ずれる。</summary>
-    private static string FusionProbe()
-    {
-        var sb = new StringBuilder();
-        for (int n = 0; n < 100; n++)
-        {
-            var rng = new Rng(20260822).Stream($"fuse:{n}");
-            var a = Sample(rng, "a" + n, 3 + n % 9);
-            var b = Sample(rng, "b" + n, 2 + n % 7);
-            var born = Fusion.Fuse(rng, a, b, ++Serial);
-            foreach (var key in Stats.Keys) sb.Append(born.Egg.Wild[key]).Append(',');
-            sb.Append(born.Egg.Rarity).Append(',').Append(born.Egg.Generation)
-              .Append(',').Append(born.Mutations).Append('\n');
-        }
-        return sb.ToString();
-    }
-
-    private static int Serial;
-
-    private static Creature Sample(Rng rng, string id, int seed)
-    {
-        var species = SpeciesTable.All[seed % SpeciesTable.All.Count];
-        var wild = new StatBlock(10 + seed, 12 + seed, 8 + seed, 9 + seed, 11 + seed, 7 + seed);
-        return new Creature(id, species.Id, wild, new StatBlock(0, 0, 0, 0, 0, 0),
-            Creatures.TrainMax, 0, null, null, 0, null, null, 1 + seed % 5,
-            StatKey.Atk, StatKey.Def);
-    }
-
-    /// <summary>⚠️ すごろく。⭐ 盤の作られ方と、道筋の並びを踏む。</summary>
-    private static string TrailProbe()
-    {
-        var sb = new StringBuilder();
-        for (int tier = 1; tier <= 6; tier++)
-        {
-            var rng = new Rng(20260822).Stream($"trail:{tier}");
-            var trail = Trails.Make(rng, tier);
-            sb.Append("tier").Append(tier).Append(' ').Append(trail.Count).Append('\n');
-            for (int at = 0; at < trail.Count; at++)
-            {
-                var sq = trail.Squares[at];
-                sb.Append(at).Append(':').Append(sq.Kind).Append(':').Append(sq.Ways.Count);
-                foreach (var w in sq.Ways) sb.Append('>').Append(w.To);
-                sb.Append('\n');
-            }
-        }
-        return sb.ToString();
-    }
-
-    /// <summary>⚠️ **超越関数そのものを並べる。**⭐ 1ULP の差はここで最初に見える。</summary>
-    private static string Libm()
-    {
-        var sb = new StringBuilder();
-        var inv = System.Globalization.CultureInfo.InvariantCulture;
-        for (int deg = -80; deg <= 80; deg += 20)
-        {
-            double r = deg * Math.PI / 180.0;
-            sb.Append(Math.Sin(r).ToString("R", inv)).Append(' ')
-              .Append(Math.Cos(r).ToString("R", inv)).Append(' ');
-        }
-        for (int n = 1; n <= 40; n += 7)
-            sb.Append(Math.Pow(n, 1.6).ToString("R", inv)).Append(' ');
-        sb.Append(Math.Atan2(3.0, 7.0).ToString("R", inv));
-        return sb.ToString();   // ⚠️ 特定のため生の値
-    }
+    // ⭐ **中身はここに書かない。**`EggCommand.Sim/Determinism.cs` が唯一の出所。
+    // ⚠️ 2026-08-22 に一度、同じ中身を両方に書いた ── 片方だけ直すと
+    //    「比べているつもりで別のものを比べる」ことになる。
+    protected override void OnInitialized() => _report = Determinism.Run();
 }

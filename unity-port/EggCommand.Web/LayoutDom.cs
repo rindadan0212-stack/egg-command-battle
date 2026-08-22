@@ -1,0 +1,183 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+using EggCommand.Core;
+
+namespace EggCommand.Web
+{
+    /// <summary>骨組みに値を差すための口。
+    ///
+    /// ⚠️ **Unity 版の `LayoutFill` と同じ形にしてある。**⭐ 画面を書く側のコードが
+    /// そのまま生きるようにするため（`BookScreen` は `Ui` を1度も呼んでいない）。
+    ///
+    /// ⚠️ 違うのは色の型だけ ── Unity は `Color`、ここは CSS の名前。</summary>
+    public sealed class DomFill
+    {
+        /// <summary>`bind=` → 出す字。</summary>
+        public Func<string, string> Text;
+        /// <summary>`bind=` → 出すドット絵。</summary>
+        public Func<string, PixelSprite> Sprite;
+        /// <summary>`bind=` → その絵の色。</summary>
+        public Func<string, Palette> Palette;
+        /// <summary>`bind=` → 掛ける色（CSS）。⚠️ null なら骨組みの `ink=` のまま。</summary>
+        public Func<string, string> Tint;
+        /// <summary>`bind=` → 薄くするか（0〜1）。⚠️ 伏せてあるものを沈めるのに使う。</summary>
+        public Func<string, double?> Fade;
+        /// <summary>`tap=` → 押しどころにするか。</summary>
+        public Func<string, bool> Tappable;
+        /// <summary>`repeat=` → 何個あるか。</summary>
+        public Func<string, int> Count;
+        /// <summary>⭐ 繰り返しの1件を組む直前に呼ばれる。</summary>
+        public Action<int> At;
+    }
+
+    /// <summary>骨組みを HTML に変える。⭐ **ここが唯一「座標を読む」場所。**
+    ///
+    /// ⚠️ Unity 版（`LayoutView.cs`）と1対1で対応する。⭐ 差し替えたのはここだけで、
+    /// 骨組みファイル（`Layouts/*.txt`）は**1文字も変えていない**。
+    ///
+    /// ⚠️ **中身の判断はしない。**何をどこに置くかは骨組みが持つ。</summary>
+    public static class LayoutDom
+    {
+        public static string Render(EggCommand.Core.Layout layout, DomFill fill)
+        {
+            var sb = new StringBuilder();
+            if (layout == null) return "<!-- 骨組みが無い -->";
+            foreach (var node in layout.Roots) One(sb, node, fill);
+            return sb.ToString();
+        }
+
+        /// <param name="suffix">繰り返しの中なら「#N」。⚠️ **子まで伝える。**
+        /// ⭐ DOM の id は一意でなければならない ── 伝えないと、11枚の札の子が
+        /// 全部同じ id になり、検査も指し示しも効かなくなる（2026-08-22 に実測）。</param>
+        private static void One(StringBuilder sb, LayoutNode node, DomFill fill, string suffix = "")
+        {
+            string repeat = node.Option("repeat");
+            if (repeat == null) { Single(sb, node, fill, node.Left, node.Top, -1, suffix); return; }
+
+            int count = fill?.Count != null ? fill.Count(repeat) : 0;
+            int cols = Math.Max(1, node.Number("cols", 1));
+            float gap = node.Number("gap", 0);
+            // ⭐ 段の高さは `Layouts.StepOf` が唯一の出所（Unity 版と同じ）
+            float step = Layouts.StepOf(node);
+
+            for (int i = 0; i < count; i++)
+            {
+                fill?.At?.Invoke(i);
+                float left = node.Left + (i % cols) * (node.Width + gap);
+                float top = node.Top + (i / cols) * step;
+                Single(sb, node, fill, left, top, i, suffix);
+            }
+        }
+
+        private static void Single(StringBuilder sb, LayoutNode node, DomFill fill,
+            float left, float top, int index, string suffix)
+        {
+            // ⚠️ 空白で繋がない（Unity 版と同じ理由 ── 読み戻せなくなる）
+            string mine = index < 0 ? suffix : "#" + index;
+            string name = node.Name + mine;
+            string tag = node.Kind == "button" ? "button" : "div";
+
+            var style = new StringBuilder();
+            style.Append("left:").Append(Px(left))
+                 .Append(";top:").Append(Px(top))
+                 .Append(";width:").Append(Px(node.Width))
+                 .Append(";height:").Append(Px(node.Height));
+
+            var cls = new StringBuilder("n ").Append(node.Kind);
+            string bind = node.Option("bind");
+
+            if (node.Kind == "label")
+            {
+                style.Append(";font-size:").Append(Px(node.Number("size", 26)));
+                cls.Append(" a-").Append(node.Option("anchor") ?? "left");
+                string ink = node.Option("ink");
+                if (ink != null) cls.Append(" ink-").Append(ink);
+                string tint = fill?.Tint != null ? fill.Tint(bind) : null;
+                if (tint != null) style.Append(";color:").Append(tint);
+            }
+            if (node.Option("lead") == "yes") cls.Append(" lead");
+
+            double? fade = fill?.Fade != null ? fill.Fade(bind) : null;
+            if (fade.HasValue) style.Append(";opacity:")
+                .Append(fade.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture));
+
+            // ⚠️ 押しどころは `tap=` があるときだけ。⭐ 無ければただの札
+            string tap = node.Option("tap");
+            bool live = tap != null && fill?.Tappable != null && fill.Tappable(tap);
+            if (tap != null && !live && node.Kind != "button") cls.Append(" quiet");
+
+            sb.Append('<').Append(tag)
+              .Append(" id=\"").Append(Esc(name)).Append('"')
+              .Append(" class=\"").Append(cls).Append('"')
+              .Append(" style=\"").Append(style).Append('"');
+            if (tag == "button" && !live && tap != null) sb.Append(" disabled");
+            sb.Append('>');
+
+            if (node.Kind == "pixel")
+            {
+                var sprite = fill?.Sprite != null ? fill.Sprite(bind) : null;
+                var palette = fill?.Palette != null ? fill.Palette(bind) : null;
+                if (sprite != null && palette != null) Dots(sb, sprite, palette, node);
+            }
+            else if (node.Kind == "label" || node.Kind == "button")
+            {
+                sb.Append(Esc(fill?.Text != null ? fill.Text(bind) ?? "" : ""));
+            }
+
+            // ⭐ 子にも同じ番号を伝える（id を一意に保つ）
+            foreach (var child in node.Children) One(sb, child, fill, mine);
+            sb.Append("</").Append(tag).Append('>');
+        }
+
+        /// <summary>ドット絵を SVG で。⭐ **`EggCommand.Sim/Book.cs` と同じやり方**
+        /// （添字色 → `Palette.ColorOf` の "#rrggbb" をそのまま矩形に）。
+        ///
+        /// ⚠️ 画像ファイルにしない ── 変異＝パレットスワップなので、
+        /// **同じ絵に別の色を掛ける**のがこの作品の仕組み。</summary>
+        private static void Dots(StringBuilder sb, PixelSprite sprite, Palette palette, LayoutNode node)
+        {
+            // ⭐ 正方形で描く（検査が「絵は正方形」を要求している）
+            float size = Math.Min(node.Width, node.Height);
+            sb.Append("<svg class=\"n pixel\" viewBox=\"0 0 ")
+              .Append(sprite.Width).Append(' ').Append(sprite.Height)
+              .Append("\" style=\"left:0;top:0;width:").Append(Px(size))
+              .Append(";height:").Append(Px(size)).Append("\">");
+            for (int y = 0; y < sprite.Height; y++)
+            {
+                for (int x = 0; x < sprite.Width; x++)
+                {
+                    byte at = sprite.At(x, y);
+                    if (at == 0) continue;   // ⚠️ 添字0は透明
+                    sb.Append("<rect x=\"").Append(x).Append("\" y=\"").Append(y)
+                      .Append("\" width=\"1\" height=\"1\" fill=\"")
+                      .Append(palette.ColorOf(at)).Append("\"/>");
+                }
+            }
+            sb.Append("</svg>");
+        }
+
+        /// <summary>⭐ **設計 px を CSS へ。**⚠️ `--u` を掛けない ── 外枠を丸ごと
+        /// 拡大縮小するので、中は設計の数のままでよい。</summary>
+        private static string Px(float value) =>
+            value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "px";
+
+        private static string Esc(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            var sb = new StringBuilder(text.Length);
+            foreach (var c in text)
+            {
+                switch (c)
+                {
+                    case '&': sb.Append("&amp;"); break;
+                    case '<': sb.Append("&lt;"); break;
+                    case '>': sb.Append("&gt;"); break;
+                    case '"': sb.Append("&quot;"); break;
+                    default: sb.Append(c); break;
+                }
+            }
+            return sb.ToString();
+        }
+    }
+}
