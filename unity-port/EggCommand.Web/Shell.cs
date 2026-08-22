@@ -22,6 +22,10 @@ public sealed class Shell
 
     public Sheet Now_Sheet = Sheet.Home;
     public Panel Open = Panel.None;
+    /// <summary>その札の**下に居た**札。⭐ 技の詳細は図鑑の種族の上にも出るので、
+    /// 閉じたときに戻る先が要る。⚠️ **1枚だけ**覚える
+    /// ── 積み重ねを作ると「どこまで戻るのか」が読めなくなる。</summary>
+    public Panel Under = Panel.None;
 
     // ── 一覧の並べ替え（BOX・配合・編成で共通）──────────
     public FilterKey Filter = FilterKey.All;
@@ -47,6 +51,15 @@ public sealed class Shell
     /// <summary>編成の札が「放置」か。⚠️ **どちらかは開いた場所で決まる**
     /// （2026-08-21・作者の指示）── 札の中に切り替えは無い。</summary>
     public bool IdleParty;
+
+    /// <summary>図鑑で開いている種族（`SpeciesTable.All` の番号）。</summary>
+    public int SpeciesAt;
+    /// <summary>長押しで開いている技。⚠️ 無ければ null。</summary>
+    public string? SkillId;
+    /// <summary>その技が入っている枠。⚠️ **枠1（0）は CT を 0 で出す。**</summary>
+    public int SkillSlot;
+    /// <summary>その技のいまのレベル。</summary>
+    public int SkillLevel = 1;
 
     /// <summary>いまの戦い。⚠️ 無ければ戦っていない。
     /// ⭐ 名前に `_` が付いているのは、Core の `Battle` と見分けるため。</summary>
@@ -107,17 +120,17 @@ public sealed class Shell
                 // ⚠️ 画面を移るときに並べ替えを畳む（Unity 版と同じ ── 一覧へ戻るたびに
                 //    開いていると、見たいのは一覧なのに毎回畳む操作が要る）
                 SortOpen = false;
-                Open = Panel.None;
+                Open = Under = Panel.None;
                 Now_Sheet = i switch
                 {
                     1 => Sheet.Nests, 2 => Sheet.Breed, 3 => Sheet.Box, _ => Sheet.Home,
                 };
                 break;
 
-            case "back": Open = Panel.None; Now_Sheet = Sheet.Home; break;
+            case "back": Open = Under = Panel.None; Now_Sheet = Sheet.Home; break;
             // ⚠️ **閉じたら選びかけも捨てる。**⭐ 残すと、次に開いたとき
             //    身に覚えのない個体が選ばれていて、そのまま分解できてしまう
-            case "close": Open = Panel.None; Melts.Clear(); Feeds.Clear(); break;
+            case "close": Open = Under; Under = Panel.None; Melts.Clear(); Feeds.Clear(); break;
 
             // ⭐ **右肩は画面ごとに中身が変わる**（Unity 版 `App.ShowExtra`）
             case "extra":
@@ -173,11 +186,59 @@ public sealed class Shell
             case "party": IdleParty = true; Open = Panel.Party; break;
             case "set": Deeds.Team(this, i); break;
             case "seat": Deeds.Drop(this, i); break;
-            case "done": Open = Panel.None; break;
+            case "done": Open = Under = Panel.None; break;
 
             // ── 図鑑・試練 ──────────────────────────
             case "trials": Now_Sheet = Sheet.Trial; SortOpen = false; break;
             case "trial": Deeds.Trial(this, i); break;
+            case "species": SpeciesAt = i; Open = Panel.Species; break;
+        }
+    }
+
+    /// <summary>**長押し**された。
+    ///
+    /// ⭐ 押しどころとは別の道（`hold=`）。⚠️ 短く触っても開かない
+    /// ── 技の札は押しどころではないので、触っただけで開くと選ぶ指が誤爆する。</summary>
+    public void Hold(string what, string at)
+    {
+        int i = Index(at);
+        switch (what)
+        {
+            // ⭐ BOX の札の技（枠0〜2）。⚠️ **いま見ている個体の**技とレベルを出す。
+            //    ⚠️ 名前に `detail-` が冠されている（`use=panel` で差した部品なので）
+            case "detail-s0": Peek(0); break;
+            case "detail-s1": Peek(1); break;
+            case "detail-s2": Peek(2); break;
+
+            // ⭐ 種族の札の抽選（枠1〜3）。⚠️ こちらは個体ではないので Lv は 1
+            case "skill1": Pool(0, i); break;
+            case "skill2": Pool(1, i); break;
+            case "skill3": Pool(2, i); break;
+        }
+
+        void Peek(int slot)
+        {
+            var one = PickedOne();
+            if (one == null) return;
+            var skills = Creatures.SkillsOf(one);
+            if (slot >= skills.Length || skills[slot] == null) return;
+            SkillId = skills[slot]!.Id;
+            SkillSlot = slot;
+            SkillLevel = SkillCosts.LevelOf(one.SkillPoints[slot]);
+            Under = Open;
+            Open = Panel.Skill;
+        }
+
+        void Pool(int slot, int n)
+        {
+            var all = SpeciesTable.All;
+            var pool = Sheets.PoolOf(all[Math.Clamp(SpeciesAt, 0, all.Count - 1)], slot);
+            if (n < 0 || n >= pool.Count || !Skills.Has(pool[n])) return;
+            SkillId = pool[n];
+            SkillSlot = slot;
+            SkillLevel = 1;
+            Under = Open;
+            Open = Panel.Skill;
         }
     }
 

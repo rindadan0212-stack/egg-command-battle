@@ -60,11 +60,18 @@ namespace EggCommand.Web
         /// ⚠️ 繰り返し（`repeat=`）は自分で番号を付けるが、
         /// **描く側が何度も呼ぶ**場合（戦闘の立ち位置）はここで渡す。
         /// ⭐ 渡さないと id が重なる（実測 2026-08-22: 5体分が全部同じ id）。</param>
-        public static string Render(EggCommand.Core.Layout layout, DomFill fill, string suffix = "")
+        /// <param name="crown">⭐ **1枚の画面に骨組みを重ねるときの冠**（`"-card"` など）。
+        ///
+        /// ⚠️ `suffix` とは**別のもの**。⭐ 冠は id にだけ付き、
+        /// 押しどころの番号（`data-at`）には入らない ── 入れると番号が読めなくなる
+        /// （実測 2026-08-22: `-card#0` を番号として読もうとして -1 になった）。
+        /// ⚠️ `use=` の冠（`Layouts.Rename`）と同じ役目を、描くときにする。</param>
+        public static string Render(EggCommand.Core.Layout layout, DomFill fill,
+            string suffix = "", string crown = "")
         {
             var sb = new StringBuilder();
             if (layout == null) return "<!-- 骨組みが無い -->";
-            foreach (var node in layout.Roots) One(sb, node, fill, node.Top, suffix);
+            foreach (var node in layout.Roots) One(sb, node, fill, node.Top, suffix, crown);
             return sb.ToString();
         }
 
@@ -72,13 +79,13 @@ namespace EggCommand.Web
         /// ⭐ DOM の id は一意でなければならない ── 伝えないと、11枚の札の子が
         /// 全部同じ id になり、検査も指し示しも効かなくなる（2026-08-22 に実測）。</param>
         private static void One(StringBuilder sb, LayoutNode node, DomFill fill,
-            float top, string suffix = "")
+            float top, string suffix = "", string crown = "")
         {
             // ⭐ **条件で出さない。**⚠️ 隠すのでなく作らない
             if (!Shows(node, fill)) return;
 
             string repeat = node.Option("repeat");
-            if (repeat == null) { Single(sb, node, fill, node.Left, top, -1, suffix); return; }
+            if (repeat == null) { Single(sb, node, fill, node.Left, top, -1, suffix, crown); return; }
 
             int count = fill?.Count != null ? fill.Count(repeat) : 0;
             int cols = Math.Max(1, node.Number("cols", 1));
@@ -91,18 +98,18 @@ namespace EggCommand.Web
                 fill?.At?.Invoke(repeat, i);
                 float left = node.Left + (i % cols) * (node.Width + gap);
                 // ⭐ 外側の番号も引き継ぐ（入れ子で id が衝突する）
-                Single(sb, node, fill, left, top + (i / cols) * step, i, suffix);
+                Single(sb, node, fill, left, top + (i / cols) * step, i, suffix, crown);
             }
         }
 
         private static void Single(StringBuilder sb, LayoutNode node, DomFill fill,
-            float left, float top, int index, string suffix)
+            float left, float top, int index, string suffix, string crown)
         {
             // ⚠️ 空白で繋がない（Unity 版と同じ理由 ── 読み戻せなくなる）
             // ⚠️ **外側の番号を捨てない。**⭐ 入れ子の繰り返しでは
             //    `card#2` の中の `face#0` が5枚できて id が衝突する（実測 2026-08-22）。
             string mine = index < 0 ? suffix : suffix + "#" + index;
-            string name = node.Name + mine;
+            string name = node.Name + crown + mine;
             string tag = node.Kind == "button" ? "button" : "div";
 
             var style = new StringBuilder();
@@ -233,7 +240,7 @@ namespace EggCommand.Web
             var tops = Layouts.TopsOf(node, child => Shows(child, fill),
                 child => fill?.Count != null ? fill.Count(child.Option("repeat")) : 0);
             for (int i = 0; i < node.Children.Count; i++)
-                One(sb, node.Children[i], fill, tops[i], mine);
+                One(sb, node.Children[i], fill, tops[i], mine, crown);
             sb.Append("</").Append(tag).Append('>');
         }
 

@@ -20,29 +20,15 @@
 
     private string _html = "";
 
+    /// <summary>⚠️ **中身は `Sheets.SkillCard` が持つ**（遊ぶ頁と同じもの）。</summary>
     protected override void OnParametersSet()
     {
         var all = Skills.All;
-        var skill = all[Math.Clamp(At, 0, all.Count - 1)];
-        var power = SkillText.PowerOf(skill);
-        int slot = Slot ?? -1;
-        int level = Math.Max(1, Level ?? 1);
-
-        _html = LayoutDom.Render(LayoutStore.Of("skillinfo"), new DomFill
+        _html = Sheets.SkillCard(new Shell(Demo.Game(), Demo.Now)
         {
-            Text = key => key switch
-            {
-                "name" => skill.Name,
-                // ⭐ Lv・CT・威力を1行に。⚠️ 3行に割ると札より縦に長い覆いになる
-                "meta" => $"Lv {level} / {Skills.MaxLevel}"
-                    + $"　CT {(slot == 0 ? 0 : skill.Ct)}"
-                    + (power.Length > 0 ? $"　威力 {power}" : ""),
-                "body" => SkillText.Describe(skill),
-                // ⚠️ 「上げると強くなる」と書かない。⭐ Lv2→Lv5 の実数を並べる
-                "steps" => SkillText.StepsOf(skill, slot),
-                _ => "",
-            },
-            Tappable = key => true,
+            SkillId = all[Math.Clamp(At, 0, all.Count - 1)].Id,
+            SkillSlot = Slot ?? -1,
+            SkillLevel = Math.Max(1, Level ?? 1),
         });
     }
 }

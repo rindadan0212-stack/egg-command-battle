@@ -9,16 +9,48 @@
 // ⚠️ 倍率合わせ（`fit`）は index.html が持っている。ここには書かない。
 
 window.eggTap = {
+  /** 指を離すまでの長さ（ms）。⭐ Unity 版 `LongPress` と同じ数。 */
+  HOLD: 500,
+
   /** @param {object} owner .NET 側の受け口（`DotNetObjectReference`） */
   listen(owner) {
-    if (this._on) document.removeEventListener('pointerup', this._on, true)
-    this._on = (e) => {
+    for (const [type, fn] of this._bound || []) document.removeEventListener(type, fn, true)
+
+    // ⚠️ **長押しは押しどころとは別の道**（`hold=`）。
+    // ⭐ 短く触っても開かない ── 技の札は押しどころではないので、
+    //   触っただけで開くと一覧を選ぶ指が誤爆する。
+    let timer = null, held = false, from = null
+    const drop = () => { if (timer) clearTimeout(timer); timer = null; from = null }
+
+    const down = (e) => {
+      held = false
+      const el = e.target instanceof Element ? e.target.closest('[data-hold]') : null
+      if (!el) return
+      from = { x: e.clientX, y: e.clientY }
+      timer = setTimeout(() => {
+        timer = null
+        held = true
+        owner.invokeMethodAsync('Held', el.dataset.hold, el.dataset.at || '')
+      }, this.HOLD)
+    }
+    // ⚠️ **指がずれたら長押しではない**（巻物を送っているだけのことがある）
+    const move = (e) => {
+      if (!from) return
+      if (Math.abs(e.clientX - from.x) > 12 || Math.abs(e.clientY - from.y) > 12) drop()
+    }
+    const up = (e) => {
+      drop()
+      // ⭐ 長押しが成立したら、離した拍で押しどころを動かさない
+      if (held) { held = false; e.preventDefault(); return }
       const el = e.target instanceof Element ? e.target.closest('[data-tap]') : null
       if (!el || el.disabled) return
       e.preventDefault()
       owner.invokeMethodAsync('Tapped', el.dataset.tap, el.dataset.at || '')
     }
-    document.addEventListener('pointerup', this._on, true)
+
+    this._bound = [['pointerdown', down], ['pointermove', move],
+      ['pointerup', up], ['pointercancel', () => drop()]]
+    for (const [type, fn] of this._bound) document.addEventListener(type, fn, true)
   },
 
   /** 帯だけ差し替える。

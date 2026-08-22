@@ -150,14 +150,18 @@ export function audit() {
   //    札の「あきらめますか」を重なりとして数えていた）。
   const inks = nodes
     .filter(e => e.classList.contains('label') && e.textContent.trim())
+    // ⚠️ 🔴 **覆いの後ろは、そもそも見えていない。**
+    //    ⭐ だから**後ろどうしも比べない** ── 比べていた頃は、札を2枚重ねた画面で
+    //    「見えていない画面」と「見えていない札」の重なりを 14 件報告した
+    //    （実測 2026-08-22 `/app?at=book&open=skill`）。
+    //    ⚠️ 後ろの画面は、札を出さない形で別に検査してある。
+    .filter(e => above(e))
     .filter(e => !clipped(e))
     .map(e => ({ el: e, ink: inkOf(e) }))
     .filter(x => x.ink)
   for (let i = 0; i < inks.length; i++) {
     for (let j = i + 1; j < inks.length; j++) {
       if (!hits(inks[i].ink, inks[j].ink)) continue
-      // ⭐ 層が違えば同時に見えない
-      if (above(inks[i].el) !== above(inks[j].el)) continue
       push(`字の重なり: ${inks[i].el.id}「${inks[i].el.textContent.slice(0, 10)}」`
         + ` × ${inks[j].el.id}「${inks[j].el.textContent.slice(0, 10)}」`)
     }

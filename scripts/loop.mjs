@@ -117,12 +117,12 @@ say((await title()) !== '試練', '戦いが始まる', await title())
 // ── あきらめる（⚠️ 取り返しがつかないので一度だけ確かめる）──────
 // ⚠️ ここは**戦いが動いている最中**に押す（`poke` を使う理由がこれ）
 say(await poke('#give'), '「あきらめる」を押せる')
-say(await has('#stop'), '　確かめが出る')
+say(await has('#stop-card'), '　確かめが出る')
 // ⭐ 確かめている間は時が止まる（読む時間は考える時間でもある）
-await poke('#stop')
-say(!(await has('#stop')) && (await title()) !== '試練', '「やめる」で戦いへ戻る', await title())
+await poke('#stop-card')
+say(!(await has('#stop-card')) && (await title()) !== '試練', '「やめる」で戦いへ戻る', await title())
 await poke('#give')
-await poke('#go')
+await poke('#go-card')
 say((await title()) === '試練', 'あきらめると負けとして畳まれる', await title())
 
 // ⭐ もう一度入って、今度は最後まで戦う

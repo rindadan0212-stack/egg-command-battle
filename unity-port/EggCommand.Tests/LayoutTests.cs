@@ -635,6 +635,17 @@ row card 0 120 100 40 repeat=stats max=6")));
         Assert.Contains("text= が空", ex.Message);
     }
 
+    /// <summary>⚠️ **長押し（`hold=`）にも冠が付く。**⭐ `tap=` と同じ
+    /// 「押されたら名前で呼ぶ」道なので、冠が無いと同じ部品を2度差した瞬間に
+    /// **どちらの長押しか言えなくなる**（2026-08-22 に抜けていた）。</summary>
+    [Fact]
+    public void 差した部品のholdにも冠が付く()
+    {
+        var main = Layouts.Parse("main", "here box 0 0 400 400 use=part");
+        var got = Layouts.Resolve(main, n => Find(n, ("part", "a card 0 0 100 100 hold=s0")));
+        Assert.Equal("here-s0", got.Roots[0].Children[0].Option("hold"));
+    }
+
     /// <summary>⚠️ 🔴 **`text=` は行末まで飲む。**⭐ 後ろに付け足しを書くと、
     /// それが**字として画面に出る**（実測 2026-08-22: 釦に「あきらめる when=!done」）。
     /// ⚠️ 静かに壊れる形なので落とす。</summary>

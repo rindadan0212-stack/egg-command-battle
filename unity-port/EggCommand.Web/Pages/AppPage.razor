@@ -10,7 +10,7 @@
     @* ⚠️ **画面を先に、外枠を後に描く。**⭐ 後に描いたものが上に乗るので、
        下の帯が一覧の上に来る（Unity では外枠が親で、Body がその中だった）。
        ⚠️ 戦闘と潜入は帯を出さないので、本体が 1788 まで使える。 *@
-    <div id="body" class="n" style="left:0;top:132px;width:1080px;overflow:hidden;height:@(_tall)px">
+    <div id="app-body" class="n" style="left:0;top:132px;width:1080px;overflow:hidden;height:@(_tall)px">
       @((MarkupString)_body)
     </div>
     @((MarkupString)_frame)
@@ -41,6 +41,12 @@
     /// ⚠️ 遊ぶ道はタブと右肩。⭐ ここは検査の入口であって近道ではない。</summary>
     [SupplyParameterFromQuery] public string? At { get; set; }
 
+    /// <summary>最初から開いておく札。⭐ **重ねた形を検査で見るための入口。**
+    /// ⚠️ 札は押しどころ（と長押し）からしか開かないので、
+    /// 静かな検査は**重なった状態を一度も見ない** ── そこで id がぶつかっていた
+    /// （実測 2026-08-22: 技の詳細の `body` と、本体の器の `body`）。</summary>
+    [SupplyParameterFromQuery] public string? Open { get; set; }
+
     private Shell _shell = default!;
     private Vault _vault = default!;
     private DotNetObjectReference<AppPage>? _me;
@@ -59,6 +65,18 @@
             "nests" => Sheet.Nests, "breed" => Sheet.Breed, "box" => Sheet.Box,
             "book" => Sheet.Book, "trial" => Sheet.Trial, _ => Sheet.Home,
         };
+        _shell.Open = Open switch
+        {
+            "party" => Panel.Party, "fuse" => Panel.Fuse, "train" => Panel.Train,
+            "eggs" => Panel.Eggs, "ask" => Panel.Ask, "species" => Panel.Species,
+            "skill" => Panel.Skill, _ => Panel.None,
+        };
+        // ⭐ 技の詳細は**種族の札の上に出る**（そこが重なる形）
+        if (_shell.Open == Panel.Skill)
+        {
+            _shell.Under = Panel.Species;
+            _shell.SkillId = Skills.All[0].Id;
+        }
         Draw();
     }
 
@@ -92,6 +110,18 @@
         Wind();
         // ⭐ 触るたびに書く。⚠️ 実測 11KB なので、間引く理由が無い
         await Keep();
+    }
+
+    /// <summary>**長押し**された。⭐ 押しどころとは別の道（`hold=`）。
+    /// ⚠️ 保存は書かない ── 開くだけで、遊びの中身は変わらない。</summary>
+    [JSInvokable]
+    public void Held(string what, string at)
+    {
+        _shell.Hold(what, at);
+        Draw();
+        StateHasChanged();
+        // ⚠️ 札が開いているあいだ時計は止まる（`Deeds.Beat`）ので、ここで畳む
+        if (_shell.Open != Panel.None) { _clock?.Dispose(); _clock = null; }
     }
 
     /// <summary>戦いの時計。⭐ **人の手番では止まる** ── そこが「選ぶ」ところ。
@@ -152,18 +182,28 @@
             Sheet.Trial => Sheets.Trials_(_shell),
             _ => "",
         };
-        _over = _shell.Open switch
-        {
-            Panel.Party => Sheets.Party(_shell, _shell.IdleParty),
-            Panel.Fuse => Sheets.Fuse(_shell),
-            Panel.Train => Sheets.Train(_shell),
-            Panel.Eggs => Sheets.Eggs(_shell),
-            Panel.Ask => Sheets.Ask(_shell),
-            _ => "",
-        };
+        // ⚠️ **札は名前をずらして描く**（`use=` の冠と同じ理由）。
+        //    ⭐ 骨組みは1枚ずつ書かれているので、重ねると名前がぶつかる
+        //    ── 実測 2026-08-22: 外枠の `title` と札の `title`、
+        //    ホームの `count` と卵の棚の `count`、技の詳細の `body` と本体の器。
+        //    ⚠️ id が重なると、検査も指し示しも効かない。
+        // ⭐ 下の札も描く（技の詳細は種族の札の上に出る）。
+        _over = Card(_shell.Under, "-back") + Card(_shell.Open, "-card");
         _frame = _shell.Frame();
         if (_shell.Say != null) { _say = _shell.Say; _shell.Say = null; }
     }
+
+    private string Card(Panel which, string suffix) => which switch
+    {
+        Panel.Party => Sheets.Party(_shell, _shell.IdleParty, suffix),
+        Panel.Fuse => Sheets.Fuse(_shell, suffix),
+        Panel.Train => Sheets.Train(_shell, suffix),
+        Panel.Eggs => Sheets.Eggs(_shell, suffix),
+        Panel.Ask => Sheets.Ask(_shell, suffix),
+        Panel.Species => Sheets.Species(_shell, suffix),
+        Panel.Skill => Sheets.SkillCard(_shell, suffix),
+        _ => "",
+    };
 
     public void Dispose() { _me?.Dispose(); _clock?.Dispose(); }
 }

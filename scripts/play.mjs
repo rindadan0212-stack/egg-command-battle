@@ -32,7 +32,7 @@ await page.waitForFunction(() => document.querySelectorAll('#stage .n').length >
   null, { timeout: 30000 }).catch(() => {})
 
 const title = () => page.evaluate(() => document.getElementById('title')?.textContent || '')
-const parts = () => page.evaluate(() => document.querySelectorAll('#body .n').length)
+const parts = () => page.evaluate(() => document.querySelectorAll('#app-body .n').length)
 
 say((await title()) === 'EGG COMMAND', '開いた直後はホーム', await title())
 
@@ -99,14 +99,14 @@ await page.waitForTimeout(120)
 const expWas = await exp(), kidsWas = await kids()
 await page.click('#bfuse')
 await page.waitForTimeout(150)
-say(await page.evaluate(() => !!document.getElementById('go')), '分解の札が開く')
+say(await page.evaluate(() => !!document.getElementById('go-card')), '分解の札が開く')
 const food = await page.evaluate(() =>
-  [...document.querySelectorAll('[id^="cell#"]')].map(e => e.id))
+  [...document.querySelectorAll('[id^="cell-card#"]')].map(e => e.id))
 say(food.length === kidsWas - 1, '候補から「見ている本人」だけ外れる', `${food.length} 体`)
 for (const one of food) { await page.click(`[id="${one}"]`); await page.waitForTimeout(60) }
-const armed = await page.evaluate(() => document.getElementById('go')?.disabled)
+const armed = await page.evaluate(() => document.getElementById('go-card')?.disabled)
 say(armed === false, 'えらぶと「分解する」が押せる', `disabled=${armed}`)
-await page.click('#go')
+await page.click('#go-card')
 await page.waitForTimeout(200)
 say((await exp()) > expWas, '分解で EXP が増える', `${expWas} → ${await exp()}`)
 say((await kids()) === kidsWas - food.length, '分解した個体は居なくなる',
@@ -132,10 +132,10 @@ say(!priced.off || /EXP\s*[\d,]+/.test(priced.text),
 // ── 技を鍛える ───────────────────────────────────
 await page.click('#btrain')
 await page.waitForTimeout(150)
-say(await page.evaluate(() => !!document.getElementById('head')), '技を鍛える札が開く')
-await page.click('#close')
+say(await page.evaluate(() => !!document.getElementById('head-card')), '技を鍛える札が開く')
+await page.click('#close-card')
 await page.waitForTimeout(120)
-say(await page.evaluate(() => !document.getElementById('head')), '　閉じられる')
+say(await page.evaluate(() => !document.getElementById('head-card')), '　閉じられる')
 
 // ── 配合する ─────────────────────────────────────
 // ⚠️ **始め直す。**⭐ 上で3体還したので、ここには親が2体残っていない。
@@ -159,26 +159,83 @@ say(born.includes('卵'), '　卵ができたと言う', born.slice(0, 40))
 await tab(0)
 await page.click('#party')
 await page.waitForTimeout(150)
-say(await page.evaluate(() => !!document.getElementById('done')), 'ホームから編成が開く')
+say(await page.evaluate(() => !!document.getElementById('done-card')), 'ホームから編成が開く')
 // ⚠️ **始めたての放置の編成は空**（「空き（自動で埋まる）」と出ている）。
 //    ⭐ だから「入れてから外す」の順で見る ── 逆にすると外すものが無い。
 const inParty = () => page.evaluate(() =>
-  document.querySelectorAll('#stage .n.card.lead[id^="ring"]').length)
+  document.querySelectorAll('#stage .n.card.lead[id^="ring-card"]').length)
 const seats = await inParty()
-await page.click('[id="cellA#0"]')
+await page.click('[id="cellA-card#0"]')
 await page.waitForTimeout(150)
 say((await inParty()) === seats + 1, '一覧から編成へ入れられる', `${seats} → ${await inParty()}`)
-await page.click('[id="seat#0"]')
+await page.click('[id="seat-card#0"]')
 await page.waitForTimeout(150)
 say((await inParty()) === seats, '選んでいる枠を押すと外れる', `${await inParty()}`)
-await page.click('#done')
+await page.click('#done-card')
 await page.waitForTimeout(120)
 say((await title()) === 'EGG COMMAND', '「決定」で閉じる', await title())
 
+// ── 長押し（⭐ 押しどころとは別の道）──────────────
+// ⚠️ **短く触っても開かない** ── 技の札は押しどころではないので、
+//    触っただけで開くと一覧を選ぶ指が誤爆する。
+const hold = async (sel, ms = 700) => {
+  const box = await page.evaluate((s) => {
+    const el = document.querySelector(s)
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  }, sel)
+  if (!box) return false
+  await page.mouse.move(box.x, box.y)
+  await page.mouse.down()
+  await page.waitForTimeout(ms)
+  await page.mouse.up()
+  await page.waitForTimeout(200)
+  return true
+}
+await tab(3)
+await page.click('#detail-s0')
+await page.waitForTimeout(200)
+say(await page.evaluate(() => !document.getElementById('steps-card')),
+  '技の札は短く触っても開かない')
+say(await hold('#detail-s0'), '技の札を長押しできる')
+say(await page.evaluate(() => !!document.getElementById('steps-card')), '　技の詳細が開く')
+await page.click('#close-card')
+await page.waitForTimeout(150)
+say(await page.evaluate(() => !document.getElementById('steps-card')), '　閉じられる')
+
 // ── 図鑑と試練（右肩とホームの入口）────────────────
+await tab(0)
 await page.click('#extra')
 await page.waitForTimeout(150)
 say((await title()) === '図鑑', '右肩から図鑑へ', await title())
+// ⭐ 見たことのある種族だけ押せる。⚠️ 伏せてある札を押しても開かない
+const known = await page.evaluate(() =>
+  [...document.querySelectorAll('#stage [id^="cell#"]')].find(e => e.dataset.tap)?.id)
+if (known) {
+  await page.click(`[id="${known}"]`)
+  await page.waitForTimeout(200)
+  say(await page.evaluate(() => !!document.getElementById('s2head-card')), '種族の札が開く')
+  // ⭐ 技の詳細は**種族の札の上にも出る**。⚠️ 閉じたら種族の札へ戻る
+  say(await hold('[id="s1chip-card#0"]'), '　抽選の技を長押しできる')
+  say(await page.evaluate(() => !!document.getElementById('steps-card')), '　技の詳細が重なる')
+  // ⚠️ **重ねた札は名前がぶつかる**（どちらにも `close` と `dim` が在る）。
+  //    ⭐ 下の札は名前をずらして描く ── 重なると検査も指し示しも効かない。
+  const twice = await page.evaluate(() => {
+    const seen = new Map()
+    for (const el of document.querySelectorAll('#stage [id]'))
+      seen.set(el.id, (seen.get(el.id) || 0) + 1)
+    return [...seen].filter(([, n]) => n > 1).map(([id]) => id)
+  })
+  say(twice.length === 0, '　重ねても id がぶつからない', twice.join(' '))
+  await page.click('#close-card')
+  await page.waitForTimeout(200)
+  say(await page.evaluate(() =>
+    !document.getElementById('steps-card') && !!document.getElementById('s2head-card')),
+    '　閉じると種族の札へ戻る')
+  await page.click('#close-card')
+  await page.waitForTimeout(150)
+}
 await page.click('#back')
 await page.waitForTimeout(150)
 say((await title()) === 'EGG COMMAND', '‹ でホームへ戻れる', await title())

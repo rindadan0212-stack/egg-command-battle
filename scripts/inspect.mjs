@@ -76,6 +76,14 @@ const PAGES = args.length ? args : [
   '/app?seed=20260822&at=box',
   '/app?seed=20260822&at=book',
   '/app?seed=20260822&at=trial',
+  // ⚠️ **札は押しどころからしか開かないので、静かな検査は重なった形を見ない。**
+  //    ⭐ そこで id がぶつかっていた（技の詳細の `body` と本体の器の `body`）。
+  '/app?seed=20260822&open=party',
+  '/app?seed=20260822&open=fuse',
+  '/app?seed=20260822&open=train',
+  '/app?seed=20260822&open=eggs',
+  '/app?seed=20260822&at=book&open=species',
+  '/app?seed=20260822&at=book&open=skill',
   // ⭐ 戦闘。⚠️ 決着した枝も見る（札が入れ替わる）
   '/fight',
   '/fight?done=true',

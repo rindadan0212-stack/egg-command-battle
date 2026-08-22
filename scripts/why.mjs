@@ -29,7 +29,7 @@ console.log('いま:', await title(), '/ 戦闘の札:', await has('#hand'))
 const churn = await p.evaluate(() => new Promise(done => {
   let n = 0
   const o = new MutationObserver(ms => { for (const m of ms) n += m.addedNodes.length })
-  o.observe(document.getElementById('body'), { childList: true, subtree: true })
+  o.observe(document.getElementById('app-body'), { childList: true, subtree: true })
   setTimeout(() => { o.disconnect(); done(n) }, 1000)
 }))
 console.log('1秒に足された節点 =', churn)

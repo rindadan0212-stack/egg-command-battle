@@ -706,7 +706,11 @@ namespace EggCommand.Core
             foreach (var pair in node.Options)
             {
                 string value = pair.Value;
-                if (pair.Key == "bind" || pair.Key == "tap" || pair.Key == "repeat")
+                // ⚠️ **`hold` も冠を付ける**（2026-08-22 に抜けていた）。
+                //    ⭐ `tap` と同じ「押されたら名前で呼ぶ」道なので、
+                //    冠が無いと同じ部品を2度差した瞬間に**どちらの長押しか言えなくなる**。
+                if (pair.Key == "bind" || pair.Key == "tap"
+                    || pair.Key == "hold" || pair.Key == "repeat")
                     value = crown + value;
                 // ⚠️ 条件は `!` が先頭に付く。⭐ 冠は名前のほうに付ける
                 else if (pair.Key == "when")

@@ -87,6 +87,21 @@ const VEIL_TRIALS = [
     wreck: () => {},
   },
   {
+    // ⚠️ 🔴 **後ろどうしの重なりも数えない。**⭐ 見えていないものは不備ではない
+    //    ── 数えていた頃は、札を2枚重ねた画面で「見えていない画面」と
+    //    「見えていない札」の重なりを 14 件報告した（実測 2026-08-22）。
+    // ⚠️ 素通りの言い訳にしないため、**前で重ねたら数える**ことは
+    //    別の試験（`字を重ねる`・覆いの無い画面）が見張っている。
+    name: '覆いの後ろで重ねても数えない',
+    want: null,
+    hush: '字の重なり',
+    wreck: () => {
+      const a = document.querySelector('[id^="name#"]')
+      const b = document.querySelector('[id^="kind#"]')
+      for (const el of [a, b]) { el.style.top = '196px'; el.style.left = '8px'; el.style.width = '301px' }
+    },
+  },
+  {
     name: '覆いの前を隠したら数える',
     want: '覆われて見えない',
     wreck: () => {
@@ -257,7 +272,7 @@ for (const t of VEIL_TRIALS) {
   const bad = await page.evaluate(audit)
   const hit = t.want ? bad.find(b => b.includes(t.want)) : null
   if (t.want === null) {
-    const noise = bad.filter(b => b.includes('覆われて見えない'))
+    const noise = bad.filter(b => b.includes(t.hush || '覆われて見えない'))
     if (noise.length === 0) console.log(`⭐ ${t.name} → 数えていない`)
     else { missed++; console.log(`🔴 ${t.name} → **${noise.length}件 数えた**: ${noise[0].slice(0,60)}`) }
   } else if (hit) {

@@ -458,7 +458,7 @@ public static class Sheets
 
     /// <summary>⭐ 巣は `party.txt`・放置は `partyidle.txt`。
     /// ⚠️ **差し込み口の名前は同じ**にしてあるので、ここは1つで足りる。</summary>
-    public static string Party(Shell s, bool idle)
+    public static string Party(Shell s, bool idle, string crown = "")
     {
         var game = s.Game;
         var kind = idle ? PartyKind.Idle : PartyKind.Nest;
@@ -525,7 +525,7 @@ public static class Sheets
             },
 
             Tappable = key => true,
-        });
+        }, crown: crown);
 
         Creature? Member(int at)
         {
@@ -594,6 +594,127 @@ public static class Sheets
         }
     }
 
+    // ── 種族の札 ────────────────────────────────────
+
+    /// <summary>種族の中身。⭐ **`flow=down` の初実戦**
+    /// ── 技の袋の長さが変わるので、下の塊の位置を骨組みに書けない。</summary>
+    public static string Species(Shell s, string crown = "")
+    {
+        var all = SpeciesTable.All;
+        var species = all[Math.Clamp(s.SpeciesAt, 0, all.Count - 1)];
+        var trait = Traits.Has(species.TraitId) ? Traits.ById(species.TraitId) : (Trait?)null;
+
+        var pools = new[]
+        {
+            new[] { species.Skill1 },
+            species.Slot2.Pool.ToArray(),
+            species.Slot3.Pool.ToArray(),
+        };
+        var at = new[] { 0, 0, 0 };
+
+        return LayoutDom.Render(LayoutStore.Of("species"), new DomFill
+        {
+            Count = key => key switch
+            {
+                "slot1" => pools[0].Length,
+                "slot2" => pools[1].Length,
+                "slot3" => pools[2].Length,
+                _ => 0,
+            },
+            At = (key, i) =>
+            {
+                if (key == "slot1") at[0] = i;
+                else if (key == "slot2") at[1] = i;
+                else if (key == "slot3") at[2] = i;
+            },
+
+            Text = key => key switch
+            {
+                "name" => species.Name,
+                // ⭐ **いつ効くか**を名前の隣に置く ── 「常時」と「倒れる一撃を受けたとき」では
+                //    編成に入れる理由がまるで違う。
+                "tname" => trait is Trait t ? $"{t.Name}　― {Traits.LabelOf(t.When)}"
+                    : "（特性が繋がっていない）",
+                "tgist" => trait is Trait g ? g.Gist : "",
+                // ⚠️ 枠1 に「N種」と付けない ── ⭐ 抽選ではない（必ずこれ）ので、
+                //    数を出すと引くものに見える
+                "s2head" => $"枠2の抽選　{pools[1].Length}種",
+                "s3head" => $"枠3の抽選　{pools[2].Length}種",
+                "s1name" => NameOf(0), "s2name" => NameOf(1), "s3name" => NameOf(2),
+                "s1kind" => KindOf(0), "s2kind" => KindOf(1), "s3kind" => KindOf(2),
+                _ => "",
+            },
+
+            Sprite = key => key == "art" ? species.Sprite : null,
+            Palette = key => key == "art" ? species.Palettes[0] : null,
+
+            // ⚠️ **知らない id を黙って飛ばさない。**⭐ 袋に綴り違いが入ったら
+            //    「その技は一生出ない」なので、目に見える形で出す
+            Tint = key => key switch
+            {
+                "s1name" => Skills.Has(pools[0][at[0]]) ? null : "#c0303f",
+                "s2name" => Skills.Has(pools[1][at[1]]) ? null : "#c0303f",
+                "s3name" => Skills.Has(pools[2][at[2]]) ? null : "#c0303f",
+                "tname" => trait == null ? "#c0303f" : null,
+                _ => null,
+            },
+
+            Tappable = key => true,
+        }, crown: crown);
+
+        string NameOf(int slot)
+        {
+            var id = pools[slot][at[slot]];
+            return Skills.Has(id) ? Skills.ById(id).Name : id;
+        }
+
+        string KindOf(int slot)
+        {
+            var id = pools[slot][at[slot]];
+            return Skills.Has(id) ? Skills.LabelOf(Skills.ById(id).Type) : "";
+        }
+    }
+
+    /// <summary>その種族の技の袋（枠1・枠2・枠3）。⭐ **長押しの行き先を出すのに使う。**
+    /// ⚠️ 出す側と読む側が別々に作ると、押した札と開く技がずれる。</summary>
+    public static IReadOnlyList<string> PoolOf(Species species, int slot) => slot switch
+    {
+        0 => new[] { species.Skill1 },
+        1 => species.Slot2.Pool.ToArray(),
+        _ => species.Slot3.Pool.ToArray(),
+    };
+
+    // ── 技の詳細 ────────────────────────────────────
+
+    /// <summary>技1つの中身。⚠️ **枠1（0）は CT を 0 で出す**
+    /// ── 技の表の数をそのまま出すと画面が嘘をつく（実測 2026-08-22:
+    /// BOX の札は「CT0」、長押しの詳細は「CT 3」と出ていた）。</summary>
+    public static string SkillCard(Shell s, string crown = "")
+    {
+        if (!Skills.Has(s.SkillId)) return "";
+        var skill = Skills.ById(s.SkillId!);
+        var power = SkillText.PowerOf(skill);
+        int slot = s.SkillSlot;
+        int level = Math.Max(1, s.SkillLevel);
+
+        return LayoutDom.Render(LayoutStore.Of("skillinfo"), new DomFill
+        {
+            Text = key => key switch
+            {
+                "name" => skill.Name,
+                // ⭐ Lv・CT・威力を1行に。⚠️ 3行に割ると札より縦に長い覆いになる
+                "meta" => $"Lv {level} / {Skills.MaxLevel}"
+                    + $"　CT {(slot == 0 ? 0 : skill.Ct)}"
+                    + (power.Length > 0 ? $"　威力 {power}" : ""),
+                "body" => SkillText.Describe(skill),
+                // ⚠️ 「上げると強くなる」と書かない。⭐ Lv2→Lv5 の実数を並べる
+                "steps" => SkillText.StepsOf(skill, slot),
+                _ => "",
+            },
+            Tappable = key => true,
+        }, crown: crown);
+    }
+
     // ── 確かめる ────────────────────────────────────
 
     /// <summary>「本当にやりますか」を一度だけ聞く札。
@@ -602,7 +723,7 @@ public static class Sheets
     ///
     /// ⚠️ **札の字に印付けを混ぜない**（`**` や ⚠️ はコードの注釈の書き方であって、
     /// 遊ぶ人の画面にそのまま出る）。</summary>
-    public static string Ask(Shell s) =>
+    public static string Ask(Shell s, string crown = "") =>
         LayoutDom.Render(LayoutStore.Of("ask"), new DomFill
         {
             Text = key => key switch
@@ -614,14 +735,14 @@ public static class Sheets
                 _ => "",
             },
             Tappable = key => true,
-        });
+        }, crown: crown);
 
     // ── 卵を選ぶ ────────────────────────────────────
 
     /// <summary>孵化器の空き枠に入れる卵を選ぶ覆い。
     /// ⚠️ **画面いっぱいに出す** ── 本体の中に置くと、上の見出しと下の帯だけ
     /// 明るいまま押せてしまう。</summary>
-    public static string Eggs(Shell s)
+    public static string Eggs(Shell s, string crown = "")
     {
         var eggs = s.Game.Eggs;
         int at = 0;
@@ -648,13 +769,13 @@ public static class Sheets
             Tint = key => key == "egg-elem" ? Face.ElementCss(eggs[at].Element) : null,
 
             Tappable = key => true,
-        });
+        }, crown: crown);
     }
 
     // ── 分解 ────────────────────────────────────────
 
     /// <summary>⭐ **個体を EXP に還す札。**⚠️ 分解した個体は失われる。</summary>
-    public static string Fuse(Shell s)
+    public static string Fuse(Shell s, string crown = "")
     {
         var game = s.Game;
         var eater = s.PickedOne();
@@ -706,7 +827,7 @@ public static class Sheets
             },
 
             Tappable = key => key != "melt" || s.Melts.Count > 0,
-        });
+        }, crown: crown);
 
         Face Cell(int i) => cells[i] ??= new Face(pool[i]);
     }
@@ -715,7 +836,7 @@ public static class Sheets
 
     /// <summary>⭐ **孵さない卵の唯一の出口。**
     /// ⚠️ 選んでから、最後に「強化する」を押す ── 1個ずつ入ると取り消せない。</summary>
-    public static string Train(Shell s)
+    public static string Train(Shell s, string crown = "")
     {
         var game = s.Game;
         var one = s.PickedOne();
@@ -777,7 +898,7 @@ public static class Sheets
                 "feed" => s.Feeds.Count > 0,
                 _ => true,
             },
-        });
+        }, crown: crown);
     }
 
     // ── 図鑑 ────────────────────────────────────────
