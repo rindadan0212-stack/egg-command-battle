@@ -12,6 +12,9 @@
 #    （塗ると画面で一番目立ち、アクセントが効かなくなる）。
 #
 #  名前     種類    左   上   幅   高    付け足し
+# ⚠️ **字は札の中に入れる（兄弟にしない）。**
+#    ⭐ 押したものから「押しどころだと名乗っている親」へ遡って拾うので、
+#    兄弟に置くと**字の上を押しても何も起きない**（実測 2026-08-22）。
 plate      card    0    0    984  112   tap=toggle
-now        label   28   0    872  112   size=28 anchor=left bind=now
-arrow      label   908  0    48   112   size=30 ink=dim anchor=right bind=arrow
+  now      label   28   0    872  112   size=28 anchor=left bind=now
+  arrow    label   908  0    48   112   size=30 ink=dim anchor=right bind=arrow

@@ -1,0 +1,25 @@
+# アプリの外枠 ── ⭐ 上のバーと下の帯（**どの画面にも付く**）
+#
+# ⭐ 帯は**常設のタブバー**（2026-08-20・作者の指示）。
+# ⚠️ ただし戦闘と潜入では出さない ── そこから抜けられると、
+#    不利な盤面をいつでも無かったことにできてしまう。
+# ⚠️ タブのある画面に ‹ を出さない。タブが行き先を全部持っているので、
+#    ‹ は「ホームへ戻る」だけの重複した道になる。
+#
+# ⚠️ **見出しの枠を 800 → 620 に縮めた。**実物は 140+800=940 で、
+#    右肩の字（780 から）と 160px 重なっていた。
+#
+# ⚠️ `dock=no` ＝ 下の帯を跨いでよい印。⭐ 帯そのものにしか付けない。
+#
+#  名前    種類    左   上    幅   高    付け足し
+top       box     0    0     1080 132
+  back    button  12   10    112  112   size=44 tap=back when=back text=‹
+  title   label   140  0     620  132   size=40 anchor=center bind=title
+  badge   label   780  0     252  132   size=28 ink=faint anchor=right bind=badge
+
+dock      box     0    1688  1080 232   when=dock dock=no
+  plate   card    0    0     1080 232
+  tab     card    48   42    234  148   repeat=tabs cols=4 gap=16 rows=148 max=4 tap=tab bind=tab
+    tname  label  0    28    234  44    size=32 anchor=upper-center bind=tname
+    # ⚠️ 0 を出さない。⭐ 数が無いことは**書かない**ことで伝わる
+    tcount label  0    84    234  36    size=24 anchor=upper-center bind=tcount

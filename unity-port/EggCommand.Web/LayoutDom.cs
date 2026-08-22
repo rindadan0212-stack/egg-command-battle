@@ -136,6 +136,10 @@ namespace EggCommand.Web
                 .Append(fade.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture));
 
             // ⚠️ 押しどころは `tap=` があるときだけ。⭐ 無ければただの札
+            // ⚠️ **長押し（`hold=`）は押しどころではない。**
+            //    ⭐ 設計が「押しても何も起きない、長押しで読む」と言い切っているので、
+            //    指の大きさ（112）の規則を掛けると**偽の警報**になる。
+            string hold = node.Option("hold");
             string tap = node.Option("tap");
             bool live = tap != null && fill?.Tappable != null && fill.Tappable(tap);
             if (tap != null && !live && node.Kind != "button") cls.Append(" quiet");
@@ -144,6 +148,17 @@ namespace EggCommand.Web
               .Append(" id=\"").Append(Esc(name)).Append('"')
               .Append(" class=\"").Append(cls).Append('"')
               .Append(" style=\"").Append(style).Append('"');
+            // ⭐ **押しどころの名前と番号を、部品そのものに書いておく。**
+            //
+            // ⚠️ ここは字を組み立てて `MarkupString` で出しているので、Blazor の
+            // `@onclick` は付けられない。⭐ 代わりに `#stage` で拾って、この2つを読む。
+            // ⚠️ 番号は**繰り返しの連なり**（`2#1` のような入れ子もある）。
+            if (live || hold != null)
+            {
+                if (live) sb.Append(" data-tap=\"").Append(Esc(tap)).Append('"');
+                if (hold != null) sb.Append(" data-hold=\"").Append(Esc(hold)).Append('"');
+                if (mine.Length > 0) sb.Append(" data-at=\"").Append(Esc(mine.Substring(1))).Append('"');
+            }
             if (tag == "button" && !live && tap != null) sb.Append(" disabled");
             sb.Append('>');
 

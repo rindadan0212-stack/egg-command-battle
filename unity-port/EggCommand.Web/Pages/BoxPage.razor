@@ -7,89 +7,14 @@
 </div>
 
 @code {
-    /// <summary>並べ替えを開いた状態で描くか。⭐ `?open=1`。
+    /// <summary>並べ替えを開いた状態で描くか。⭐ `?open=true`。
     /// ⚠️ 両方の枝を検査したいので、**画面の状態を URL から言えるようにしてある**。</summary>
     [SupplyParameterFromQuery] public bool Open { get; set; }
 
     private string _html = "";
 
-    /// <summary>BOX。⭐ **部品を3つ差している**（1体の札・並べ替えの帯・升）。
-    /// ⚠️ 座標は1行も無い ── `Layouts/box.txt` と、それが差す4枚が持つ。</summary>
-    protected override void OnParametersSet()
-    {
-        var game = Demo.Game();
-        var sorted = Demo.Sorted(game);
-        var picked = sorted[0];
-        var face = new Face(picked);
-
-        int one = 0, chip = 0;
-        var cells = new Face[sorted.Count];
-
-        _html = LayoutDom.Render(LayoutStore.Of("box"), new DomFill
-        {
-            Count = key => key switch
-            {
-                "box" => sorted.Count,
-                "detail-stats" => Stats.Keys.Length,
-                "detail-lines" => Stats.Keys.Length - 1,
-                "chips-filters" => Filters.Keys.Length,
-                "chips-sorts" => Storages.SortKeys.Length,
-                "chips-bases" => Storages.Bases.Length,
-                _ => 0,
-            },
-
-            At = (key, i) =>
-            {
-                if (key == "box") one = i;
-                else if (key == "detail-stats") face.Row = i;
-                else chip = i;
-            },
-
-            Text = key => key switch
-            {
-                // ⭐ 押しどころは3つ。⚠️ 主役（塗る）は「Lv ＋1」だけ
-                "grow" => $"Lv ＋1　EXP {Face.Digits(Levels.ExpToNext(picked))}",
-                "bar-now" => Demo.SortLine(FilterKey.All, SortKey.WildTotal, SortBasis.Born),
-                "bar-arrow" => Open ? "▲" : "▼",
-                "chips-fchip" => Filters.LabelOf(Filters.Keys[chip]),
-                "chips-schip" => Storages.LabelOf(Storages.SortKeys[chip]),
-                "chips-bchip" => Storages.LabelOf(Storages.Bases[chip]),
-                "cellA-star" or "cellB-star" => Face.Star(sorted[one]),
-                _ => key.StartsWith("detail-") ? face.Text(key[7..], face.Row) : "",
-            },
-
-            Sprite = key => key switch
-            {
-                "detail-art" => face.Sprite,
-                "cellA-art" or "cellB-art" => Cell(one).Sprite,
-                _ => null,
-            },
-            Palette = key => key switch
-            {
-                "detail-art" => face.Palette,
-                "cellA-art" or "cellB-art" => Cell(one).Palette,
-                _ => null,
-            },
-
-            Tint = key => key switch
-            {
-                "cellA-elem" or "cellB-elem" => Face.ElementCss(sorted[one].Element),
-                _ => key.StartsWith("detail-") ? face.Tint(key[7..]) : null,
-            },
-
-            When = key => key switch
-            {
-                "open" => Open,
-                // ⭐ 印を付けるのは「いま見ている個体」だけ
-                "cellA-picked" or "cellB-picked" => sorted[one].Id == picked.Id,
-                // ⚠️ BOX の升に一言は出さない（合成の「＋14」・編成の「Lv 44」だけ）
-                "cellA-note" or "cellB-note" => false,
-                _ => key.StartsWith("detail-") && face.Shows(key[7..]),
-            },
-
-            Tappable = key => key != "grow" || game.Idle.Exp >= Levels.ExpToNext(picked),
-        });
-
-        Face Cell(int at) => cells[at] ??= new Face(sorted[at]);
-    }
+    /// <summary>BOX を1枚だけ描く（外枠なし）。⭐ 中身は `Sheets.Box` ── **遊ぶ頁と同じもの**。
+    /// ⚠️ ここに描く手順を書くと、確かめている画面と遊ぶ画面が別物になる。</summary>
+    protected override void OnParametersSet() =>
+        _html = Sheets.Box(new Shell(Demo.Game(), Demo.Now) { SortOpen = Open });
 }

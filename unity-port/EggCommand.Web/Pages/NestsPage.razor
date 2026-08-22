@@ -9,9 +9,7 @@
 @code {
     /// <summary>何件の巣が出ている状態で描くか（0〜3）。
     /// ⭐ 巣が減ったときにヌシが上へ詰まることを見たい。</summary>
-    // ⚠️ **問い合わせに無い値は、型の既定で**上書き**される。**
-    // ⭐ だから `int?` で受けて、既定をこちらで決める
-    // （実測 2026-08-22: `= 2` と書いた既定が 0 になり、枝を一度も描いていなかった）。
+    // ⚠️ 問い合わせに無い値は型の既定で上書きされるので `int?` で受ける
     [SupplyParameterFromQuery] public int? Shown { get; set; }
     /// <summary>その巣から何回盗んだか。⭐ 4回で「戦闘」に変わる。</summary>
     [SupplyParameterFromQuery] public int Raids { get; set; }
@@ -20,67 +18,11 @@
 
     protected override void OnParametersSet()
     {
-        var game = Demo.Game();
-        long now = Demo.Now;
-        int shown = Math.Clamp(Shown ?? Encounters.Shown, 0, game.Encounters.Count);
-        int at = 0;
-
-        _html = LayoutDom.Render(LayoutStore.Of("nests"), new DomFill
-        {
-            Count = key => key == "nests" ? shown : 0,
-            At = (key, i) => at = i,
-
-            Text = key => key switch
-            {
-                "card-level" => game.Encounters[at].Level.ToString(),
-                "card-left" => Left(at) is int s ? Rarities.Clock(s) : "",
-                // ⭐ 4回盗むと親が道を塞ぐ ＝ 入れば必ず戦闘（巣の寿命）
-                "card-raids" => Steal.IsSealed(Raids) ? "戦闘"
-                    : Raids <= 0 ? "" : new string('●', Raids),
-                "bname" => Nests.BossName,
-                _ => "",
-            },
-
-            Sprite = key => key switch
-            {
-                "card-art" => SpeciesTable.ById(game.Encounters[at].Nest.SpeciesId).Sprite,
-                "bart" => SpeciesTable.ById("nushi").Sprite,
-                _ => null,
-            },
-            Palette = key => key switch
-            {
-                "card-art" => SpeciesTable.ById(game.Encounters[at].Nest.SpeciesId).Palettes[0],
-                "bart" => SpeciesTable.ById("nushi").Palettes[0],
-                _ => null,
-            },
-
-            // ⭐ 残りがこの割合を切ったら赤くする（数字を読ませずに急かす）
-            Ratio = key => key == "card-track" ? RatioOf(at) : 0,
-
-            Tint = key => key switch
-            {
-                "card-track" => RatioOf(at) <= 0.25 ? "#e04f5f" : "#2fa84a",
-                "card-left" => RatioOf(at) <= 0.25 ? "#c0303f" : null,
-                "card-raids" => Steal.IsSealed(Raids) ? "#c0303f" : null,
-                _ => null,
-            },
-
-            Tappable = key => true,
-        });
-
-        // ⚠️ **期限を持たない巣がある**（時刻を渡さずに始めた保存）。
-        //    ⭐ 0 を「もう切れた」と読まない ── 読むと即座に消しにかかる。
-        int? Left(int i)
-        {
-            var e = game.Encounters[i];
-            return e.UntilUnix <= 0 ? null : Encounters.LeftOf(e, now);
-        }
-
-        double RatioOf(int i)
-        {
-            if (Left(i) is not int left) return 0;
-            int whole = Encounters.SecondsFor(game.Encounters[i].Nest.Tier);
-            return whole <= 0 ? 0 : Math.Clamp(left / (double)whole, 0, 1);
-        }
+        var shell = new Shell(Demo.Game(), Demo.Now);
+        // ⚠️ 減った状態を作るのは**確かめ用の頁の仕事**（遊びでは時間で消える）
+        int shown = Math.Clamp(Shown ?? Encounters.Shown, 0, shell.Game.Encounters.Count);
+        while (shell.Game.Encounters.Count > shown)
+            shell.Game.Encounters.RemoveAt(shell.Game.Encounters.Count - 1);
+        _html = Sheets.Wilds(shell, Raids);
     }
 }

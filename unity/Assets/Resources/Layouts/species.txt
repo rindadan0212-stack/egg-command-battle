@@ -22,17 +22,17 @@ panel      card    48   150   984  1500
       tgist  label  0   2     920  62    size=26 ink=dim anchor=upper-left wrap=yes bind=tgist
 
       s1head label  0   36    920  38    size=26 ink=faint anchor=left text=枠1（この種族が必ず持つ）
-      s1chip card   0   0     298  112   repeat=slot1 cols=3 gap=12 rows=124 max=1 tap=skill1
+      s1chip card   0   0     298  112   repeat=slot1 cols=3 gap=12 rows=124 max=1 hold=skill1
         s1name label 6  12    286  44    size=26 anchor=center bind=s1name
         s1kind label 6  58    286  34    size=22 ink=faint anchor=center bind=s1kind
 
       s2head label  0   36    920  38    size=26 ink=faint anchor=left bind=s2head
-      s2chip card   0   0     298  112   repeat=slot2 cols=3 gap=12 rows=124 max=5 tap=skill2
+      s2chip card   0   0     298  112   repeat=slot2 cols=3 gap=12 rows=124 max=5 hold=skill2
         s2name label 6  12    286  44    size=26 anchor=center bind=s2name
         s2kind label 6  58    286  34    size=22 ink=faint anchor=center bind=s2kind
 
       s3head label  0   36    920  38    size=26 ink=faint anchor=left bind=s3head
-      s3chip card   0   0     298  112   repeat=slot3 cols=3 gap=12 rows=124 max=5 tap=skill3
+      s3chip card   0   0     298  112   repeat=slot3 cols=3 gap=12 rows=124 max=5 hold=skill3
         s3name label 6  12    286  44    size=26 anchor=center bind=s3name
         s3kind label 6  58    286  34    size=22 ink=faint anchor=center bind=s3kind
 

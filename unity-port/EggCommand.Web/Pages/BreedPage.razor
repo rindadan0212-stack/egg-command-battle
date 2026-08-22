@@ -9,97 +9,18 @@
 @code {
     [SupplyParameterFromQuery] public bool Open { get; set; }
     /// <summary>親を何体えらんだ状態で描くか（0〜2）。⭐ 空の枠も検査したい。</summary>
-    // ⚠️ **問い合わせに無い値は、型の既定で**上書き**される。**
-    // ⭐ だから `int?` で受けて、既定をこちらで決める
-    // （実測 2026-08-22: `= 2` と書いた既定が 0 になり、枝を一度も描いていなかった）。
+    // ⚠️ 問い合わせに無い値は型の既定で上書きされるので `int?` で受ける
     [SupplyParameterFromQuery] public int? Picked { get; set; }
 
     private string _html = "";
 
-    /// <summary>配合。⭐ **親の札は BOX の詳細と同じ差し込み口**（器が小さいだけ）。
-    /// ⚠️ 左右で同じ部品を差すので、`use=` が名前に冠を付けている
-    /// （`pfill-name` = 左の親の名前 / `qfill-name` = 右）。</summary>
     protected override void OnParametersSet()
     {
-        var game = Demo.Game();
-        var sorted = Demo.Sorted(game);
+        var shell = new Shell(Demo.Game(), Demo.Now) { SortOpen = Open };
+        var sorted = shell.Sorted();
         int picked = Picked ?? 2;
-        var a = picked >= 1 ? sorted[0] : null;
-        var b = picked >= 2 ? sorted[1] : null;
-        var fa = a == null ? null : new Face(a);
-        var fb = b == null ? null : new Face(b);
-
-        int one = 0, chip = 0;
-        var cells = new Face[sorted.Count];
-
-        _html = LayoutDom.Render(LayoutStore.Of("breed"), new DomFill
-        {
-            Count = key => key switch
-            {
-                "box" => sorted.Count,
-                "pfill-stats" or "qfill-stats" => Stats.Keys.Length,
-                "pfill-lines" or "qfill-lines" => Stats.Keys.Length - 1,
-                "chips-filters" => Filters.Keys.Length,
-                "chips-sorts" => Storages.SortKeys.Length,
-                "chips-bases" => Storages.Bases.Length,
-                _ => 0,
-            },
-
-            At = (key, i) =>
-            {
-                if (key == "box") one = i;
-                else if (key == "pfill-stats") { if (fa != null) fa.Row = i; }
-                else if (key == "qfill-stats") { if (fb != null) fb.Row = i; }
-                else chip = i;
-            },
-
-            Text = key => Of(key) is (Face f, string what)
-                ? f.Text(what, f.Row)
-                : key switch
-                {
-                    "bar-now" => Demo.SortLine(FilterKey.All, SortKey.WildTotal, SortBasis.Born),
-                    "bar-arrow" => Open ? "▲" : "▼",
-                    "chips-fchip" => Filters.LabelOf(Filters.Keys[chip]),
-                    "chips-schip" => Storages.LabelOf(Storages.SortKeys[chip]),
-                    "chips-bchip" => Storages.LabelOf(Storages.Bases[chip]),
-                    "cellA-star" or "cellB-star" => Face.Star(sorted[one]),
-                    _ => "",
-                },
-
-            Sprite = key => key is "cellA-art" or "cellB-art" ? Cell(one).Sprite
-                : Of(key) is (Face f, "art") ? f.Sprite : null,
-            Palette = key => key is "cellA-art" or "cellB-art" ? Cell(one).Palette
-                : Of(key) is (Face f, "art") ? f.Palette : null,
-
-            Tint = key => key is "cellA-elem" or "cellB-elem"
-                ? Face.ElementCss(sorted[one].Element)
-                : Of(key) is (Face f, string what) ? f.Tint(what) : null,
-
-            When = key => key switch
-            {
-                "open" => Open,
-                // ⭐ 親が入っていれば札、いなければ「下から選ぶ」
-                "pa" => a != null,
-                "pb" => b != null,
-                // ⭐ 選んでいる親は一覧でも印を付ける
-                "cellA-picked" or "cellB-picked" =>
-                    sorted[one].Id == a?.Id || sorted[one].Id == b?.Id,
-                "cellA-note" or "cellB-note" => false,
-                _ => Of(key) is (Face f, string what) && f.Shows(what),
-            },
-
-            // ⚠️ **2体そろうまで押せない。**⭐ 押せないのに主導線の色のままだった
-            //    頃は、「配合する」が押せるように見えていた
-            Tappable = key => key != "breed" || (a != null && b != null && Fusion.CanFuse(a, b)),
-        });
-
-        Face Cell(int at) => cells[at] ??= new Face(sorted[at]);
-
-        // ⭐ 冠から「どちらの親か」を読む。⚠️ ここが `use=` を2度差せる理由
-        (Face, string)? Of(string? key) =>
-            key == null ? null
-            : key.StartsWith("pfill-") && fa != null ? (fa, key[6..])
-            : key.StartsWith("qfill-") && fb != null ? (fb, key[6..])
-            : null;
+        if (picked >= 1) shell.ParentA = sorted[0].Id;
+        if (picked >= 2) shell.ParentB = sorted[1].Id;
+        _html = Sheets.Breed(shell);
     }
 }

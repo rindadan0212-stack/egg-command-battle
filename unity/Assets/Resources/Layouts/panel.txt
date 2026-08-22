@@ -34,15 +34,15 @@ trait     card    44    446   896  56    ink=faint
 
 # ⭐ 技の札は**その個体の属性の色**（戦闘と同じ約束）。空き枠は箱ごと出さない。
 # ⚠️ 1枚目だけ狭い（400）── 上段1枚・下段2枚で、左右の余白を 44 に揃えるため。
-s0        card    292   526   400  72    when=s0 bind=s0 tap=s0
+s0        card    292   526   400  72    when=s0 bind=s0 hold=s0
   s0name  label   0     6     400  32    size=26 anchor=center bind=s0name
   s0lv    label   18    42    130  24    size=20 ink=dim anchor=left bind=s0lv
   s0ct    label   252   42    130  24    size=20 ink=dim anchor=right bind=s0ct
-s1        card    44    610   424  72    when=s1 bind=s1 tap=s1
+s1        card    44    610   424  72    when=s1 bind=s1 hold=s1
   s1name  label   0     6     424  32    size=26 anchor=center bind=s1name
   s1lv    label   18    42    130  24    size=20 ink=dim anchor=left bind=s1lv
   s1ct    label   276   42    130  24    size=20 ink=dim anchor=right bind=s1ct
-s2        card    516   610   424  72    when=s2 bind=s2 tap=s2
+s2        card    516   610   424  72    when=s2 bind=s2 hold=s2
   s2name  label   0     6     424  32    size=26 anchor=center bind=s2name
   s2lv    label   18    42    130  24    size=20 ink=dim anchor=left bind=s2lv
   s2ct    label   276   42    130  24    size=20 ink=dim anchor=right bind=s2ct

@@ -134,7 +134,8 @@ namespace EggCommand.Core
             "ink",      // 字の色（名前で指す。色そのものは書かない）
             "anchor",   // 字の寄せ
             "bind",     // 値の差し込み口
-            "tap",      // 押したときの手の名前
+            "tap",      // 押しどころ（⭐ 指で押す── 高さ 112 以上）
+            "hold",     // ⭐ **長押しで開く札**（⚠️ 押しどころではない）
             "lead",     // 主導線の見た目にするか
             "repeat",   // 繰り返す元（データの名前）
             "cols",     // 繰り返しの列数
@@ -147,6 +148,7 @@ namespace EggCommand.Core
             "text",     // ⭐ **動かない字**（⚠️ 必ず行の最後。以降は全部その字）
             "flow",     // ⭐ 兄弟を上から詰める（`flow=down`）
             "wrap",     // ⭐ 枠の幅で折り返す（`wrap=yes`）
+            "dock",     // ⭐ 下の帯を跨いでよい（`dock=no`）── 帯そのものだけ
         };
 
         /// <summary>⭐ **兄弟を上から詰めるか。**
@@ -606,9 +608,10 @@ namespace EggCommand.Core
             }
         }
 
-        /// <summary>指が触れる部品か。⭐ `button` と、`tap=` を持つ札。</summary>
+        /// <summary>指が触れる部品か。⭐ `button` と、`tap=` / `hold=` を持つ札。
+        /// ⚠️ 重なりの検査では長押しも数える ── 重なれば片方に指が届かないのは同じ。</summary>
         private static bool Tappable(LayoutNode node) =>
-            IsTappable(node.Kind) || node.Option("tap") != null;
+            IsTappable(node.Kind) || node.Option("tap") != null || node.Option("hold") != null;
 
         /// <summary>⚠️ 上端は**詰めた結果**を渡すこと。⭐ 骨組みに書いてある `上` で
         /// 比べると、`flow=down` の中は全部が同じ位置に見えて偽の重なりが出る。</summary>

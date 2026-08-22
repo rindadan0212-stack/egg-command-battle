@@ -27,8 +27,30 @@ public static class Demo
         return Storages.Sorted(new Storage(game.Storage.Slots, pool), sort, basis);
     }
 
-    /// <summary>畳んだ帯に出す1行。⚠️ どの数で並べているかまで出す
-    /// （「素質合計 順」だけだと、育成を含む数なのか読めなかった）。</summary>
-    public static string SortLine(FilterKey filter, SortKey sort, SortBasis basis) =>
-        $"{Filters.LabelOf(filter)}　／　{Storages.LabelOf(sort)} 順（{Storages.LabelOf(basis)}）";
+    /// <summary>卵をいくつか温めている状態を作る。
+    /// ⚠️ 入れる前に**棚へ載せる** ── `Hatchery.Begin` は棚から取る作り。
+    /// ⭐ 始めた時刻をずらして、進み具合の違う枠を並べる（帯を見るため）。</summary>
+    public static void Incubate(Game game, long now, int howMany)
+    {
+        var nest = Nests.ById("shallow-scale");
+        int want = Math.Clamp(howMany, 0, Hatchery.Slots);
+        for (int i = 0; i < want; i++)
+        {
+            var egg = Nests.MakeEgg(game.RngEgg, nest, EggOrigin.Defeated, ++game.Serial,
+                element: SpeciesTable.Roll(game.RngElement));
+            game.Eggs.Add(egg);
+            Hatchery.Begin(game, egg.Id, now - i * 1200);
+        }
+    }
+
+    /// <summary>棚に卵を積む（孵化器には入れない）。</summary>
+    public static void Shelve(Game game, int howMany)
+    {
+        var nest = Nests.ById("shallow-scale");
+        for (int i = 0; i < Math.Max(0, howMany); i++)
+        {
+            game.Eggs.Add(Nests.MakeEgg(game.RngEgg, nest, EggOrigin.Defeated, ++game.Serial,
+                element: SpeciesTable.Roll(game.RngElement)));
+        }
+    }
 }

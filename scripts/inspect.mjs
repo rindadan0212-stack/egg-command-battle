@@ -63,6 +63,8 @@ const PAGES = args.length ? args : [
   '/fuse?empty=true',
   '/train?picked=3',
   '/train?picked=0&have=0',
+  // ⭐ **外枠付きの本体**。⚠️ 上のバーと下の帯が乗った状態で見る
+  '/app',
 ]
 
 /** ⚠️ 実機の幅は 320〜430。⭐ 一番狭いところで測るのが要点（罠22・24・26）。 */

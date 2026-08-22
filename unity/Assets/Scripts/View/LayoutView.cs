@@ -258,11 +258,15 @@ namespace EggCommand.View
 
             // ⭐ 札そのものを押しどころにする（`tap=` があるとき）。
             // ⚠️ 中に釦を置かない ── どこを押すのか読めなくなる。
+            // ⚠️ **長押し（`hold=`）は押しどころと別の名前。**
+            //    ⭐ 「押しても何も起きない、長押しで読む」札があるので、
+            //    1つの名前に兼ねさせると検査が区別できない。
             string tap = node.Option("tap");
-            if (tap != null && node.Kind != "button" && fill != null)
+            string hold = node.Option("hold");
+            if ((tap != null || hold != null) && node.Kind != "button" && fill != null)
             {
-                var hand = fill.Tap != null ? fill.Tap(tap) : null;
-                var held = fill.Hold != null ? fill.Hold(tap) : null;
+                var hand = tap != null && fill.Tap != null ? fill.Tap(tap) : null;
+                var held = hold != null && fill.Hold != null ? fill.Hold(hold) : null;
                 if (hand != null || held != null) Touchable(rect, hand, held);
             }
 

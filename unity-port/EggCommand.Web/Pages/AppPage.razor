@@ -1,0 +1,62 @@
+@page "/app"
+@using EggCommand.Core
+@using EggCommand.Web
+@using Microsoft.JSInterop
+@implements IDisposable
+@inject IJSRuntime Js
+
+<div id="stage-wrap">
+  <div id="stage">
+    @* ⚠️ **画面を先に、外枠を後に描く。**⭐ 後に描いたものが上に乗るので、
+       下の帯が一覧の上に来る（Unity では外枠が親で、Body がその中だった）。 *@
+    <div id="body" class="n" style="left:0;top:132px;width:1080px;height:1556px;overflow:hidden">
+      @((MarkupString)_body)
+    </div>
+    @((MarkupString)_frame)
+  </div>
+</div>
+
+@code {
+    private Shell _shell = default!;
+    private DotNetObjectReference<AppPage>? _me;
+    private string _body = "", _frame = "";
+
+    protected override void OnInitialized()
+    {
+        // ⚠️ いまは決まった中身から始める。⭐ 保存を繋ぐのはこの次（計画 §6）。
+        _shell = new Shell(Demo.Game(), Demo.Now);
+        Draw();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (!first) return;
+        _me = DotNetObjectReference.Create(this);
+        await Js.InvokeVoidAsync("eggTap.listen", _me);
+    }
+
+    /// <summary>押しどころから呼ばれる。⚠️ 名前と番号だけが届く
+    /// （どこを押したかは骨組みが知っている）。</summary>
+    [JSInvokable]
+    public void Tapped(string what, string at)
+    {
+        _shell.Tap(what, at);
+        Draw();
+        StateHasChanged();
+    }
+
+    private void Draw()
+    {
+        _body = _shell.Now_Sheet switch
+        {
+            Sheet.Home => Sheets.Home(_shell),
+            Sheet.Nests => Sheets.Wilds(_shell),
+            Sheet.Breed => Sheets.Breed(_shell),
+            Sheet.Box => Sheets.Box(_shell),
+            _ => "",
+        };
+        _frame = _shell.Frame();
+    }
+
+    public void Dispose() => _me?.Dispose();
+}

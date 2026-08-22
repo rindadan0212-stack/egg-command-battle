@@ -23,12 +23,7 @@
         var creature = Demo.Sorted(game)[0];
         var skills = Creatures.SkillsOf(creature);
 
-        var nest = Nests.ById("shallow-scale");
-        for (int i = 0; i < Math.Max(0, Have ?? 8); i++)
-        {
-            game.Eggs.Add(Nests.MakeEgg(game.RngEgg, nest, EggOrigin.Defeated, ++game.Serial,
-                element: SpeciesTable.Roll(game.RngElement)));
-        }
+        Demo.Shelve(game, Have ?? 8);
         var eggs = game.Eggs;
 
         int slot = Math.Clamp(Slot ?? 0, 0, skills.Length - 1);
