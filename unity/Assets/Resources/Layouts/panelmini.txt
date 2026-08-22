@@ -1,0 +1,45 @@
+# 1体を1枚で見せる札（小） ── ⭐ **部品**（器は 460x524）
+#
+# ⚠️ `panel.txt` と**同じ差し込み口**を持つ。⭐ 器が小さいだけで、
+#    出す欄は1つも減らさない（減らすと画面によって見える欄が変わる）。
+#
+# ⚠️ 数は `Resources/Prefabs/BreedScreen.prefab` の親札の実測。
+#
+#  名前    種類    左    上    幅   高    付け足し
+elem      round   8     8     42   42    bind=elem
+# ⚠️ **絵は正方形にしか描かれない。**⭐ Prefab の枠は 172x276 だが、
+#    実際に出るのは 172 角を縦の真ん中に置いたもの（`preserveAspect`）。
+#    ⭐ 検査が指摘したので、**出るとおりの数**に直した（26 + (276−172)÷2 = 78）。
+art       pixel   22    78    172  172   bind=art
+name      label   212   26    226  36    size=23 anchor=left bind=name
+lv        label   212   62    226  24    size=15 ink=dim anchor=right bind=lv
+sub       label   212   86    226  22    size=13 ink=faint anchor=left bind=sub
+
+table     box     212   118   226  184
+  hwild   label   108   0     44   22    size=13 ink=faint anchor=right text=素質
+  hgain   label   158   0     62   22    size=13 ink=faint anchor=right text=強化
+  hline   line    0     20    226  2
+  rline   line    0     49    226  1     ink=faint repeat=lines rows=27 max=5
+# ⚠️ **名前の列を 94 → 104 に広げた。**大得意の印が付いた
+#    「▲▲弱化耐性」が **96 要るのに枠が 94** だった（実測 2026-08-22）。
+#    ⭐ その分を「素質」の列から候す（数字は 3桁でも 30 で足りる）。
+  key     label   0     22    104  27    size=16 ink=dim anchor=left repeat=stats rows=27 max=6 bind=key
+  wild    label   108   22    44   27    size=18 anchor=right repeat=stats rows=27 max=6 bind=wild
+  gain    label   158   22    62   27    size=18 ink=accent anchor=right repeat=stats rows=27 max=6 bind=gain
+
+trait     card    22    318   416  44    ink=faint
+  ttag    label   12    12    46   20    size=13 ink=faint anchor=left text=特性
+  tbody   label   58    12    346  20    size=15 ink=accent anchor=left bind=trait
+
+s0        card    130   380   200  50    when=s0 bind=s0
+  s0name  label   0     2     200  26    size=19 anchor=center bind=s0name
+  s0lv    label   12    28    84   18    size=15 ink=dim anchor=left bind=s0lv
+  s0ct    label   104   28    84   18    size=15 ink=dim anchor=right bind=s0ct
+s1        card    22    442   200  50    when=s1 bind=s1
+  s1name  label   0     2     200  26    size=19 anchor=center bind=s1name
+  s1lv    label   12    28    84   18    size=15 ink=dim anchor=left bind=s1lv
+  s1ct    label   104   28    84   18    size=15 ink=dim anchor=right bind=s1ct
+s2        card    238   442   200  50    when=s2 bind=s2
+  s2name  label   0     2     200  26    size=19 anchor=center bind=s2name
+  s2lv    label   12    28    84   18    size=15 ink=dim anchor=left bind=s2lv
+  s2ct    label   104   28    84   18    size=15 ink=dim anchor=right bind=s2ct

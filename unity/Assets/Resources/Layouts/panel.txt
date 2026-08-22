@@ -1,0 +1,48 @@
+# 1体を1枚で見せる札 ── ⭐ **部品**（器は 984x706）
+#
+# ⭐ **BOX と配合で同じ並び。**⚠️ 画面ごとに組み立てを書くと、同じ個体が
+#    画面によって違う顔になり、「BOX では見えるのに配合では見えない」欄が生まれる。
+#
+# ⚠️ 配合の親札は器が小さいので `panelmini.txt` が別に在る。
+#    ⭐ **差し込み口（bind）の名前は同じ**にしてある ── 出す欄が食い違わないため。
+#
+# ⚠️ 数は `Resources/Prefabs/CreaturePanel.prefab` の実測。記憶で書かない。
+#
+#  名前    種類    左    上    幅   高    付け足し
+elem      round   24    18    62   62    bind=elem
+art       pixel   44    42    380  380   bind=art
+name      label   448   40    350  50    size=38 anchor=left bind=name
+lv        label   798   52    160  32    size=22 ink=dim anchor=right bind=lv
+sub       label   448   96    510  28    size=19 ink=faint anchor=left bind=sub
+
+# ⭐ **素質と育成を別の列に。**⚠️ 「41 (17+8)」と1つに詰めていた頃は、
+#    何体か見比べるときに桁が揃わず、どれが伸びているのか読めなかった。
+table     box     448   140   510  240
+  hwild   label   224   0     123  30    size=18 ink=faint anchor=right text=素質
+  hgain   label   357   0     143  30    size=18 ink=faint anchor=right text=強化
+  hline   line    0     28    510  2
+  rline   line    0     65    510  1     ink=faint repeat=lines rows=35 max=5
+  key     label   0     30    214  35    size=22 ink=dim anchor=left repeat=stats rows=35 max=6 bind=key
+  wild    label   224   30    123  35    size=26 anchor=right repeat=stats rows=35 max=6 bind=wild
+  gain    label   357   30    143  35    size=26 ink=accent anchor=right repeat=stats rows=35 max=6 bind=gain
+
+# ⚠️ 特性が無いときは「—」を入れる。⭐ 帯ごと消すと札に穴が空き、
+#    空のままだと壊れて見える（どちらも実測で確認）。「特性なし」とは書かない。
+trait     card    44    446   896  56    ink=faint
+  ttag    label   18    15    72   26    size=19 ink=faint anchor=left text=特性
+  tbody   label   90    15    788  26    size=22 ink=accent anchor=left bind=trait
+
+# ⭐ 技の札は**その個体の属性の色**（戦闘と同じ約束）。空き枠は箱ごと出さない。
+# ⚠️ 1枚目だけ狭い（400）── 上段1枚・下段2枚で、左右の余白を 44 に揃えるため。
+s0        card    292   526   400  72    when=s0 bind=s0 tap=s0
+  s0name  label   0     6     400  32    size=26 anchor=center bind=s0name
+  s0lv    label   18    42    130  24    size=20 ink=dim anchor=left bind=s0lv
+  s0ct    label   252   42    130  24    size=20 ink=dim anchor=right bind=s0ct
+s1        card    44    610   424  72    when=s1 bind=s1 tap=s1
+  s1name  label   0     6     424  32    size=26 anchor=center bind=s1name
+  s1lv    label   18    42    130  24    size=20 ink=dim anchor=left bind=s1lv
+  s1ct    label   276   42    130  24    size=20 ink=dim anchor=right bind=s1ct
+s2        card    516   610   424  72    when=s2 bind=s2 tap=s2
+  s2name  label   0     6     424  32    size=26 anchor=center bind=s2name
+  s2lv    label   18    42    130  24    size=20 ink=dim anchor=left bind=s2lv
+  s2ct    label   276   42    130  24    size=20 ink=dim anchor=right bind=s2ct

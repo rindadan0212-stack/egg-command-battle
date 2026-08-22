@@ -1,0 +1,27 @@
+# 配合 ── 2体を1つの卵に還す
+#
+# ⚠️ **卵の予告は出さない**（2026-08-18・作者判断）。親2枚を見比べる画面なのに、
+#    真ん中に3枚目の札が入ると主役が割れる。
+#
+# ⭐ 親の札は BOX の詳細と**同じ差し込み口**（器が小さいので `panelmini`）。
+# ⚠️ 数は `Resources/Prefabs/BreedScreen.prefab` の実測。
+#
+#  名前    種類    左   上     幅   高    付け足し
+pa        card    48   12     460  540   tap=pa
+  psay    label   0    240    460  60    size=30 ink=faint anchor=center when=!pa text=下から選ぶ
+  pfill   box     0    0      460  524   when=pa use=panelmini
+plus      label   508  12     64   540   size=48 ink=accent anchor=center text=＋
+pb        card    572  12     460  540   tap=pb
+  qsay    label   0    240    460  60    size=30 ink=faint anchor=center when=!pb text=下から選ぶ
+  qfill   box     0    0      460  524   when=pb use=panelmini
+
+go        button  48   570    984  112   size=32 tap=breed lead=yes text=配合する
+
+bar       box     48   694    984  112   use=sortbar
+open      scroll  48   818    984  420   when=open
+  chips   box     0    0      984  746   use=sortchips
+
+gridA     scroll  48   818    984  738   when=!open
+  cellA   card    26   0      224  200   repeat=box cols=4 gap=12 rows=212 tap=one use=cell
+gridB     scroll  48   1250   984  306   when=open
+  cellB   card    26   0      224  200   repeat=box cols=4 gap=12 rows=212 tap=one use=cell

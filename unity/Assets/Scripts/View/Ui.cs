@@ -419,9 +419,11 @@ namespace EggCommand.View
 
         /// <summary>押せるもの。⭐ 角丸を使えるのはここだけ（今は面で表す）。
         /// ⚠️ 高さは <see cref="Tap"/> を下回らせない。</summary>
+        /// <param name="size">字の大きさ。⚠️ 既定は 34。⭐ 骨組み（`size=`）から渡せるように
+        /// 引数にしてある ── 決め打ちだと、細い札で字が枠より広くなる。</param>
         public static Button Tappable(Transform parent, string name, string label, Action onClick,
             float left, float top, float width, float height,
-            bool lead = false, bool enabled = true)
+            bool lead = false, bool enabled = true, int size = 34)
         {
             // ⚠️ 黙って高さを引き上げない。呼ぶ側は渡した高さで次の位置を決めているので、
             //    ここで勝手に伸ばすと親の枠からはみ出す（実際 BOX の行で起きた）。
@@ -443,7 +445,7 @@ namespace EggCommand.View
             if (onClick != null) button.onClick.AddListener(() => onClick());
 
             // ⚠️ 明るい札の上に明るい字を置かない。札ごとに読める側を選ぶ
-            var text = Label(rect, "Label", label, 34,
+            var text = Label(rect, "Label", label, size,
                 !enabled ? InkFaint : lead ? OnLead : Ink,
                 TextAnchor.MiddleCenter, 0f, 0f, width, height);
             text.horizontalOverflow = HorizontalWrapMode.Overflow;

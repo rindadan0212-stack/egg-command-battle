@@ -1,0 +1,15 @@
+# 一覧の升1つ ── ⭐ **部品**（器は 224x200）
+#
+# ⭐ BOX・配合・編成・合成が**同じ升**を使う（読み方が画面ごとに変わらない）。
+# ⚠️ 手書きで並べていた頃は、同じ「個体を選ぶ升」が画面ごとに
+#    228×200（べた塗りで選択）と 224×200（枠で選択）に割れていた。
+#
+# ⚠️ **素質の合計を出さない**（2026-08-18・作者判断）。並べ替えれば順に並ぶ。
+#    ⭐ 画面ごとの一言（合成の「＋14」・編成の「Lv 44」）だけを下段に出す。
+#
+#  名前   種類    左   上    幅   高    付け足し
+mark     card    0    0     224  200   lead=yes when=picked
+star     label   34   2     156  26    size=20 ink=accent anchor=center bind=star
+elem     round   14   14    30   30    bind=elem
+art      pixel   53   28    118  118   bind=art
+note     label   8    150   208  40    size=22 anchor=center bind=note when=note

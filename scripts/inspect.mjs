@@ -11,13 +11,38 @@
  *  ⭐ そして Unity 版に無かったものを1つ足す:
  *  - **id の重複** ── DOM では一意でなければ、検査も指し示しも効かない
  *
- *  使い方: node scripts/inspect.mjs [URL]
+ *  ⚠️ **枝も1枚と数える。**⭐ 開いた並べ替え・空の親枠・放置の編成は
+ *  `when=` で中身が入れ替わるので、**閉じた側しか見ない検査は嘘をつく**。
+ *  だから URL に状態を出してある（`?open=true` など）。
+ *
+ *  使い方: node scripts/inspect.mjs [URL] [path ...]
  */
 
 import { chromium } from 'playwright'
 import { audit } from './audit.mjs'
 
-const URL = process.argv[2] || 'http://localhost:5817'
+const args = process.argv.slice(2)
+const URL = (args[0] && args[0].startsWith('http') ? args.shift() : 'http://localhost:5817')
+  .replace(/\/$/, '')
+
+/** 調べる画面。⚠️ 足したら必ずここに入れる（入れないと「0件」が痩せる）。 */
+const PAGES = args.length ? args : [
+  '/',                    // 図鑑
+  '/trial',               // 試練
+  '/ask',                 // 確かめる札
+  '/box',                 // BOX（畳んだ）
+  '/box?open=true',          // BOX（開いた）
+  // ⚠️ `picked` は**必ず書く**。⭐ Blazor は問い合わせに無い値を
+  //    型の既定（0）で上書きするので、省くと**親なしの枝しか見ない**
+  //    （実測 2026-08-22: `/breed` と `/breed?picked=0` が同じ 80 部品だった）。
+  '/breed?picked=2',      // 配合（親2体）
+  '/breed?picked=1',      // 配合（片方だけ）
+  '/breed?picked=0',      // 配合（親なし）
+  '/breed?picked=2&open=true',   // 配合（開いた）
+  '/party',               // 編成（巣）
+  '/party?open=true',        // 編成（巣・開いた）
+  '/party?idle=true',        // 編成（放置）
+]
 
 /** ⚠️ 実機の幅は 320〜430。⭐ 一番狭いところで測るのが要点（罠22・24・26）。 */
 const SIZES = [
@@ -26,22 +51,34 @@ const SIZES = [
   { w: 430, h: 932, name: '15 Pro Max' },
 ]
 
-/** ブラウザの中で走る検査。⚠️ ここは DOM しか触らない。 */
 const browser = await chromium.launch()
+// ⚠️ **器は1つだけ作る。**⭐ 画面ごとに新しい器を作ると WASM を毎回落とし直す
+//    （実測 2026-08-22: 33回の読み直しで6分経っても終わらなかった）。
+const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
+const page = await context.newPage()
 let total = 0
-for (const size of SIZES) {
-  const page = await browser.newPage({ viewport: { width: size.w, height: size.h } })
-  await page.goto(URL, { waitUntil: 'networkidle' })
-  await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 0,
-    null, { timeout: 20000 }).catch(() => {})
-  const bad = await page.evaluate(audit)
-  const parts = await page.evaluate(() => document.querySelectorAll('#stage .n').length)
-  total += bad.length
-  console.log(`\n■ ${size.name} (${size.w}x${size.h})  調べた部品 ${parts}`)
-  if (!bad.length) console.log('  ⭐ 不備なし')
-  for (const line of bad) console.log('  ⚠️ ' + line)
-  await page.close()
+let thin = 0
+
+for (const path of PAGES) {
+  console.log(`\n━━ ${path}`)
+  for (const size of SIZES) {
+    await page.setViewportSize({ width: size.w, height: size.h })
+    await page.goto(URL + path)
+    await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 0,
+      null, { timeout: 30000 }).catch(() => {})
+    const bad = await page.evaluate(audit)
+    const parts = await page.evaluate(() => document.querySelectorAll('#stage .n').length)
+    total += bad.length
+    // ⚠️ **部品が少なすぎる＝描けていない。**⭐ 「不備なし」と区別する
+    if (parts < 4) { thin++; console.log(`  🔴 ${size.name}: 部品が ${parts} 個しか無い`) }
+    else if (!bad.length) console.log(`  ⭐ ${size.name}: 不備なし（${parts}）`)
+    else {
+      console.log(`  ⚠️ ${size.name}: ${bad.length} 件（${parts}）`)
+      for (const line of bad) console.log('     ' + line)
+    }
+  }
 }
 await browser.close()
-console.log(`\n合計 ${total} 件`)
-process.exit(total ? 1 : 0)
+console.log(`\n${PAGES.length} 画面 × ${SIZES.length} サイズ ── 不備 ${total} 件`
+  + (thin ? ` / 🔴 描けていない ${thin} 件` : ''))
+process.exit(total || thin ? 1 : 0)

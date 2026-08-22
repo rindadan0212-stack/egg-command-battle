@@ -403,7 +403,8 @@ b label 0 60 400 40")));
         Assert.Equal("slot", got.Roots[0].Name);
         // ⭐ 部品の中身が、差した枠の子になる
         Assert.Equal(2, got.Roots[0].Children.Count);
-        Assert.Equal("a", got.Roots[0].Children[0].Name);
+        // ⭐ 差した枠の名前を冠す（id が重ならないように）
+        Assert.Equal("slot-a", got.Roots[0].Children[0].Name);
     }
 
     /// <summary>⭐ 差した枠の子は、部品の**後ろ**に並ぶ（順番で言える）。</summary>
@@ -416,7 +417,7 @@ b label 0 60 400 40")));
 
         var kids = got.Roots[0].Children;
         Assert.Equal(2, kids.Count);
-        Assert.Equal("inner", kids[0].Name);
+        Assert.Equal("slot-inner", kids[0].Name);
         Assert.Equal("own", kids[1].Name);
     }
 
@@ -436,6 +437,180 @@ b label 0 60 400 40")));
         var a = Layouts.Parse("a", "x box 0 0 100 100 use=どこにも無い");
         var ex = Assert.Throws<InvalidOperationException>(() => Layouts.Resolve(a, n => null));
         Assert.Contains("見つからない", ex.Message);
+    }
+
+    /// <summary>⚠️ **同じ部品を1画面で2度差すと、名前がそのまま重なる。**
+    /// ⭐ web では名前が id になるので、重なった時点でどちらも指し示せない。
+    /// 差した枠の名前を冠して避ける（配合は親札を左右2つ差す）。</summary>
+    [Fact]
+    public void 同じ部品を二度差しても名前が重ならない()
+    {
+        var main = Layouts.Parse("main", @"pa box 0 0 400 300 use=part
+pb box 500 0 400 300 use=part");
+        var got = Layouts.Resolve(main, n => Find(n, ("part", @"art pixel 0 0 100 100 bind=art
+  in label 0 0 100 40")));
+
+        Assert.Equal("pa-art", got.Roots[0].Children[0].Name);
+        Assert.Equal("pb-art", got.Roots[1].Children[0].Name);
+        // ⚠️ 冠は**中身すべて**に付く ── 根だけだと孫が重なる
+        Assert.Equal("pa-in", got.Roots[0].Children[0].Children[0].Name);
+        Assert.Equal("pb-in", got.Roots[1].Children[0].Children[0].Name);
+    }
+
+    /// <summary>⚠️ **差し込み口にも冠が要る。**⭐ 付けないと、配合の左右2枚が
+    /// 同じ `bind=art` を持ち、どちらの親の絵か言えなくなる。</summary>
+    [Fact]
+    public void 差し込み口にも冠が付く()
+    {
+        var main = Layouts.Parse("main", "pa box 0 0 400 300 use=part");
+        var got = Layouts.Resolve(main, n => Find(n, ("part",
+            @"art pixel 0 0 100 100 bind=art tap=open when=有る
+row card 0 120 100 40 repeat=stats max=6")));
+
+        var art = got.Roots[0].Children[0];
+        Assert.Equal("pa-art", art.Option("bind"));
+        Assert.Equal("pa-open", art.Option("tap"));
+        Assert.Equal("pa-有る", art.Option("when"));
+        Assert.Equal("pa-stats", got.Roots[0].Children[1].Option("repeat"));
+    }
+
+    /// <summary>⚠️ 条件の `!` は先頭のまま。⭐ 冠は名前のほうに付く。</summary>
+    [Fact]
+    public void 冠は否定の印を壊さない()
+    {
+        var main = Layouts.Parse("main", "pa box 0 0 400 300 use=part");
+        var got = Layouts.Resolve(main, n => Find(n, ("part", "a label 0 0 100 40 when=!開")));
+        Assert.Equal("!pa-開", got.Roots[0].Children[0].Option("when"));
+        Assert.Equal("pa-開", Layouts.WhenOf(got.Roots[0].Children[0]));
+        Assert.True(Layouts.WhenNot(got.Roots[0].Children[0]));
+    }
+
+    // ── flow=down ── ⭐ 兄弟を上から詰める ──────────────
+
+    /// <summary>⭐ **`上` は「その上に空ける隙間」になる。**</summary>
+    [Fact]
+    public void 詰めると上から順に並ぶ()
+    {
+        var got = Layouts.Parse("t", @"body box 0 0 400 600 flow=down
+  a label 0 0 400 40
+  b label 0 10 400 40
+  c label 0 10 400 40");
+        var tops = Layouts.TopsOf(got.Roots[0], null, null);
+        Assert.Equal(new[] { 0f, 50f, 100f }, tops);
+    }
+
+    /// <summary>⚠️ **これが `flow=down` の目的そのもの。**⭐ 出さない子の高さぶんの
+    /// 空白がそのまま残っていた（編成のレビュー指摘 2026-08-19）。</summary>
+    [Fact]
+    public void 出さない子は場所を取らない()
+    {
+        var got = Layouts.Parse("t", @"body box 0 0 400 600 flow=down
+  a label 0 0 400 40 when=巣
+  b label 0 10 400 40");
+        var tops = Layouts.TopsOf(got.Roots[0], child => Layouts.WhenOf(child) == null, null);
+        Assert.Equal(10f, tops[1]);   // ⭐ a が消えたぶん上へ詰まる
+    }
+
+    /// <summary>⭐ 繰り返しは**段数ぶん**場所を取る。</summary>
+    [Fact]
+    public void 詰めるとき繰り返しは段数ぶん場所を取る()
+    {
+        var got = Layouts.Parse("t", @"body box 0 0 400 900 flow=down
+  a card 0 0 100 50 repeat=x cols=2 rows=60 max=6
+  b label 0 10 400 40");
+        // 6個 ÷ 2列 = 3段 → (3-1)×60 + 50 = 170
+        Assert.Equal(180f, Layouts.TopsOf(got.Roots[0], null, null)[1]);
+    }
+
+    /// <summary>⚠️ 🔴 **入れ替わる2つを詰める中に置かせない。**
+    /// ⭐ 同時には出ないので、検査が数えすぎて嘘の位置になる。</summary>
+    [Fact]
+    public void 詰める中の入れ替わりを落とす()
+    {
+        var bad = Layouts.Parse("t", @"body box 0 0 400 600 flow=down
+  a label 0 0 400 40 when=開
+  b label 0 0 400 40 when=!開");
+        Assert.Contains(Layouts.Faults(bad), f => f.Contains("入れ替わる2つ"));
+    }
+
+    /// <summary>⚠️ 綴り違いが黙って「詰めない」に落ちると、重なった画面が出る。</summary>
+    [Fact]
+    public void 知らないflowを落とす()
+    {
+        var bad = Layouts.Parse("t", "a box 0 0 400 600 flow=up");
+        Assert.Contains(Layouts.Faults(bad), f => f.Contains("flow="));
+    }
+
+    /// <summary>⚠️ **詰めた位置で重なりを見る。**⭐ 骨組みの `上` で比べると、
+    /// 詰める中は全部が同じ位置に見えて偽の重なりが出る。</summary>
+    [Fact]
+    public void 詰めた中は偽の重なりを出さない()
+    {
+        var fine = Layouts.Parse("t", @"body box 0 0 400 600 flow=down
+  a label 0 0 400 40
+  b label 0 0 400 40
+  c label 0 0 400 40");
+        Assert.Equal(new System.Collections.Generic.List<string>(), Layouts.Faults(fine));
+    }
+
+    // ── text= ── ⭐ 動かない字は骨組みに置く ────────────
+
+    /// <summary>⭐ **行末まで全部が字。**⚠️ 引用符もエスケープも要らない。</summary>
+    [Fact]
+    public void 動かない字が行末まで読める()
+    {
+        var got = Layouts.Parse("t", "head label 0 0 400 40 size=28 text=技を鍛える　＝　たまごを使う");
+        Assert.Equal("技を鍛える　＝　たまごを使う", got.Roots[0].Option("text"));
+        Assert.Equal("28", got.Roots[0].Option("size"));
+    }
+
+    /// <summary>⚠️ **空白で切ってから繋ぎ直さない。**⭐ 二重空白が失われる。</summary>
+    [Fact]
+    public void 字の中の空白がそのまま残る()
+    {
+        var got = Layouts.Parse("t", "a label 0 0 400 40 text=Lv 1  /  Lv 40");
+        Assert.Equal("Lv 1  /  Lv 40", got.Roots[0].Option("text"));
+    }
+
+    /// <summary>⚠️ `text=` より後ろは全部字なので、`=` が入っていても壊れない。</summary>
+    [Fact]
+    public void 字の中の等号が付け足しに化けない()
+    {
+        var got = Layouts.Parse("t", "a label 0 0 400 40 text=素質 ＋ 強化 = 実値");
+        Assert.Equal("素質 ＋ 強化 = 実値", got.Roots[0].Option("text"));
+        Assert.Single(got.Roots[0].Options);
+    }
+
+    /// <summary>⭐ **`\n` だけは行替えとして読む。**⚠️ 骨組みは1部品1行なので、
+    /// これが無いと2行の字が書けない（編成の「空き／（自動で埋まる）」）。</summary>
+    [Fact]
+    public void 字の中の行替えが読める()
+    {
+        var got = Layouts.Parse("t", @"a label 0 0 400 80 text=空き\n（自動で埋まる）");
+        Assert.Equal("空き\n（自動で埋まる）", got.Roots[0].Option("text"));
+    }
+
+    [Fact]
+    public void 空のtextは落とす()
+    {
+        var ex = Assert.Throws<ArgumentException>(() => Layouts.Parse("t", "a label 0 0 400 40 text="));
+        Assert.Contains("text= が空", ex.Message);
+    }
+
+    /// <summary>⚠️ **字の出所は1つ。**⭐ 2つあると、勝つほうを描く側が決めることになる。</summary>
+    [Fact]
+    public void 字の出所が2つあったら落とす()
+    {
+        var got = Layouts.Parse("t", "a label 0 0 400 40 bind=name text=固定の字");
+        Assert.Contains(Layouts.Faults(got), f => f.Contains("字の出所は1つ"));
+    }
+
+    /// <summary>⚠️ 字を出さない種類に書いても**どこにも出ない**。⭐ 黙って捨てない。</summary>
+    [Fact]
+    public void 字を出さない種類のtextを落とす()
+    {
+        var got = Layouts.Parse("t", "a pixel 0 0 100 100 text=出ない");
+        Assert.Contains(Layouts.Faults(got), f => f.Contains("字を出さない"));
     }
 
     /// <summary>⚠️ 画面の大きさは View の `Ui` と同じ数でなければ、検査が嘘になる。</summary>

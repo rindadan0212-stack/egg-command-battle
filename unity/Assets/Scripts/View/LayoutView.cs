@@ -79,10 +79,12 @@ namespace EggCommand.View
         {
             var layout = Of(id);
             if (layout == null) return;
-            foreach (var node in layout.Roots) One(node, parent, fill);
+            foreach (var node in layout.Roots) One(node, parent, fill, node.Top);
         }
 
-        private static void One(LayoutNode node, RectTransform parent, LayoutFill fill)
+        /// <summary>子を組む。<paramref name="top"/> は**詰めた結果の上端**
+        /// （`Layouts.TopsOf` が出す。⚠️ ここで数え直さない）。</summary>
+        private static void One(LayoutNode node, RectTransform parent, LayoutFill fill, float top)
         {
             // ⭐ **条件で出さない。**⚠️ 隠すのでなく作らない
             //    （作って隠すと、検査が「在るのに見えない」と数えることになる）
@@ -90,11 +92,12 @@ namespace EggCommand.View
 
             // ⭐ 繰り返しは、その札を人数ぶん複製する
             string repeat = node.Option("repeat");
-            if (repeat != null) { Many(node, parent, fill, repeat); return; }
-            Single(node, parent, fill, node.Left, node.Top);
+            if (repeat != null) { Many(node, parent, fill, repeat, top); return; }
+            Single(node, parent, fill, node.Left, top);
         }
 
-        private static void Many(LayoutNode node, RectTransform parent, LayoutFill fill, string repeat)
+        private static void Many(LayoutNode node, RectTransform parent, LayoutFill fill,
+            string repeat, float top)
         {
             int count = fill != null && fill.Count != null ? fill.Count(repeat) : 0;
             int cols = node.Number("cols", 1);
@@ -107,8 +110,7 @@ namespace EggCommand.View
             {
                 if (fill != null && fill.At != null) fill.At(repeat, i);
                 float left = node.Left + (i % cols) * (node.Width + gap);
-                float top = node.Top + (i / cols) * step;
-                Single(node, parent, fill, left, top, i);
+                Single(node, parent, fill, left, top + (i / cols) * step, i);
             }
         }
 
@@ -144,10 +146,12 @@ namespace EggCommand.View
 
                 case "pixel":
                 {
-                    var sprite = fill != null && fill.Sprite != null
-                        ? fill.Sprite(node.Option("bind")) : null;
-                    var palette = fill != null && fill.Palette != null
-                        ? fill.Palette(node.Option("bind")) : null;
+                    // ⚠️ **差し口が無ければ一度も呼ばない**（web 版と同じ約束）
+                    string art = node.Option("bind");
+                    var sprite = art != null && fill != null && fill.Sprite != null
+                        ? fill.Sprite(art) : null;
+                    var palette = art != null && fill != null && fill.Palette != null
+                        ? fill.Palette(art) : null;
                     if (sprite == null || palette == null)
                     {
                         rect = Ui.Rect(name, parent);
@@ -156,7 +160,7 @@ namespace EggCommand.View
                     }
                     var image = Ui.Pixel(parent, name, sprite, palette,
                         left, top, Mathf.Min(node.Width, node.Height));
-                    var tint = fill.Tint != null ? fill.Tint(node.Option("bind")) : null;
+                    var tint = art != null && fill.Tint != null ? fill.Tint(art) : null;
                     if (tint.HasValue) image.color = tint.Value;
                     rect = (RectTransform)image.transform;
                     break;
@@ -164,9 +168,11 @@ namespace EggCommand.View
 
                 case "button":
                 {
+                    // ⚠️ **字の大きさを渡す。**⭐ 渡さないと `Ui.Tappable` の既定 34 に
+                    //    固定され、骨組みに書いた `size=` が黙って効かない。
                     var button = Ui.Tappable(parent, name, TextOf(node, fill),
                         HandOf(node, fill), left, top, node.Width, node.Height,
-                        lead: node.Option("lead") == "yes");
+                        lead: node.Option("lead") == "yes", size: node.Number("size", 34));
                     rect = (RectTransform)button.transform;
                     break;
                 }
@@ -190,6 +196,20 @@ namespace EggCommand.View
                         Mathf.Min(node.Width, node.Height), InkOf(node, fill));
                     break;
 
+                case "line":
+                {
+                    // ⭐ **区切りの1本。**⚠️ 色は薄墨（`ink=faint` でさらに薄く）。
+                    //    表の見出しの下だけ濃く、行の間は消え入るくらいにする。
+                    var bar = Ui.Rect(name, parent);
+                    Ui.Place(bar, left, top, node.Width, node.Height);
+                    var paint = bar.gameObject.AddComponent<UnityEngine.UI.Image>();
+                    paint.raycastTarget = false;
+                    paint.color = new Color32(0x2e, 0x26, 0x1c,
+                        node.Option("ink") == "faint" ? (byte)0x24 : (byte)0x57);
+                    rect = bar;
+                    break;
+                }
+
                 default:
                     // ⚠️ 「box」と、知らない種類。⭐ 入れ物としてだけ作る
                     rect = Ui.Rect(name, parent);
@@ -207,7 +227,13 @@ namespace EggCommand.View
                 if (hand != null || held != null) Touchable(rect, hand, held);
             }
 
-            foreach (var child in node.Children) One(child, rect, fill);
+            // ⭐ 詰める親なら、ここで子の上端を出す（`TopsOf` が唯一の出所）
+            var tops = Layouts.TopsOf(node,
+                child => Shows(child, fill),
+                child => fill != null && fill.Count != null
+                    ? fill.Count(child.Option("repeat")) : 0);
+            for (int i = 0; i < node.Children.Count; i++)
+                One(node.Children[i], rect, fill, tops[i]);
         }
 
         /// <summary>巻物の中身の高さ。⭐ **並ぶ数から出す**（骨組みには書かない ──
@@ -257,8 +283,13 @@ namespace EggCommand.View
             return Layouts.WhenNot(node) ? !yes : yes;
         }
 
+        /// <summary>出す字。⭐ **動かない字は骨組み（`text=`）から直に。**
+        /// ⚠️ `bind=` と併記されていたら <see cref="Layouts.Faults"/> が落とすので、
+        /// ここで順序を決める必要は無い。</summary>
         private static string TextOf(LayoutNode node, LayoutFill fill)
         {
+            string literal = node.Option("text");
+            if (literal != null) return literal;
             string bind = node.Option("bind");
             if (bind == null || fill == null || fill.Text == null) return "";
             return fill.Text(bind) ?? "";
@@ -273,9 +304,10 @@ namespace EggCommand.View
 
         private static Color InkOf(LayoutNode node, LayoutFill fill)
         {
-            if (fill != null && fill.Tint != null)
+            string bind = node.Option("bind");
+            if (bind != null && fill != null && fill.Tint != null)
             {
-                var chosen = fill.Tint(node.Option("bind"));
+                var chosen = fill.Tint(bind);
                 if (chosen.HasValue) return chosen.Value;
             }
             switch (node.Option("ink"))

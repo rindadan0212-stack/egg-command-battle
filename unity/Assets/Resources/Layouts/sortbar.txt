@@ -1,20 +1,17 @@
-# 絞り込みと並べ替えの帯 ── ⭐ **部品**（`use=sortbar` で差す）
+# 絞り込みと並べ替えの、畳んだ1行 ── ⭐ **部品**（`use=sortbar` で差す）
 #
 # ⚠️ この骨組みは単体では画面にならない。BOX・配合・編成が差して使う。
-# ⭐ 差す側が位置を決める（この中は 0,0 からの相対）。
+# ⭐ 差す側が位置を決める（この中は 0,0 からの相対・器は 984x112）。
 #
-# ⭐ **開いた高さは定数**（746）。札の枚数がコンパイル時に決まるため:
-#    絞る 6枚 → 2段 / 並べる 8枚 → 2段 / 何の数で 2枚 → 1段
-#    Deep(n) = 34 + ceil(n/4) × (112 + 12)
+# ⚠️ **開いた中身はここに無い**（`sortchips.txt`）。
+#    ⭐ 開いたときに使える高さは画面ごとに違うので、**巻物の高さは差す側が決める**。
+#    ここに書くと、いちばん狭い画面（BOX）に合わせて全部が縮む。
 #
-#  名前     種類    左  上    幅   高    付け足し
-now        label   0   0     820  112   size=26 ink=dim anchor=left bind=now
-toggle     button  832 0     152  112   bind=toggle tap=toggle
-
-open       box     0   128   984  746   when=open
-  fhead    label   0   0     984  34    size=26 ink=faint anchor=left bind=fhead
-  fchip    button  0   34    234  112   repeat=filters cols=4 gap=12 rows=124 max=8 bind=fchip tap=filter
-  shead    label   0   294   984  34    size=26 ink=faint anchor=left bind=shead
-  schip    button  0   328   234  112   repeat=sorts cols=4 gap=12 rows=124 max=8 bind=schip tap=sort
-  bhead    label   0   588   984  34    size=26 ink=faint anchor=left bind=bhead
-  bchip    button  0   622   234  112   repeat=bases cols=4 gap=12 rows=124 max=4 bind=bchip tap=basis
+# ⭐ **行そのものが押しどころ。**⚠️ 中に釦を置かない（どこを押すのか読めなくなる）。
+# ⭐ ここは状態を出す1行で、主役ではない ── だから塗らない
+#    （塗ると画面で一番目立ち、アクセントが効かなくなる）。
+#
+#  名前     種類    左   上   幅   高    付け足し
+plate      card    0    0    984  112   tap=toggle
+now        label   28   0    872  112   size=28 anchor=left bind=now
+arrow      label   908  0    48   112   size=30 ink=dim anchor=right bind=arrow

@@ -72,15 +72,21 @@ html, body {
    ここも切らない。⭐ 切ると「収まっているのに見えない」が生まれる。 */
 .n.label {
   display: flex;
+  flex-direction: column;
   white-space: pre;
   color: var(--ink);
   line-height: 1.15;
 }
-.n.label.a-left    { justify-content: flex-start; align-items: center; }
-.n.label.a-center  { justify-content: center;     align-items: center; }
-.n.label.a-right   { justify-content: flex-end;   align-items: center; }
-.n.label.a-upper-left   { justify-content: flex-start; align-items: flex-start; }
-.n.label.a-upper-center { justify-content: center;     align-items: flex-start; }
+/* ⚠️ **寄せは2重に指定する** ── flex は行を寄せ、`text-align` は行の中を寄せる。
+   ⭐ 2行の字（`text=空き
+（自動で埋まる）`）でこの違いが出る。 */
+/* ⚠️ **縦に積むので、`justify` が上下・`align` が左右。**
+   ⭐ 横に積むつもりで書くと、寄せが丸ごと入れ替わる。 */
+.n.label.a-left    { justify-content: center;     align-items: flex-start; text-align: left; }
+.n.label.a-center  { justify-content: center;     align-items: center;     text-align: center; }
+.n.label.a-right   { justify-content: center;     align-items: flex-end;   text-align: right; }
+.n.label.a-upper-left   { justify-content: flex-start; align-items: flex-start; text-align: left; }
+.n.label.a-upper-center { justify-content: flex-start; align-items: center;     text-align: center; }
 
 .ink-dim    { color: var(--ink-dim); }
 .ink-faint  { color: var(--ink-faint); }
@@ -89,11 +95,24 @@ html, body {
 .ink-good   { color: var(--good-ink); }
 .ink-on-lead{ color: var(--on-lead); }
 
-/* card ── ⭐ 面（明度差）で区切る。⚠️ 角丸は押せる要素だけ（画面の作法） */
+/* card ── ⭐ **実物（`Resources/UI/panel.png`）に合わせる。**
+   白地・薄墨の細い縁・角丸。⚠️ 「面だけで区切る」ほうが作法には近いが、
+   ⭐ いま出荷しているのはこの絵なので、移し替えでは見た目を変えない。
+
+   ⚠️ **縁は `border` でなく内側の影で描く。**⭐ `border` は中の座標の起点を
+   2px ずらすので、984 の中に 984 を置いた子が**全部はみ出す**
+   （実測 2026-08-22: それだけで 258件 出た）。骨組みは絶対座標なので、
+   縁が場所を食う描き方は使えない。 */
 .n.card {
-  background: var(--paper);
-  border-radius: 0;
-  box-shadow: 0 1px 0 rgba(43,51,80,.08);
+  background: #ffffff;
+  box-shadow: inset 0 0 0 2px rgba(43, 51, 80, .16);
+  border-radius: 20px;
+}
+
+/* ⭐ **沈んだ札**（特性の帯・技の枠）。⚠️ 縁は出さない ── 面と線を二重に使わない。 */
+.n.card.ink-faint {
+  background: rgba(0, 0, 0, .05);
+  box-shadow: none;
 }
 
 /* button ── ⭐ 押せるものだけ角丸 */
@@ -119,6 +138,18 @@ html, body {
 }
 
 .n.round { border-radius: 50%; }
+
+/* line ── ⭐ **区切りの1本。**⚠️ 一辺だけ。面（明度差）と二重に使わない。
+   色は Prefab の実測（`#2e261c` α.34 / 行の間は α.14）。 */
+.n.line { background: rgba(46, 38, 28, .34); }
+.n.line.ink-faint { background: rgba(46, 38, 28, .14); }
+
+/* ⭐ **選んでいる升は「輪」で示す**（塗りつぶさない）。
+   ⚠️ べた塗りにすると絵が読めなくなり、同じ升が画面ごとに別物に見えていた。 */
+.n.card.lead {
+  background: transparent;
+  box-shadow: inset 0 0 0 6px var(--accent);
+}
 
 /* ⭐ **覆い。**地を暗くして、後ろを押させない。
    ⚠️ ここを押しても閉じない ── 聞いている最中に、触っただけで消えるのは危ない

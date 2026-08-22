@@ -95,12 +95,31 @@ export function audit() {
     if (a.left < s.left - 0.5 || a.right > s.right + 0.5) push(`画面の外（横）: ${el.id}`)
   }
 
+  /** 巻物に切られていて、そもそも見えていないか。
+   *
+   *  ⚠️ `getBoundingClientRect` は**切られる前**の位置を返すので、
+   *  巻物の外へ出た札を「下の野に覆われている」と数えてしまう
+   *  （実測 2026-08-22: 編成の一覧で 4段目の「Lv 37」が「決定」に覆われたと報告された）。
+   *  ⭐ 巻物の外へ出ているのは**動かせば見える**ので不備ではない。 */
+  const clipped = el => {
+    let a = el.getBoundingClientRect()
+    for (let p = el.parentElement; p && p !== stage; p = p.parentElement) {
+      const o = getComputedStyle(p).overflowY
+      if (o !== 'auto' && o !== 'scroll' && o !== 'hidden') continue
+      const r = p.getBoundingClientRect()
+      if (a.bottom <= r.top + 0.5 || a.top >= r.bottom - 0.5) return true
+      if (a.right <= r.left + 0.5 || a.left >= r.right - 0.5) return true
+    }
+    return false
+  }
+
   // ── ⑤ 字の重なり（⭐ 実際に乗っている範囲どうし）──
   // ⚠️ **層をまたいで比べない。**覆いの前と後ろは同時に見えないので、
   //    重なっていても不備ではない（実測 2026-08-22: 覆いの下の「—」と
   //    札の「あきらめますか」を重なりとして数えていた）。
   const inks = nodes
     .filter(e => e.classList.contains('label') && e.textContent.trim())
+    .filter(e => !clipped(e))
     .map(e => ({ el: e, ink: inkOf(e) }))
     .filter(x => x.ink)
   for (let i = 0; i < inks.length; i++) {
@@ -130,7 +149,7 @@ export function audit() {
   //    ⭐ Unity 版の「層」と同じ考え ── いちばん上の覆いから先だけを見る。
   for (const el of nodes) {
     if (!el.classList.contains('label') || !el.textContent.trim()) continue
-    if (!above(el)) continue
+    if (!above(el) || clipped(el)) continue
     const ink = inkOf(el)
     if (!ink) continue
     const cx = (ink.left + ink.right) / 2, cy = (ink.top + ink.bottom) / 2

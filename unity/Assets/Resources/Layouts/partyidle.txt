@@ -1,0 +1,25 @@
+# パーティ編成（放置）── ⭐ 「編成1/2/3」の段が無い
+#
+# ⚠️ **段のぶん（86）だけ下を詰める。**⭐ 空けたままにすると、
+#    消した段の高さがそのまま空白として残る（レビュー指摘 2026-08-19）。
+# ⭐ 巣の編成は `party.txt`。⚠️ 差し込み口の名前は同じにしてある。
+#
+#  名前    種類    左   上     幅   高    付け足し
+dim       veil    0    0      1080 1920
+panel     card    48   180    984  1560
+  title   label   24   24     936  56    size=40 anchor=left text=放置の編成
+  note    label   24   84     936  40    size=24 ink=dim anchor=left bind=note
+  head    label   24   150    936  32    size=26 anchor=left bind=head
+  pick    card    24   190    225  220   repeat=picks cols=4 gap=12 rows=232 max=4 tap=pick
+    ring  card    0    0      225  220   lead=yes when=full
+    part  pixel   57   16     110  110   bind=part when=full
+    plv   label   0    166    225  32    size=24 anchor=center bind=plv when=full
+    psay  label   0    0      225  220   size=22 ink=dim anchor=center when=!full text=空き\n（自動で埋まる）
+  bar     box     0    434    984  112   use=sortbar
+  open    scroll  0    558    984  420   when=open
+    chips box     0    0      984  746   use=sortchips
+  poolA   scroll  0    558    984  854   when=!open
+    cellA card    26   0      224  200   repeat=box cols=4 gap=12 rows=212 tap=one use=cell
+  poolB   scroll  0    990    984  422   when=open
+    cellB card    26   0      224  200   repeat=box cols=4 gap=12 rows=212 tap=one use=cell
+  done    button  24   1424   936  112   size=34 tap=done lead=yes text=決定

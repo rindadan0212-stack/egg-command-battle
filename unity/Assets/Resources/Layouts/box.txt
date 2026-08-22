@@ -1,22 +1,26 @@
-# BOX ── 保管庫（⭐ 帯は部品を差して使う）
+# BOX ── 保管庫
 #
-# ⚠️ 一覧は開閉で高さが変わる。⭐ 札の枚数が固定なので、
-#    2つの巻物を `when=` で入れ替えるだけで足りる（`flow=down` は要らない）。
+# ⭐ **部品を3つ差している**: 1体の札（panel）・並べ替えの帯（sortbar）・升（cell）。
+# ⚠️ 数は `Resources/Prefabs/BoxScreen.prefab` の実測。記憶で書かない。
 #
-#  名前    種類    左   上    幅   高    付け足し
-head      label   48   16    984  44    size=28 ink=faint anchor=left bind=count
-bar       box     48   76    984  874   use=sortbar
+# ⚠️ **開閉で一覧の場所が変わる。**⭐ 札の枚数がコンパイル時に決まるので、
+#    2つの巻物を `when=` で入れ替えるだけで足りる。
+# ⚠️ 開いた中身（746）はどの画面にも入らないので、**巻物に入れる**
+#    （作者の指摘 2026-08-22「ソート機能がスクロールできないため全体を操作できない」）。
+# ⭐ 開いていても一覧は 204 残す ── 絞った結果がその場で見えるため。
+#    ⚠️ 開いた札の高さ 320 は Unity 版の `SortBar.MinOpen` と同じ数。
+#
+#  名前    種類    左   上     幅   高    付け足し
+detail    card    48   12     984  860   use=panel
+  bfuse   button  26   722    302  112   size=20 tap=fuse text=分解
+  bgrow   button  341  722    302  112   size=20 tap=grow lead=yes bind=grow
+  btrain  button  656  722    302  112   size=20 tap=train text=技を鍛える
 
-# ⭐ 閉じているとき ── 帯の下から下の帯まで
-gridA     scroll  48   204   984  1352  when=!open
-  cellA   card    0    0     236  260   repeat=box cols=4 gap=12 rows=272 tap=one
-    artA  pixel   59   20    118  118   bind=art
-    lvA   label   8    150   220  40    size=24 anchor=center bind=lv
-    starA label   8    196   220  34    size=20 ink=accent anchor=center bind=star
+bar       box     48   896    984  112   use=sortbar
+open      scroll  48   1020   984  320   when=open
+  chips   box     0    0      984  746   use=sortchips
 
-# ⭐ 開いているとき ── 帯が 746 ぶん場所を取る
-gridB     scroll  48   966   984  590   when=open
-  cellB   card    0    0     236  260   repeat=box cols=4 gap=12 rows=272 tap=one
-    artB  pixel   59   20    118  118   bind=art
-    lvB   label   8    150   220  40    size=24 anchor=center bind=lv
-    starB label   8    196   220  34    size=20 ink=accent anchor=center bind=star
+gridA     scroll  48   1020   984  536   when=!open
+  cellA   card    26   0      224  200   repeat=box cols=4 gap=12 rows=212 tap=one use=cell
+gridB     scroll  48   1352   984  204   when=open
+  cellB   card    26   0      224  200   repeat=box cols=4 gap=12 rows=212 tap=one use=cell

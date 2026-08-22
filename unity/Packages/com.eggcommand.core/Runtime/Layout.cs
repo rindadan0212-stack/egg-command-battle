@@ -108,6 +108,7 @@ namespace EggCommand.Core
             "scroll",   // 巻物（content= で中身の高さ）
             "round",    // 丸
             "veil",     // ⭐ 覆い（地を暗くし、後ろを押させない）
+            "line",     // ⭐ 区切りの1本（⚠️ 一辺だけ・面と二重に使わない）
         };
 
         /// <summary>押しどころとして指が触れる種類。⚠️ 高さの検査はこれだけに掛ける。</summary>
@@ -132,7 +133,64 @@ namespace EggCommand.Core
             "when",     // ⭐ 条件で出す／出さない（`when=有る` / `when=!有る`）
             "foe",      // ⭐ 左右反転して出す（敵はすべて反転・2026-08-21 の指示）
             "use",      // ⭐ 別の骨組みを部品として差す（使い回し）
+            "text",     // ⭐ **動かない字**（⚠️ 必ず行の最後。以降は全部その字）
+            "flow",     // ⭐ 兄弟を上から詰める（`flow=down`）
         };
+
+        /// <summary>⭐ **兄弟を上から詰めるか。**
+        ///
+        /// ⚠️ 詰める親の中では、子の `上` は**絶対位置でなく「その上に空ける隙間」**に変わる。
+        /// ⭐ こうしないと、出ない子（`when=`）の高さぶんの空白がそのまま残る
+        /// ── パーティ編成で実際に起きて、レビューで指摘された（2026-08-19）。</summary>
+        public static bool Flows(LayoutNode node) => node.Option("flow") == "down";
+
+        /// <summary>詰めたときの、子それぞれの上端。⭐ **ここが唯一の出所。**
+        ///
+        /// ⚠️ 検査（<see cref="Faults"/>）と描く側が別々に数えると、必ずずれる。
+        /// ⭐ 検査は「全部出る・繰り返しは `max=` まで」の**いちばん深い場合**で見る
+        /// （実際はそれより浅くなるので、安全側）。</summary>
+        /// <param name="shows">その子を出すか。⚠️ null なら全部出るものとして数える。</param>
+        /// <param name="countOf">繰り返しの個数。⚠️ null なら `max=`。</param>
+        public static float[] TopsOf(LayoutNode parent,
+            Func<LayoutNode, bool> shows, Func<LayoutNode, int> countOf)
+        {
+            var tops = new float[parent.Children.Count];
+            if (!Flows(parent))
+            {
+                for (int i = 0; i < tops.Length; i++) tops[i] = parent.Children[i].Top;
+                return tops;
+            }
+            float y = 0f;
+            for (int i = 0; i < parent.Children.Count; i++)
+            {
+                var child = parent.Children[i];
+                tops[i] = y + child.Top;
+                // ⭐ 出さない子は場所を取らない（これが `flow=down` の目的そのもの）
+                if (shows != null && !shows(child)) { tops[i] = y; continue; }
+                y = tops[i] + DeepOf(child, countOf);
+            }
+            return tops;
+        }
+
+        /// <summary>その子が縦に使う高さ。⭐ 繰り返しなら段数ぶん。</summary>
+        private static float DeepOf(LayoutNode node, Func<LayoutNode, int> countOf)
+        {
+            if (node.Option("repeat") == null) return node.Height;
+            int count = countOf != null ? countOf(node) : node.Number("max", 0);
+            int cols = Math.Max(1, node.Number("cols", 1));
+            int rows = (count + cols - 1) / cols;
+            return rows <= 0 ? 0f : (rows - 1) * StepOf(node) + node.Height;
+        }
+
+        /// <summary>⭐ **動かない字は骨組みに、動く字だけ `bind`。**
+        ///
+        /// ⚠️ `bind=` 一本槍にすると、「特性」「決定」「空き」のような**変わらない字**まで
+        /// コードの `switch` へ戻ります。⭐ しかも switch 側には検査が1つも掛からない
+        /// （綴り違いは `?? ""` で素通りする）。
+        ///
+        /// ⚠️ **`text=` は必ず行の最後。**⭐ 規約はこれ1つだけで、
+        /// 引用符もエスケープも要らない（空白も「　」もそのまま書ける）。</summary>
+        public const string TextMark = " text=";
 
         /// <summary>その部品を出す条件の名前。⚠️ null なら常に出す。
         ///
@@ -195,6 +253,16 @@ namespace EggCommand.Core
                 string body = raw.Trim();
                 if (body.Length == 0 || body[0] == '#') continue;
 
+                // ⭐ **`text=` は行の最後まで全部。**⚠️ 空白で切る前に外す
+                //    ── 切ってから繋ぎ直すと、二重空白や全角空白が失われる。
+                string literal = null;
+                int mark = body.IndexOf(TextMark, StringComparison.Ordinal);
+                if (mark >= 0)
+                {
+                    literal = body.Substring(mark + TextMark.Length);
+                    body = body.Substring(0, mark);
+                }
+
                 int spaces = 0;
                 while (spaces < raw.Length && raw[spaces] == ' ') spaces++;
                 if (spaces % 2 != 0)
@@ -224,6 +292,16 @@ namespace EggCommand.Core
                     if (options.ContainsKey(key))
                         throw new ArgumentException($"{id}: {i + 1}行目「{key}=」が2つある");
                     options[key] = parts[p].Substring(eq + 1);
+                }
+                // ⚠️ 空の `text=` は「書いたのに何も出ない」になる。⭐ 落とす
+                if (literal != null)
+                {
+                    if (literal.Length == 0)
+                        throw new ArgumentException($"{id}: {i + 1}行目 text= が空");
+                    // ⭐ **`\n` だけは行替えとして読む。**⚠️ 骨組みは1部品1行なので、
+                    //    これが無いと2行の字（「空き／（自動で埋まる）」）が書けない。
+                    //    ⭐ 規約はこれ1つだけ ── 他のエスケープは作らない。
+                    options["text"] = literal.Replace("\\n", "\n");
                 }
 
                 pending.Add(new object[]
@@ -283,7 +361,7 @@ namespace EggCommand.Core
 
             // ⚠️ **根っこ同士も兄弟。**⭐ ここを見ていなくて、わざと重ねた2つの字が
             //    素通りした（2026-08-22・道具を壊して確かめたときに発覚）。
-            Siblings(layout.Id, layout.Id, layout.Roots, problems);
+            Siblings(layout.Id, layout.Id, layout.Roots, TopsOf2(layout.Roots), problems);
             foreach (var root in layout.Roots)
                 Walk(layout.Id, root, 0f, 0f, ScreenWidth, ScreenHeight, false, false, problems);
 
@@ -298,16 +376,22 @@ namespace EggCommand.Core
         /// ⚠️ **この2つを1本の旗で兼ねてはいけない**（2026-08-22 の初版はそうしていた）。
         /// 巻物 → 箱 → 字 の3段になると、箱は巻物ではないので孫の旗が下りてしまい、
         /// **巻物の中なのに「画面の外」と嘘をつく**（実測: `t/a: 画面の外（0,1950 400x40）`）。</param>
+        /// <param name="flowTop">親が `flow=down` のとき、詰めた結果の上端。
+        /// ⚠️ null なら骨組みに書いてある `上` をそのまま使う。</param>
         private static void Walk(string id, LayoutNode node,
             float parentX, float parentY, float parentW, float parentH,
-            bool parentScrolls, bool insideScroll, List<string> problems)
+            bool parentScrolls, bool insideScroll, List<string> problems,
+            float? flowTop = null)
         {
+            // ⭐ **効く上端はここ1か所で決める。**⚠️ 以降で node.Top を直に読まない
+            //    ── 読んだ場所だけ詰める前の数を見て、検査が嘘になる。
+            float top = flowTop ?? node.Top;
             bool known = false;
             for (int i = 0; i < Kinds.Length; i++) if (Kinds[i] == node.Kind) { known = true; break; }
             if (!known) problems.Add($"{id}/{node.Name}: 知らない種類「{node.Kind}」");
 
             float x = parentX + node.Left;
-            float y = parentY + node.Top;
+            float y = parentY + top;
 
             if (node.Width <= 0f || node.Height <= 0f)
                 problems.Add($"{id}/{node.Name}: 大きさが 0 以下（{node.Width}x{node.Height}）");
@@ -315,6 +399,20 @@ namespace EggCommand.Core
             // ⚠️ 条件の名前が空だと、何で出し分けるのか誰にも分からない
             if (node.Option("when") != null && string.IsNullOrEmpty(WhenOf(node)))
                 problems.Add($"{id}/{node.Name}: when= の名前が空");
+
+            // ⚠️ **同じ場所に2つの出所を置かない。**⭐ どちらが勝つかを
+            //    描く側の順序が決めることになり、直したのに効かないが生まれる。
+            if (node.Option("text") != null && node.Option("bind") != null)
+                problems.Add($"{id}/{node.Name}: text= と bind= の両方がある（字の出所は1つ）");
+
+            // ⚠️ 字を出さない種類に text= を書いても**どこにも出ない**
+            if (node.Option("text") != null && !IsText(node.Kind) && !IsTappable(node.Kind))
+                problems.Add($"{id}/{node.Name}: 「{node.Kind}」は字を出さないのに text= がある");
+
+            // ⚠️ **`flow=` は down しか無い。**⭐ 綴り違いが黙って
+            //    「詰めない」に落ちると、重なった画面がそのまま出る。
+            if (node.Option("flow") != null && !Flows(node))
+                problems.Add($"{id}/{node.Name}: flow=「{node.Option("flow")}」は知らない（down だけ）");
 
             // ⚠️ 知らない付け足しを黙って無視しない（#5）
             foreach (var pair in node.Options)
@@ -359,10 +457,10 @@ namespace EggCommand.Core
             }
             if (parentH > 0f && !parentScrolls)
             {
-                if (node.Top < -0.5f || node.Top + node.Height > parentH + 0.5f)
+                if (top < -0.5f || top + node.Height > parentH + 0.5f)
                 {
                     problems.Add($"{id}/{node.Name}: 親の枠から縦へはみ出し"
-                        + $"（子 上{node.Top} 高{node.Height} / 親 高{parentH}）");
+                        + $"（子 上{top} 高{node.Height} / 親 高{parentH}）");
                 }
             }
 
@@ -381,7 +479,7 @@ namespace EggCommand.Core
                     + $"。{TapHeight} 以上にする（指で押せない）");
             }
 
-            Siblings(id, node.Name, node.Children, problems);
+            Siblings(id, node.Name, node.Children, TopsOf(node, null, null), problems);
 
             // ⭐ **並びの検査。**`repeat=` を持つ札は、`cols=` 枚が親の幅に収まるか。
             // ⚠️ ここを見ないと「3列で置いたら右端が切れる」が実機まで分からない。
@@ -409,7 +507,7 @@ namespace EggCommand.Core
                     else if (parentH > 0f)
                     {
                         int rows = (max + cols - 1) / cols;
-                        float deep = node.Top + rows * StepOf(node) - gap;
+                        float deep = top + rows * StepOf(node) - gap;
                         if (deep > parentH + 0.5f)
                             problems.Add($"{id}/{node.Name}: max={max} だと親の枠から縦へはみ出す"
                                 + $"（要る {deep} / 親 高{parentH}）");
@@ -417,17 +515,45 @@ namespace EggCommand.Core
                 }
             }
 
+            // ⚠️ 🔴 **詰める親の中に「入れ替わる2つ」を置かない。**
+            //
+            // ⭐ 検査は「全部出る」いちばん深い場合で数えます。入れ替わる2つ
+            //    （`when=x` と `when=!x`）は**同時には出ない**ので、そこだけ
+            //    数えすぎになり、⚠️ **通るはずの画面が落ちる**か、逆に
+            //    位置がずれたまま通ります。
+            // ⭐ 入れ替わる2つは「変わり種」なので、詰める中でなく
+            //    **決め打ちの位置**か**別の骨組み**に置くこと。
+            if (Flows(node))
+            {
+                for (int i = 0; i < node.Children.Count; i++)
+                    for (int j = i + 1; j < node.Children.Count; j++)
+                        if (Exclusive(node.Children[i], node.Children[j]))
+                            problems.Add($"{id}/{node.Name}: 詰める中に入れ替わる2つ"
+                                + $"「{node.Children[i].Name}」×「{node.Children[j].Name}」"
+                                + "── 決め打ちの位置か、別の骨組みに置く");
+            }
+
             bool scrolls = node.Kind == "scroll";
-            foreach (var child in node.Children)
-                Walk(id, child, x, y, node.Width, node.Height,
-                    scrolls, insideScroll || scrolls, problems);
+            // ⭐ **詰めた結果の上端で降りる。**⚠️ `TopsOf` が唯一の出所
+            //    ── 描く側と別々に数えたら、検査は別の画面を見ていることになる。
+            var tops = TopsOf(node, null, null);
+            for (int i = 0; i < node.Children.Count; i++)
+                Walk(id, node.Children[i], x, y, node.Width, node.Height,
+                    scrolls, insideScroll || scrolls, problems, tops[i]);
         }
 
         /// <summary>同じ親を持つ部品どうしの見張り。
         /// ⚠️ **根っこの一覧にも掛ける** ── 掛け忘れると、画面の一番外側だけ
         /// 検査が素通りする（2026-08-22 に実際そうなっていた）。</summary>
+        private static float[] TopsOf2(IReadOnlyList<LayoutNode> roots)
+        {
+            var tops = new float[roots.Count];
+            for (int i = 0; i < roots.Count; i++) tops[i] = roots[i].Top;
+            return tops;
+        }
+
         private static void Siblings(string id, string owner,
-            IReadOnlyList<LayoutNode> list, List<string> problems)
+            IReadOnlyList<LayoutNode> list, float[] tops, List<string> problems)
         {
             for (int i = 0; i < list.Count; i++)
             {
@@ -436,7 +562,7 @@ namespace EggCommand.Core
                     if (list[i].Name == list[j].Name)
                         problems.Add($"{id}/{owner}: 「{list[i].Name}」が2つある");
 
-                    if (!Overlaps(list[i], list[j])) continue;
+                    if (!Overlaps(list[i], tops[i], list[j], tops[j])) continue;
                     // ⭐ 条件で入れ替わる2つは、同時には出ない
                     if (Exclusive(list[i], list[j])) continue;
 
@@ -463,9 +589,11 @@ namespace EggCommand.Core
         private static bool Tappable(LayoutNode node) =>
             IsTappable(node.Kind) || node.Option("tap") != null;
 
-        private static bool Overlaps(LayoutNode a, LayoutNode b) =>
+        /// <summary>⚠️ 上端は**詰めた結果**を渡すこと。⭐ 骨組みに書いてある `上` で
+        /// 比べると、`flow=down` の中は全部が同じ位置に見えて偽の重なりが出る。</summary>
+        private static bool Overlaps(LayoutNode a, float aTop, LayoutNode b, float bTop) =>
             !(a.Left + a.Width <= b.Left + 0.5f || b.Left + b.Width <= a.Left + 0.5f
-              || a.Top + a.Height <= b.Top + 0.5f || b.Top + b.Height <= a.Top + 0.5f);
+              || aTop + a.Height <= bTop + 0.5f || bTop + b.Height <= aTop + 0.5f);
 
         /// <summary>⭐ **`use=` を実物に差し替える。**
         ///
@@ -503,13 +631,48 @@ namespace EggCommand.Core
                 // ⚠️ **差し込む側の子は、差し込まれる中身の後ろ**に置く。
                 //    ⭐ 上に足したいものがあるとき、順番で言えるようにする。
                 var deeper = new List<string>(seen) { use };
-                foreach (var inner in part.Roots) kids.Add(Splice(use, inner, find, deeper));
+                foreach (var inner in part.Roots)
+                    kids.Add(Rename(node.Name + "-", Splice(use, inner, find, deeper)));
             }
 
             foreach (var child in node.Children) kids.Add(Splice(id, child, find, seen));
 
             return new LayoutNode(node.Name, node.Kind, node.Left, node.Top,
                 node.Width, node.Height, node.Options, kids);
+        }
+
+        /// <summary>⭐ **差した部品の名前に、差した枠の名前を冠する。**
+        ///
+        /// ⚠️ 同じ部品を1画面で2度差すと、名前がそのまま重なります
+        /// （配合は親札を左右2つ差す）。⭐ web では名前が id になるので、
+        /// 重なった時点で**どちらも指し示せなくなる**。
+        ///
+        /// ⚠️ 冠は**部品の中身すべて**に付ける ── 根だけだと孫が重なる。
+        /// ⭐ 読むときの利も大きい（`pa-art` で「左の親の絵」と分かる）。</summary>
+        private static LayoutNode Rename(string crown, LayoutNode node)
+        {
+            var kids = new List<LayoutNode>();
+            foreach (var child in node.Children) kids.Add(Rename(crown, child));
+
+            // ⭐ **差し込み口にも冠を付ける。**⚠️ 付けないと、配合の左右2枚が
+            //    同じ `bind=art` を持ち、**どちらの親の絵か言えなくなる**。
+            // ⭐ 付けると、値を差す側は「どの枠のどの欄か」を1つの名前で受け取れる:
+            //    `pfill-name` → 左の親の名前。⚠️ 中身の出し方は1つの関数で済む。
+            var options = new Dictionary<string, string>();
+            foreach (var pair in node.Options)
+            {
+                string value = pair.Value;
+                if (pair.Key == "bind" || pair.Key == "tap" || pair.Key == "repeat")
+                    value = crown + value;
+                // ⚠️ 条件は `!` が先頭に付く。⭐ 冠は名前のほうに付ける
+                else if (pair.Key == "when")
+                    value = value.Length > 0 && value[0] == '!'
+                        ? "!" + crown + value.Substring(1) : crown + value;
+                options[pair.Key] = value;
+            }
+
+            return new LayoutNode(crown + node.Name, node.Kind, node.Left, node.Top,
+                node.Width, node.Height, options, kids);
         }
 
         /// <summary>不備があれば投げる。⚠️ 起動時に1度呼んで、**黙って壊れた画面を出さない**。</summary>

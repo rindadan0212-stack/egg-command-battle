@@ -46,20 +46,21 @@ namespace EggCommand.Web
         {
             var sb = new StringBuilder();
             if (layout == null) return "<!-- 骨組みが無い -->";
-            foreach (var node in layout.Roots) One(sb, node, fill);
+            foreach (var node in layout.Roots) One(sb, node, fill, node.Top);
             return sb.ToString();
         }
 
         /// <param name="suffix">繰り返しの中なら「#N」。⚠️ **子まで伝える。**
         /// ⭐ DOM の id は一意でなければならない ── 伝えないと、11枚の札の子が
         /// 全部同じ id になり、検査も指し示しも効かなくなる（2026-08-22 に実測）。</param>
-        private static void One(StringBuilder sb, LayoutNode node, DomFill fill, string suffix = "")
+        private static void One(StringBuilder sb, LayoutNode node, DomFill fill,
+            float top, string suffix = "")
         {
             // ⭐ **条件で出さない。**⚠️ 隠すのでなく作らない
             if (!Shows(node, fill)) return;
 
             string repeat = node.Option("repeat");
-            if (repeat == null) { Single(sb, node, fill, node.Left, node.Top, -1, suffix); return; }
+            if (repeat == null) { Single(sb, node, fill, node.Left, top, -1, suffix); return; }
 
             int count = fill?.Count != null ? fill.Count(repeat) : 0;
             int cols = Math.Max(1, node.Number("cols", 1));
@@ -71,9 +72,8 @@ namespace EggCommand.Web
             {
                 fill?.At?.Invoke(repeat, i);
                 float left = node.Left + (i % cols) * (node.Width + gap);
-                float top = node.Top + (i / cols) * step;
                 // ⭐ 外側の番号も引き継ぐ（入れ子で id が衝突する）
-                Single(sb, node, fill, left, top, i, suffix);
+                Single(sb, node, fill, left, top + (i / cols) * step, i, suffix);
             }
         }
 
@@ -94,20 +94,38 @@ namespace EggCommand.Web
                  .Append(";height:").Append(Px(node.Height));
 
             var cls = new StringBuilder("n ").Append(node.Kind);
+            // ⚠️ **差し口が無ければ一度も呼ばない。**⭐ 値を差す側は
+            //    「自分が書いた名前」だけを受け取ればよい（null を見張らせない）。
             string bind = node.Option("bind");
+            bool has = bind != null;
+
+            // ⚠️ **釦も字を出す。**⭐ ここを札だけにしていたので、釦の字がすべて
+            //    ブラウザの既定（16px）で出ていた（実測 2026-08-22）。
+            //    ⚠️ 既定は Unity の `Ui.Tappable` に合わせて 34。
+            if (node.Kind == "label" || node.Kind == "button")
+                style.Append(";font-size:")
+                     .Append(Px(node.Number("size", node.Kind == "button" ? 34 : 26)));
 
             if (node.Kind == "label")
             {
-                style.Append(";font-size:").Append(Px(node.Number("size", 26)));
                 cls.Append(" a-").Append(node.Option("anchor") ?? "left");
                 string ink = node.Option("ink");
                 if (ink != null) cls.Append(" ink-").Append(ink);
-                string tint = fill?.Tint != null ? fill.Tint(bind) : null;
+                string tint = has && fill?.Tint != null ? fill.Tint(bind) : null;
                 if (tint != null) style.Append(";color:").Append(tint);
+            }
+            else
+            {
+                // ⭐ 字でないものは、色を**地**に掛ける（丸＝属性の色・線＝薄墨）。
+                // ⚠️ Unity 版は `InkOf` が同じ役をしている（`Ui.Round` の色）。
+                string ink = node.Option("ink");
+                if (ink != null) cls.Append(" ink-").Append(ink);
+                string tint = has && fill?.Tint != null ? fill.Tint(bind) : null;
+                if (tint != null) style.Append(";background:").Append(tint);
             }
             if (node.Option("lead") == "yes") cls.Append(" lead");
 
-            double? fade = fill?.Fade != null ? fill.Fade(bind) : null;
+            double? fade = has && fill?.Fade != null ? fill.Fade(bind) : null;
             if (fade.HasValue) style.Append(";opacity:")
                 .Append(fade.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture));
 
@@ -125,17 +143,23 @@ namespace EggCommand.Web
 
             if (node.Kind == "pixel")
             {
-                var sprite = fill?.Sprite != null ? fill.Sprite(bind) : null;
-                var palette = fill?.Palette != null ? fill.Palette(bind) : null;
+                var sprite = has && fill?.Sprite != null ? fill.Sprite(bind) : null;
+                var palette = has && fill?.Palette != null ? fill.Palette(bind) : null;
                 if (sprite != null && palette != null) Dots(sb, sprite, palette, node);
             }
             else if (node.Kind == "label" || node.Kind == "button")
             {
-                sb.Append(Esc(fill?.Text != null ? fill.Text(bind) ?? "" : ""));
+                // ⭐ **動かない字は骨組みから直に**（Unity 版 `TextOf` と同じ順）
+                string literal = node.Option("text");
+                sb.Append(Esc(literal ?? (has && fill?.Text != null ? fill.Text(bind) ?? "" : "")));
             }
 
             // ⭐ 子にも同じ番号を伝える（id を一意に保つ）
-            foreach (var child in node.Children) One(sb, child, fill, mine);
+            // ⭐ 詰める親なら、ここで子の上端を出す（`TopsOf` が唯一の出所）
+            var tops = Layouts.TopsOf(node, child => Shows(child, fill),
+                child => fill?.Count != null ? fill.Count(child.Option("repeat")) : 0);
+            for (int i = 0; i < node.Children.Count; i++)
+                One(sb, node.Children[i], fill, tops[i], mine);
             sb.Append("</").Append(tag).Append('>');
         }
 

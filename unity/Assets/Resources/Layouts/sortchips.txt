@@ -1,0 +1,15 @@
+# 絞る・並べる・何の数で ── ⭐ **部品**（器は 984x746）
+#
+# ⭐ **高さは定数。**札の枚数がコンパイル時に決まるため:
+#    絞る 6枚 → 2段 / 並べる 8枚 → 2段 / 何の数で 2枚 → 1段
+#    Deep(n) = 34 + ceil(n/4) × (112 + 12)
+#
+# ⚠️ 札の幅 237 は (984 − 12×3) ÷ 4。⭐ 隙間は固定、余りは出さない。
+#
+#  名前   種類    左   上    幅   高    付け足し
+fhead    label   0    0     984  34    size=24 ink=dim anchor=left text=絞る
+fchip    button  0    34    237  112   size=34 repeat=filters cols=4 gap=12 rows=124 max=8 bind=fchip tap=filter
+shead    label   0    294   984  34    size=24 ink=dim anchor=left text=並べる
+schip    button  0    328   237  112   size=34 repeat=sorts cols=4 gap=12 rows=124 max=8 bind=schip tap=sort
+bhead    label   0    588   984  34    size=24 ink=dim anchor=left text=何の数で
+bchip    button  0    622   237  112   size=34 repeat=bases cols=4 gap=12 rows=124 max=4 bind=bchip tap=basis

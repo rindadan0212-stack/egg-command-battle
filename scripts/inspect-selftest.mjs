@@ -88,6 +88,34 @@ const VEIL_TRIALS = [
   },
 ]
 
+/** ⚠️ 巻物のある画面でだけ効く試験（`/party`）。
+ *  ⭐ 「切られて見えていない字」と「見えているのに覆われた字」を**両方**見る。
+ *  ⚠️ 片方だけだと、巻物の中を丸ごと見ない道具になっても気づけない。 */
+const SCROLL_TRIALS = [
+  {
+    name: '巻物から出た字は数えない',
+    want: null,
+    wreck: () => {},
+  },
+  {
+    name: '巻物の中でも、見えている字を覆ったら数える',
+    want: '覆われて見えない',
+    wreck: () => {
+      // ⭐ 1枚目の升の一言（必ず見えている）の上に蓋を置く
+      const note = document.querySelector('[id^="cellA-note#0"]')
+      const r = note.getBoundingClientRect()
+      const s = document.getElementById('stage').getBoundingClientRect()
+      const k = s.width / 1080
+      const d = document.createElement('div')
+      d.id = 'lid'
+      d.className = 'n card'
+      d.style.cssText = `left:${(r.left - s.left) / k}px;top:${(r.top - s.top) / k}px;`
+        + `width:${r.width / k}px;height:${r.height / k}px;background:#000;position:absolute`
+      document.getElementById('stage').appendChild(d)
+    },
+  },
+]
+
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
 let missed = 0
@@ -135,8 +163,28 @@ for (const t of VEIL_TRIALS) {
   }
 }
 
+// ── 巻物のある画面 ────────────────────────────────
+const poolUrl = URL.replace(/\/$/, '') + '/party'
+for (const t of SCROLL_TRIALS) {
+  await page.goto(poolUrl, { waitUntil: 'networkidle' })
+  await page.waitForFunction(() => !!document.querySelector('[id^="cellA-note#0"]'))
+    .catch(() => {})
+  await page.evaluate(t.wreck)
+  const bad = await page.evaluate(audit)
+  const noise = bad.filter(b => b.includes('覆われて見えない'))
+  if (t.want === null) {
+    if (noise.length === 0) console.log(`⭐ ${t.name} → 数えていない`)
+    else { missed++; console.log(`🔴 ${t.name} → **${noise.length}件 数えた**: ${noise[0].slice(0, 66)}`) }
+  } else if (noise.length) {
+    console.log(`⭐ ${t.name} → 捕まえた: ${noise[0].slice(0, 66)}`)
+  } else {
+    missed++
+    console.log(`🔴 ${t.name} → **素通り**`)
+  }
+}
+
 await browser.close()
 console.log(missed === 0
-  ? `\n⭐ 検査は効いている（試した ${TRIALS.length + VEIL_TRIALS.length} 件すべてが正しく動いた）`
+  ? `\n⭐ 検査は効いている（試した ${TRIALS.length + VEIL_TRIALS.length + SCROLL_TRIALS.length} 件すべてが正しく動いた）`
   : `\n🔴 ${missed} 件が素通り ── この検査は、その分だけ嘘をつく`)
 process.exit(missed ? 1 : 0)
