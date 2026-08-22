@@ -34,6 +34,11 @@ namespace EggCommand.Web
         public Func<string, bool> When;
         /// <summary>`bar` の伸び具（0〜1）。⚠️ null なら 0。</summary>
         public Func<string, double> Ratio;
+        /// <summary>⭐ **`host` の中身**（名前 → そのまま差す HTML）。
+        ///
+        /// ⚠️ 骨組みが知らないと宣言した枠なので、描く側が全部決める。
+        /// ⭐ Unity 版の `LayoutFill.Mount`（器を渡す）に当たる。</summary>
+        public Func<string, string> Inside;
     }
 
     /// <summary>骨組みを HTML に変える。⭐ **ここが唯一「座標を読む」場所。**
@@ -44,11 +49,16 @@ namespace EggCommand.Web
     /// ⚠️ **中身の判断はしない。**何をどこに置くかは骨組みが持つ。</summary>
     public static class LayoutDom
     {
-        public static string Render(EggCommand.Core.Layout layout, DomFill fill)
+        /// <param name="suffix">⭐ **同じ骨組みを何枚も出すときの番号**（`"#2"` など）。
+        ///
+        /// ⚠️ 繰り返し（`repeat=`）は自分で番号を付けるが、
+        /// **描く側が何度も呼ぶ**場合（戦闘の立ち位置）はここで渡す。
+        /// ⭐ 渡さないと id が重なる（実測 2026-08-22: 5体分が全部同じ id）。</param>
+        public static string Render(EggCommand.Core.Layout layout, DomFill fill, string suffix = "")
         {
             var sb = new StringBuilder();
             if (layout == null) return "<!-- 骨組みが無い -->";
-            foreach (var node in layout.Roots) One(sb, node, fill, node.Top);
+            foreach (var node in layout.Roots) One(sb, node, fill, node.Top, suffix);
             return sb.ToString();
         }
 
@@ -162,7 +172,12 @@ namespace EggCommand.Web
             if (tag == "button" && !live && tap != null) sb.Append(" disabled");
             sb.Append('>');
 
-            if (node.Kind == "bar")
+            if (node.Kind == "host")
+            {
+                // ⭐ **中は骨組みが知らない。**⚠️ ここだけは描く側の字をそのまま流す
+                sb.Append(fill?.Inside != null ? fill.Inside(node.Name) ?? "" : "");
+            }
+            else if (node.Kind == "bar")
             {
                 // ⭐ **帯は「地」と「伸びた分」の2枚。**⚠️ 幅だけが割合で変わるので
                 //    骨組みには書けない（だから種類にしてある）。

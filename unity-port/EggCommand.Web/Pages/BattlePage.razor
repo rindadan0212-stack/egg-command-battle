@@ -1,0 +1,32 @@
+@page "/fight"
+@using EggCommand.Core
+@using EggCommand.Web
+
+<div id="stage-wrap">
+  <div id="stage">
+    @* ⚠️ **戦闘は下の帯を出さない画面**なので、本体は 1788 まで使える。 *@
+    <div id="body" class="n" style="left:0;top:132px;width:1080px;height:1788px;overflow:hidden">
+      @((MarkupString)_html)
+    </div>
+  </div>
+</div>
+
+@code {
+    /// <summary>決着した状態で描くか。⭐ 「決着」の札と技の札は入れ替わる。</summary>
+    [SupplyParameterFromQuery] public bool Done { get; set; }
+
+    private string _html = "";
+
+    protected override void OnParametersSet()
+    {
+        var shell = new Shell(Demo.Game(), Demo.Now);
+        shell.Fight_ = Demo.Fight(shell.Game);
+        // ⚠️ 決着は**中身から**作る（旗だけ立てると、生きている体が並んだまま「勝った」と出る）
+        if (Done)
+        {
+            foreach (var u in shell.Fight_.Units) if (u.Side == Side.Enemy) u.Hp = 0;
+            shell.Fight_.Result = Outcome.Ally;
+        }
+        _html = Sheets.Fight(shell);
+    }
+}

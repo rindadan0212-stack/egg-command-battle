@@ -1,0 +1,22 @@
+# 戦闘に立つ1体 ── ⭐ **部品**（器は 340x350）
+#
+# ⚠️ 数は `Resources/Prefabs/UnitStand.prefab` の実測。
+# ⚠️ **全体を 20 ずらしてある。**実物は光の輪が -20,-20 から始まるが、
+#    骨組みは負の座標を「画面の外」として落とす。⭐ 互いの位置関係は変えていない。
+#
+# ⚠️ **敵は絵だけ反転**（作者の指示 2026-08-21）。⭐ 器ごと反転させると字まで裏返る
+#    （実際に一度やった ── HP の数字が鏡文字になった）。だから絵を2つ書き分ける。
+#
+# 🔴 **狙い先の印（Target Mark）はまだ無い。**実物は細い棒8本で四隅を囲む。
+#
+#  名前    種類    左   上    幅   高    付け足し
+glow      round   0    0     240  240   when=actor bind=glow
+art       pixel   20   20    200  200   when=!foe bind=art
+artf      pixel   20   20    200  200   when=foe foe=yes bind=art
+hp        card    20   226   260  46
+  hpfill  bar     52   9     198  28    bind=hp
+gauge     bar     72   278   208  12    bind=gauge
+elem      round   244  232   22   22    bind=elem
+# ⭐ 有利を取る相手の色を、細い帯で下に添える（矢印の代わり）
+beats     line    244  258   22   6     bind=beats
+status    label   20   298   320  30    size=20 ink=dim anchor=upper-left bind=status

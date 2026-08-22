@@ -221,7 +221,131 @@ public static class Sheets
         Incubation? Slot(int i) => Hatchery.At(s.Game, i);
     }
 
-    // ── パーティ編成 ─────────────────────────────────
+    // ── 戦闘 ────────────────────────────────────────
+
+    /// <summary>⭐ **`host` の初実戦。**⚠️ 立ち位置は体数から逆算するので、
+    /// 骨組みが持つのは枠だけ（`Stands` が中を埋める）。</summary>
+    public static string Fight(Shell s)
+    {
+        var state = s.Fight_;
+        if (state == null) return "<!-- 戦っていない -->";
+
+        var allies = new List<Unit>();
+        var foes = new List<Unit>();
+        foreach (var u in state.Units) (u.Side == Side.Ally ? allies : foes).Add(u);
+        var actor = EggCommand.Core.Battle.NextActor(state);
+        var skills = actor != null ? Creatures.SkillsOf(actor.Creature) : new Skill?[3];
+        bool done = state.Result != null;
+
+        return LayoutDom.Render(LayoutStore.Of("battle"), new DomFill
+        {
+            Inside = key => key switch
+            {
+                "allies" => Column(allies, 540, 1278, false, actor),
+                "foes" => Column(foes, 540, 1278, true, actor),
+                _ => "",
+            },
+
+            Text = key => key switch
+            {
+                "pick" => "オート",
+                "finish" => state.Result switch
+                {
+                    Outcome.Ally => "勝った",
+                    Outcome.Enemy => "負けた",
+                    _ => "引き分け",
+                },
+                _ => Slot(key) is (int n, string what)
+                    ? SkillWord(skills, actor, n, what) : "",
+            },
+
+            // ⭐ CT の丸薬は濃紺・字は白。⚠️ 同じ色を2か所に書かない
+            Tint = key => key.EndsWith("pill") ? "#2b3350"
+                : key.EndsWith("ct") ? "#ffffff" : null,
+
+            When = key => key switch
+            {
+                "done" => done,
+                "s0" => skills[0] != null,
+                "s1" => skills.Length > 1 && skills[1] != null,
+                "s2" => skills.Length > 2 && skills[2] != null,
+                _ => false,
+            },
+
+            // ⚠️ CT が残っている技は押せない
+            Tappable = key => Slot(key) is (int n, "") ? Ready(actor, n) : true,
+        });
+
+        static (int, string)? Slot(string? key)
+        {
+            if (key == null || key.Length < 2 || key[0] != 's' || key[1] < '0' || key[1] > '2')
+                return null;
+            return (key[1] - '0', key.Substring(2));
+        }
+
+        static bool Ready(Unit? actor, int slot) =>
+            actor != null && slot < actor.Cooldowns.Length && actor.Cooldowns[slot] <= 0;
+
+        static string SkillWord(Skill?[] skills, Unit? actor, int slot, string what)
+        {
+            if (slot >= skills.Length || skills[slot] is not Skill skill) return "";
+            return what switch
+            {
+                "name" => skill.Name,
+                // ⭐ 残りの CT を出す。⚠️ 0 なら「使える」と読めるように空にしない
+                "ct" => actor != null && actor.Cooldowns[slot] > 0
+                    ? $"あと {actor.Cooldowns[slot]}"
+                    : $"CT{Skills.EffectiveCt(slot, skill)}",
+                "lv" => actor != null ? $"Lv{Creatures.SkillLevelOf(actor.Creature, slot)}" : "",
+                _ => "",
+            };
+        }
+    }
+
+    /// <summary>片側の列。⭐ 1体ずつ `unit.txt` で描いて、計算した場所へ置く。</summary>
+    private static string Column(List<Unit> units, float wide, float room, bool foe, Unit? actor)
+    {
+        var spots = Stands.Lay(units.Count, wide, room);
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < units.Count; i++)
+        {
+            var u = units[i];
+            bool alive = EggCommand.Core.Battle.IsAlive(u);
+            var says = EggCommand.Core.Battle.ActiveStatuses(u);
+            // ⚠️ **側も名前に入れる。**⭐ 番号だけだと味方の1体目と敵の1体目が同じ id になる
+            sb.Append(Stands.One(spots[i], (foe ? "f" : "a") + i, new DomFill
+            {
+                Text = key => key == "status" ? string.Join(" ", says) : "",
+                Sprite = key => key == "art" ? Creatures.SpeciesOf(u.Creature).Sprite : null,
+                Palette = key => key == "art" ? Creatures.PaletteOf(u.Creature) : null,
+                Ratio = key => key switch
+                {
+                    "hp" => u.MaxHp > 0 ? Math.Clamp(u.Hp / (double)u.MaxHp, 0, 1) : 0,
+                    "gauge" => Math.Clamp(u.Gauge / (double)EggCommand.Core.Battle.GaugeMax, 0, 1),
+                    _ => 0,
+                },
+                Tint = key => key switch
+                {
+                    // ⭐ 生きていれば味方は緑・敵は赤。⚠️ 倒れたら沈める
+                    "hp" => !alive ? "#636980" : foe ? "#e04f5f" : "#2fa84a",
+                    "elem" => Face.ElementCss(u.Creature.Element),
+                    "beats" => Face.ElementCss(SpeciesTable.Beats(u.Creature.Element)),
+                    "glow" => "rgba(255,217,77,.55)",
+                    _ => null,
+                },
+                When = key => key switch
+                {
+                    "foe" => foe,
+                    // ⭐ いま手番が回っている体を光らせる
+                    "actor" => actor != null && actor.Key == u.Key,
+                    _ => false,
+                },
+            }));
+        }
+        return sb.ToString();
+    }
+
+    // ── パーティ編成 ─────────────────────────────────────────
 
     /// <summary>⭐ 巣は `party.txt`・放置は `partyidle.txt`。
     /// ⚠️ **差し込み口の名前は同じ**にしてあるので、ここは1つで足りる。</summary>

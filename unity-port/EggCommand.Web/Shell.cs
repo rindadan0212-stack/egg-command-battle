@@ -3,7 +3,7 @@ using EggCommand.Core;
 namespace EggCommand.Web;
 
 /// <summary>いま出ている画面。⚠️ Unity 版 `App.Screen` と同じ並び。</summary>
-public enum Sheet { Home, Nests, Breed, Box, Book }
+public enum Sheet { Home, Nests, Breed, Box, Book, Fight }
 
 /// <summary>覆いで前に出る札。⚠️ 画面とは別に数える（後ろの画面は残る）。</summary>
 public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train }
@@ -35,6 +35,10 @@ public sealed class Shell
     public string? Picked;
     /// <summary>配合の親2体。</summary>
     public string? ParentA, ParentB;
+
+    /// <summary>いまの戦い。⚠️ 無ければ戦っていない。
+    /// ⭐ 名前に `_` が付いているのは、Core の `Battle` と見分けるため。</summary>
+    public BattleState? Fight_;
 
     public Shell(Game game, long now) { Game = game; Now = now; }
 
@@ -152,7 +156,13 @@ public sealed class Shell
             // ⭐ いま居るタブだけ塗る
             Tint = key => key == "tab" && tab == here ? "#f59e0b" : null,
             // ⚠️ タブのある画面に ‹ を出さない ── タブが行き先を全部持っている
-            When = key => key switch { "dock" => true, "back" => false, _ => false },
+            // ⚠️ **戦闘中は帯を出さない** ── 抜けられると、
+            //    不利な盤面をいつでも無かったことにできてしまう。
+            When = key => key switch
+            {
+                "dock" => Now_Sheet != Sheet.Fight,
+                _ => false,
+            },
             Tappable = key => true,
         });
     }
@@ -164,6 +174,7 @@ public sealed class Shell
         Sheet.Breed => "配合",
         Sheet.Box => "BOX",
         Sheet.Book => "図鑑",
+        Sheet.Fight => "戦闘",
         _ => "",
     };
 

@@ -43,6 +43,25 @@ public static class Demo
         }
     }
 
+    /// <summary>決まった戦いを1つ組む。⚠️ 遊びの入口ではない ── 画面を見るための土台。
+    /// ⭐ 巣の守り手を相手にする（本番と同じ作り方）。</summary>
+    public static BattleState Fight(Game game)
+    {
+        var nest = Nests.ById("shallow-scale");
+        var mine = new List<Creature>();
+        foreach (var id in Games.RosterOf(game, PartyKind.Nest))
+            foreach (var c in game.Storage.Creatures) if (c.Id == id) mine.Add(c);
+        if (mine.Count == 0)
+            for (int i = 0; i < Games.PartySize && i < game.Storage.Creatures.Count; i++)
+                mine.Add(game.Storage.Creatures[i]);
+
+        var state = EggCommand.Core.Battle.CreateBattle(mine, Games.DefendersOf(game, nest));
+        // ⭐ ゲージを少し進めておく（帯が動いていることが見える形にする）
+        for (int i = 0; i < state.Units.Count; i++)
+            state.Units[i].Gauge = EggCommand.Core.Battle.GaugeMax / (i + 2);
+        return state;
+    }
+
     /// <summary>棚に卵を積む（孵化器には入れない）。</summary>
     public static void Shelve(Game game, int howMany)
     {
