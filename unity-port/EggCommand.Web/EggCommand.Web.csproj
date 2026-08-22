@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- ⚠️ **地域の設定を固定する。**Blazor は `CultureInfo.CurrentCulture` を
+         ブラウザの言語から決めるので、Core の約225箇所の `ToString()` / 補間が
+         地域で変わる（負号・桁区切り・小数点）。⭐ 遊びの規則が地域で変わってはいけない。
+         ⭐ 副産物: ICU（約1.5MB）が積載から消える。
+         ⚠️ Core は `string.CompareOrdinal` しか使っていないので、固定しても比較は壊れない。 -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="9.0.19" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="9.0.19" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- ⭐ 遊びの規則。⚠️ 唯一の出所は Unity 側の local package（写さない）。 -->
+  <ItemGroup>
+    <ProjectReference Include="..\EggCommand.Core\EggCommand.Core.csproj" />
+  </ItemGroup>
+
+  <!-- ⭐ **決定性の検査に使う手順**。⚠️ `SeriesRecord.Build()` は IO を持たない純粋関数なので、
+       ブラウザ内でそのまま呼べる。`Write()` は使わない。
+       ⚠️ Sim を丸ごと参照しない ── Sim は Console や File を触るものを含む。 -->
+  <ItemGroup>
+    <Compile Include="..\EggCommand.Sim\SeriesRecord.cs" Link="SeriesRecord.cs" />
+  </ItemGroup>
+
+</Project>

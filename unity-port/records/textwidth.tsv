@@ -1,0 +1,247 @@
+画面	部品	字	大きさ	枠幅	要る幅	占有%
+Home	Count	EXP 133,290	40	400.0	304.0	76.0
+Home	Stand	からっぽ	28	300.0	112.0	37.3
+Home	Stand	からっぽ	28	300.0	112.0	37.3
+Home	Stand	からっぽ	28	300.0	112.0	37.3
+Home	Stand	からっぽ	28	300.0	112.0	37.3
+Home	Stand	からっぽ	28	300.0	112.0	37.3
+Home	Stand	からっぽ	28	300.0	112.0	37.3
+Home	Label	パーティ編成	34	492.0	204.0	41.5
+Home	Label	試練　2/5	34	444.0	166.0	37.4
+Home	World	#EC2DADE3	24	492.0	179.0	36.4
+Home	Title	EGG COMMAND	40	800.0	372.0	46.5
+Home	Badge	図鑑	28	252.0	56.0	22.2
+Home	Name	ホーム	32	234.0	96.0	41.0
+Home	Name	探索	32	234.0	64.0	27.4
+Home	Count	3	24	234.0	18.0	7.7
+Home	Name	配合	32	234.0	64.0	27.4
+Home	Count	22体	24	234.0	60.0	25.6
+Home	Name	BOX	32	234.0	86.0	36.8
+Home	Count	22/50	24	234.0	82.0	35.0
+Nests	LvTag	Lv	28	90.0	43.0	47.8
+Nests	Level	98	76	300.0	115.0	38.3
+Nests	Left	15:00	44	248.0	144.0	58.1
+Nests	LvTag	Lv	28	90.0	43.0	47.8
+Nests	Level	55	76	300.0	118.0	39.3
+Nests	Left	40:00	44	248.0	148.0	59.7
+Nests	LvTag	Lv	28	90.0	43.0	47.8
+Nests	Level	80	76	300.0	115.0	38.3
+Nests	Left	25:00	44	248.0	147.0	59.3
+Nests	Name	淵のヌシ	56	600.0	224.0	37.3
+Nests	Title	探索	40	800.0	80.0	10.0
+Nests	Badge	パーティ編成	28	252.0	168.0	66.7
+Nests	Name	ホーム	32	234.0	96.0	41.0
+Nests	Name	探索	32	234.0	64.0	27.4
+Nests	Count	3	24	234.0	18.0	7.7
+Nests	Name	配合	32	234.0	64.0	27.4
+Nests	Count	22体	24	234.0	60.0	25.6
+Nests	Name	BOX	32	234.0	86.0	36.8
+Nests	Count	22/50	24	234.0	82.0	35.0
+Breed	Say	下から選ぶ	30	460.0	150.0	32.6
+Breed	Say	下から選ぶ	30	460.0	150.0	32.6
+Breed	Plus	＋	48	64.0	48.0	75.0
+Breed	Label	配合する	32	984.0	128.0	13.0
+Breed	What	すべて　／　素質合計 順（素質だけ）	28	884.0	482.0	54.5
+Breed	Arrow	▼	30	48.0	30.0	62.5
+Breed	Rarity	★★★★★	20	156.0	80.0	51.3
+Breed	Rarity	★★★★★	20	156.0	80.0	51.3
+Breed	Rarity	★★★★	20	156.0	64.0	41.0
+Breed	Rarity	★★★★	20	156.0	64.0	41.0
+Breed	Rarity	★★★★	20	156.0	64.0	41.0
+Breed	Rarity	★★★★	20	156.0	64.0	41.0
+Breed	Rarity	★★★	20	156.0	48.0	30.8
+Breed	Rarity	★★★	20	156.0	48.0	30.8
+Breed	Rarity	★★★	20	156.0	48.0	30.8
+Breed	Rarity	★★★	20	156.0	48.0	30.8
+Breed	Rarity	★★★	20	156.0	48.0	30.8
+Breed	Rarity	★★	20	156.0	32.0	20.5
+Breed	Rarity	★★	20	156.0	32.0	20.5
+Breed	Rarity	★★	20	156.0	32.0	20.5
+Breed	Rarity	★★	20	156.0	32.0	20.5
+Breed	Rarity	★★	20	156.0	32.0	20.5
+Breed	Rarity	★	20	156.0	16.0	10.3
+Breed	Rarity	★	20	156.0	16.0	10.3
+Breed	Rarity	★	20	156.0	16.0	10.3
+Breed	Rarity	★	20	156.0	16.0	10.3
+Breed	Rarity	★	20	156.0	16.0	10.3
+Breed	Rarity	★	20	156.0	16.0	10.3
+Breed	Title	配合	40	800.0	80.0	10.0
+Breed	Badge	EXP 133,290	28	252.0	211.0	83.7
+Breed	Name	ホーム	32	234.0	96.0	41.0
+Breed	Name	探索	32	234.0	64.0	27.4
+Breed	Count	3	24	234.0	18.0	7.7
+Breed	Name	配合	32	234.0	64.0	27.4
+Breed	Count	22体	24	234.0	60.0	25.6
+Breed	Name	BOX	32	234.0	86.0	36.8
+Breed	Count	22/50	24	234.0	82.0	35.0
+Box	Label	分解	20	197.8	40.0	20.2
+Box	Label	Lv ＋1　EXP 122	20	197.8	189.0	95.6
+Box	Label	技を鍛える	20	197.8	100.0	50.6
+Box	Name	ツノガ	38	350.0	114.0	32.6
+Box	Lv	Lv 120/140	22	160.0	145.0	90.6
+Box	Sub	shot1145　1代　変異0	19	510.0	227.0	44.5
+Box	Head Wild 0	素質	18	123.0	36.0	29.3
+Box	Head Trained 0	強化	18	143.0	36.0	25.2
+Box	K 0	▲▲HP	22	214.0	81.0	37.9
+Box	W 0	42,315	26	123.0	103.0	83.7
+Box	G 0	−	26	143.0	24.0	16.8
+Box	K 1	▲攻撃力	22	214.0	88.0	41.1
+Box	W 1	270	26	123.0	59.0	48.0
+Box	G 1	−	26	143.0	24.0	16.8
+Box	K 2	▼▼防御力	22	214.0	110.0	51.4
+Box	W 2	88	26	123.0	40.0	32.5
+Box	G 2	−	26	143.0	24.0	16.8
+Box	K 3	スピード	22	214.0	88.0	41.1
+Box	W 3	110	26	123.0	54.0	43.9
+Box	G 3	−	26	143.0	24.0	16.8
+Box	K 4	弱化命中	22	214.0	88.0	41.1
+Box	W 4	275	26	123.0	59.0	48.0
+Box	G 4	−	26	143.0	24.0	16.8
+Box	K 5	▼弱化耐性	22	214.0	110.0	51.4
+Box	W 5	123	26	123.0	56.0	45.5
+Box	G 5	−	26	143.0	24.0	16.8
+Box	Tag	特性	19	72.0	38.0	52.8
+Box	Body	追い打ち — 弱化が付いた相手に与えるダメージが増える	22	788.0	560.0	71.1
+Box	Name	攻撃	26	400.0	52.0	13.0
+Box	Level	Lv1	20	130.0	44.0	33.8
+Box	Ct	CT0	20	130.0	51.0	39.2
+Box	Name	全体攻撃	26	424.0	104.0	24.5
+Box	Level	Lv1	20	130.0	44.0	33.8
+Box	Ct	CT4	20	130.0	51.0	39.2
+Box	Name	防御力DOWN	26	424.0	172.0	40.6
+Box	Level	Lv1	20	130.0	44.0	33.8
+Box	Ct	CT2	20	130.0	51.0	39.2
+Box	Rarity	★★★★★	20	156.0	80.0	51.3
+Box	Rarity	★★★★★	20	156.0	80.0	51.3
+Box	Rarity	★★★★	20	156.0	64.0	41.0
+Box	Rarity	★★★★	20	156.0	64.0	41.0
+Box	Rarity	★★★★	20	156.0	64.0	41.0
+Box	Rarity	★★★★	20	156.0	64.0	41.0
+Box	Rarity	★★★	20	156.0	48.0	30.8
+Box	Rarity	★★★	20	156.0	48.0	30.8
+Box	Rarity	★★★	20	156.0	48.0	30.8
+Box	Rarity	★★★	20	156.0	48.0	30.8
+Box	Rarity	★★★	20	156.0	48.0	30.8
+Box	Rarity	★★	20	156.0	32.0	20.5
+Box	Rarity	★★	20	156.0	32.0	20.5
+Box	Rarity	★★	20	156.0	32.0	20.5
+Box	Rarity	★★	20	156.0	32.0	20.5
+Box	Rarity	★★	20	156.0	32.0	20.5
+Box	Rarity	★	20	156.0	16.0	10.3
+Box	Rarity	★	20	156.0	16.0	10.3
+Box	Rarity	★	20	156.0	16.0	10.3
+Box	Rarity	★	20	156.0	16.0	10.3
+Box	Rarity	★	20	156.0	16.0	10.3
+Box	Rarity	★	20	156.0	16.0	10.3
+Box	What	すべて　／　素質合計 順（素質だけ）	28	884.0	482.0	54.5
+Box	Arrow	▼	30	48.0	30.0	62.5
+Box	Title	BOX	40	800.0	107.0	13.4
+Box	Badge	EXP 133,290	28	252.0	211.0	83.7
+Box	Name	ホーム	32	234.0	96.0	41.0
+Box	Name	探索	32	234.0	64.0	27.4
+Box	Count	3	24	234.0	18.0	7.7
+Box	Name	配合	32	234.0	64.0	27.4
+Box	Count	22体	24	234.0	60.0	25.6
+Box	Name	BOX	32	234.0	86.0	36.8
+Box	Count	22/50	24	234.0	82.0	35.0
+Trail	LvTag	Lv	28	90.0	43.0	47.8
+Trail	Level	98	76	300.0	115.0	38.3
+Trail	Left	15:00	44	248.0	144.0	58.1
+Trail	LvTag	Lv	28	90.0	43.0	47.8
+Trail	Level	55	76	300.0	118.0	39.3
+Trail	Left	40:00	44	248.0	148.0	59.7
+Trail	LvTag	Lv	28	90.0	43.0	47.8
+Trail	Level	80	76	300.0	115.0	38.3
+Trail	Left	25:00	44	248.0	147.0	59.3
+Trail	Name	淵のヌシ	56	600.0	224.0	37.3
+Trail	Title	探索	40	800.0	80.0	10.0
+Trail	Badge	パーティ編成	28	252.0	168.0	66.7
+Trail	Name	ホーム	32	234.0	96.0	41.0
+Trail	Name	探索	32	234.0	64.0	27.4
+Trail	Count	3	24	234.0	18.0	7.7
+Trail	Name	配合	32	234.0	64.0	27.4
+Trail	Count	22体	24	234.0	60.0	25.6
+Trail	Name	BOX	32	234.0	86.0	36.8
+Trail	Count	22/50	24	234.0	82.0	35.0
+Trial	Note	勝った試練　2 / 5	28	984.0	234.0	23.8
+Trial	Step	1	64	90.0	43.0	47.8
+Trial	Name	毒の園	40	680.0	120.0	17.6
+Trial	Gist	弱化を撒き、撒いた数だけ深く入ってくる	26	840.0	494.0	58.8
+Trial	Beaten	勝った	28	160.0	84.0	52.5
+Trial	Elem 0	木	24	116.0	24.0	20.7
+Trial	Elem 1	炎	24	116.0	24.0	20.7
+Trial	Elem 2	水	24	116.0	24.0	20.7
+Trial	Elem 3	木	24	116.0	24.0	20.7
+Trial	Label	もう一度	34	280.0	136.0	48.6
+Trial	Step	2	64	90.0	47.0	52.2
+Trial	Name	動けぬ盤	40	680.0	160.0	23.5
+Trial	Gist	手番を奪い、止まった相手を狙ってくる	26	840.0	468.0	55.7
+Trial	Beaten	勝った	28	160.0	84.0	52.5
+Trial	Elem 0	炎	24	116.0	24.0	20.7
+Trial	Elem 1	木	24	116.0	24.0	20.7
+Trial	Elem 2	水	24	116.0	24.0	20.7
+Trial	Elem 3	水	24	116.0	24.0	20.7
+Trial	Label	もう一度	34	280.0	136.0	48.6
+Trial	Step	3	64	90.0	49.0	54.4
+Trial	Name	崩れぬ壁	40	680.0	160.0	23.5
+Trial	Gist	固めて、癒して、こちらの手を止めてくる	26	840.0	494.0	58.8
+Trial	Elem 0	水	24	116.0	24.0	20.7
+Trial	Elem 1	木	24	116.0	24.0	20.7
+Trial	Elem 2	炎	24	116.0	24.0	20.7
+Trial	Elem 3	水	24	116.0	24.0	20.7
+Trial	Label	挑む	34	280.0	68.0	24.3
+Trial	Step	4	64	90.0	48.0	53.3
+Trial	Name	倒すほど昂ぶる	40	680.0	280.0	41.2
+Trial	Gist	1体倒すごとに、残りが速くなる	26	840.0	381.0	45.4
+Trial	Elem 0	炎	24	116.0	24.0	20.7
+Trial	Elem 1	木	24	116.0	24.0	20.7
+Trial	Elem 2	水	24	116.0	24.0	20.7
+Trial	Elem 3	木	24	116.0	24.0	20.7
+Trial	Label	挑む	34	280.0	68.0	24.3
+Trial	Step	5	64	90.0	50.0	55.6
+Trial	Name	試練の主	40	680.0	160.0	23.5
+Trial	Gist	置き、止め、耐え、倒れてなお速くなる	26	840.0	468.0	55.7
+Trial	Elem 0	炎	24	116.0	24.0	20.7
+Trial	Elem 1	水	24	116.0	24.0	20.7
+Trial	Elem 2	木	24	116.0	24.0	20.7
+Trial	Elem 3	炎	24	116.0	24.0	20.7
+Trial	Label	挑む	34	280.0	68.0	24.3
+Trial	Title	試練	40	800.0	80.0	10.0
+Trial	Name	ホーム	32	234.0	96.0	41.0
+Trial	Name	探索	32	234.0	64.0	27.4
+Trial	Count	3	24	234.0	18.0	7.7
+Trial	Name	配合	32	234.0	64.0	27.4
+Trial	Count	22体	24	234.0	60.0	25.6
+Trial	Name	BOX	32	234.0	86.0	36.8
+Trial	Count	22/50	24	234.0	82.0	35.0
+Book	head	手に入れた種族　3 / 11	28	984.0	306.0	31.1
+Book	name	タマル	30	301.0	90.0	29.9
+Book	kind	執念	24	301.0	48.0	15.9
+Book	name	ツノガ	30	301.0	90.0	29.9
+Book	kind	追い打ち	24	301.0	96.0	31.9
+Book	name	ハネル	30	301.0	90.0	29.9
+Book	kind	狙い澄まし	24	301.0	120.0	39.9
+Book	name	？？？	30	301.0	90.0	29.9
+Book	kind	—	24	301.0	24.0	8.0
+Book	name	？？？	30	301.0	90.0	29.9
+Book	kind	—	24	301.0	24.0	8.0
+Book	name	？？？	30	301.0	90.0	29.9
+Book	kind	—	24	301.0	24.0	8.0
+Book	name	？？？	30	301.0	90.0	29.9
+Book	kind	—	24	301.0	24.0	8.0
+Book	name	？？？	30	301.0	90.0	29.9
+Book	kind	—	24	301.0	24.0	8.0
+Book	name	？？？	30	301.0	90.0	29.9
+Book	kind	—	24	301.0	24.0	8.0
+Book	name	？？？	30	301.0	90.0	29.9
+Book	kind	—	24	301.0	24.0	8.0
+Book	name	？？？	30	301.0	90.0	29.9
+Book	kind	—	24	301.0	24.0	8.0
+Book	Title	図鑑	40	800.0	80.0	10.0
+Book	Name	ホーム	32	234.0	96.0	41.0
+Book	Name	探索	32	234.0	64.0	27.4
+Book	Count	3	24	234.0	18.0	7.7
+Book	Name	配合	32	234.0	64.0	27.4
+Book	Count	22体	24	234.0	60.0	25.6
+Book	Name	BOX	32	234.0	86.0	36.8
+Book	Count	22/50	24	234.0	82.0	35.0
