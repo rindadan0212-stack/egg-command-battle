@@ -19,13 +19,13 @@ namespace EggCommand.View
     public sealed class TrailDice : MonoBehaviour
     {
         /// <summary>回している時間。⭐ 短く。⚠️ 長いと、振る回数ぶん待たされる。</summary>
-        private const float Spin = 0.42f;
+        private const float Spin = (float)Core.Beats.Spin;
         /// <summary>出目を出したまま止めておく時間。
         /// ⭐ **目を読み切るための間。**⚠️ 短いと「何が出たか分からないまま次へ行く」
         /// （2026-08-20・作者の指示「少しの間停止して出目を正確に目視できるように」）。</summary>
-        private const float Hold = 0.95f;
+        private const float Hold = (float)Core.Beats.DiceHold;
         /// <summary>目が切り替わる間隔。</summary>
-        private const float Flick = 0.055f;
+        private const float Flick = (float)Core.Beats.Flick;
         /// <summary>回り終わってから、出目の面が正面へ収まるまでの時間。
         /// ⚠️ 長いとぬるっとして「決まった」感じが消える。</summary>
         private const float Settle = 0.12f;

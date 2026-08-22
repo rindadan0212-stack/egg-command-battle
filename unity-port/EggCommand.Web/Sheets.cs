@@ -248,7 +248,9 @@ public static class Sheets
             Count = key => key switch { "dice" => show, "purse" => keys.Length, _ => 0 },
             At = (key, i) => { if (key == "dice") die = i; else purse = i; },
 
-            Inside = key => key == "ground" ? Board.Draw(raid, s.Open_) : "",
+            // ⭐ 駒は**見せている所**に立つ（歩いている最中は道の途中）
+            Inside = key => key == "ground"
+                ? Board.Draw(raid, s.Open_, s.Path != null ? s.Path[s.Step_] : -1) : "",
 
             Text = key => key switch
             {
@@ -355,12 +357,6 @@ public static class Sheets
                 //    押しても**いまどちらなのか画面のどこにも出ていなかった**
                 //    （Unity 版は字と色の両方で出している）。
                 "pick" => s.Auto ? "オート  ON" : "オート  OFF",
-                "finish" => state.Result switch
-                {
-                    Outcome.Ally => "勝った",
-                    Outcome.Enemy => "負けた",
-                    _ => "引き分け",
-                },
                 _ => Slot(key) is (int n, string what)
                     ? SkillWord(skills, actor, n, what) : "",
             },
@@ -751,6 +747,30 @@ public static class Sheets
     /// <summary>控えの古さを読める字に。⭐ `Rarities.Clock` と同じ言い回しに揃える。</summary>
     private static string Age(int seconds) =>
         seconds < 60 ? "たった今" : Rarities.Clock(seconds) + "前";
+
+    // ── さいころ ────────────────────────────────────
+
+    /// <summary>回っているさいころ。⭐ **目が決まる瞬間だけを見せる。**
+    /// ⚠️ 出目は `Trails.Roll` が先に決めている ── ここは見せるだけ。
+    /// ⚠️ 回っている間の面は**乱数を引かない**（`fx.js` が順に送る）。</summary>
+    public static string Dice(Shell s, string crown = "") =>
+        LayoutDom.Render(LayoutStore.Of("dice"), new DomFill
+        {
+            Pic = key => "die-" + Math.Clamp(s.Dice, 1, Trail.Pips),
+            Tint = key => key == "face" ? "var(--ink)" : null,
+            Tappable = key => false,
+        }, crown: crown);
+
+    // ── 告知 ────────────────────────────────────────
+
+    /// <summary>短い告知。⭐ 出て、読ませて、自分で消えて、次へ渡す。
+    /// ⚠️ **ボタンを置かない** ── 勝ち負けは選択ではなく結果。</summary>
+    public static string Banner(Shell s, string crown = "") =>
+        LayoutDom.Render(LayoutStore.Of("banner"), new DomFill
+        {
+            Text = key => key == "line" ? s.Banner ?? "" : "",
+            Tappable = key => false,
+        }, crown: crown);
 
     // ── 確かめる ────────────────────────────────────
 

@@ -7,10 +7,9 @@ namespace EggCommand.Web;
 ///
 /// ⭐ **3つ目の `host`。**⚠️ 何体並ぶかは編成しだいなので、間隔と大きさを逆算する。
 ///
-/// ⭐ 進んでいることは**地面が左へ流れる**ことで見せる（実物）。
-/// 🔴 **その動きはまだ web に無い。**⚠️ いまは止まった絵。
-/// ⭐ 動きを付けるときは `requestAnimationFrame` 側の話になるので、
-/// この枠の中だけで済む ── 骨組みも他の画面も触らない。
+/// ⭐ 進んでいることは**地面が左へ流れる**ことで見せる。走者は歩幅だけ揺らす。
+/// ⚠️ 動きは `stage.css` が持つ（時計を1本増やさずに済む）── ⭐ ここは級を付けるだけ。
+/// ⚠️ 数（流れる速さ・揺れ幅）は `Core.Beats` が唯一の出所。
 ///
 /// ⚠️ ここは `Core.Idle` が決めた結果を描くだけ。勝ち負けも素材もここでは決めない
 /// （決めた瞬間に第2の出所ができる）。</summary>
@@ -25,39 +24,59 @@ public static class Idle
     {
         var sb = new StringBuilder();
 
-        // ⭐ 地面。⚠️ 画面幅の2倍あるのは、左へ流して折り返すため（動きは未実装）
+        // ⭐ 地面。⚠️ 画面幅の2倍あるのは、左へ流して**折り返す**ため
+        //    （1枚ぶん流れたら元へ戻るので、繋ぎ目が見えない）
         sb.Append(Box("ground", 0, GroundTop, Wide * 2, GroundHigh, "#f2b34b"));
-        for (int i = 0; i < 8; i++)
-            sb.Append(Box($"tuft#{i}", 90 + 260 * i, GroundTop - 26, 46, 26, "#9ac95e"));
+        // ⚠️ 草も一緒に流す ── ⭐ 地面だけ動くと、生えている物が滑って見える
+        for (int i = 0; i < 16; i++)
+            sb.Append(Box($"tuft#{i}", 90 + 260 * i, GroundTop - 26, 46, 26, "#9ac95e",
+                "idle-tuft"));
 
         // ⭐ 編成ぶん並べる。⚠️ **占有する幅は変えない** ── 間隔を詰め、そのぶん縮める
         var party = Games.PartyOf(game);
         int want = Math.Max(1, party.Count);
         const float Span = 130f, First = 120f, Size = 160f;
+        // ⭐ 揺れ幅は `Core.Beats` が唯一の出所（動きは `stage.css` が同じ数で書く）
+        const float Bob = (float)Beats.Bob;
         float step = Span * 3f / Math.Max(1, want - 1);   // ⚠️ 元は3体ぶんの幅
         float shrink = Math.Min(1f, step / Span);
         for (int i = 0; i < want; i++)
         {
             var c = party[Math.Min(i, party.Count - 1)];
+            // ⚠️ **揺れは中の器に掛ける。**⭐ 外は縮めるための `scale` を持っているので、
+            //    ここへ動きを足すと `transform` が丸ごと置き換わって縮みが消える。
+            // ⚠️ 🔴 **揺れるぶんの天井を空けておく。**⭐ 器の高さを揺れ幅だけ足し、
+            //    中の絵をそのぶん下げる ── ⚠️ 空けないと、上がった拍に
+            //    絵が器の外へ出て、検査が「親の枠からはみ出し」と読む（実測 2026-08-23）。
             sb.Append("<div class=\"n\" style=\"left:")
               .Append(Px(First + step * i)).Append(";top:")
-              .Append(Px(GroundTop - Size * shrink))
-              .Append(";width:160px;height:160px;transform-origin:0 0;transform:scale(")
+              .Append(Px(GroundTop - (Size + Bob) * shrink))
+              .Append(";width:160px;height:").Append(Px(Size + Bob))
+              .Append(";transform-origin:0 0;transform:scale(")
               .Append(shrink.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))
-              .Append(")\">")
+              .Append(")\"><div class=\"n idle-walk\" style=\"left:0;top:").Append(Px(Bob))
+              .Append(";width:160px;")
+              // ⚠️ 一人ずつずらす ── ⭐ 揃うと行進になり、めいめいが歩いている感じが消える
+              .Append("height:160px;animation-delay:")
+              .Append((i * 0.21).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))
+              .Append("s\">")
               .Append(LayoutDom.Render(LayoutStore.Of("walker"), new DomFill
               {
                   Sprite = key => Creatures.SpeciesOf(c).Sprite,
                   Palette = key => Creatures.PaletteOf(c),
               }, "#w" + i))
-              .Append("</div>");
+              .Append("</div></div>");
         }
 
         // ⭐ 相手。⚠️ 居ないときは出さない（`Core.Idle` が決める）
         if (game.Idle.EnemyHp > 0)
         {
             var foe = SpeciesTable.All[0];
-            sb.Append("<div class=\"n\" style=\"left:880px;top:196px;width:200px;height:200px\">")
+            // ⭐ **外から転がって来る**（⚠️ 定位置にぽんと現れると「回復した」に見える）。
+            //    ⚠️ 一度きりの動きなので、満タンのときだけ掛ける。
+            bool fresh = game.Idle.EnemyHp >= 1;
+            sb.Append("<div class=\"n").Append(fresh ? " idle-come" : "")
+              .Append("\" style=\"left:880px;top:196px;width:200px;height:200px\">")
               .Append(LayoutDom.Render(LayoutStore.Of("walker"), new DomFill
               {
                   Sprite = key => foe.Sprite,
@@ -72,8 +91,10 @@ public static class Idle
         return sb.ToString();
     }
 
-    private static string Box(string id, float x, float y, float w, float h, string paint) =>
-        $"<div id=\"{id}\" class=\"n\" style=\"left:{Px(x)};top:{Px(y)};width:{Px(w)};"
+    private static string Box(string id, float x, float y, float w, float h, string paint,
+        string also = "") =>
+        $"<div id=\"{id}\" class=\"n{(also.Length > 0 ? " " + also : "")}\""
+        + $" style=\"left:{Px(x)};top:{Px(y)};width:{Px(w)};"
         + $"height:{Px(h)};background:{paint}\"></div>";
 
     private static string Px(float v) =>

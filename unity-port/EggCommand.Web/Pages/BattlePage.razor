@@ -8,14 +8,20 @@
     <div id="body" class="n" style="left:0;top:132px;width:1080px;height:1788px;overflow:hidden">
       @((MarkupString)_html)
     </div>
+    @((MarkupString)_over)
   </div>
 </div>
 
 @code {
-    /// <summary>決着した状態で描くか。⭐ 「決着」の札と技の札は入れ替わる。</summary>
+    /// <summary>決着した状態で描くか。⭐ 技の札と「あきらめる」が消える。</summary>
     [SupplyParameterFromQuery] public bool Done { get; set; }
 
-    private string _html = "";
+    /// <summary>決着の告知を出すか（`win` / `lose`）。⭐ **出る場所はここ**
+    /// ── ⚠️ 告知は覆いを敷かないので、後ろの画面と同じ層に見える。
+    /// 実際に重なる相手（戦いの盤）の上で見ないと、置き方を確かめたことにならない。</summary>
+    [SupplyParameterFromQuery] public string? Banner { get; set; }
+
+    private string _html = "", _over = "";
 
     protected override void OnParametersSet()
     {
@@ -28,5 +34,10 @@
             shell.Fight_.Result = Outcome.Ally;
         }
         _html = Sheets.Fight(shell);
+        if (Banner is "win" or "lose")
+        {
+            shell.Banner = Banner == "win" ? "WIN" : "LOSE";
+            _over = Sheets.Banner(shell, "-tell");
+        }
     }
 }

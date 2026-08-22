@@ -8,6 +8,17 @@ public enum Sheet { Home, Nests, Breed, Box, Book, Fight, Raid, Trial }
 /// <summary>覆いで前に出る札。⚠️ 画面とは別に数える（後ろの画面は残る）。</summary>
 public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train, Ask, Keep }
 
+/// <summary>すごろくの演出がどこまで進んだか。</summary>
+public enum Roam
+{
+    /// <summary>止まっている（押しどころを待つ）。</summary>
+    Still,
+    /// <summary>さいころが回っている。⚠️ 出目は**もう決まっている**。</summary>
+    Rolling,
+    /// <summary>駒が1マスずつ踏んでいる。⚠️ 行き先は**もう決まっている**。</summary>
+    Walking,
+}
+
 /// <summary>盤に1つ出す演出。⭐ **「何が起きたか」を字で説明しないための道具。**
 ///
 /// ⚠️ 座標は持たない ── ⭐ 出す先は**体の名前**（`a0` `f2`）で言い、
@@ -127,6 +138,22 @@ public sealed class Shell
     public Unit? CastAim;
     /// <summary>盤へ出す演出。⭐ **描いた側が空にする**（一度出したら消える）。</summary>
     public readonly List<Spark> Sparks = new();
+
+    /// <summary>いま出ている告知（「WIN」など）。⚠️ 無ければ null。
+    /// ⭐ ボタンは置かない ── 結果であって、選択ではない。</summary>
+    public string? Banner;
+
+    // ── すごろくの拍 ──────────────────────────────────
+    /// <summary>さいころ・駒がどこまで進んだか。</summary>
+    public Roam Roam_;
+    /// <summary>次の拍までの残り（秒）。</summary>
+    public double RoamWait;
+    /// <summary>いま転がしている目。⚠️ **ここで引き直さない**（`Trails.Roll` が決めた数）。</summary>
+    public int Dice;
+    /// <summary>いま辿っている道。⚠️ 先頭は**いま居るマス**。</summary>
+    public List<int>? Path;
+    /// <summary>道の何歩目まで見せたか。⭐ 駒はここに立つ（盤の中の数ではない）。</summary>
+    public int Step_;
     /// <summary>画面に出す一言。⚠️ 黙って変わらないことを防ぐ。</summary>
     public string? Say;
 
@@ -196,7 +223,6 @@ public sealed class Shell
             case "s1": Deeds.Strike(this, 1); break;
             case "s2": Deeds.Strike(this, 2); break;
             case "pick": Auto = !Auto; break;
-            case "finish": Now_Sheet = Sheet.Nests; break;
             // ⭐ **取り返しがつかないので一度だけ確かめる**（押し間違いで負けにしない）
             case "give": if (Fight_ != null) Open = Panel.Ask; break;
             case "stop": Open = Panel.None; break;

@@ -47,7 +47,7 @@ namespace EggCommand.View
         /// <summary>関門を踏んだあと、余分に置く間（秒）。
         /// ⭐ **重い所で一拍おく**と、そこが重く感じる（2026-08-21 の手ざわりの調べ）。
         /// ⚠️ 長いと「詰まった」に見える。</summary>
-        private const float GateBeat = 0.26f;
+        private const float GateBeat = (float)Core.Beats.GateBeat;
 
         /// <summary>卵まであと何マスから、行き先が脈打ちはじめるか。
         /// ⚠️ 「あと少し！」と字で書かない（作者の指示・この画面に説明の文は置かない）。</summary>

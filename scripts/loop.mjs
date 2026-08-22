@@ -71,6 +71,49 @@ say(await tap('[id="card#0"]'), '巣の札を押せる')
 say((await title()) !== '探索', '潜入が始まる', await title())
 say(await has('#roll'), 'さいころの釦が出ている')
 
+// ── さいころと駒（⭐ **決まったことを見せるだけ**）──────────
+// ⚠️ ここは**遊ぶ速さのまま**測る（早送りは「着くか」しか見ていない）。
+{
+  const spot = () => page.evaluate(() =>
+    document.getElementById('piece')?.style.top || null)
+  const from = await spot()
+  await page.goto(URL + '/app?seed=20260822')   // ⭐ 拍を縮めずに開き直す
+  await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 3,
+    null, { timeout: 30000 }).catch(() => {})
+  await tap('[id="tab#1"]')
+  await tap('[id="card#0"]')
+  await tap('#roll')
+  await page.waitForTimeout(200)
+  say(await has('#face-roll'), 'さいころが回っている')
+  // ⚠️ **止まってから選ばせる。**⭐ 回っている間に道が光ると、目を読む前に手が出る
+  say(!(await page.evaluate(() =>
+      [...document.querySelectorAll('#stage .n.card.lead')].some(e => e.id.startsWith('sq#')))),
+    '　回っている間は道が光らない')
+  await page.waitForTimeout(1500)
+  say(!(await has('#face-roll')), '　止まると消える')
+
+  const lit = await page.evaluate(() =>
+    [...document.querySelectorAll('#stage .n.card.lead')].map(e => e.id).filter(i => i.startsWith('sq#')))
+  say(lit.length > 0, '　止まってから道が光る', `${lit.length} 通り`)
+  if (lit.length) await tap(`[id="${lit[lit.length - 1]}"]`)
+  // ⭐ 駒が**途中のマス**を踏むか（⚠️ 瞬間移動だと2か所しか出ない）
+  const seen = new Set()
+  for (let i = 0; i < 40; i++) {
+    await page.waitForTimeout(45)
+    const t = await spot()
+    if (t) seen.add(t)
+    if (await has('#pick') || await has('#pay')) break
+  }
+  say(seen.size >= 2, '駒が1マスずつ踏んで進む', `${seen.size} か所に立った`)
+  say(from !== null, '　盤が描けている')
+}
+// ⭐ 続きは早送りで通す
+await page.goto(URL + '/app?seed=20260822&pace=0.12')
+await page.waitForFunction(() => document.querySelectorAll('#stage .n').length > 3,
+  null, { timeout: 30000 }).catch(() => {})
+await tap('[id="tab#1"]')
+await tap('[id="card#0"]')
+
 // ── 一巡する ────────────────────────────────────
 /** ⭐ **入っているかは画面に聞く。**⚠️ 自分で数えていた頃は、押した回数と
  *  実際の状態がずれて、入れたり切ったりを繰り返して嵌まった。 */
@@ -93,17 +136,40 @@ const fight = async (limit = 90000) => {
   //    ⭐ 戦闘の画面そのものが在るか（`#pick`）で待つ。
   while (await has('#pick')) {
     if (Date.now() > until) return false
-    await page.waitForTimeout(250)
+    // ⭐ 告知は 1.17秒 しか出ないので、待つついでに見張る
+    if (!told && await has('#strip-tell')) told = true
+    await page.waitForTimeout(120)
   }
   return true
+}
+/** 決着の告知を見たか。⚠️ 一瞬しか出ないので、待っている間に拾う。 */
+let told = false
+
+/** ⚠️ 🔴 **演出の最中は押さない。**⭐ さいころは回り切るまで 1.37秒、
+ *  駒は1マス 0.13秒 かかる ── その間は道も光らず、釦も灰のままなので、
+ *  待たずに次を見ると「行き止まり」に見える（実測 2026-08-23）。
+ *  ⚠️ 遊ぶ人は「動きが止まったら押す」ので、検査も同じにする。 */
+const quiet = async (limit = 8000) => {
+  const until = Date.now() + limit
+  while (Date.now() < until) {
+    if (await has('#face-roll')) { await page.waitForTimeout(80); continue }
+    const ready = await page.evaluate(() =>
+      !!document.querySelector('#pick') || !!document.querySelector('#pay')
+      || !!document.querySelector('#roll:not([disabled])')
+      || [...document.querySelectorAll('#stage .n.card.lead')].some(e => e.id.startsWith('sq#'))
+      || document.getElementById('title')?.textContent === '探索')
+    if (ready) return true
+    await page.waitForTimeout(80)
+  }
+  return false
 }
 
 let rolls = 0, fought = false, done = false
 for (let step = 0; step < 60; step++) {
+  await quiet()
   const now = await title()
 
   if (await has('#pick')) { fought = true; await fight(); continue }
-  if (await has('#finish')) { await tap('#finish'); continue }
   if (await has('#pay')) { await tap('#pay'); continue }
 
   const lit = await page.evaluate(() =>
@@ -155,6 +221,8 @@ say(saveNow !== saveWas, '触っていなくても、進んだ分が書かれて
 // ⚠️ **卵は出ない。**⭐ 出すと「試練で卵を稼ぐ」が最短経路になる
 const said = await page.evaluate(() => document.getElementById('say')?.textContent || '')
 say(!said.includes('卵'), '　卵は出ない', said.slice(0, 30))
+// ⭐ **決着は告知で渡す**（⚠️ 釦を置かない ── 押したから終わったに見える）
+say(told, '決着を告知で渡す（WIN / LOSE）')
 
 await browser.close()
 console.log(bad === 0 ? '\n⭐ 遊びの輪が閉じている' : `\n🔴 ${bad} 件で止まる`)

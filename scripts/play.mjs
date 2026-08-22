@@ -37,6 +37,28 @@ const parts = () => page.evaluate(() => document.querySelectorAll('#app-body .n'
 
 say((await title()) === 'EGG COMMAND', '開いた直後はホーム', await title())
 
+// ── 放置の帯（⭐ 進んでいることは**地面が流れる**ことで見せる）──────
+{
+  const moving = await page.evaluate(() => {
+    const one = (id) => {
+      const e = document.getElementById(id)
+      return e ? getComputedStyle(e).animationName : 'なし'
+    }
+    return {
+      ground: one('ground'),
+      tuft: document.querySelectorAll('.idle-tuft').length,
+      walk: document.querySelectorAll('.idle-walk').length,
+      // ⚠️ **揃うと行進になる。**⭐ 一人ずつずらす
+      delays: new Set([...document.querySelectorAll('.idle-walk')]
+        .map(e => getComputedStyle(e).animationDelay)).size,
+    }
+  })
+  say(moving.ground === 'idle-roll', '地面が流れる', moving.ground)
+  say(moving.tuft > 0, '　草も一緒に流れる', `${moving.tuft} 本`)
+  say(moving.walk > 0 && moving.delays === moving.walk,
+    '　走者は一人ずつずれて揺れる', `${moving.walk} 体 / ずれ ${moving.delays} 通り`)
+}
+
 /** ⭐ 下の帯の札を押す。⚠️ 名前でなく**並びの番号**で押す（骨組みが順を持つ）。 */
 const tab = async (i) => {
   await page.click(`[id="tab#${i}"]`)

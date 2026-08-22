@@ -62,9 +62,9 @@ namespace EggCommand.View
         }
 
         /// <summary>地面が1秒に流れる幅。⭐ 進んでいる速さの見た目。</summary>
-        private const float Scroll = 90f;
+        private const float Scroll = (float)Core.Beats.Scroll;
         /// <summary>歩幅の揺れ。⚠️ 大きいと跳ねて見えて「進んでいる」から離れる。</summary>
-        private const float Bob = 6f;
+        private const float Bob = (float)Core.Beats.Bob;
 
         private Game _game;
         private System.Func<long> _clock;
@@ -83,7 +83,7 @@ namespace EggCommand.View
 
         /// <summary>転がって来るのにかかる秒。⚠️ 短いと結局パッと入れ替わって見える。
         /// ⭐ 0.7 では次が来るのが早すぎたので倍にした（間が空くほど別個体だと分かる）。</summary>
-        private const float EntrySeconds = 1.4f;
+        private const float EntrySeconds = (float)Core.Beats.EntrySeconds;
         /// <summary>画面の外へ置く距離。⚠️ 短いと画面内から湧いたように見える。</summary>
         private const float EntryFrom = 700f;
 

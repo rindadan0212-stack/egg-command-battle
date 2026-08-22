@@ -11,8 +11,8 @@ namespace EggCommand.Web;
 /// ⚠️ ただし**描かない** ── 出すものを `Spark` で言うだけで、
 /// 実際に盤へ差すのは `fx.js`（組み直しで消えないように、Blazor の外に置く）。
 ///
-/// ⚠️ すごろくの演出（さいころが転がる・駒が1マスずつ歩く）は**まだ無い**。
-/// ⭐ 結果は同じところへ着くが、途中が飛ぶ。</summary>
+/// ⭐ **すごろくの演出もここが持つ**（さいころが回る・駒が1マスずつ踏む）。
+/// ⚠️ どちらも**決まったことを見せるだけ** ── 出目も行き先も、もう決まっている。</summary>
 public static class Deeds
 {
     // ── 探索 ────────────────────────────────────────
@@ -29,6 +29,7 @@ public static class Deeds
         s.Raid_ = Trails.Begin(Trails.OfNest(nest), Games.PartyOf(s.Game),
             Games.RaidsOn(s.Game, nest));
         s.Open_ = null;
+        Stop(s);
         s.Now_Sheet = Sheet.Raid;
     }
 
@@ -50,6 +51,7 @@ public static class Deeds
     {
         var raid = s.Raid_;
         if (raid == null || raid.Rolls <= 0 || raid.Step != RaidStep.Moved) return;
+        if (s.Roam_ != Roam.Still) return;   // ⚠️ 回っている最中は受けない
         var nest = s.Nest_;
         if (nest == null) { s.Now_Sheet = Sheet.Nests; return; }
 
@@ -57,6 +59,20 @@ public static class Deeds
             $"trail:{nest.Id}:{Games.RaidsOn(s.Game, nest)}"
             + $":{raid.Rolls}:{raid.At}:{raid.Took.Count}:{raid.Beaten.Count}");
         Trails.Roll(rng, raid);
+
+        // ⭐ **目が決まる瞬間だけを見せる。**⚠️ 出目は `Trails.Roll` が先に決めている
+        //    ── ここは見せるだけで、何が出るかは決めない（決めると出所が2つになる）。
+        s.Dice = raid.Pending;
+        s.Roam_ = Roam.Rolling;
+        s.RoamWait = Beats.Spin + Beats.DiceHold;
+    }
+
+    /// <summary>さいころが止まった。⭐ ここで初めて「行ける先」を出す。</summary>
+    private static void Landed(Shell s)
+    {
+        var raid = s.Raid_;
+        s.Roam_ = Roam.Still;
+        if (raid == null) return;
 
         var open = Trails.Reach(raid, raid.Pending);
         // ⚠️ 1マスも動けない ── そこで見つかる
@@ -73,6 +89,7 @@ public static class Deeds
     {
         var raid = s.Raid_;
         if (raid == null || raid.Step != RaidStep.Choosing) return;
+        if (s.Roam_ != Roam.Still) return;   // ⚠️ 歩いている最中は受けない
         foreach (var path in Trails.Reach(raid, raid.Pending))
         {
             if (path[path.Count - 1] != goal) continue;
@@ -101,11 +118,69 @@ public static class Deeds
         After(s);
     }
 
+    /// <summary>駒が**1マスずつ踏みながら**進む。
+    ///
+    /// ⚠️ **盤の中の位置は先に動かす**（`Trails.Go`）── Unity 版と同じ順。
+    /// ⭐ 見せているのは `Path`／`Step_` で、盤はそこに駒を立てる
+    /// （動かす前に歩かせると、途中で押されたときに行き先が変わりうる）。</summary>
     private static void Walk(Shell s, IReadOnlyList<int> path)
     {
         s.Open_ = null;
-        Trails.Go(s.Raid_!, path);
-        After(s);
+        var whole = new List<int>(path);
+        Trails.Go(s.Raid_!, whole);
+        // ⚠️ 1マスも動かないなら見せない（1拍待たせる意味が無い）
+        if (whole.Count <= 1) { After(s); return; }
+        s.Path = whole;
+        s.Step_ = 0;
+        s.Roam_ = Roam.Walking;
+        s.RoamWait = Beats.WalkStep;
+    }
+
+    /// <summary>一歩ぶん進める。⭐ **一歩ごとに間を変えられる**
+    /// ── ⚠️ 全部が同じ間だと、関門を通った所も素通りの所も同じ重さに見える。</summary>
+    private static void Stride(Shell s)
+    {
+        var raid = s.Raid_;
+        var path = s.Path;
+        if (raid == null || path == null) { Stop(s); return; }
+
+        s.Step_++;
+        if (s.Step_ >= path.Count - 1)
+        {
+            // ⭐ 着いた。盤の位置はもう動かしてあるので、後始末だけ
+            Stop(s);
+            After(s);
+            return;
+        }
+        int here = path[s.Step_];
+        // ⭐ **関門では一拍おく。**⚠️ ここが一番「払った甲斐」を感じるべき所なのに、
+        //    素通りのマスと同じ速さで抜けていた（2026-08-21 の手ざわりの調べ）。
+        bool gate = raid.Trail.Squares[here].IsGate;
+        s.RoamWait = Beats.WalkStep + (gate ? Beats.GateBeat : 0);
+    }
+
+    /// <summary>すごろくの拍を最初に戻す。⚠️ 潜入の出入りで必ず呼ぶ。</summary>
+    private static void Stop(Shell s)
+    {
+        s.Roam_ = Roam.Still;
+        s.RoamWait = 0;
+        s.Path = null;
+        s.Step_ = 0;
+    }
+
+    /// <summary>すごろくの時が進む。⭐ さいころと駒だけ。
+    /// ⚠️ 名前を `Roam` にしない ── ⭐ 同じ名前の enum が隠れる
+    /// （`Layout` フォルダ・`Trial` 頁で踏んだのと同じ形）。
+    /// ⚠️ **決まったことは動かさない** ── 出目も行き先も、もう決まっている。</summary>
+    public static Tick Rove(Shell s, double seconds)
+    {
+        if (s.Raid_ == null || s.Roam_ == Roam.Still) return Tick.Stopped;
+        if (s.Open != Panel.None) return Tick.Stopped;
+        if (s.RoamWait > 0) { s.RoamWait -= seconds; return Tick.Filling; }
+
+        if (s.Roam_ == Roam.Rolling) { Landed(s); return Tick.Acted; }
+        Stride(s);
+        return Tick.Acted;
     }
 
     /// <summary>1手ぶんの後始末。⭐ 雑魚に会ったか、決着したかを見る。</summary>
@@ -128,6 +203,7 @@ public static class Deeds
         bool won = raid.Result == StealOutcome.Success;
         var where = s.Nest_;
         s.Raid_ = null;
+        Stop(s);
         if (won)
         {
             Games.GrowParty(Games.PartyOf(s.Game));
@@ -169,6 +245,7 @@ public static class Deeds
         s.Cast = null;
         s.CastAim = null;
         s.Sparks.Clear();
+        s.Banner = null;
     }
 
 
@@ -206,6 +283,9 @@ public static class Deeds
         Announcing,
         /// <summary>打った。⭐ 数字が飛び切るまで次を始めない。</summary>
         Settling,
+        /// <summary>決着を告げている。⚠️ **ボタンを置かない**
+        /// ── 勝ち負けは選択ではなく結果なので、押させると「押したから」に見える。</summary>
+        Telling,
     }
 
     /// <summary>時が進む。
@@ -257,6 +337,19 @@ public static class Deeds
             }
 
             case Stage.Settling:
+                // ⭐ **決着したら、まず告げる。**⚠️ 畳んでから告げる先が無い
+                if (state.Result != null)
+                {
+                    s.Banner = state.Result == Outcome.Ally ? "WIN" : "LOSE";
+                    s.Stage = Stage.Telling;
+                    s.Wait = Beats.SlideIn + Beats.BannerHold;
+                    return Tick.Acted;
+                }
+                s.Stage = Stage.Idle;
+                return Tick.Acted;
+
+            case Stage.Telling:
+                s.Banner = null;
                 s.Stage = Stage.Idle;
                 // ⚠️ **決着の後始末はここ。**⭐ 打った拍で畳むと、
                 //    最後の数字が飛ぶ前に画面が変わる

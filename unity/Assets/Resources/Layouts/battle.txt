@@ -44,4 +44,7 @@ hand      box     0    1440  1080 348   when=!done dock=no
       s2ct  label   0    0     150  40    size=22 anchor=center bind=s2ct
     s2lv    label   12   74    120  40    size=24 anchor=left bind=s2lv
 
-finish    button  48   1450  984  112   size=32 tap=finish bind=finish when=done dock=no
+# ⚠️ **「決着」の釦は置かない**（2026-08-23 に外した）。⭐ 告知（`banner.txt`）が
+#    出て、読ませて、自分で消えて、次へ渡す ── Unity 版と同じ形。
+#    ⚠️ 釦にすると「押したから終わった」に見えるし、
+#    告知の 1.17秒 だけ出て勝手に消える釦になっていた。

@@ -89,6 +89,10 @@
             _shell.Under = Panel.Species;
             _shell.SkillId = Skills.All[0].Id;
         }
+        // ⚠️ **演出は一瞬しか出ない。**⭐ 静かな検査から見えるように、
+        //    止めた形で開く入口を用意する（さいころ・告知）。
+        if (Open == "dice") { _shell.Roam_ = Roam.Rolling; _shell.Dice = 5; }
+
         Draw();
     }
 
@@ -195,21 +199,25 @@
     /// ⚠️ ここを変えると戦いの見え方だけが変わる（勝敗も手数も変わらない）。</summary>
     private const int Every = (int)(1000 / Beats.TicksPerSecond);
 
-    /// <summary>戦いの時計。⭐ **人の手番では止まる** ── そこが「選ぶ」ところ。
-    /// ⭐ 1手は3拍（名乗り・着弾・間）── 割り方と数は `Core.Beats`。</summary>
+    /// <summary>時計。⭐ **人の手番では止まる** ── そこが「選ぶ」ところ。
+    ///
+    /// ⭐ 戦いは1手を3拍（名乗り・着弾・間）、すごろくはさいころと駒
+    /// ── 割り方と数は `Core.Beats`。
+    /// ⚠️ **1本で足りる** ── 戦いと潜入は同時に動かない。</summary>
     private void Wind()
     {
         _clock?.Dispose();
         _clock = null;
-        if (_shell.Fight_ == null) return;
+        if (_shell.Fight_ == null && _shell.Roam_ == Roam.Still) return;
         _clock = new System.Threading.Timer(_ => InvokeAsync(Beat), null, Every, Every);
     }
 
     private async Task Beat()
     {
-        if (_shell.Fight_ == null) { Wind(); return; }
+        if (_shell.Fight_ == null && _shell.Roam_ == Roam.Still) { Wind(); return; }
         // ⭐ **時計そのものを早送りする**（`pace`）。⚠️ 拍の数は触らない
-        var how = Deeds.Beat(_shell, Every / 1000.0 / _shell.Pace);
+        double dt = Every / 1000.0 / _shell.Pace;
+        var how = _shell.Fight_ != null ? Deeds.Beat(_shell, dt) : Deeds.Rove(_shell, dt);
 
         // ⚠️ 🔴 **帯が伸びただけなら組み直さない。**⭐ 組み直すと押しどころが
         //    作り直されて触れなくなる（Unity 版の `UnitStand.Retick` と同じ理由）。
@@ -226,7 +234,8 @@
 
         Draw();
         StateHasChanged();
-        if (_shell.Fight_ == null) Wind();
+        // ⭐ 戦いが終わって潜入へ戻る（またはその逆）拍で、時計を掛け直す
+        Wind();
         // ⚠️ 🔴 **時計が進めた分も書く。**⭐ 押していないので `Tapped` は通らない
         //    ── オートで勝った育ちが、閉じた瞬間に丸ごと消えていた。
         //    ⚠️ 中身が変わっていなければ `Keep` は書かないので、無駄打ちにはならない。
@@ -287,7 +296,10 @@
         //    ホームの `count` と卵の棚の `count`、技の詳細の `body` と本体の器。
         //    ⚠️ id が重なると、検査も指し示しも効かない。
         // ⭐ 下の札も描く（技の詳細は種族の札の上に出る）。
-        _over = Card(_shell.Under, "-back") + Card(_shell.Open, "-card");
+        _over = Card(_shell.Under, "-back") + Card(_shell.Open, "-card")
+            // ⭐ 演出は札の上。⚠️ さいころは回っている間だけ、告知は決着の一拍だけ
+            + (_shell.Roam_ == Roam.Rolling ? Sheets.Dice(_shell, "-roll") : "")
+            + (_shell.Banner != null ? Sheets.Banner(_shell, "-tell") : "");
         _frame = _shell.Frame();
         if (_shell.Say != null) { _say = _shell.Say; _shell.Say = null; }
     }

@@ -15,8 +15,8 @@ namespace EggCommand.View
         [SerializeField] private RectTransform _strip;
         [SerializeField] private Text _line;
 
-        private const float SlideIn = 0.22f;
-        private const float Hold = 0.95f;
+        private const float SlideIn = (float)Core.Beats.SlideIn;
+        private const float Hold = (float)Core.Beats.BannerHold;
 
         private Action _onDone;
         private float _age;

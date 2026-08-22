@@ -23,7 +23,7 @@ namespace EggCommand.View
     public sealed class TrailWalk : MonoBehaviour
     {
         /// <summary>1マスぶんの間。⭐ **短く。**⚠️ 長いと、出目のぶんだけ待たされる。</summary>
-        private const float StepTime = 0.13f;
+        private const float StepTime = (float)Core.Beats.WalkStep;
 
         private List<int> _path;
         private int _at;

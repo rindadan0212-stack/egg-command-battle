@@ -251,12 +251,77 @@ html, body {
 @keyframes fx-stepf  { 0%,100% { transform: scaleX(-1) translateX(0); }  40% { transform: scaleX(-1) translateX(30px); } }
 @keyframes fx-shockf { 0%,100% { transform: scaleX(-1) translateY(0); }  45% { transform: scaleX(-1) translateY(14px); } }
 
+/* ── さいころ ────────────────────────────────────────
+   ⭐ **目が決まる瞬間だけを見せる。**⚠️ 出目は Core が先に決めている
+   ── ここは回して、止めて、読ませるだけ。
+   ⭐ **段で送る**（`steps()`）。⚠️ なめらかに回すと、ドット絵の面がぶれて溶ける。 */
+#face-roll {
+  animation: die-spin .42s steps(8, end), die-land .12s .42s ease-out both;
+  transform-origin: center center;
+}
+/* ⚠️ 覆いは**溶かして入れる** ── いきなり暗くすると、さいころが出るより先に
+   「画面が切り替わった」ように見えて、転がりの始まりが見えない。 */
+#dim-roll { animation: die-veil .18s ease-out both; }
+
+@keyframes die-spin {
+  /* ⭐ 割り切れない角度にしてあるので、同じ向きが続けて出ない */
+  0%   { transform: rotate(0deg)   scale(1);    }
+  25%  { transform: rotate(121deg) scale(1.16); }
+  50%  { transform: rotate(242deg) scale(.9);   }
+  75%  { transform: rotate(47deg)  scale(1.1);  }
+  100% { transform: rotate(168deg) scale(1);    }
+}
+/* ⭐ 止まったときの捻り。⚠️ 真正面だと**転がって止まった**ように見えない */
+@keyframes die-land {
+  0%   { transform: rotate(168deg) scale(1); }
+  60%  { transform: rotate(-8deg)  scale(1.12); }
+  100% { transform: rotate(0deg)   scale(1); }
+}
+/* ⚠️ 濃さは実物と同じ（濃いと盤が読めず、薄いと転がりが背景に紛れる） */
+@keyframes die-veil { from { background: rgba(0,0,0,0); } to { background: rgba(0,0,0,.34); } }
+
+/* ── 告知 ────────────────────────────────────────────
+   ⭐ 横から伸びる。動いて止まると、そこを読む。 */
+#strip-tell {
+  transform-origin: left center;
+  animation: tell-in .22s ease-out both;
+  background: var(--ink);
+  box-shadow: none;
+  border-radius: 0;
+}
+#line-tell { color: #ffffff; letter-spacing: .12em; }
+@keyframes tell-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* ── 放置の帯 ────────────────────────────────────────
+   ⭐ 進んでいることは**地面が左へ流れる**ことで見せる。走者は歩幅だけ揺らす。
+   ⚠️ 地面は画面幅の2倍あるので、1枚ぶん流れたら折り返す（`Core.Beats.Scroll`）。 */
+#ground { animation: idle-roll 12s linear infinite; }
+@keyframes idle-roll { from { transform: translateX(0); } to { transform: translateX(-1080px); } }
+
+/* ⚠️ 草も一緒に流す ── 地面だけ動くと、生えている物が滑って見える */
+.idle-tuft { animation: idle-roll 12s linear infinite; }
+
+/* ⭐ 歩幅の揺れ。⚠️ 大きいと跳ねて見えて「進んでいる」から離れる（`Core.Beats.Bob`）。
+   ⚠️ 一人ずつずらす ── 揃うと行進になり、めいめいが歩いている感じが消える。 */
+.idle-walk { animation: idle-bob .86s ease-in-out infinite; }
+@keyframes idle-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+/* ⭐ 相手は**外から転がって来る**。⚠️ 定位置にぽんと現れると「回復した」に見える */
+.idle-come { animation: idle-enter 1.4s ease-out both; }
+@keyframes idle-enter {
+  from { transform: translateX(700px) rotate(-720deg); }
+  to   { transform: translateX(0) rotate(0deg); }
+}
+
 /* ⚠️ **動きを望まない人には出さない。**⭐ 何が起きたかは字と数で残す
    （動きは読み取りやすさのためであって、情報の出所ではない）。 */
 @media (prefers-reduced-motion: reduce) {
   .fx-say, .fx-shout { animation: fx-hold .9s linear forwards; }
   .fx-ring, .fx-hit { display: none; }
   .fx-step, .fx-stepf, .fx-shock { animation: none; }
+  #face-roll, #dim-roll, #strip-tell { animation: none; }
+  #dim-roll { background: rgba(0,0,0,.34); }
+  #ground, .idle-tuft, .idle-walk, .idle-come { animation: none; }
 }
 
 /* icon ── ⭐ **絵を出して、その上から色を掛ける。**

@@ -86,6 +86,9 @@ const PAGES = args.length ? args : [
   '/app?seed=20260822&open=train',
   '/app?seed=20260822&open=eggs',
   '/app?seed=20260822&open=keep',
+  // ⚠️ **演出は一瞬しか出ない。**⭐ 止めた形で開いて、置き方だけ見る
+  '/app?seed=20260822&open=dice',
+  '/fight?done=true&banner=win',
   '/app?seed=20260822&at=book&open=species',
   '/app?seed=20260822&at=book&open=skill',
   // ⭐ 戦闘。⚠️ 決着した枝も見る（札が入れ替わる）

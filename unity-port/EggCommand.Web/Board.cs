@@ -48,7 +48,7 @@ public static class Board
     /// <summary>盤ぜんぶ。⭐ 線 → マス → 駒 の順に重ねる。</summary>
     /// <param name="open">行ける先。⚠️ null なら選んでいない。
     /// ⭐ **行けるマスだけを光らせる** ── 字で「選んでください」と書かない。</param>
-    public static string Draw(Raid raid, List<List<int>>? open = null)
+    public static string Draw(Raid raid, List<List<int>>? open = null, int shown = -1)
     {
         var lit = new HashSet<int>();
         if (open != null) foreach (var path in open) lit.Add(path[path.Count - 1]);
@@ -68,7 +68,9 @@ public static class Board
         for (int i = 0; i < trail.Count; i++) sb.Append(Cell(raid, i, spots[i], lit.Contains(i)));
 
         // ⭐ 駒は一番上（いま居る所）
-        int at = raid.At;
+        // ⭐ **駒は「見せている所」に立つ。**⚠️ 盤の中の位置は歩き始めに終点へ動くので、
+        //    そのまま描くと**瞬間移動**に見える（何マス進んだか目で追えない）。
+        int at = shown >= 0 ? shown : raid.At;
         if (at >= 0 && at < spots.Length)
         {
             sb.Append("<div id=\"piece\" class=\"n round\" style=\"left:")
