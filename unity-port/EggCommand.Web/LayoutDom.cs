@@ -29,6 +29,8 @@ namespace EggCommand.Web
         public Func<string, int> Count;
         /// <summary>⭐ 繰り返しの1件を組む直前に呼ばれる。</summary>
         public Action<int> At;
+        /// <summary>`when=` → 出すか。⚠️ null なら常に出す。</summary>
+        public Func<string, bool> When;
     }
 
     /// <summary>骨組みを HTML に変える。⭐ **ここが唯一「座標を読む」場所。**
@@ -52,6 +54,9 @@ namespace EggCommand.Web
         /// 全部同じ id になり、検査も指し示しも効かなくなる（2026-08-22 に実測）。</param>
         private static void One(StringBuilder sb, LayoutNode node, DomFill fill, string suffix = "")
         {
+            // ⭐ **条件で出さない。**⚠️ 隠すのでなく作らない
+            if (!Shows(node, fill)) return;
+
             string repeat = node.Option("repeat");
             if (repeat == null) { Single(sb, node, fill, node.Left, node.Top, -1, suffix); return; }
 
@@ -159,6 +164,15 @@ namespace EggCommand.Web
 
         /// <summary>⭐ **設計 px を CSS へ。**⚠️ `--u` を掛けない ── 外枠を丸ごと
         /// 拡大縮小するので、中は設計の数のままでよい。</summary>
+        /// <summary>その部品を出すか。⚠️ `when=` が無ければ常に出す。</summary>
+        private static bool Shows(LayoutNode node, DomFill fill)
+        {
+            string key = Layouts.WhenOf(node);
+            if (key == null) return true;
+            bool yes = fill?.When != null && fill.When(key);
+            return Layouts.WhenNot(node) ? !yes : yes;
+        }
+
         private static string Px(float value) =>
             value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "px";
 

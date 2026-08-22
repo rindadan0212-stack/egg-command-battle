@@ -128,7 +128,39 @@ namespace EggCommand.Core
             "gap",      // 繰り返しの隙間
             "rows",     // 繰り返しの1段ぶんの高さ
             "max",      // 繰り返しの上限（⚠️ 巻物の外で繰り返すときは必須）
+            "when",     // ⭐ 条件で出す／出さない（`when=有る` / `when=!有る`）
         };
+
+        /// <summary>その部品を出す条件の名前。⚠️ null なら常に出す。
+        ///
+        /// ⭐ **式は書けない。名前だけ。**⚠️ 骨組みに `and` や比較を入れ始めると、
+        /// そこが第二のプログラムになり、検査も編集も追えなくなる。
+        /// 真偽を決めるのは呼ぶ側（`When(key)`）。</summary>
+        public static string WhenOf(LayoutNode node)
+        {
+            var text = node.Option("when");
+            if (text == null) return null;
+            return text.Length > 0 && text[0] == '!' ? text.Substring(1) : text;
+        }
+
+        /// <summary>その条件が「偽のとき出す」ものか（`when=!有る`）。</summary>
+        public static bool WhenNot(LayoutNode node)
+        {
+            var text = node.Option("when");
+            return text != null && text.Length > 0 && text[0] == '!';
+        }
+
+        /// <summary>⭐ **2つが同時には出ないか。**`when=x` と `when=!x` は排他。
+        ///
+        /// ⚠️ これが無いと、条件で入れ替わる2つを**重なっている**と誤って落とす
+        /// （どちらか片方しか出ないのに）。</summary>
+        public static bool Exclusive(LayoutNode a, LayoutNode b)
+        {
+            var ka = WhenOf(a);
+            var kb = WhenOf(b);
+            if (ka == null || kb == null || ka != kb) return false;
+            return WhenNot(a) != WhenNot(b);
+        }
 
         /// <summary>繰り返しの1段ぶんの高さ。⭐ **ここが唯一の出所。**
         ///
@@ -277,6 +309,10 @@ namespace EggCommand.Core
             if (node.Width <= 0f || node.Height <= 0f)
                 problems.Add($"{id}/{node.Name}: 大きさが 0 以下（{node.Width}x{node.Height}）");
 
+            // ⚠️ 条件の名前が空だと、何で出し分けるのか誰にも分からない
+            if (node.Option("when") != null && string.IsNullOrEmpty(WhenOf(node)))
+                problems.Add($"{id}/{node.Name}: when= の名前が空");
+
             // ⚠️ 知らない付け足しを黙って無視しない（#5）
             foreach (var pair in node.Options)
             {
@@ -387,6 +423,8 @@ namespace EggCommand.Core
                         problems.Add($"{id}/{owner}: 「{list[i].Name}」が2つある");
 
                     if (!Overlaps(list[i], list[j])) continue;
+                    // ⭐ 条件で入れ替わる2つは、同時には出ない
+                    if (Exclusive(list[i], list[j])) continue;
 
                     // ⭐ 字どうし。⚠️ 面（card）と字が重なるのは当たり前なので見ない
                     if (IsText(list[i].Kind) && IsText(list[j].Kind))

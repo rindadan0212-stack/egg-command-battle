@@ -41,7 +41,10 @@ namespace EggCommand.View
                         case "name":
                             return Known(app, all[at]) ? all[at].Name : "？？？";
                         case "trait":
-                            return TraitNameOf(app, all[at]);
+                            return Traits.Has(all[at].TraitId)
+                                ? Traits.ById(all[at].TraitId).Name : "—";
+                        case "hide":
+                            return "—";
                         default: return "";
                     }
                 },
@@ -62,17 +65,14 @@ namespace EggCommand.View
                     if (!Known(app, species)) return null;
                     return () => SpeciesPanel.Show(app, species);
                 },
+
+                // ⭐ `when=known` / `when=!known` で、特性名と伏せ字が入れ替わる
+                When = key => key == "known" && Known(app, all[at]),
             });
         }
 
         private static bool Known(App app, Species species) =>
             Games.HasSeen(app.Game, species.Id);
-
-        private static string TraitNameOf(App app, Species species)
-        {
-            if (!Known(app, species)) return "—";
-            return Traits.Has(species.TraitId) ? Traits.ById(species.TraitId).Name : "—";
-        }
 
         /// <summary>伏せてあるものを沈める色。⚠️ 骨組みは「どの色か」を知らないので、
         /// ⭐ **データ次第で変わる色だけ**をここで差す。</summary>

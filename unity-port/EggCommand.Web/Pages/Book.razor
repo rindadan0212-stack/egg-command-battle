@@ -29,8 +29,8 @@
             {
                 "count" => $"手に入れた種族　{seen.Count} / {all.Count}",
                 "name"  => seen.Contains(all[at].Id) ? all[at].Name : "？？？",
-                "trait" => seen.Contains(all[at].Id) && Traits.Has(all[at].TraitId)
-                    ? Traits.ById(all[at].TraitId).Name : "—",
+                "trait" => Traits.Has(all[at].TraitId) ? Traits.ById(all[at].TraitId).Name : "—",
+                "hide"  => "—",
                 _ => "",
             },
 
@@ -42,6 +42,9 @@
             Tint = key => key != "art" && !seen.Contains(all[at].Id) ? "var(--ink-faint)" : null,
 
             Tappable = key => key == "species" && seen.Contains(all[at].Id),
+
+            // ⭐ `when=known` / `when=!known` で、特性名と伏せ字が入れ替わる
+            When = key => key == "known" && seen.Contains(all[at].Id),
         });
     }
 }

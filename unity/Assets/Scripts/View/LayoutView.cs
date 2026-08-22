@@ -31,6 +31,8 @@ namespace EggCommand.View
         public Func<string, int> Count;
         /// <summary>⭐ 繰り返しの1件を組む直前に呼ばれる。⚠️ ここで「いま何番目」を控える。</summary>
         public Action<int> At;
+        /// <summary>`when=` → 出すか。⚠️ null なら常に出す。</summary>
+        public Func<string, bool> When;
     }
 
     /// <summary>骨組みを実際の部品に変える。⭐ **ここが唯一「座標を読む」場所。**
@@ -78,6 +80,10 @@ namespace EggCommand.View
 
         private static void One(LayoutNode node, RectTransform parent, LayoutFill fill)
         {
+            // ⭐ **条件で出さない。**⚠️ 隠すのでなく作らない
+            //    （作って隠すと、検査が「在るのに見えない」と数えることになる）
+            if (!Shows(node, fill)) return;
+
             // ⭐ 繰り返しは、その札を人数ぶん複製する
             string repeat = node.Option("repeat");
             if (repeat != null) { Many(node, parent, fill, repeat); return; }
@@ -222,6 +228,15 @@ namespace EggCommand.View
             var press = rect.gameObject.AddComponent<LongPress>();
             press.OnTap = tap;
             press.OnHold = hold;
+        }
+
+        /// <summary>その部品を出すか。⚠️ `when=` が無ければ常に出す。</summary>
+        private static bool Shows(LayoutNode node, LayoutFill fill)
+        {
+            string key = Layouts.WhenOf(node);
+            if (key == null) return true;
+            bool yes = fill != null && fill.When != null && fill.When(key);
+            return Layouts.WhenNot(node) ? !yes : yes;
         }
 
         private static string TextOf(LayoutNode node, LayoutFill fill)

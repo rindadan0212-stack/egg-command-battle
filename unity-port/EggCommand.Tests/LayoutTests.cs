@@ -333,6 +333,57 @@ box box    0 1800 400 300
         Assert.Contains(Layouts.Faults(bad), p => p.Contains("画面の外"));
     }
 
+    // ── `when=`（2026-08-22 に足した1語）──────────────
+
+    [Fact]
+    public void 条件の名前と向きが読める()
+    {
+        var l = Layouts.Parse("t", @"
+a label 0 0 100 40 when=有る
+b label 0 60 100 40 when=!有る
+c label 0 120 100 40
+");
+        Assert.Equal("有る", Layouts.WhenOf(l.Roots[0]));
+        Assert.False(Layouts.WhenNot(l.Roots[0]));
+
+        Assert.Equal("有る", Layouts.WhenOf(l.Roots[1]));
+        Assert.True(Layouts.WhenNot(l.Roots[1]));
+
+        Assert.Null(Layouts.WhenOf(l.Roots[2]));   // ⭐ 無ければ常に出す
+    }
+
+    /// <summary>⭐ **条件で入れ替わる2つは、同時には出ない。**
+    /// ⚠️ 見ないと「重なっている」と誤って落とす。</summary>
+    [Fact]
+    public void 排他な2つの重なりは落とさない()
+    {
+        var fine = Layouts.Parse("t", @"
+box box    0 0 400 200
+  a label  0 0 400 40 when=空
+  b label  0 0 400 40 when=!空
+");
+        Assert.Equal(new System.Collections.Generic.List<string>(), Layouts.Faults(fine));
+    }
+
+    /// <summary>⚠️ **同じ向きなら、重なりは落とす。**⭐ 見逃しを広げすぎていないことの裏取り。</summary>
+    [Fact]
+    public void 同じ条件どうしの重なりは落とす()
+    {
+        var bad = Layouts.Parse("t", @"
+box box    0 0 400 200
+  a label  0 0 400 40 when=空
+  b label  0 0 400 40 when=空
+");
+        Assert.Contains(Layouts.Faults(bad), p => p.Contains("字の重なり"));
+    }
+
+    [Fact]
+    public void 条件の名前が空なら落とす()
+    {
+        var bad = Layouts.Parse("t", "a label 0 0 100 40 when=!");
+        Assert.Contains(Layouts.Faults(bad), p => p.Contains("when= の名前が空"));
+    }
+
     /// <summary>⚠️ 画面の大きさは View の `Ui` と同じ数でなければ、検査が嘘になる。</summary>
     [Fact]
     public void 画面の大きさがViewと揃っている()
