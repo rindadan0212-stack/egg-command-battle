@@ -278,16 +278,56 @@ namespace EggCommand.Web
             sb.Append("</").Append(tag).Append('>');
         }
 
-        /// <summary>ドット絵を SVG で。⭐ **`EggCommand.Sim/Book.cs` と同じやり方**
-        /// （添字色 → `Palette.ColorOf` の "#rrggbb" をそのまま矩形に）。
+        /// <summary>ドット絵を出す。⭐ **種族の絵は「あらかじめ差し替えた PNG」を `&lt;img&gt;` 1枚で**
+        /// （2026-08-23・作者の指示 ──「色の差し替えを機械的に行い、あらかじめ差し替えた PNG を
+        /// ゲームに表示させる」）。
         ///
-        /// ⚠️ 画像ファイルにしない ── 変異＝パレットスワップなので、
-        /// **同じ絵に別の色を掛ける**のがこの作品の仕組み。</summary>
+        /// ⚠️ **以前ここは逆のことを書いていた**（「画像ファイルにしない、同じ絵に色を掛ける」）。
+        /// SVG で1画素＝1つの `&lt;rect&gt;` を敷く方式は、64×64 の絵1枚が矩形1,085個になり、
+        /// BOX 画面（絵30枚）だけで DOM が 32,663 個・骨組みエディタの1手（土台=panel）が
+        /// 最大 359ms まで膨らんでいた（実測 2026-08-23）。
+        /// ⭐ 色の差し替え（変異＝パレットスワップ）は**もう実行時にしない**。
+        /// `SpritePng.RunDisplay`（Sim）がビルド前に (種族 × パレット) の全通りを焼き、
+        /// ここは焼けた PNG のファイル名を引いて `&lt;img&gt;` を1つ置くだけ。
+        ///
+        /// ⚠️ **卵（`EggArt`）はまだ焼いていない**（種族表の外・View 側に絵が埋まっている、
+        /// `SpritePng.Run` のコメント参照）。<see cref="SpriteManifest.StemOf"/> が
+        /// 種族表に無いと判じたら、今までどおり SVG で描く ── 焼いていない絵まで
+        /// `&lt;img&gt;` にすると、静かに空白へ落ちる。</summary>
         private static void Dots(StringBuilder sb, PixelSprite sprite, Palette palette, LayoutNode node)
         {
             // ⭐ 正方形で描く（検査が「絵は正方形」を要求している）
             float size = Math.Min(node.Width, node.Height);
-            sb.Append("<svg class=\"n pixel").Append(node.Option("foe") == "yes" ? " foe" : "")
+            string foeClass = node.Option("foe") == "yes" ? " foe" : "";
+
+            string? stem = SpriteManifest.StemOf(sprite, palette);
+            if (stem != null)
+            {
+                if (!SpriteManifest.Exists(stem))
+                {
+                    // 🔴 **黙って空の四角にしない。**⚠️ `IconManifest` の `icon-missing` と同じ扱い
+                    //    ── 種族やパレットを増やしたのに `sim sprites` を走らせ忘れると、
+                    //    ここへ落ちて画面の上で気づける（テストでも `SpritePngTests` が落ちる）。
+                    sb.Append("<div class=\"n icon-missing\" style=\"left:0;top:0;width:")
+                      .Append(Px(size)).Append(";height:").Append(Px(size))
+                      .Append("\" title=\"絵が無い: sprite/").Append(Esc(stem))
+                      .Append(".png\">？</div>");
+                    return;
+                }
+                // ⚠️ `class="n pixel"` と `foe` の付き方は SVG 版から変えていない
+                //    ── `stage.css` の `.n.pixel`（crisp）／`.n.pixel.foe`（左右反転）が
+                //    タグの種類を問わずそのまま乗る。
+                sb.Append("<img class=\"n pixel").Append(foeClass)
+                  .Append("\" src=\"sprite/").Append(Esc(stem)).Append(".png\" alt=\"\"")
+                  .Append(" style=\"left:0;top:0;width:").Append(Px(size))
+                  .Append(";height:").Append(Px(size)).Append("\" />");
+                return;
+            }
+
+            // ⚠️ 種族表に無い絵（卵など）は、まだ PNG を焼いていないので SVG のまま描く
+            //    （`EggCommand.Sim/Book.cs` と同じやり方 ── 添字色 → `Palette.ColorOf` の
+            //    "#rrggbb" をそのまま矩形に）。
+            sb.Append("<svg class=\"n pixel").Append(foeClass)
               .Append("\" viewBox=\"0 0 ")
               .Append(sprite.Width).Append(' ').Append(sprite.Height)
               .Append("\" style=\"left:0;top:0;width:").Append(Px(size))

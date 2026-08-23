@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using EggCommand.Core;
 using EggCommand.Sim;
 using Xunit;
@@ -103,5 +105,50 @@ public class SpritePngTests
             for (int x = 0; x < tampered.Width && !differs; x++)
                 if (tampered.At(x, y) != same.At(x, y)) differs = true;
         Assert.True(differs, "1画素変えたのに違いが出ない＝比べ方が効いていない");
+    }
+
+    // ── 表示用 PNG（`art/sprites/display/`）── ─────────────────
+
+    public static IEnumerable<object[]> AllDisplayPalettes()
+    {
+        foreach (var species in SpeciesTable.All)
+            for (int p = 0; p < species.Palettes.Count; p++)
+                yield return new object[] { species.Id, p };
+    }
+
+    /// <summary>🔴 **「その場で焼き直したもの」と「art/sprites/display/ の実物」をバイト単位で比べる。**
+    ///
+    /// ⚠️ Core（種族の絵・パレット）を直して `sim sprites` を走らせ忘れると、
+    /// ゲームは黙って古い PNG を出し続ける ── 出所が2つに割れて、誰も気づけない。
+    /// ⭐ ここで焼き直しと実物を突き合わせておけば、忘れた瞬間に `dotnet test` が落ちる。
+    /// ⚠️ 落ちたときは**原因ではなく直し方**を言う（「sim sprites を走らせてください」）。</summary>
+    [Theory]
+    [MemberData(nameof(AllDisplayPalettes))]
+    public void 表示用PNGが最新である(string id, int paletteIndex)
+    {
+        var species = SpeciesTable.ById(id);
+        var fresh = SpritePng.Encode(species.Sprite, species.Palettes[paletteIndex]);
+
+        var path = Path.Combine(AppContext.BaseDirectory, "sprites-display",
+            SpritePng.DisplayFileName(id, paletteIndex));
+        Assert.True(File.Exists(path),
+            $"{id}-{paletteIndex} の表示用 PNG が無い。sim sprites を走らせてください（art/sprites/display/ が唯一の出所）");
+
+        var onDisk = File.ReadAllBytes(path);
+        Assert.True(fresh.AsSpan().SequenceEqual(onDisk),
+            $"{id}-{paletteIndex} の表示用 PNG が古い。sim sprites を走らせてください（Core の絵かパレットを直したのに焼き直していない）");
+    }
+
+    /// <summary>⚠️ **枚数のずれも古さの一種。**種族を消す／パレット数を変えたのに焼き直さないと、
+    /// 死んだファイルが残ったり、逆に足りなかったりする ── 中身の比較だけでは拾えない。</summary>
+    [Fact]
+    public void 表示用PNGの枚数が種族表と一致する()
+    {
+        int expected = 0;
+        foreach (var species in SpeciesTable.All) expected += species.Palettes.Count;
+
+        var dir = Path.Combine(AppContext.BaseDirectory, "sprites-display");
+        Assert.True(Directory.Exists(dir), $"{dir} が無い。sim sprites を走らせてください");
+        Assert.Equal(expected, Directory.GetFiles(dir, "*.png").Length);
     }
 }

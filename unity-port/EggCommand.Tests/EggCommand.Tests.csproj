@@ -67,4 +67,12 @@
     <None Include="..\..\unity\Assets\Resources\UI\icon\*.png" Link="icon\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- 表示用に焼いた (種族 × パレット) の PNG（`SpritePng.RunDisplay` が書く）。
+       ⚠️ 唯一の出所は `art/sprites/display/`（写さない・読むだけ）。⭐ `SpritePngTests` が
+       「その場で焼き直したものと、ここにある実物」をバイト単位で比べる ──
+       `sim sprites` を走らせ忘れて古いまま気づかない、を止める検査のため。 -->
+  <ItemGroup>
+    <None Include="..\..\art\sprites\display\*.png" Link="sprites-display\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -55,7 +55,11 @@ namespace EggCommand.Core
             TraitId = traitId;
             Base = baseStats;
             Sprite = sprite;
-            Palettes = palettes;
+            // 🔴 **解決は組み立てのときに1度だけ**（種族表は static readonly で1回しか作らない）。
+            //    ⚠️ 変異パレットの null（「通常色のまま」）はここで消える ── 以降、
+            //    `Palettes[i].Colors` を直に読む側（帳面・PNG書き出し・検査）は
+            //    1文字も変えなくてよい。
+            Palettes = Palette.ResolveGroup(palettes);
             Slot2 = slot2;
             Slot3 = slot3;
         }
@@ -489,14 +493,18 @@ namespace EggCommand.Core
         /// <summary>タマルの色。⚠️ **11色ぶん**（意匠が 64×64 になったため）。
         ///
         /// ⭐ 変異色は通常色の**色相を回しただけ**（蒼 +162° / 紅 +259° / 金 +47°）。
-        /// ⚠️ 無彩色（目の黒・光の白・刃の灰）は回さない ── 回すと目が色づいて顔が濁る。
+        /// ⚠️ 無彩色（目の黒・刃の灰）は回さない ── 回すと目が色づいて顔が濁る。
+        /// ⭐ **回さない2色（7番目=刃・10番目=目）は null にして通常色を受け継ぐ**
+        /// （2026-08-23・null 対応）。⚠️ 光（11番目=白）は回さないのに 4通りとも
+        /// 微妙に違う値（`#fefeff` / `#fffffe` / `#fefffe` / `#fffeff`）── 意図か
+        /// 事故か分からないので**そのまま残した**（勝手に統一しない）。
         /// ⭐ 手で置き直してよいが、**11色すべて**揃えること（足りないと描いた瞬間に落ちる）。</summary>
         private static readonly Palette[] TamaruPalettes =
         {
             new Palette("#00fe01", "#fefc01", "#00c862", "#8c8504", "#c3bc01", "#ff7e00", "#7f807f", "#553e00", "#b31a00", "#000000", "#fefeff"), // 通常
-            new Palette("#b300fe", "#014ffe", "#c800a2", "#04348c", "#0142c3", "#00cdff", "#7f807f", "#003155", "#00b397", "#000000", "#fffffe"), // 変異・蒼
-            new Palette("#fe5200", "#fe01af", "#c8a200", "#8c0467", "#c3018c", "#d000ff", "#7f807f", "#550051", "#5300b3", "#000000", "#fefffe"), // 変異・紅
-            new Palette("#00fec7", "#3bfe01", "#0092c8", "#298c04", "#33c301", "#b9ff00", "#7f807f", "#2a5500", "#b3a600", "#000000", "#fffeff"), // 変異・金
+            new Palette("#b300fe", "#014ffe", "#c800a2", "#04348c", "#0142c3", "#00cdff", null, "#003155", "#00b397", null, "#fffffe"), // 変異・蒼
+            new Palette("#fe5200", "#fe01af", "#c8a200", "#8c0467", "#c3018c", "#d000ff", null, "#550051", "#5300b3", null, "#fefffe"), // 変異・紅
+            new Palette("#00fec7", "#3bfe01", "#0092c8", "#298c04", "#33c301", "#b9ff00", null, "#2a5500", "#b3a600", null, "#fffeff"), // 変異・金
         };
 
         private static readonly Palette[] KibanePalettes =

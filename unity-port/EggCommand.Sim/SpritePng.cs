@@ -22,8 +22,25 @@ namespace EggCommand.Sim
     public static class SpritePng
     {
         /// <summary>書き出し先。⭐ **エンジンに紐づかない場所**へ置く
-        /// （`unity/Assets` に置くと、Unity を出るときに一緒に消える）。</summary>
+        /// （`unity/Assets` に置くと、Unity を出るときに一緒に消える）。
+        /// ⚠️ ここは **Aseprite で描くための正典**（0番のパレットだけ）。
+        /// 遊びが表示する絵は <see cref="DisplayDir"/>（別の置き場・別の役目）。</summary>
         public const string Dir = "art/sprites";
+
+        /// <summary>⭐ **遊びが表示する絵の置き場**（作者の指示 2026-08-23
+        /// 「あらかじめ差し替えた PNG をゲームに表示させる」）。
+        ///
+        /// ⚠️ 上の <see cref="Dir"/> と役目が違う ── そちらは0番（ふつう色）1枚だけの
+        /// 「編集用の正典」、こちらは **(種族 × パレット) の全通り**を焼いた「表示用」。
+        /// ⭐ ファイル名は <see cref="DisplayFileName"/> が唯一の出所
+        /// （焼く側＝ここと、読む側＝Web の `SpriteManifest` が、別々に組み立てて
+        /// ずれる事故を避ける）。</summary>
+        public const string DisplayDir = "art/sprites/display";
+
+        /// <summary>種族id・パレット番号 → 表示用 PNG のファイル名（拡張子つき）。
+        /// ⚠️ **焼く側と読む側の両方がここを通す**（別々に文字列を組み立てない）。</summary>
+        public static string DisplayFileName(string speciesId, int paletteIndex) =>
+            $"{speciesId}-{paletteIndex}.png";
 
         public static void Run(string root)
         {
@@ -53,6 +70,8 @@ namespace EggCommand.Sim
             Console.WriteLine($"■ ドット絵を PNG に書き出した: {made} 枚 → {Dir}/");
             foreach (var line in notes) Console.WriteLine(line);
 
+            RunDisplay(root);
+
             // ⭐ 変異色を人が読める形で添える。⚠️ PNG には0番のパレットしか入らないので、
             //    ここが無いと「変異色がどこへ行ったか」が分からなくなる。
             var swatch = new StringBuilder();
@@ -73,6 +92,35 @@ namespace EggCommand.Sim
             var swatchPath = Path.Combine(outDir, "palettes.txt");
             File.WriteAllText(swatchPath, swatch.ToString(), new UTF8Encoding(false));
             Console.WriteLine($"  変異色: {Dir}/palettes.txt");
+        }
+
+        /// <summary>🔴 **(種族 × パレット) の全通り**を「あらかじめ差し替えた PNG」として焼く
+        /// （作者の指示 2026-08-23）。⚠️ ゲーム側は色を差し替えない ── ここで焼いた PNG を
+        /// そのまま `&lt;img&gt;` で出す（`EggCommand.Web.LayoutDom` / `SpriteManifest`）。
+        ///
+        /// ⚠️ **これを走らせ忘れると、ゲームは黙って古い絵を出す**（出所が2つに割れる）。
+        /// ⭐ だから `EggCommand.Tests` の `SpritePngTests` に「その場で焼き直してバイト比較する」
+        /// 検査を置いてある ── 忘れたら `dotnet test` が「sim sprites を走らせてください」と
+        /// 言って落ちる。</summary>
+        public static void RunDisplay(string root)
+        {
+            var outDir = Path.Combine(root, DisplayDir);
+            Directory.CreateDirectory(outDir);
+
+            int made = 0;
+            long bytes = 0;
+            foreach (var species in SpeciesTable.All)
+            {
+                for (int p = 0; p < species.Palettes.Count; p++)
+                {
+                    var path = Path.Combine(outDir, DisplayFileName(species.Id, p));
+                    var png = Encode(species.Sprite, species.Palettes[p]);
+                    File.WriteAllBytes(path, png);
+                    made++;
+                    bytes += png.Length;
+                }
+            }
+            Console.WriteLine($"■ 表示用 PNG を焼いた: {made} 枚（{bytes:N0} バイト）→ {DisplayDir}/");
         }
 
         // ── PNG を組む ──────────────────────────────────

@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 
 namespace EggCommand.Core
 {
@@ -91,14 +92,28 @@ namespace EggCommand.Core
         }
     }
 
-    /// <summary>色の組。⚠️ 添字1がこの配列の0番。文字列は "#rrggbb"。</summary>
+    /// <summary>色の組。⚠️ 添字1がこの配列の0番。文字列は "#rrggbb"。
+    ///
+    /// ⭐ **0番（通常色）以外は、要素に null を書いて「指定しない」にできる**（2026-08-23）。
+    /// null は 0番の同じ位置の色を**組み立て時に1度だけ**受け継ぐ（<see cref="ResolveGroup"/>）。
+    /// ⚠️ 「指定しない」は**書き方の都合**でしかない ── 実行時に読む側
+    /// （<see cref="ColorOf"/> や <c>.Colors</c> を直に読む帳面・PNG書き出し）は
+    /// 1か所も変えていない。ここへ来るころには <see cref="Colors"/> に null は残らない。</summary>
     public sealed class Palette
     {
         public readonly string[] Colors;
 
-        public Palette(params string[] colors)
+        /// <summary>⚠️ 引数の型は <c>string?[]</c>（0番以外は null を書ける）だが、
+        /// 保つ <see cref="Colors"/> は解決前後を問わず同じ配列型 ── 型を分けると、
+        /// 「解決した後の Palette」と「まだ null が残る Palette」を読む側が見分けられなくなる。
+        /// ⚠️ null が残ったまま <see cref="ColorOf"/> や PNG 書き出しへ渡ると、
+        /// そこで「色は #rrggbb で書く」という別の検査が落ちる（サイレントに壊れない）。</summary>
+        public Palette(params string?[] colors)
         {
-            Colors = colors ?? throw new ArgumentNullException(nameof(colors));
+            if (colors == null) throw new ArgumentNullException(nameof(colors));
+            var copy = new string[colors.Length];
+            for (int i = 0; i < colors.Length; i++) copy[i] = colors[i]!;
+            Colors = copy;
         }
 
         public int Count => Colors.Length;
@@ -109,6 +124,41 @@ namespace EggCommand.Core
             if (index == 0) throw new ArgumentException("添字0は透明。色を引かない");
             if (index - 1 >= Colors.Length) throw new ArgumentException($"パレットに添字 {index} が無い");
             return Colors[index - 1];
+        }
+
+        /// <summary>🔴 **null を0番から受け継いで消す。呼ぶのは組み立て時に1度だけ**
+        /// （<see cref="Species"/> のコンストラクタ）。
+        ///
+        /// ⚠️ **0番（<paramref name="raw"/>[0]）自身に null があれば投げる**
+        /// （受け継ぐ先が無い）。⭐ 1番以降は、0番と同じ位置が null なら0番の色を写す。
+        /// ⚠️ 色の値は1つも変えない ── 埋めるのは「無かったところ」だけ。</summary>
+        public static IReadOnlyList<Palette> ResolveGroup(IReadOnlyList<Palette> raw)
+        {
+            if (raw == null) throw new ArgumentNullException(nameof(raw));
+            if (raw.Count == 0) return raw;
+
+            var baseline = raw[0];
+            for (int i = 0; i < baseline.Colors.Length; i++)
+            {
+                if (baseline.Colors[i] == null)
+                    throw new ArgumentException($"0番のパレットの{i}番目が null（受け継ぐ先が無い）");
+            }
+
+            var resolved = new Palette[raw.Count];
+            resolved[0] = baseline;
+            for (int p = 1; p < raw.Count; p++)
+            {
+                var src = raw[p];
+                if (src.Colors.Length != baseline.Colors.Length)
+                {
+                    throw new ArgumentException(
+                        $"{p}番のパレットが{src.Colors.Length}色（0番の{baseline.Colors.Length}色に揃える）");
+                }
+                var colors = new string[src.Colors.Length];
+                for (int i = 0; i < colors.Length; i++) colors[i] = src.Colors[i] ?? baseline.Colors[i];
+                resolved[p] = new Palette(colors);
+            }
+            return resolved;
         }
     }
 }
