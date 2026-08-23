@@ -11,12 +11,16 @@
     // ⚠️ 問い合わせに無い値は型の既定で上書きされるので `int?` で受ける
     [SupplyParameterFromQuery] public int? Eggs { get; set; }
 
+    /// <summary>🔴 あふれの場面で描くか。⭐ `?full=true`。⚠️ 孵化器を満杯（`Hatchery.Slots`）
+    /// にし、溜まった EXP・試練の数を <see cref="Demo.Overflow"/> の最大値で出す。</summary>
+    [SupplyParameterFromQuery] public bool Full { get; set; }
+
     private string _html = "";
 
     protected override void OnParametersSet()
     {
-        var shell = new Shell(Demo.Game(), Demo.Now);
-        Demo.Incubate(shell.Game, shell.Now, Eggs ?? 3);
+        var shell = new Shell(Demo.Game(Full), Demo.Now);
+        Demo.Incubate(shell.Game, shell.Now, Eggs ?? (Full ? Hatchery.Slots : 3));
         _html = Sheets.Home(shell);
     }
 }

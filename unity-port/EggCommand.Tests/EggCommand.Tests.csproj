@@ -60,4 +60,11 @@
     <None Include="..\..\sheets\*.txt" Link="sheets\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- 絵の実物（`Resources/UI/icon/*.png`）。⚠️ 唯一の出所は Unity 側のまま
+       （写さない・読むだけ）。⭐ `ArtTests` が「表・骨組みが指す名前に実体があるか」
+       「実体はあるのに誰にも指されていないか（死蔵）」を検査するのに要る。 -->
+  <ItemGroup>
+    <None Include="..\..\unity\Assets\Resources\UI\icon\*.png" Link="icon\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

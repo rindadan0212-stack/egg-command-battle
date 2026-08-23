@@ -13,13 +13,17 @@
     // （実測 2026-08-22: `= 2` と書いた既定が 0 になり、枝を一度も描いていなかった）。
     [SupplyParameterFromQuery] public int? Have { get; set; }
 
+    /// <summary>🔴 あふれの場面で描くか。⭐ `?full=true`。⚠️ 卵棚そのものに件数上限を課す
+    /// 規則は見当たらなかった ── 目安として保管庫と同じ枠数（`Storages.StorageSlots`）を積む。</summary>
+    [SupplyParameterFromQuery] public bool Full { get; set; }
+
     private string _html = "";
 
     /// <summary>⚠️ **中身は `Sheets.Eggs` が持つ**（遊ぶ頁と同じもの）。</summary>
     protected override void OnParametersSet()
     {
-        var s = new Shell(Demo.Game(), Demo.Now);
-        Demo.Shelve(s.Game, Have ?? 7);
+        var s = new Shell(Demo.Game(Full), Demo.Now);
+        Demo.Shelve(s.Game, Have ?? (Full ? Storages.StorageSlots : 7), Full ? Rarities.Max : 1);
         _html = Sheets.Eggs(s);
     }
 }

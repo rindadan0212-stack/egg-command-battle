@@ -11,10 +11,14 @@
     /// ⚠️ 両方の枝を検査したいので、**画面の状態を URL から言えるようにしてある**。</summary>
     [SupplyParameterFromQuery] public bool Open { get; set; }
 
+    /// <summary>🔴 あふれの場面で描くか。⭐ `?full=true`（<see cref="Demo.Overflow"/>）。
+    /// ⚠️ 全頁が同じ語で受ける ── 頁ごとに違う名前を作らない。</summary>
+    [SupplyParameterFromQuery] public bool Full { get; set; }
+
     private string _html = "";
 
     /// <summary>BOX を1枚だけ描く（外枠なし）。⭐ 中身は `Sheets.Box` ── **遊ぶ頁と同じもの**。
     /// ⚠️ ここに描く手順を書くと、確かめている画面と遊ぶ画面が別物になる。</summary>
     protected override void OnParametersSet() =>
-        _html = Sheets.Box(new Shell(Demo.Game(), Demo.Now) { SortOpen = Open });
+        _html = Sheets.Box(new Shell(Demo.Game(Full), Demo.Now) { SortOpen = Open });
 }

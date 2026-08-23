@@ -445,6 +445,7 @@ namespace EggCommand.Core
             "dock",     // ⭐ 下の帯を跨いでよい（`dock=no`）── 帯そのものだけ
             "pic",      // ⭐ 絵の名前（`Resources/UI/icon/<名前>.png`）
             "turn",     // ⭐ 絵を回す度数（矢印を ±90 するのに使う）
+            "crisp",    // ⭐ icon を補間しない（自作の仮ドット絵など・`crisp=yes`）
         };
 
         /// <summary>⭐ **兄弟を上から詰めるか。**

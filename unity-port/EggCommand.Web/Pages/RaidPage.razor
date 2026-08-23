@@ -15,11 +15,16 @@
     /// <summary>その巣から何回盗んだか。⭐ 増えるほど守りが固くなる。</summary>
     [SupplyParameterFromQuery] public int Raids { get; set; }
 
+    /// <summary>🔴 あふれの場面で描くか。⭐ `?full=true`。⚠️ 極まった編成（<see cref="Demo.Overflow"/>）
+    /// は速度が跳ね上がるので、<see cref="Trails.RollsFor"/>（速度合計 ÷ <see cref="Trail.SpeedPerRoll"/>）
+    /// が返す「振れる回数」も大きくなる ── wiki §11 の「さいころ12個超」を実際に作る入口。</summary>
+    [SupplyParameterFromQuery] public bool Full { get; set; }
+
     private string _html = "";
 
     protected override void OnParametersSet()
     {
-        var shell = new Shell(Demo.Game(), Demo.Now);
+        var shell = new Shell(Demo.Game(Full), Demo.Now);
         shell.Raid_ = Demo.Raid(shell.Game, Raids);
         _html = Sheets.Raid(shell);
     }

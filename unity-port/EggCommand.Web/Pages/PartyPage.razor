@@ -13,8 +13,11 @@
     /// 画面の中に切り替えは無い。ここは検査のための入口。</summary>
     [SupplyParameterFromQuery] public bool Idle { get; set; }
 
+    /// <summary>🔴 あふれの場面で描くか。⭐ `?full=true`（<see cref="Demo.Overflow"/>）。</summary>
+    [SupplyParameterFromQuery] public bool Full { get; set; }
+
     private string _html = "";
 
     protected override void OnParametersSet() =>
-        _html = Sheets.Party(new Shell(Demo.Game(), Demo.Now) { SortOpen = Open }, Idle);
+        _html = Sheets.Party(new Shell(Demo.Game(Full), Demo.Now) { SortOpen = Open }, Idle);
 }

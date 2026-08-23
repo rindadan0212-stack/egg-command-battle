@@ -14,14 +14,19 @@
     /// <summary>いくつ勝った状態で描くか。⭐ 「勝った」の出方も検査したい。</summary>
     [SupplyParameterFromQuery] public int? Won { get; set; }
 
+    /// <summary>🔴 あふれの場面で描くか。⭐ `?full=true`。⚠️ 既定は「勝った段 2/5」だが、
+    /// あふれでは全段勝った状態（<see cref="Core.Trials"/>.All.Count）にする
+    /// ── `Won` を明示していればそちらを優先する。</summary>
+    [SupplyParameterFromQuery] public bool Full { get; set; }
+
     private string _html = "";
 
     /// <summary>⚠️ **中身は `Sheets.Trials_` が持つ**（遊ぶ頁と同じもの）。
     /// ⭐ 入れ子の繰り返し（段5枚 × 顔ぶれ4体）の初実戦。</summary>
     protected override void OnParametersSet()
     {
-        var s = new Shell(Demo.Game(), Demo.Now);
-        Demo.Beat(s.Game, Won ?? 2);
+        var s = new Shell(Demo.Game(Full), Demo.Now);
+        Demo.Beat(s.Game, Won ?? (Full ? Trials.All.Count : 2));
         _html = Sheets.Trials_(s);
     }
 }

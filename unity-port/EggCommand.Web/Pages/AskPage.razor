@@ -12,13 +12,17 @@
 </div>
 
 @code {
+    /// <summary>🔴 あふれの場面で描くか。⭐ `?full=true`。⚠️ この札そのものは固定文なので
+    /// 見た目は変わらないが、後ろの図鑑（あふれの保管庫）と重ねて検査できるよう揃えてある。</summary>
+    [SupplyParameterFromQuery] public bool Full { get; set; }
+
     private string _screen = "";
     private string _panel = "";
 
     /// <summary>⚠️ **中身は `Sheets` が持つ**（遊ぶ頁と同じもの）。</summary>
     protected override void OnInitialized()
     {
-        var s = new Shell(Demo.Game(), Demo.Now);
+        var s = new Shell(Demo.Game(Full), Demo.Now);
         _screen = Sheets.Book(s);
         _panel = Sheets.Ask(s);
     }

@@ -15,16 +15,22 @@
     /// <summary>注ぐ先の枠。</summary>
     [SupplyParameterFromQuery] public int? Slot { get; set; }
 
+    /// <summary>🔴 あふれの場面で描くか。⭐ `?full=true`。⚠️ 卵棚は保管庫と同じ枠数を目安に積み、
+    /// 選ぶ卵は★5（`Rarities.Max`）── 1個の価値も、まとめ選び（`Games.PickAtOnce`）も最大にする。
+    /// ⭐ 見ている個体（<see cref="Demo.Overflow"/> の主力）は枠0だけまだ Lv4 止まり
+    /// なので、既定の枠0では「あと何ポイントで Lv5 か」の伸びしろも見える。</summary>
+    [SupplyParameterFromQuery] public bool Full { get; set; }
+
     private string _html = "";
 
     /// <summary>⚠️ **中身は `Sheets.Train` が持つ**（遊ぶ頁と同じもの）。</summary>
     protected override void OnParametersSet()
     {
-        var s = new Shell(Demo.Game(), Demo.Now);
-        Demo.Shelve(s.Game, Have ?? 8);
+        var s = new Shell(Demo.Game(Full), Demo.Now);
+        Demo.Shelve(s.Game, Have ?? (Full ? Storages.StorageSlots : 8), Full ? Rarities.Max : 1);
         s.Slot_ = Math.Clamp(Slot ?? 0, 0, 2);
         // ⭐ 選んだ状態は**規則を通して**作る（上限を越える組み合わせを作らない）
-        int want = Math.Clamp(Picked ?? 3, 0, Games.PickAtOnce);
+        int want = Math.Clamp(Picked ?? (Full ? Games.PickAtOnce : 3), 0, Games.PickAtOnce);
         for (int i = 0; i < s.Game.Eggs.Count && s.Feeds.Count < want; i++) Deeds.Feed_(s, i);
         _html = Sheets.Train(s);
     }

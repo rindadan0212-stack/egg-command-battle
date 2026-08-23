@@ -21,12 +21,16 @@
     /// 実際に重なる相手（戦いの盤）の上で見ないと、置き方を確かめたことにならない。</summary>
     [SupplyParameterFromQuery] public string? Banner { get; set; }
 
+    /// <summary>🔴 あふれの場面で描くか。⭐ `?full=true`。⚠️ 極まった編成（<see cref="Demo.Overflow"/>）
+    /// で戦い、味方1体・敵1体へ実在する技が配る状態異常を同時に載せる（<see cref="Demo.Fight"/>）。</summary>
+    [SupplyParameterFromQuery] public bool Full { get; set; }
+
     private string _html = "", _over = "";
 
     protected override void OnParametersSet()
     {
-        var shell = new Shell(Demo.Game(), Demo.Now);
-        shell.Fight_ = Demo.Fight(shell.Game);
+        var shell = new Shell(Demo.Game(Full), Demo.Now);
+        shell.Fight_ = Demo.Fight(shell.Game, Full);
         // ⚠️ 決着は**中身から**作る（旗だけ立てると、生きている体が並んだまま「勝った」と出る）
         if (Done)
         {

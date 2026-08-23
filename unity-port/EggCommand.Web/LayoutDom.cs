@@ -158,6 +158,9 @@ namespace EggCommand.Web
             }
             if (node.Option("lead") == "yes"
                 || (has && fill?.Lead != null && fill.Lead(bind))) cls.Append(" lead");
+            // ⭐ 自作の仮ドット絵など、補間せず出したい icon だけに効く
+            //    （既存の Kenney 絵は滑らかな見た目のまま ── stage.css 参照）。
+            if (node.Kind == "icon" && node.Option("crisp") == "yes") cls.Append(" crisp");
 
             double? fade = has && fill?.Fade != null ? fill.Fade(bind) : null;
             if (fade.HasValue) style.Append(";opacity:")
@@ -207,7 +210,15 @@ namespace EggCommand.Web
                 // ⭐ **絵は抱き合わせ（mask）で出して、色は地で与える。**
                 //    ⚠️ Unity は `Image.color` で染めているので、同じ振る舞いに合わせる。
                 string pic = (has && fill?.Pic != null ? fill.Pic(bind) : null) ?? node.Option("pic");
-                if (pic != null)
+                if (pic != null && !IconManifest.Exists(pic))
+                {
+                    // 🔴 **黙って空の四角にしない。**⚠️ 表や骨組みが指す名前でも、
+                    //    実体（`Resources/UI/icon/<名前>.png`）が無ければここへ落ちる
+                    //    ── 埋め込んだ一覧（`IconManifest`）と突き合わせて分かる。
+                    sb.Append("<div class=\"n icon-missing\" style=\"left:0;top:0;width:100%;height:100%\" title=\"絵が無い: ")
+                      .Append(Esc(pic)).Append(".png\">？</div>");
+                }
+                else if (pic != null)
                 {
                     // ⭐ 絵の場所は1回だけ言う（`--pic`）。⚠️ 素の絵と、
                     //    その形に切った色の2枚が同じ絵を見るので、二重に書かない。

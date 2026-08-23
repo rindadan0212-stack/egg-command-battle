@@ -7,10 +7,13 @@
 </div>
 
 @code {
+    /// <summary>🔴 あふれの場面で描くか。⭐ `?full=true`（<see cref="Demo.Overflow"/>）。</summary>
+    [SupplyParameterFromQuery] public bool Full { get; set; }
+
     private string _html = "";
 
     /// <summary>⚠️ **中身は `Sheets.Book` が持つ**（遊ぶ頁と同じもの）。
     /// ⭐ 座標は1つも書かない ── `Layouts/book.txt` が持つ。</summary>
-    protected override void OnInitialized() =>
-        _html = Sheets.Book(new Shell(Demo.Game(), Demo.Now));
+    protected override void OnParametersSet() =>
+        _html = Sheets.Book(new Shell(Demo.Game(Full), Demo.Now));
 }

@@ -352,6 +352,29 @@ html, body {
   mask-position: center;
 }
 
+/* ⭐ **自作の仮ドット絵**（状態異常アイコンなど・`crisp=yes`）は補間しない。
+   ⚠️ 既存の Kenney 絵（さいころ・盤の印）は滑らかな見た目のまま ──
+   `.n.icon-art` 自体は変えず、`crisp` を付けた icon の中だけに効かせる。 */
+.n.icon.crisp .icon-art,
+.n.icon.crisp .icon-art::after {
+  image-rendering: pixelated;
+}
+
+/* ⭐ **絵が無いときの印。**⚠️ 空の四角と混同しない ── `IconManifest` が
+   「実体が無い」と判じた `pic=` にだけ出る（`NOTICE.md` 参照）。 */
+.n.icon-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  background: repeating-linear-gradient(45deg,
+    rgba(224, 79, 95, .22) 0 6px, rgba(224, 79, 95, .06) 6px 12px);
+  box-shadow: inset 0 0 0 2px var(--danger);
+  color: var(--danger-ink);
+  border-radius: 6px;
+  font-size: 70%;
+}
+
 /* host ── ⭐ **中は骨組みが知らないと宣言した枠。**
    ⚠️ 見た目は何も与えない ── 中を描く側が全部決める。 */
 .n.host { overflow: hidden; }

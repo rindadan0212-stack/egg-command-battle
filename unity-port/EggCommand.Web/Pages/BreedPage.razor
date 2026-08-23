@@ -12,11 +12,15 @@
     // ⚠️ 問い合わせに無い値は型の既定で上書きされるので `int?` で受ける
     [SupplyParameterFromQuery] public int? Picked { get; set; }
 
+    /// <summary>🔴 あふれの場面で描くか。⭐ `?full=true`（<see cref="Demo.Overflow"/>）。
+    /// ⚠️ 並べ替えは素質合計順が既定なので、親には自動で「極まった個体」が選ばれる。</summary>
+    [SupplyParameterFromQuery] public bool Full { get; set; }
+
     private string _html = "";
 
     protected override void OnParametersSet()
     {
-        var shell = new Shell(Demo.Game(), Demo.Now) { SortOpen = Open };
+        var shell = new Shell(Demo.Game(Full), Demo.Now) { SortOpen = Open };
         var sorted = shell.Sorted();
         int picked = Picked ?? 2;
         if (picked >= 1) shell.ParentA = sorted[0].Id;

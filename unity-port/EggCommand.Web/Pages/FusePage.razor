@@ -13,6 +13,10 @@
     /// <summary>候補が居ない状態を出すか。⭐ 「壊れている」に見えない形を確かめる。</summary>
     [SupplyParameterFromQuery] public bool Empty { get; set; }
 
+    /// <summary>🔴 あふれの場面で描くか。⭐ `?full=true`。⚠️ 一度に選べる上限
+    /// （`Games.PickAtOnce`）まで選び、分解で戻る EXP の実測を最大に近づける。</summary>
+    [SupplyParameterFromQuery] public bool Full { get; set; }
+
     private string _html = "";
 
     /// <summary>⚠️ **中身は `Sheets.Fuse` が持つ**（遊ぶ頁と同じもの）。
@@ -20,9 +24,10 @@
     protected override void OnParametersSet()
     {
         // ⭐ 1体しか居なければ候補は空（見ている本人は候補に出ない）
-        var s = new Shell(Empty ? Games.NewGame(Demo.Seed, Demo.Now, 1) : Demo.Game(), Demo.Now);
+        var s = new Shell(Empty ? Games.NewGame(Demo.Seed, Demo.Now, 1) : Demo.Game(Full), Demo.Now);
         var pool = Deeds.Food(s);
-        int want = Math.Clamp(Picked ?? 3, 0, Math.Min(Games.PickAtOnce, pool.Count));
+        int want = Math.Clamp(Picked ?? (Full ? Games.PickAtOnce : 3), 0,
+            Math.Min(Games.PickAtOnce, pool.Count));
         for (int i = 0; i < want; i++) s.Melts.Add(pool[i].Id);
         _html = Sheets.Fuse(s);
     }

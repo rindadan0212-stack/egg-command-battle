@@ -14,15 +14,20 @@
     /// <summary>その巣から何回盗んだか。⭐ 4回で「戦闘」に変わる。</summary>
     [SupplyParameterFromQuery] public int Raids { get; set; }
 
+    /// <summary>🔴 あふれの場面で描くか。⭐ `?full=true`。⚠️ `Raids` を明示していなければ
+    /// 巣の寿命の上限（<see cref="Steal.RaidsToSeal"/>）まで押し上げる。</summary>
+    [SupplyParameterFromQuery] public bool Full { get; set; }
+
     private string _html = "";
 
     protected override void OnParametersSet()
     {
-        var shell = new Shell(Demo.Game(), Demo.Now);
+        var shell = new Shell(Demo.Game(Full), Demo.Now);
         // ⚠️ 減った状態を作るのは**確かめ用の頁の仕事**（遊びでは時間で消える）
         int shown = Math.Clamp(Shown ?? Encounters.Shown, 0, shell.Game.Encounters.Count);
         while (shell.Game.Encounters.Count > shown)
             shell.Game.Encounters.RemoveAt(shell.Game.Encounters.Count - 1);
-        _html = Sheets.Wilds(shell, Raids);
+        int raids = Full && Raids <= 0 ? Steal.RaidsToSeal : Raids;
+        _html = Sheets.Wilds(shell, raids);
     }
 }

@@ -19,4 +19,14 @@ gauge     bar     72   278   208  12    bind=gauge
 elem      round   244  232   22   22    bind=elem
 # ⭐ 有利を取る相手の色を、細い帯で下に添える（矢印の代わり）
 beats     line    244  258   22   6     bind=beats
-status    label   20   298   320  30    size=20 ink=dim anchor=upper-left bind=status
+# ⭐ 状態は絵の並び（応急・仮のドット絵。2026-08-23）。⚠️ 字だと枠 320 に対し
+#    実測 743 要る組み合わせが在ったため、絵＋小さな数へ作り替えた
+#    （`Core.Battle.ActiveStatusBadges` が構造化した出所。字を返す
+#    `ActiveStatuses` は Unity の `UnitStand` がまだ読むので残してある）。
+# ⚠️ 12種すべてが同時に起こり得るが、5個までしか並べられない。
+#    ⭐ 残りは「+N」にまとめる（`smore`）。⚠️ 隠れた分の内訳（ターン数など）は
+#    まだ読む場所が無い ── `wiki/開発/課題.md` に送ってある。
+status    box     20   298   320  48
+  sicon   icon    9    0     28   28    repeat=status cols=5 gap=18 max=5 bind=sicon crisp=yes
+  snum    label   0    30    46   16    size=13 anchor=upper-center repeat=status cols=5 gap=0 max=5 bind=snum
+  smore   label   240  9     70   30    size=24 ink=dim anchor=upper-center when=smore bind=smore

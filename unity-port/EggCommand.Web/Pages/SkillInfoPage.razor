@@ -18,17 +18,24 @@
     [SupplyParameterFromQuery] public int? Slot { get; set; }
     [SupplyParameterFromQuery] public int? Level { get; set; }
 
+    /// <summary>🔴 あふれの場面で描くか。⭐ `?full=true`。⚠️ `At` を上書きし、
+    /// 名前と実際に描く効果文（`SkillText.Describe`）を合わせた字がいちばん長い技を出す
+    /// （<see cref="Demo.OverflowSkillIndex"/>）。⭐ `Level` も既定で最大（Lv5）にする
+    /// ── 積み上がった成長ぶんの字も一緒に見るため。</summary>
+    [SupplyParameterFromQuery] public bool Full { get; set; }
+
     private string _html = "";
 
     /// <summary>⚠️ **中身は `Sheets.SkillCard` が持つ**（遊ぶ頁と同じもの）。</summary>
     protected override void OnParametersSet()
     {
         var all = Skills.All;
-        _html = Sheets.SkillCard(new Shell(Demo.Game(), Demo.Now)
+        int at = Full ? Demo.OverflowSkillIndex : At;
+        _html = Sheets.SkillCard(new Shell(Demo.Game(Full), Demo.Now)
         {
-            SkillId = all[Math.Clamp(At, 0, all.Count - 1)].Id,
+            SkillId = all[Math.Clamp(at, 0, all.Count - 1)].Id,
             SkillSlot = Slot ?? -1,
-            SkillLevel = Math.Max(1, Level ?? 1),
+            SkillLevel = Math.Max(1, Level ?? (Full ? Skills.MaxLevel : 1)),
         });
     }
 }

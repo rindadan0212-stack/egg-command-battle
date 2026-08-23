@@ -17,6 +17,51 @@ namespace EggCommand.Core
         Draw,
     }
 
+    /// <summary>状態異常の種類。⭐ **絵にするための唯一の分類**（`Art.StatusIcon` が名前を引く）。
+    ///
+    /// ⚠️ <see cref="UnitStatus"/> の欄と1対1（`TauntBy` だけは絵にしないので無い）。
+    /// ⭐ 12種類 ── 応急のドット絵アイコンも、この数ぶん作ってある
+    /// （`Resources/UI/NOTICE.md` / `scripts/gen-status-icons.mjs`）。</summary>
+    public enum StatusKind
+    {
+        Atk,
+        Def,
+        Spd,
+        Poison,
+        Regen,
+        Shield,
+        Stun,
+        Taunt,
+        Guts,
+        Immune,
+        Sleep,
+        Block,
+    }
+
+    /// <summary>状態1つを絵で出すための最小限。
+    ///
+    /// ⭐ **数の意味は種類ごとに違う**（％・×スタック・枚・回・段）ので、
+    /// 表示する文字列はここで一度だけ決める ── View 側（Unity / Web）に
+    /// 「この種類なら％を付ける」のような分岐を持たせない。
+    ///
+    /// ⚠️ **持続の残りターン（毒の `(4)` にあたる部分）はここに無い。**
+    /// 絵の並びは数を1つしか置けないので、削ってある（`wiki/開発/課題.md` に送った）。</summary>
+    public readonly struct StatusBadge
+    {
+        public readonly StatusKind Kind;
+        /// <summary>添える数。⚠️ 種類によって％だったり×スタックだったりする。</summary>
+        public readonly string Text;
+        /// <summary>良い側か。⭐ 色分け（好悪）にだけ使う。</summary>
+        public readonly bool Good;
+
+        public StatusBadge(StatusKind kind, string text, bool good)
+        {
+            Kind = kind;
+            Text = text;
+            Good = good;
+        }
+    }
+
     /// <summary>ステータスに掛かる修正。⭐ 段階ではなく、ステータスの数値に対する ±%。</summary>
     public struct Modifier
     {
@@ -1852,6 +1897,39 @@ namespace EggCommand.Core
             if (s.Immune > 0) output.Add($"免疫{s.Immune}");
             if (s.Sleep > 0) output.Add($"睡眠{s.Sleep}");
             if (s.Block > 0) output.Add($"ブロック{s.Block}");
+            return output;
+        }
+
+        /// <summary>画面に絵で出す、今かかっている状態の一覧。
+        ///
+        /// ⭐ **`ActiveStatuses`（字）とは別口**。⚠️ **字を返す側は消さない**
+        /// （他から使われているかもしれない ── Unity の `UnitStand` が今もこちらを読む）。
+        /// こちらは絵の並び（`unit.txt` の `status` 一式）専用の、構造化した出口。
+        ///
+        /// ⚠️ 並び順は <see cref="ActiveStatuses"/> と揃えてある（同じ理由で読める）。</summary>
+        public static List<StatusBadge> ActiveStatusBadges(Unit unit)
+        {
+            var s = unit.Status;
+            var output = new List<StatusBadge>();
+            if (IsOn(s.Atk)) output.Add(new StatusBadge(StatusKind.Atk,
+                Sign(s.Atk.Percent) + "%" + Ever(s.Atk), s.Atk.Percent > 0));
+            if (IsOn(s.Def)) output.Add(new StatusBadge(StatusKind.Def,
+                Sign(s.Def.Percent) + "%" + Ever(s.Def), s.Def.Percent > 0));
+            if (IsOn(s.Spd)) output.Add(new StatusBadge(StatusKind.Spd,
+                Sign(s.Spd.Percent) + "%" + Ever(s.Spd), s.Spd.Percent > 0));
+            // ⚠️ 良い/悪いは「この個体にとって」で判じる。毒＝悪い、リジェネ＝良い、のように
+            //    弱化・強化の意味そのままではなく、**受けている側の得失**で決める
+            //    （挑発は自分に掛ける守りの構えなので良い側、ブロックは
+            //    外からの回復・強化を弾かれてしまうので悪い側 ── 割り切り。詳細は課題.md）。
+            if (s.Poison.Turns > 0) output.Add(new StatusBadge(StatusKind.Poison, "×" + s.Poison.Stacks, false));
+            if (s.Regen.Turns > 0) output.Add(new StatusBadge(StatusKind.Regen, "×" + s.Regen.Stacks, true));
+            if (s.Shield > 0) output.Add(new StatusBadge(StatusKind.Shield, s.Shield.ToString(), true));
+            if (s.Stun > 0) output.Add(new StatusBadge(StatusKind.Stun, s.Stun.ToString(), false));
+            if (s.Taunt > 0) output.Add(new StatusBadge(StatusKind.Taunt, s.Taunt.ToString(), true));
+            if (s.Guts > 0) output.Add(new StatusBadge(StatusKind.Guts, s.Guts.ToString(), true));
+            if (s.Immune > 0) output.Add(new StatusBadge(StatusKind.Immune, s.Immune.ToString(), true));
+            if (s.Sleep > 0) output.Add(new StatusBadge(StatusKind.Sleep, s.Sleep.ToString(), false));
+            if (s.Block > 0) output.Add(new StatusBadge(StatusKind.Block, s.Block.ToString(), false));
             return output;
         }
 

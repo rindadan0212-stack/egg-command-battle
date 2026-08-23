@@ -57,6 +57,11 @@
     /// ⚠️ **速さそのものは別に見張る**（縮めた検査は「着くか」しか見ていない）。</summary>
     [SupplyParameterFromQuery] public double? Pace { get; set; }
 
+    /// <summary>🔴 あふれの場面で始めるか。⭐ `?full=true`（<see cref="Demo.Overflow"/>）。
+    /// ⚠️ **遊ぶ道の振る舞いは変えない** ── 既定 false のときは今までどおり
+    /// `Seed`／現在時刻から始める。検査の入口という位置づけは `Pace` と同じ。</summary>
+    [SupplyParameterFromQuery] public bool Full { get; set; }
+
     private Shell _shell = default!;
     private Vault _vault = default!;
     private DotNetObjectReference<AppPage>? _me;
@@ -69,7 +74,11 @@
         // ⚠️ **読むまでは書かない。**⭐ 空の器を先に作って上書きすると、本物が消える。
         _vault = new Vault(Js);
         long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        _shell = new Shell(Games.NewGame(Seed ?? unchecked((int)now), now), now);
+        // ⚠️ あふれの場面は種と時刻も固定する（Demo.Seed／Demo.Now）── 毎回違う画面を
+        //    撮ると、差が「直したから」なのか「引きが違うから」なのか分からなくなる。
+        _shell = Full
+            ? new Shell(Demo.Overflow(), Demo.Now)
+            : new Shell(Games.NewGame(Seed ?? unchecked((int)now), now), now);
         _shell.Pace = Pace is > 0 ? Pace.Value : 1;
         _shell.Now_Sheet = At switch
         {

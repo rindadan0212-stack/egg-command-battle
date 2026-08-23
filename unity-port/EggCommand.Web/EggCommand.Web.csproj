@@ -46,13 +46,38 @@
        （実測 2026-08-22: フォントも絵も 200 を返しながら 0 バイト
        ── そのせいで、それまでの画面は全部**代替フォント**で描かれていた）。
        ⭐ だから毎回コピーする。⚠️ 唯一の出所は Unity 側のままで、
-       `wwwroot/fonts` と `wwwroot/icon` は git から外してある。 -->
+       `wwwroot/fonts` `wwwroot/icon` `wwwroot/ui` は git から外してある。
+
+       ⚠️ 🔴 **`UI/` の下の PNG は全部（`icon/` を含む）ここでコピーする。**
+       ⭐ これが絵の通り道の唯一の入口 ── 増えた素材（キャラ・ボタン・背景）は
+       置き場所を選ぶだけで自動的に web へ届く（`icon/` 以外は `wwwroot/ui` へ）。
+       ⚠️ **だからといって描き方まで変わるわけではない。**panel / button / 空は
+       まだ CSS が描いている（`stage.css`）── コピーされるのは「材料」だけで、
+       それを使うかどうかは別の段の判断。 -->
   <Target Name="CopyArt" BeforeTargets="BeforeBuild">
     <ItemGroup>
       <Art Include="..\..\unity\Assets\Resources\Fonts\MochiyPopOne-Regular.ttf" Into="wwwroot\fonts" />
       <Art Include="..\..\unity\Assets\Resources\UI\icon\*.png" Into="wwwroot\icon" />
+      <Art Include="..\..\unity\Assets\Resources\UI\*.png" Into="wwwroot\ui" />
     </ItemGroup>
     <Copy SourceFiles="@(Art)" DestinationFolder="%(Art.Into)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- 🔴 **絵の一覧を埋め込む。**⚠️ `LayoutDom` の icon が「表や骨組みが指す名前
+       ＝ 実在するファイル」と信じて `url(icon/<名前>.png)` を組み立てても、
+       CSS は無いファイルを黙って空白にする（エラーにならない）── 打ち間違いに
+       気づけない。⭐ ここで「本当に在る名前」を持たせ、`IconManifest.cs` が読む。
+       ⚠️ HTTP で取りに行かない（上と同じ「200 だが 0 バイト」の罠を避ける）。 -->
+  <Target Name="IconManifest" BeforeTargets="BeforeBuild">
+    <ItemGroup>
+      <IconFile Include="..\..\unity\Assets\Resources\UI\icon\*.png" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(IntermediateOutputPath)icon-manifest.txt"
+                       Lines="@(IconFile-&gt;'%(Filename)')"
+                       Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(IntermediateOutputPath)icon-manifest.txt" Link="IconManifest.txt" />
+    </ItemGroup>
   </Target>
 
 </Project>

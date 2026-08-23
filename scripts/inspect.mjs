@@ -28,13 +28,18 @@ const URL = (args[0] && args[0].startsWith('http') ? args.shift() : 'http://loca
 /** 調べる画面。⚠️ 足したら必ずここに入れる（入れないと「0件」が痩せる）。 */
 const PAGES = args.length ? args : [
   '/',                    // 図鑑
+  '/?full=true',          // 🔴 図鑑・あふれ（保管庫満杯の盤で「手に入れた種族」を見る）
   // ⚠️ **勝った段が1つも無い状態しか見ない検査は嘘をつく**
   //    （`when=beaten` の枝を一度も描かないまま「0件」と言う）。
   '/trial?won=2',         // 試練（勝った段あり）
   '/trial?won=0',         // 試練（まだ勝っていない）
+  '/trial?full=true',     // 🔴 試練・あふれ（全5段クリア済み）
   '/ask',                 // 確かめる札
+  '/ask?full=true',       // 🔴 確かめる札・あふれ（後ろの図鑑もあふれの盤）
   '/box',                 // BOX（畳んだ）
   '/box?open=true',          // BOX（開いた）
+  '/box?full=true',       // 🔴 BOX・あふれ（保管庫 50/50・極まった個体の詳細）
+  '/box?full=true&open=true', // 🔴 BOX・あふれ（並べ替えを開いた形）
   // ⚠️ `picked` は**必ず書く**。⭐ Blazor は問い合わせに無い値を
   //    型の既定（0）で上書きするので、省くと**親なしの枝しか見ない**
   //    （実測 2026-08-22: `/breed` と `/breed?picked=0` が同じ 80 部品だった）。
@@ -42,33 +47,43 @@ const PAGES = args.length ? args : [
   '/breed?picked=1',      // 配合（片方だけ）
   '/breed?picked=0',      // 配合（親なし）
   '/breed?picked=2&open=true',   // 配合（開いた）
+  '/breed?picked=2&full=true',   // 🔴 配合・あふれ（親2体が極まった個体）
   '/party',               // 編成（巣）
   '/party?open=true',        // 編成（巣・開いた）
   '/party?idle=true',        // 編成（放置）
+  '/party?full=true',        // 🔴 編成・あふれ（Lv200・極まった個体の一覧）
   // ⚠️ 図鑑の中の2枚。⭐ **一番長いもの**を選んで見る
   //    （技の袋は 1〜5種・説明文は 1〜2行）。
   '/species?at=0',
   '/species?at=7',
+  '/species?full=true',   // 🔴 種族・あふれ（特性の一言＋名乗りがいちばん長い種族）
   '/skill?at=0',
   '/skill?at=12&slot=0',
+  '/skill?full=true',     // 🔴 技・あふれ（名前＋効果文がいちばん長い技・Lv5満タン）
   // ⭐ ホーム。⚠️ 空の枠と入っている枠を両方見る
   '/home?eggs=3',
   '/home?eggs=0',
   '/home?eggs=6',
+  '/home?full=true',      // 🔴 ホーム・あふれ（孵化器満杯・溜まった EXP が大きい）
   // ⭐ 探索と卵の在庫。⚠️ **減ったとき**も見る
   '/nests',
   '/nests?shown=1&raids=4',
+  '/nests?full=true',     // 🔴 探索・あふれ（盗んだ回数が封鎖の閾値）
   '/eggs?have=7',
   '/eggs?have=0',
+  '/eggs?full=true',      // 🔴 卵の在庫・あふれ（50個・全部★5）
   // ⭐ 分解と技を鍛える。⚠️ **選んでいない状態**と**候補が0件**も見る
   '/fuse?picked=3',
   '/fuse?picked=0',
   '/fuse?empty=true',
+  '/fuse?full=true',      // 🔴 分解・あふれ（まとめ選びの上限・EXP の実測が大きい）
   '/train?picked=3',
   '/train?picked=0&have=0',
+  '/train?full=true',     // 🔴 技を鍛える・あふれ（卵50個・★5・まとめ選びの上限）
   // ⭐ 保存の控え。⚠️ **まだ1度も書かれていない形**も見る（字が丸ごと入れ替わる）
   '/save?size=11024&past=5',
   '/save?size=0&past=0',
+  '/save?full=true',      // 🔴 保存の控え・あふれ（あふれの盤を実際に書き出した字数）
   // ⭐ **外枠付きの本体**。⚠️ 上のバーと下の帯が乗った状態で見る
   // ⚠️ 種を固定する。⭐ 毎回違う画面を撮ると、差が「直したから」なのか
   //    「引きが違うから」なのか分からなくなる。
@@ -79,6 +94,12 @@ const PAGES = args.length ? args : [
   '/app?seed=20260822&at=box',
   '/app?seed=20260822&at=book',
   '/app?seed=20260822&at=trial',
+  // 🔴 あふれ。⚠️ 下の帯は4タブとも常に数を出す（「50体」「50/50」）ので、
+  //    どのタブでも保管庫のあふれが見える。box・breed は右肩の EXP 表示も重なる
+  //    （wiki §11 が指した「EXP 19,475　44/50」の実物）。
+  '/app?seed=20260822&full=true',
+  '/app?seed=20260822&at=box&full=true',
+  '/app?seed=20260822&at=breed&full=true',
   // ⚠️ **札は押しどころからしか開かないので、静かな検査は重なった形を見ない。**
   //    ⭐ そこで id がぶつかっていた（技の詳細の `body` と本体の器の `body`）。
   '/app?seed=20260822&open=party',
@@ -94,9 +115,11 @@ const PAGES = args.length ? args : [
   // ⭐ 戦闘。⚠️ 決着した枝も見る（札が入れ替わる）
   '/fight',
   '/fight?done=true',
+  '/fight?full=true',     // 🔴 戦闘・あふれ（極まった編成＋状態異常を全部背負った1体）
   // ⭐ すごろくの盤
   '/raid',
   '/raid?raids=2',
+  '/raid?full=true',      // 🔴 すごろく・あふれ（さいころの数が12個を超える）
 ]
 
 /** ⚠️ 実機の幅は 320〜430。⭐ 一番狭いところで測るのが要点（罠22・24・26）。 */

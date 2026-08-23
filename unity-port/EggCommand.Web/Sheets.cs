@@ -416,13 +416,27 @@ public static class Sheets
         {
             var u = units[i];
             bool alive = EggCommand.Core.Battle.IsAlive(u);
-            var says = EggCommand.Core.Battle.ActiveStatuses(u);
+            // ⭐ 絵の並び用（構造化）。⚠️ 字を返す `ActiveStatuses` は Unity の
+            //    `UnitStand` がまだ読むので、そちらは触らない（Battle.cs 参照）。
+            var badges = EggCommand.Core.Battle.ActiveStatusBadges(u);
+            // ⚠️ **unit.txt の `sicon`/`snum` の cols= と同じ数にすること。**
+            //    ⭐ 唯一の出所は骨組みだが、繰り返しの個数はここ（Fill 側）でしか
+            //    決められない（`Count` が返す数がそのまま描かれる枚数になる）。
+            const int shown = 5;
+            int cur = -1;   // ⭐ 「状態の何番目を描いているか」（At が置く）
             // ⚠️ **側も名前に入れる。**⭐ 番号だけだと味方の1体目と敵の1体目が同じ id になる
             sb.Append(Stands.One(spots[i], (foe ? "f" : "a") + i, new DomFill
             {
-                Text = key => key == "status" ? string.Join(" ", says) : "",
+                Text = key => key switch
+                {
+                    "snum" => cur >= 0 && cur < badges.Count ? badges[cur].Text : "",
+                    "smore" => badges.Count > shown ? "+" + (badges.Count - shown) : "",
+                    _ => "",
+                },
                 Sprite = key => key == "art" ? Creatures.SpeciesOf(u.Creature).Sprite : null,
                 Palette = key => key == "art" ? Creatures.PaletteOf(u.Creature) : null,
+                Pic = key => key == "sicon" && cur >= 0 && cur < badges.Count
+                    ? EggCommand.Core.Art.StatusIcon(badges[cur].Kind) : null,
                 Ratio = key => key switch
                 {
                     "hp" => u.MaxHp > 0 ? Math.Clamp(u.Hp / (double)u.MaxHp, 0, 1) : 0,
@@ -436,13 +450,19 @@ public static class Sheets
                     "elem" => Face.ElementCss(u.Creature.Element),
                     "beats" => Face.ElementCss(SpeciesTable.Beats(u.Creature.Element)),
                     "glow" => "rgba(255,217,77,.55)",
+                    // ⚠️ 新しい色を作らない ── 既存の良い側／悪い側の字色（Ui.cs の12定数）そのまま
+                    "sicon" or "snum" => cur >= 0 && cur < badges.Count
+                        ? (badges[cur].Good ? "#1e7a38" : "#c0303f") : null,
                     _ => null,
                 },
+                Count = key => key == "status" ? Math.Min(badges.Count, shown) : 0,
+                At = (key, idx) => { if (key == "status") cur = idx; },
                 When = key => key switch
                 {
                     "foe" => foe,
                     // ⭐ いま手番が回っている体を光らせる
                     "actor" => actor != null && actor.Key == u.Key,
+                    "smore" => badges.Count > shown,
                     _ => false,
                 },
             }));
