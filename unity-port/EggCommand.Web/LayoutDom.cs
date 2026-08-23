@@ -191,6 +191,17 @@ namespace EggCommand.Web
             //    「1本の元の行」に行き着く ── `closest('[data-line]')` で終わる。
             if (node.LineNumber >= 0)
                 sb.Append(" data-line=\"").Append(node.LineNumber).Append('"');
+            // ⭐ **差し込まれた側は、代わりに出所（部品ファイル名・その中の行）を出す。**
+            //
+            // ⚠️ `data-line` は出さない（上と同じ理由 ── 別ファイルの行番号を
+            //    いま編集中の骨組みの行として書き戻すと事故る）。⭐ その代わり、
+            //    どの部品ファイルの何行目から来たかは言える ── これでエディタが
+            //    「その部品ファイルへ切り替える」次の一手を作れる（今回はまだ作らない）。
+            //    ⭐ こうして、画面のどの部品も `data-line` か
+            //    `data-part`＋`data-part-line` の**どちらか一方**を必ず持つ。
+            else if (node.PartId != null)
+                sb.Append(" data-part=\"").Append(Esc(node.PartId)).Append('"')
+                  .Append(" data-part-line=\"").Append(node.PartLine).Append('"');
             // ⭐ **押しどころの名前と番号を、部品そのものに書いておく。**
             //
             // ⚠️ ここは字を組み立てて `MarkupString` で出しているので、Blazor の

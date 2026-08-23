@@ -79,4 +79,61 @@ public class LayoutAssetTests
                 + $"（下端 {node.Top + node.Height} / 帯の上端 {floor}）");
         }
     }
+
+    // ── PartId / PartLine ── ⭐ 「掴めるようにする」でなく「どこの行か言える」──
+
+    /// <summary>🔴 **画面の全部が出所を言える、の証明。**
+    ///
+    /// ⚠️ 実物32枚すべての、`Resolve` した木の**全節点**を辿り、
+    /// `LineNumber >= 0`（自前の行）か `PartId != null && PartLine >= 0`
+    /// （差し込まれた部品の行）の**どちらか一方**を必ず満たすことを確かめる。
+    /// ⭐ 片方も満たさない節点が1つでもあれば落ちる（黙って出所不明を許さない）。</summary>
+    [Theory]
+    [MemberData(nameof(All))]
+    public void 全ての節点が出所を言える(string id)
+    {
+        foreach (var root in Read(id).Roots) AssertHasOrigin(id, root);
+    }
+
+    private static void AssertHasOrigin(string id, LayoutNode node)
+    {
+        bool own = node.LineNumber >= 0;
+        bool part = node.PartId != null && node.PartLine >= 0;
+        Assert.True(own || part,
+            $"{id}/{node.Name}: 出所が無い"
+            + $"（LineNumber={node.LineNumber} PartId={node.PartId ?? "null"} PartLine={node.PartLine}）");
+        foreach (var child in node.Children) AssertHasOrigin(id, child);
+    }
+
+    /// <summary>⭐ **数で桁を合わせる。**⚠️ 実測（コメント・空行を除く）:
+    /// box は自前11行・差し込み47行 ── `panel`(28) + `sortbar`(3) + `sortchips`(6)
+    /// + `cell`(5)×2（`cellA`/`cellB`）= 47。⭐ ここが崩れたら、
+    /// 出所の付け方（`Rename`）のどこかが二重に数えたか、取りこぼしている。</summary>
+    [Fact]
+    public void boxの自前と差し込みの数()
+    {
+        int own = 0, part = 0;
+        foreach (var root in Read("box").Roots) CountOrigins(root, ref own, ref part);
+        Assert.Equal(11, own);
+        Assert.Equal(47, part);
+    }
+
+    /// <summary>⭐ breed は自前15行・差し込み75行 ──
+    /// `panelmini`(28)×2（`pfill`/`qfill`）+ `sortbar`(3) + `sortchips`(6)
+    /// + `cell`(5)×2（`cellA`/`cellB`）= 75。</summary>
+    [Fact]
+    public void breedの自前と差し込みの数()
+    {
+        int own = 0, part = 0;
+        foreach (var root in Read("breed").Roots) CountOrigins(root, ref own, ref part);
+        Assert.Equal(15, own);
+        Assert.Equal(75, part);
+    }
+
+    private static void CountOrigins(LayoutNode node, ref int own, ref int part)
+    {
+        if (node.LineNumber >= 0) own++;
+        else if (node.PartId != null) part++;
+        foreach (var child in node.Children) CountOrigins(child, ref own, ref part);
+    }
 }

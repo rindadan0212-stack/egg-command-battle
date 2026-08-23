@@ -4,13 +4,14 @@
 @using EggCommand.Web
 @implements IDisposable
 @inject IJSRuntime Js
+@inject NavigationManager Nav
 
 @*
   骨組み（`Assets/Resources/Layouts/*.txt`）を GUI で直して、ファイルへ書き戻す道具。
 
   ⚠️ **この頁は `/app`（遊ぶ頁）とは完全に別物。**`Shell` / `Sheets.*` は呼ぶだけで、
-  中身には触らない。⭐ 掴んで動かす・吸い付き・取り消しは**まだ作っていない**
-  （今回の完成条件は「開く→選ぶ→直す→保存→その行だけ変わる」の背骨1本）。
+  中身には触らない。⭐ 掴んで動かす・大きさを変える・吸い付き・取り消しは
+  この頁の上に載っている（背骨は「開く→選ぶ→直す→保存→その行だけ変わる」）。
 
   ⭐ **編集面は遊ぶ画面そのもの**（`wiki/開発/web移行計画.md` §11「別プレビューを作らない」）。
   盤は `Sheets.*` を呼んで実データで描く ── `LayoutStore` にディスクの生の字を
@@ -38,7 +39,17 @@
       📂 フォルダを選ぶ@(string.IsNullOrEmpty(_folder) ? "" : $"（{_folder}）")
     </button>
 
-    <button type="button" @onclick="Save" disabled="@(_raw is null)">💾 保存</button>
+    @* ⭐ 見える押しどころ＋ Ctrl+Z / Ctrl+Shift+Z の両方（作者の指示）。
+       ⭐ 数は「あと何回戻せるか」── 0件のときは字を出さず、押せないことも示す。 *@
+    <button type="button" @onclick="Undo" disabled="@(_undo.Count == 0)" title="取り消し（Ctrl+Z）">
+      ⟲@(_undo.Count > 0 ? _undo.Count.ToString(CultureInfo.InvariantCulture) : "")
+    </button>
+    <button type="button" @onclick="Redo" disabled="@(_redo.Count == 0)" title="やり直し（Ctrl+Shift+Z）">
+      ⟳@(_redo.Count > 0 ? _redo.Count.ToString(CultureInfo.InvariantCulture) : "")
+    </button>
+
+    @* ⚠️ demo モードでは保存を封じる（ディスクに書く相手が無い ── フォルダを選んでいない）。 *@
+    <button type="button" @onclick="Save" disabled="@(_raw is null || _demo)">💾 保存</button>
 
     @if (!_checkedSupport)
     {
@@ -83,16 +94,30 @@
       <div class="edstagewrap">
         <div class="edstage" id="edstage">
           @((MarkupString)_html)
-          @* ⭐ 選んでいる節点を輪で囲む（塗り潰さない）。⚠️ 盤の外枠より前に置いて、
-             盤の組み直し（@_html の差し替え）の影響を受けない層にしたいところだが、
-             ここは1本だけなので `edit.js` が毎回位置を数で置き直す方式で足りる。 *@
-          <div id="edring" class="edring"></div>
           @* ⭐ **透明な覆い。**盤のいちばん上（DOM の最後）に置いて、遊びの押しどころ
-             （`data-tap`）より先に指を受け止める。中身は空 ── 押しどころは覆いの
-             「下に何が描かれているか」を JS 側が `elementFromPoint` で探して拾う。 *@
+             （`data-tap`）より先に指を受け止める。中身は空 ── 押しどころも「掴んで動かす」も
+             覆いの「下に何が描かれているか」を JS 側が `elementFromPoint` で探して拾う
+             （`edit.js` の `listen`）。 *@
           <div id="edcap" class="edcap"></div>
         </div>
       </div>
+      @* ⭐ **輪と掴みどころは、盤の外の層に置く。**
+         ⚠️ 盤（#edstage）には `scale(k)` が掛かっている。輪をその中に置くと、
+         掴みどころ（8個の四角）も一緒に縮んで、盤を小さく表示しているときに
+         指で押せなくなる。⭐ ここでは「輪を盤の外に出す」ほうを選んだ ──
+         `1/k` を掛け続けるより、`#edwrap` を基準に実寸（screen px）だけで
+         置き直すほうが単純（`edit.js` の `_ringTo`）。
+         ⚠️ 塗り潰さない約束は変わらない（囲むのは輪の線と、押せる掴みどころだけ）。 *@
+      <div id="edring" class="edring">
+        @foreach (var h in Handles)
+        {
+          <div class="edhandle" data-handle="@h"></div>
+        }
+      </div>
+      @* ⭐ 吸い付いた瞬間だけ見せる細い線。⚠️ 面で塗らない・囲みを増やさない
+         （`画面の作法.md`「区切りは余白で／線は一辺だけ」と同じ約束）。 *@
+      <div id="edguidex" class="edguide edguide-x"></div>
+      <div id="edguidey" class="edguide edguide-y"></div>
     </div>
 
     @* ── その1つ ───────────────────────────────── *@
@@ -149,6 +174,13 @@
 
     [SupplyParameterFromQuery(Name = "of")] public string? OfQuery { get; set; }
 
+    /// <summary>⭐ **開発時だけの入口**（`?edit=box&amp;demo=true` 相当・実際は `/edit?demo=true`）。
+    /// File System Access API の許可ダイアログは Playwright から自動で通せないので、
+    /// フォルダを選ばなくても掴める状態を作るための道。⚠️ **遊ぶ頁（`/app`）には出てこない**
+    /// ── このクラスの中だけで読み、`Save` も封じる（下の <see cref="_demo"/> 参照）。</summary>
+    [SupplyParameterFromQuery(Name = "demo")] public string? DemoQuery { get; set; }
+    private bool _demo;
+
     private string _of = "box";
     private bool _checkedSupport;
     private bool _supported;
@@ -161,6 +193,33 @@
     private string _status = "";
     private float _left, _top, _width, _height;
     private float _step = 10f;
+
+    /// <summary>⭐ 吸い付きは**設計 px**で8以内だけ（唯一の出所）。
+    /// ⚠️ 兄弟・親の辺も、きざみ（<see cref="_step"/>）も、同じ物差しで比べる。</summary>
+    private const float SnapRange = 8f;
+
+    /// <summary>⚠️ 大きさは0以下にしない（`Faults` の指摘は正しいが、エディタが自分で
+    /// 作ってはいけない）。⭐ さらに「潰れて二度と掴めない」を避ける実用上の下限。</summary>
+    private const float MinSize = 4f;
+
+    /// <summary>⭐ 8つの掴みどころ。並び順がそのまま Razor の描画順。</summary>
+    private static readonly string[] Handles = { "nw", "n", "ne", "e", "se", "s", "sw", "w" };
+
+    // ⭐ 取り消し／やり直し。**木ごと積む**（`Layouts.Write` の文字列）── 差分ではない
+    // （作者の指示「実装は木ごと差し替えるのが安全」をそのまま踏襲）。
+    private readonly List<string> _undo = new();
+    private readonly List<string> _redo = new();
+    /// <summary>進行中の一動作の「前」の姿。⚠️ <see cref="BeginAction"/>〜
+    /// <see cref="CommitAction"/> の間だけ値を持つ。</summary>
+    private string? _pendingBefore;
+
+    /// <summary>掴んだ瞬間の節点（不変オブジェクトのスナップショット）。⚠️ 指の移動量は
+    /// **この元の位置からの累計**で計算する ── 毎フレーム「今の位置」から足すと、
+    /// 吸い付きで丸めた誤差が積み重なって暴れる。</summary>
+    private LayoutNode? _dragOrigin;
+
+    private string? _resizeHandle;
+    private LayoutNode? _resizeOrigin;
 
     /// <summary>このページが差し替えた骨組みの id。⚠️ 離れるとき必ず解く
     /// （`LayoutStore` は静的＝プロセス全体で共有なので、解かずに `/app` へ移ると
@@ -184,8 +243,12 @@
         _me = DotNetObjectReference.Create(this);
         _supported = await Js.InvokeAsync<bool>("eggDisk.supported");
         _checkedSupport = true;
+        _demo = DemoQuery == "true";
+        if (_demo) LoadDemo();
         await Js.InvokeVoidAsync("eggEdit.start", "edwrap", "edstage");
         await Js.InvokeVoidAsync("eggEdit.listen", _me, "edcap");
+        await Js.InvokeVoidAsync("eggEdit.resize", _me);
+        await Js.InvokeVoidAsync("eggEdit.keys", _me);
         StateHasChanged();
     }
 
@@ -196,7 +259,39 @@
         bool ok = await Js.InvokeAsync<bool>("eggDisk.pick");
         if (!ok) { _status = "フォルダを選べませんでした"; return; }
         _folder = await Js.InvokeAsync<string>("eggDisk.folderName");
+        _demo = false;   // ⭐ 本物のフォルダを選んだので、開発用の入口は退く
         await LoadFile();
+    }
+
+    /// <summary>⭐ 埋め込みの骨組みを、ディスクを介さず直接読む（`?demo=true` 専用）。
+    /// ⚠️ 読んだあとは <see cref="LoadFile"/> とまったく同じ経路（`Refresh` →
+    /// `LayoutStore.SetOverride` → 離れるとき `ClearOverrides`）を通す ── 漏れを防ぐ
+    /// 仕組みを新しく作らず、既にある「頁を離れたら必ず解く」の1本に乗せる。</summary>
+    private void LoadDemo()
+    {
+        string? text = ReadEmbedded(_of);
+        if (text is null) { _status = $"⚠️ demo: {_of}.txt が埋め込みに見つからない"; return; }
+        _originalText = text;
+        _raw = Core.Layouts.Parse(_of, text);
+        _selectedLine = -1;
+        _status = "⚠️ demo モード（開発確認用 ── 保存は封じてあります）";
+        _undo.Clear();
+        _redo.Clear();
+        Refresh();
+    }
+
+    /// <summary>⚠️ `LayoutStore` に読ませず、この頁だけで完結させる（`LoadDemo` 専用）。
+    /// ⭐ `LayoutStore.Of` と同じ埋め込みリソースを読むが、キャッシュにも Overrides にも
+    /// 触らない ── ここで読んだ生の字を <see cref="Refresh"/> が改めて `SetOverride`
+    /// する（`LoadFile` と全く同じ形）ので、二重に持たせない。</summary>
+    private static string? ReadEmbedded(string id)
+    {
+        var asm = typeof(EditPage).Assembly;
+        string path = asm.GetName().Name + ".Layouts." + id + ".txt";
+        using var stream = asm.GetManifestResourceStream(path);
+        if (stream == null) return null;
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
     }
 
     private async Task OnOfChange(ChangeEventArgs e)
@@ -209,9 +304,14 @@
         _originalText = null;
         _selectedLine = -1;
         _status = "";
+        // ⭐ 別の文書になるので、取り消しの積みは引き継がない（前の骨組みの姿を
+        //    別の骨組みへ Undo で持ち込むと事故る）。
+        _undo.Clear();
+        _redo.Clear();
         RefreshView();
         await Js.InvokeVoidAsync("eggEdit.rering", "");
-        if (!string.IsNullOrEmpty(_folder)) await LoadFile();
+        if (_demo) LoadDemo();
+        else if (!string.IsNullOrEmpty(_folder)) await LoadFile();
     }
 
     /// <summary>⚠️ `LayoutStore` は静的（プロセス全体で共有）。未保存の姿を
@@ -237,6 +337,9 @@
         _raw = Core.Layouts.Parse(_of, text);
         _selectedLine = -1;
         _status = "";
+        // ⭐ ディスクから読み直した＝新しい文書として扱う（前の取り消しは意味を失う）。
+        _undo.Clear();
+        _redo.Clear();
         Refresh();
         await Js.InvokeVoidAsync("eggEdit.rering", "");
     }
@@ -270,24 +373,359 @@
 
     // ── 直す ────────────────────────────────────────
 
-    private void ApplyLeft(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, v, n.Top, n.Width, n.Height,
-        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator));
-    private void ApplyTop(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, n.Left, v, n.Width, n.Height,
-        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator));
-    private void ApplyWidth(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, n.Left, n.Top, v, n.Height,
-        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator));
-    private void ApplyHeight(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, n.Left, n.Top, n.Width, v,
-        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator));
+    // ⚠️ **作り直すとき `PartId`/`PartLine` も必ず運ぶ。**
+    //    ⭐ これは省略可能引数なので、書き忘れると**黙って null / -1 に落ちる**
+    //    ── 今はまだ選べるのが自前の節点（`PartId == null`）だけなので実害が無く、
+    //    ⚠️ **部品ファイルへ切り替える一手を足した日に、初めて壊れる**形になる。
 
+    private void ApplyLeft(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, v, n.Top, n.Width, n.Height,
+        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+    private void ApplyTop(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, n.Left, v, n.Width, n.Height,
+        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+    private void ApplyWidth(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, n.Left, n.Top, v, n.Height,
+        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+    private void ApplyHeight(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, n.Left, n.Top, n.Width, v,
+        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+
+    /// <summary>数を打った1回（＋ − や欄の入力）。⭐ **これで1つの取り消し**（Begin〜Commit
+    /// を1回で閉じる）。⚠️ ドラッグ中の毎フレーム呼び出し（<see cref="Dragging"/>）は
+    /// これを通らない ── 通ると1動作が何十件も積まれてしまう。</summary>
     private void Apply(Func<LayoutNode, LayoutNode> edit)
     {
         if (_raw is null || _selectedLine < 0) return;
-        var roots = ReplaceLine(_raw.Roots, _selectedLine, edit);
+        BeginAction();
+        ApplyRaw(_selectedLine, edit);
+        CommitAction();
+    }
+
+    /// <summary>不変の木を「その1本の行だけ」差し替えて組み直す。⚠️ 取り消しの積みには
+    /// 触らない（積むのは <see cref="BeginAction"/>/<see cref="CommitAction"/> の対で
+    /// 1回だけ ── ここは <see cref="Apply"/> と、ドラッグ中の毎フレーム更新の両方が通る）。</summary>
+    private void ApplyRaw(int line, Func<LayoutNode, LayoutNode> edit)
+    {
+        if (_raw is null) return;
+        var roots = ReplaceLine(_raw.Roots, line, edit);
         _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
         SyncFields();
         Refresh();
-        _ = Js.InvokeVoidAsync("eggEdit.rering", _selectedLine.ToString(CultureInfo.InvariantCulture));
+        _ = Js.InvokeVoidAsync("eggEdit.rering", line.ToString(CultureInfo.InvariantCulture));
         StateHasChanged();
+    }
+
+    // ── 取り消し／やり直し ──────────────────────────
+
+    private void BeginAction()
+    {
+        _pendingBefore = _raw is null ? null : Core.Layouts.Write(_raw);
+    }
+
+    /// <summary>⭐ **変わっていなければ積まない**（動かしただけで元の位置に吸い付いて
+    /// 戻った、掴んで離しただけ、等）。⚠️ ここが唯一の「積む」場所 ── 積む場所を
+    /// 増やすと「1動作＝1積み」が崩れる。</summary>
+    private void CommitAction()
+    {
+        if (_pendingBefore is null || _raw is null) { _pendingBefore = null; return; }
+        string after = Core.Layouts.Write(_raw);
+        if (after != _pendingBefore)
+        {
+            _undo.Add(_pendingBefore);
+            _redo.Clear();   // ⭐ 新しい動作をしたら、やり直しの筋は消える（一般的な作法）
+        }
+        _pendingBefore = null;
+    }
+
+    [JSInvokable]
+    public void Undo() => ApplyHistory(_undo, _redo);
+
+    [JSInvokable]
+    public void Redo() => ApplyHistory(_redo, _undo);
+
+    private void ApplyHistory(List<string> from, List<string> to)
+    {
+        if (_raw is null || from.Count == 0) return;
+        string current = Core.Layouts.Write(_raw);
+        string prior = from[from.Count - 1];
+        from.RemoveAt(from.Count - 1);
+        to.Add(current);
+        _raw = Core.Layouts.Parse(_of, prior);
+        // ⭐ 選んでいる行は動かさない（値が変わるだけで、同じ行を指し続ける）。
+        SyncFields();
+        Refresh();
+        _ = Js.InvokeVoidAsync("eggEdit.rering",
+            _selectedLine >= 0 ? _selectedLine.ToString(CultureInfo.InvariantCulture) : "");
+        StateHasChanged();
+    }
+
+    // ── 掴んで動かす ────────────────────────────────
+
+    /// <summary>盤の透明な覆い（`edcap`）が、遊びのしきい値（12px）を超えて動いたと
+    /// 判断した瞬間に呼ばれる。⭐ ここで選択も同時に済ませる（掴む＝選ぶ）。</summary>
+    [JSInvokable]
+    public void DragStart(string line)
+    {
+        if (_raw is null) return;
+        _selectedLine = int.TryParse(line, out var n) ? n : -1;
+        _dragOrigin = _selectedLine < 0 ? null : Find(_raw.Roots, _selectedLine);
+        if (_dragOrigin is null) return;
+        BeginAction();
+        SyncFields();
+        StateHasChanged();
+    }
+
+    /// <param name="dx">⚠️ 掴んだ瞬間からの**累計**（設計px・盤の倍率 k で割ったあと。
+    /// `edit.js` 側で割っている）。毎フレーム「今の位置」から積むと、吸い付きの丸めが
+    /// 重なって暴れるので、必ず <see cref="_dragOrigin"/> からの累計で計算する。</param>
+    [JSInvokable]
+    public void Dragging(double dx, double dy)
+    {
+        if (_raw is null || _dragOrigin is null || _selectedLine < 0) return;
+        float left = _dragOrigin.Left + (float)dx;
+        float top = _dragOrigin.Top + (float)dy;
+        var (snapLeft, snapTop, guideX, guideY) = SnapMove(_dragOrigin, left, top);
+        ApplyRaw(_selectedLine, n => new LayoutNode(n.Name, n.Kind, snapLeft, snapTop, n.Width, n.Height,
+            n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+        _ = Js.InvokeVoidAsync("eggEdit.guide", guideX, guideY);
+    }
+
+    [JSInvokable]
+    public void DragEnd()
+    {
+        CommitAction();
+        _dragOrigin = null;
+        _ = Js.InvokeVoidAsync("eggEdit.guide", null, null);
+        StateHasChanged();   // ⭐ 取り消し釦の件数を更新するため
+    }
+
+    // ── 大きさを変える ──────────────────────────────
+
+    [JSInvokable]
+    public void ResizeStart(string handle)
+    {
+        if (_raw is null || _selectedLine < 0) return;
+        _resizeHandle = handle;
+        _resizeOrigin = Find(_raw.Roots, _selectedLine);
+        if (_resizeOrigin is null) return;
+        BeginAction();
+    }
+
+    [JSInvokable]
+    public void Resizing(double dx, double dy)
+    {
+        if (_raw is null || _resizeOrigin is null || _resizeHandle is null || _selectedLine < 0) return;
+        var (left, top, width, height) = ResizedRect(_resizeOrigin, _resizeHandle, (float)dx, (float)dy);
+        var (snapLeft, snapTop, snapW, snapH, guideX, guideY) =
+            SnapResize(_resizeOrigin, _resizeHandle, left, top, width, height);
+        // 🔴 幅・高さは0以下にしない。`Faults` が言うのは正しいが、エディタが自分で作ってはいけない。
+        snapW = Math.Max(MinSize, snapW);
+        snapH = Math.Max(MinSize, snapH);
+        ApplyRaw(_selectedLine, n => new LayoutNode(n.Name, n.Kind, snapLeft, snapTop, snapW, snapH,
+            n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+        _ = Js.InvokeVoidAsync("eggEdit.guide", guideX, guideY);
+    }
+
+    [JSInvokable]
+    public void ResizeEnd()
+    {
+        CommitAction();
+        _resizeHandle = null;
+        _resizeOrigin = null;
+        _ = Js.InvokeVoidAsync("eggEdit.guide", null, null);
+        StateHasChanged();   // ⭐ 取り消し釦の件数を更新するため
+    }
+
+    /// <summary>掴みどころと指の移動から、次の矩形を作る（まだ吸い付かせない ──
+    /// 吸い付きは <see cref="SnapResize"/> が別に持つ）。
+    /// ⚠️ 縮める向き（n/w）は、反対の辺（動かない辺）を超えて反転しないよう、
+    /// その場で `MinSize` に止める。</summary>
+    private static (float Left, float Top, float Width, float Height) ResizedRect(
+        LayoutNode n, string handle, float dx, float dy)
+    {
+        float left = n.Left, top = n.Top, width = n.Width, height = n.Height;
+        bool west = handle.IndexOf('w') >= 0, east = handle.IndexOf('e') >= 0;
+        bool north = handle.IndexOf('n') >= 0, south = handle.IndexOf('s') >= 0;
+
+        if (east) width = Math.Max(MinSize, n.Width + dx);
+        if (west)
+        {
+            float right = n.Left + n.Width;
+            left = Math.Min(n.Left + dx, right - MinSize);
+            width = right - left;
+        }
+        if (south) height = Math.Max(MinSize, n.Height + dy);
+        if (north)
+        {
+            float bottom = n.Top + n.Height;
+            top = Math.Min(n.Top + dy, bottom - MinSize);
+            height = bottom - top;
+        }
+        return (left, top, width, height);
+    }
+
+    // ── 吸い付き ────────────────────────────────────
+
+    /// <summary>この節点の親と兄弟。⚠️ `_raw`（原文の生の木）だけを見る ──
+    /// `use=` を展開した解決済みの木では行番号が失われ、道しるべにできない。</summary>
+    private (LayoutNode? Parent, IReadOnlyList<LayoutNode> Siblings) Locate(int line)
+    {
+        if (_raw != null && LocateIn(_raw.Roots, line, null, out var parent, out var siblings))
+            return (parent, siblings);
+        return (null, Array.Empty<LayoutNode>());
+    }
+
+    private static bool LocateIn(IReadOnlyList<LayoutNode> list, int line, LayoutNode? parent,
+        out LayoutNode? foundParent, out IReadOnlyList<LayoutNode> foundSiblings)
+    {
+        foreach (var n in list)
+        {
+            if (n.LineNumber == line) { foundParent = parent; foundSiblings = list; return true; }
+            if (LocateIn(n.Children, line, n, out foundParent, out foundSiblings)) return true;
+        }
+        foundParent = null;
+        foundSiblings = Array.Empty<LayoutNode>();
+        return false;
+    }
+
+    /// <summary>横方向の吸い付き先（設計px）。⭐ 兄弟の左・右・中心と、親の枠の左・右・
+    /// 中心（根っこなら画面そのもの）。⚠️ 道しるべの字（`"line:42:right"` 等）は
+    /// `edit.js` が実 DOM から絶対位置を読み直すための索引 ── ここでは値は要らない。</summary>
+    private List<(float Value, string Token)> TargetsX(
+        LayoutNode node, LayoutNode? parent, IReadOnlyList<LayoutNode> siblings)
+    {
+        var list = new List<(float, string)>();
+        float parentW = parent?.Width ?? Core.Layouts.ScreenWidth;
+        string ptag = parent != null ? "line:" + parent.LineNumber.ToString(CultureInfo.InvariantCulture) : "stage";
+        list.Add((0f, ptag + ":left"));
+        list.Add((parentW, ptag + ":right"));
+        list.Add((parentW / 2f, ptag + ":centerx"));
+        foreach (var sib in siblings)
+        {
+            if (sib.LineNumber == node.LineNumber || sib.LineNumber < 0) continue;
+            string tag = "line:" + sib.LineNumber.ToString(CultureInfo.InvariantCulture);
+            list.Add((sib.Left, tag + ":left"));
+            list.Add((sib.Left + sib.Width, tag + ":right"));
+            list.Add((sib.Left + sib.Width / 2f, tag + ":centerx"));
+        }
+        return list;
+    }
+
+    private List<(float Value, string Token)> TargetsY(
+        LayoutNode node, LayoutNode? parent, IReadOnlyList<LayoutNode> siblings)
+    {
+        var list = new List<(float, string)>();
+        float parentH = parent?.Height ?? Core.Layouts.ScreenHeight;
+        string ptag = parent != null ? "line:" + parent.LineNumber.ToString(CultureInfo.InvariantCulture) : "stage";
+        list.Add((0f, ptag + ":top"));
+        list.Add((parentH, ptag + ":bottom"));
+        list.Add((parentH / 2f, ptag + ":centery"));
+        foreach (var sib in siblings)
+        {
+            if (sib.LineNumber == node.LineNumber || sib.LineNumber < 0) continue;
+            string tag = "line:" + sib.LineNumber.ToString(CultureInfo.InvariantCulture);
+            list.Add((sib.Top, tag + ":top"));
+            list.Add((sib.Top + sib.Height, tag + ":bottom"));
+            list.Add((sib.Top + sib.Height / 2f, tag + ":centery"));
+        }
+        return list;
+    }
+
+    /// <summary>1点を、いちばん近い吸い付き先へ丸める。⭐ 兄弟・親の辺と「きざみ」を
+    /// **同列の候補**として扱う ── どちらが勝つかは距離だけで決める。
+    /// ⚠️ 8設計px を超えたら何も返さない（<see cref="SnapRange"/> が唯一の出所）。</summary>
+    private (float Value, string? Token) SnapPoint(float value, List<(float Value, string Token)> targets)
+    {
+        float stepTarget = _step > 0 ? MathF.Round(value / _step) * _step : value;
+        float bestDist = SnapRange;
+        float snapped = value;
+        string? token = null;
+        void Try(float t, string tok)
+        {
+            float d = Math.Abs(t - value);
+            if (d <= bestDist) { bestDist = d; snapped = t; token = tok; }
+        }
+        Try(stepTarget, "step");
+        foreach (var (v, tok) in targets) Try(v, tok);
+        return (snapped, token);
+    }
+
+    /// <summary>移動（並行移動）の吸い付き。⭐ 節点の**3つの辺**（起点・終点・中心）
+    /// それぞれについて最寄りの吸い付き先を試し、いちばん近い1つだけを採用する
+    /// （3つとも動かすと矛盾する ── 並行移動は1つのずれ量しか持てない）。</summary>
+    private (float Start, string? Token) SnapAxis(
+        float start, float length, List<(float Value, string Token)> targets)
+    {
+        float end = start + length;
+        float center = start + length / 2f;
+        (float Edge, float Offset)[] trials = { (start, 0f), (end, -length), (center, -length / 2f) };
+        float bestDist = SnapRange;
+        float snappedStart = start;
+        string? token = null;
+        foreach (var (edge, offset) in trials)
+        {
+            var (snapped, tok) = SnapPoint(edge, targets);
+            if (tok is null) continue;
+            float dist = Math.Abs(snapped - edge);
+            if (dist <= bestDist) { bestDist = dist; snappedStart = snapped + offset; token = tok; }
+        }
+        return token != null ? (snappedStart, token) : (start, null);
+    }
+
+    private (float Left, float Top, string? GuideX, string? GuideY) SnapMove(LayoutNode node, float left, float top)
+    {
+        var (parent, siblings) = Locate(node.LineNumber);
+        var xt = TargetsX(node, parent, siblings);
+        var yt = TargetsY(node, parent, siblings);
+        var (snapLeft, gx) = SnapAxis(left, node.Width, xt);
+        var (snapTop, gy) = SnapAxis(top, node.Height, yt);
+        return (snapLeft, snapTop, gx, gy);
+    }
+
+    /// <summary>大きさ変更の吸い付き。⭐ 動いている辺**だけ**を吸い付かせる
+    /// （動いていない辺は掴みどころの意味どおり固定のまま）。</summary>
+    private (float Left, float Top, float Width, float Height, string? GuideX, string? GuideY) SnapResize(
+        LayoutNode node, string handle, float left, float top, float width, float height)
+    {
+        var (parent, siblings) = Locate(node.LineNumber);
+        bool west = handle.IndexOf('w') >= 0, east = handle.IndexOf('e') >= 0;
+        bool north = handle.IndexOf('n') >= 0, south = handle.IndexOf('s') >= 0;
+        string? gx = null, gy = null;
+
+        if (east || west)
+        {
+            var xt = TargetsX(node, parent, siblings);
+            if (east)
+            {
+                var (snapped, tok) = SnapPoint(left + width, xt);
+                if (tok != null) { width = Math.Max(MinSize, snapped - left); gx = tok; }
+            }
+            else
+            {
+                float right = node.Left + node.Width;
+                var (snapped, tok) = SnapPoint(left, xt);
+                if (tok != null) { left = Math.Min(snapped, right - MinSize); width = right - left; gx = tok; }
+            }
+        }
+        if (north || south)
+        {
+            var yt = TargetsY(node, parent, siblings);
+            if (south)
+            {
+                var (snapped, tok) = SnapPoint(top + height, yt);
+                if (tok != null) { height = Math.Max(MinSize, snapped - top); gy = tok; }
+            }
+            else
+            {
+                float bottom = node.Top + node.Height;
+                var (snapped, tok) = SnapPoint(top, yt);
+                if (tok != null) { top = Math.Min(snapped, bottom - MinSize); height = bottom - top; gy = tok; }
+            }
+        }
+        return (left, top, width, height, gx, gy);
     }
 
     /// <summary>不変の木を「その1本の行だけ」差し替えて組み直す。
@@ -302,7 +740,8 @@
             if (n.LineNumber == line) { result.Add(edit(n)); continue; }
             var kids = ReplaceLine(n.Children, line, edit);
             result.Add(new LayoutNode(n.Name, n.Kind, n.Left, n.Top, n.Width, n.Height,
-                n.Options, kids, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator));
+                n.Options, kids, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+                n.PartId, n.PartLine));
         }
         return result;
     }
@@ -423,6 +862,11 @@
                 // ⭐ 書いた字そのものから読み直す ── 出所を1つに保つ
                 _raw = Core.Layouts.Parse(_of, candidate);
                 _status = "保存しました";
+                // ⚠️ **取り消しの積みは捨てない。**保存は「ここより前には戻れない関所」
+                //    ではなく、ディスクへの書き出しでしかない ── 保存の直後に誤って
+                //    直したときも Ctrl+Z で保存前の姿へ戻れたほうが安全。積みは
+                //    `Layouts.Write` の**文字列**を持っているだけなので、`_raw` を
+                //    読み直しても Undo は問題なく効く（オブジェクト参照に依存しない）。
                 break;
             case "changed":
                 _status = "⚠️ このファイルは開いた後に外部で変わっています。保存を中止しました。"
@@ -476,9 +920,35 @@
         builder.CloseElement();
     };
 
+    /// <summary>🔴 **離れる「前」に差し替えを解く。**
+    ///
+    /// ⚠️ <see cref="Dispose"/> だけでは**遅い**。次の頁（`/box` など）が先に描かれ、
+    /// **未保存の姿がそのまま遊ぶ画面に出たまま残る** ── しかも誰も組み直さないので
+    /// 「1拍だけ」では済まず、次に何かが再描画するまで居座る。
+    /// ⭐ 2026-08-23 に実測: 骨組みの `左` を 26 → 56 にして `/box` へ移ると、
+    /// 遊ぶ画面が **56 のまま**（素の値は 26）。
+    ///
+    /// ⚠️ `LayoutStore` が静的（プロセス全体で共有）である以上、
+    /// 「解くのが遅い」は必ずこの形で漏れる。</summary>
+    private IDisposable? _leaving;
+
+    protected override void OnInitialized()
+    {
+        _leaving = Nav.RegisterLocationChangingHandler(_ =>
+        {
+            ClearOverrides();
+            return ValueTask.CompletedTask;
+        });
+    }
+
     public void Dispose()
     {
-        ClearOverrides();
+        _leaving?.Dispose();   // ⚠️ 頁が消えたあとも掛け金が残ると、次の遷移で死んだ頁を呼ぶ
+        ClearOverrides();     // ⭐ 念のため（上の掛け金が走らない道 ── 直接の破棄 ── のため）
+        // ⚠️ `eggEdit.keys` は document に直接 keydown を付けている。DOM がこの頁の
+        //    ものでなくなっても listener 自体は自然には外れない ── 外さないと
+        //    `/app`（遊ぶ頁）へ移っても Ctrl+Z を奪い続ける。
+        _ = Js.InvokeVoidAsync("eggEdit.stop");
         _me?.Dispose();
     }
 }

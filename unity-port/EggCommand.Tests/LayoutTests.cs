@@ -500,6 +500,70 @@ row card 0 120 100 40 repeat=stats max=6")));
         Assert.True(Layouts.WhenNot(got.Roots[0].Children[0]));
     }
 
+    // ── PartId / PartLine ── ⭐ 差し込まれた節点の「どこの行か」────
+
+    /// <summary>⭐ **自前の行は `PartId` を持たない。**⚠️ `LineNumber` が既に出所
+    /// なので、`PartId` は差し込まれた側（`LineNumber == -1`）だけの印。</summary>
+    [Fact]
+    public void 自前の節点はPartIdを持たない()
+    {
+        var main = Layouts.Parse("main", "slot box 0 0 400 300 use=part");
+        var got = Layouts.Resolve(main, n => Find(n, ("part", "a label 0 0 100 40")));
+        var slot = got.Roots[0];
+        Assert.Equal(0, slot.LineNumber);
+        Assert.Null(slot.PartId);
+        Assert.Equal(-1, slot.PartLine);
+    }
+
+    /// <summary>⭐ **差し込まれた節点は、部品ファイルの名前と、その中の行番号を持つ。**
+    /// ⚠️ これが「掴めるようにする」ではなく「どこの行か言える」の土台。</summary>
+    [Fact]
+    public void 差し込まれた節点は出所を持つ()
+    {
+        var main = Layouts.Parse("main", "slot box 0 0 400 300 use=part");
+        var got = Layouts.Resolve(main, n => Find(n, ("part", @"a label 0 0 100 40
+b label 0 60 100 40")));
+        var a = got.Roots[0].Children[0];
+        var b = got.Roots[0].Children[1];
+        Assert.Equal(-1, a.LineNumber);
+        Assert.Equal("part", a.PartId);
+        Assert.Equal(0, a.PartLine);   // ⭐ part.txt の1行目（0始まり）
+        Assert.Equal("part", b.PartId);
+        Assert.Equal(1, b.PartLine);   // ⭐ part.txt の2行目
+    }
+
+    /// <summary>⚠️ 🔴 **入れ子の `use=` は、一番内側（いちばん具体的）の出所を残す。**
+    ///
+    /// ⭐ 実物の32枚には入れ子の形が無いので、ここで組んで確かめる
+    /// （`outer` がさらに `use=inner` で `inner` を差す3段）。
+    ///
+    /// ⚠️ **決めた理由**: エディタが次にやりたいのは「その節点が書いてある
+    /// 部品ファイルへ切り替える」こと。外側（`outer`）を刻んでも、
+    /// `outer.txt` にはその節点自身の行が無い（`use=inner` の参照が1行あるだけ）
+    /// ので、切り替え先として意味がない。だから深いほうを残す。</summary>
+    [Fact]
+    public void 入れ子のuseは一番内側の出所を残す()
+    {
+        var main = Layouts.Parse("main", "slot box 0 0 400 300 use=outer");
+        var got = Layouts.Resolve(main, n => Find(n,
+            ("outer", "mid box 0 0 400 300 use=inner"),
+            ("inner", "leaf label 0 0 100 40")));
+
+        var mid = got.Roots[0].Children[0];
+        Assert.Equal("slot-mid", mid.Name);
+        Assert.Equal(-1, mid.LineNumber);
+        Assert.Equal("outer", mid.PartId);      // ⭐ mid 自身は outer.txt の1行目
+        Assert.Equal(0, mid.PartLine);
+
+        var leaf = mid.Children[0];
+        Assert.Equal("slot-mid-leaf", leaf.Name);
+        Assert.Equal(-1, leaf.LineNumber);
+        // ⚠️ 🔴 ここが要 ── "outer" ではなく "inner" のまま（内側で決まった出所を
+        //    外側の Rename が上書きしない）。
+        Assert.Equal("inner", leaf.PartId);
+        Assert.Equal(0, leaf.PartLine);         // ⭐ leaf 自身は inner.txt の1行目
+    }
+
     // ── flow=down ── ⭐ 兄弟を上から詰める ──────────────
 
     /// <summary>⭐ **`上` は「その上に空ける隙間」になる。**</summary>

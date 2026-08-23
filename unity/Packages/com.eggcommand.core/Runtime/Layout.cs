@@ -58,7 +58,9 @@ namespace EggCommand.Core
         /// -1 になるのは、**差し込まれた側**（`use=` で差した部品の中身。
         /// <see cref="Layouts.Rename"/> を通る）だけ ── 別ファイルの行番号を
         /// この骨組みの選択に使うと指し示す先を取り違えるので、そこだけ意図的に捨てる。
-        /// ⭐ これがエディタの `data-line`（節点を選ぶ土台）の出所そのもの。</summary>
+        /// ⭐ これがエディタの `data-line`（節点を選ぶ土台）の出所そのもの。
+        /// ⚠️ -1 のとき、捨てた行番号の代わりが <see cref="PartId"/>/<see cref="PartLine"/>
+        /// （どの部品ファイルの何行目か）── 消える出所を、指し示せる形に付け替えて残す。</summary>
         public readonly int LineNumber;
         /// <summary>行頭の空白の数（字下げ）。</summary>
         public readonly int Indent;
@@ -71,6 +73,21 @@ namespace EggCommand.Core
         /// <summary>この行の終端文字。`"\r\n"` / `"\n"` / `""`（最終行で改行が無い）。</summary>
         public readonly string Terminator;
 
+        /// <summary>差し込まれた節点（<see cref="LineNumber"/> が -1）が、
+        /// **どの部品ファイルから来たか**（例: `"panel"`）。⚠️ 自前の行なら null。
+        ///
+        /// ⭐ <see cref="Layouts.Rename"/> が、`use=` を差すたびに刻む ── これが無いと
+        /// 「選べない」だけでなく「どこの行か言えない」ままになる
+        /// （エディタが部品ファイルへ切り替える、次の一手の土台）。
+        /// ⚠️ 入れ子（部品がさらに `use=` する）のときは、**一番内側**
+        /// （実際にその節点が書いてある、いちばん具体的なファイル）を残す
+        /// ── 外側の部品ファイルを開いても、そこにはその節点自身は無い
+        /// （`use=` の参照が書いてあるだけ）ので、切り替え先として意味がない。</summary>
+        public readonly string PartId;
+        /// <summary><see cref="PartId"/> のファイルの中での行番号（0始まり）。
+        /// ⚠️ <see cref="PartId"/> が null なら -1。</summary>
+        public readonly int PartLine;
+
         public LayoutNode(string name, string kind, float left, float top, float width, float height,
             IReadOnlyDictionary<string, string> options, IReadOnlyList<LayoutNode> children)
             : this(name, kind, left, top, width, height, options, children, -1, 0, null, "", "\n")
@@ -79,10 +96,15 @@ namespace EggCommand.Core
 
         /// <summary>⚠️ <see cref="Layouts.Parse"/> 専用。行の情報まで持つ節点を組み立てる。
         /// ⭐ 上の（短い）コンストラクタは、行を知らない節点用 ── 呼び分ける理由が無い限り
-        /// 使わない（コードでは座標を作らない）。</summary>
+        /// 使わない（コードでは座標を作らない）。
+        ///
+        /// ⚠️ 🔴 **この形を変えないこと。**`partId`/`partLine` は末尾に足した既定値つきの
+        /// 省略可能引数 ── 既存の13引数呼び出し（`EditPage.razor` 等）は、
+        /// この2つを渡さなくてもそのままコンパイルが通る（省くと null / -1 のまま）。</summary>
         public LayoutNode(string name, string kind, float left, float top, float width, float height,
             IReadOnlyDictionary<string, string> options, IReadOnlyList<LayoutNode> children,
-            int lineNumber, int indent, IReadOnlyList<LayoutField> fields, string trailing, string terminator)
+            int lineNumber, int indent, IReadOnlyList<LayoutField> fields, string trailing, string terminator,
+            string partId = null, int partLine = -1)
         {
             Name = name;
             Kind = kind;
@@ -97,6 +119,8 @@ namespace EggCommand.Core
             Fields = fields ?? new List<LayoutField>();
             Trailing = trailing ?? "";
             Terminator = terminator ?? "";
+            PartId = partId;
+            PartLine = partLine;
         }
 
         public string Option(string key)
@@ -361,6 +385,112 @@ namespace EggCommand.Core
             Roots = roots;
             Lines = lines ?? new List<RawLine>();
             Resolved = resolved;
+        }
+    }
+
+    /// <summary>画面座標の矩形（1080x1920 の設計 px・**絶対**位置）。
+    ///
+    /// ⭐ <see cref="Fault"/> が「どこが悪いか」を形で持つための器。⚠️ 親からの相対
+    /// （<see cref="LayoutNode.Left"/> / <see cref="LayoutNode.Top"/>）ではない ──
+    /// エディタが盤へ描くとき、祖先を遡って足し直さずに済むようにするため。</summary>
+    public readonly struct Box
+    {
+        public readonly float X, Y, W, H;
+
+        public Box(float x, float y, float w, float h)
+        {
+            X = x;
+            Y = y;
+            W = w;
+            H = h;
+        }
+
+        public override string ToString() => $"{X},{Y} {W}x{H}";
+    }
+
+    /// <summary>不備の種類。⭐ **`problems.Add` していた箇所と1対1。**
+    /// ⚠️ 増やしたら <see cref="Layouts.Inspect"/> 側で必ず1箇所は使う ──
+    /// `LayoutFaultTests` が `Enum.GetValues` を舐めて「作れていない種類」を落とす。</summary>
+    public enum FaultKind
+    {
+        /// <summary>骨組みそのものが無い（`layout == null`）。</summary>
+        NoLayout,
+        /// <summary><see cref="Layouts.Kinds"/> に無い種類。</summary>
+        UnknownKind,
+        /// <summary>幅か高さが 0 以下。</summary>
+        ZeroSize,
+        /// <summary>`when=` はあるのに条件の名前が空（`when=!`）。</summary>
+        EmptyWhenName,
+        /// <summary>`text=` と `bind=` の両方がある（字の出所が2つ）。</summary>
+        TextAndBind,
+        /// <summary>字を出さない種類なのに `text=` がある。</summary>
+        TextOnNonText,
+        /// <summary>`host`（中を知らないと宣言した枠）の中に子がある。</summary>
+        HostWithChildren,
+        /// <summary>`icon` に `pic=` も `bind=` も無い（何の絵か言えていない）。</summary>
+        IconMissingSource,
+        /// <summary>`flow=` が `down` 以外（知らない値）。</summary>
+        UnknownFlow,
+        /// <summary><see cref="Layouts.Options"/> に無い付け足し。</summary>
+        UnknownOption,
+        /// <summary>`veil`（覆い）が画面いっぱいでない。</summary>
+        VeilNotFullScreen,
+        /// <summary>`pixel`/`round`/`icon` が正方形で書かれていない
+        /// （実際は短い辺で正方形に描かれる）。</summary>
+        NotSquare,
+        /// <summary>親の枠から横へはみ出し。</summary>
+        OverflowParentX,
+        /// <summary>親の枠から縦へはみ出し（巻物の中は見逃す）。</summary>
+        OverflowParentY,
+        /// <summary>画面（1080x1920）の外（巻物の中は見逃す）。</summary>
+        OffScreen,
+        /// <summary>押しどころの高さが <see cref="Layouts.TapHeight"/> 未満。</summary>
+        TapTooShort,
+        /// <summary>`repeat=` の `cols=` が1未満。</summary>
+        InvalidCols,
+        /// <summary>`repeat=` の `cols=` 枚が親の幅に収まらない。</summary>
+        ColsOverflow,
+        /// <summary>巻物の外で繰り返すのに `max=`（上限）が無い。</summary>
+        RepeatMissingMax,
+        /// <summary>`max=` まで並べると親の枠から縦へはみ出す。</summary>
+        RepeatMaxOverflow,
+        /// <summary>詰める（`flow=down`）親の中に、条件で入れ替わる2つがある。</summary>
+        ExclusivePairInFlow,
+        /// <summary>同じ親の中で名前が2つある。</summary>
+        DuplicateName,
+        /// <summary>字（`label`）どうしの重なり。</summary>
+        LabelOverlap,
+        /// <summary>押しどころ（`button`/`tap=`/`hold=`）どうしの重なり。</summary>
+        TapOverlap,
+    }
+
+    /// <summary>骨組みの不備1件。⭐ <see cref="Layouts.Faults"/> の字はここ（<see cref="Text"/>）
+    /// から取り出すだけ ── 出所は <see cref="Layouts.Inspect"/> 1つ。</summary>
+    public sealed class Fault
+    {
+        public FaultKind Kind;
+        /// <summary>骨組みの id（画面の <see cref="Layout.Id"/>）。
+        /// ⚠️ 骨組みそのものが無い（<see cref="FaultKind.NoLayout"/>）ときだけ null。</summary>
+        public string Id;
+        /// <summary>⭐ 今までと同じ字。1バイトも変えない（呼び出し側 43箇所が読む）。</summary>
+        public string Text;
+        /// <summary>関わる原文の行番号。0本・1本・2本。
+        /// ⚠️ -1（`use=` で差し込まれた側 ── 原文に無い）も、そのまま入れる。</summary>
+        public IReadOnlyList<int> Lines;
+        /// <summary>関わる枠（絶対座標）。0本・1本・2本。</summary>
+        public IReadOnlyList<Box> Boxes;
+        /// <summary>「ここが悪い」の形。⚠️ 形で示せないものを無理に埋めず null のままにする。</summary>
+        public Box? Focus;
+
+        public Fault(FaultKind kind, string id, string text,
+            IReadOnlyList<int> lines, IReadOnlyList<Box> boxes, Box? focus)
+        {
+            Kind = kind;
+            Id = id;
+            Text = text;
+            Lines = lines;
+            Boxes = boxes;
+            Focus = focus;
         }
     }
 
@@ -804,24 +934,43 @@ namespace EggCommand.Core
 
         // ── 検査（⭐ エンジン不要）────────────────────────
 
-        /// <summary>骨組みの不備を数える。⭐ **`InspectScreens` の静的版。**
+        /// <summary>0本のときに使い回す、空の行番号・枠。⚠️ 呼ぶたび新しい配列を
+        /// 作らせないための唯一の出所（`NoLayout` と、多くの単発不備が使う）。</summary>
+        private static readonly int[] NoLines = Array.Empty<int>();
+        private static readonly Box[] NoBoxes = Array.Empty<Box>();
+
+        /// <summary>骨組みの不備を、形（<see cref="Box"/>）まで持たせて数える。
+        /// ⭐ **`Faults` の本体はこちら。**
         ///
         /// ⚠️ 実物の字幅までは見られません（それは描いてからでないと分からない）。
         /// ⭐ ただし**枠どうしの関係**── 重なり・はみ出し・画面の外・押しどころの大きさ
-        /// ── はここで全部落ちます。</summary>
-        public static List<string> Faults(Layout layout)
+        /// ── はここで全部落ちます。
+        ///
+        /// ⚠️ 🔴 走査（<see cref="Walk"/> / <see cref="Siblings"/>）は**1本のまま**。
+        /// 字だけを見る版と形まで見る版を別々に歩かせると、いつか2つがずれる。</summary>
+        public static List<Fault> Inspect(Layout layout)
         {
-            var problems = new List<string>();
-            if (layout == null) { problems.Add("骨組みが無い"); return problems; }
+            var faults = new List<Fault>();
+            if (layout == null)
+            {
+                faults.Add(new Fault(FaultKind.NoLayout, null, "骨組みが無い", NoLines, NoBoxes, null));
+                return faults;
+            }
 
             // ⚠️ **根っこ同士も兄弟。**⭐ ここを見ていなくて、わざと重ねた2つの字が
             //    素通りした（2026-08-22・道具を壊して確かめたときに発覚）。
-            Siblings(layout.Id, layout.Id, layout.Roots, TopsOf2(layout.Roots), problems);
+            Siblings(layout.Id, layout.Id, 0f, 0f, layout.Roots, TopsOf2(layout.Roots), faults);
             foreach (var root in layout.Roots)
-                Walk(layout.Id, root, 0f, 0f, ScreenWidth, ScreenHeight, false, false, problems);
+                Walk(layout.Id, root, 0f, 0f, ScreenWidth, ScreenHeight, false, false, faults);
 
-            return problems;
+            return faults;
         }
+
+        /// <summary>骨組みの不備を数える。⭐ <see cref="Inspect"/> の薄い包み ──
+        /// 呼び出し側 43箇所（多くはテストの `Contains`）はこの字だけを見ている。
+        /// ⚠️ 🔴 ここで字を作り直さない（<see cref="Fault.Text"/> をそのまま渡す）
+        /// ── 出所が2つに割れると、いつか字が食い違う。</summary>
+        public static List<string> Faults(Layout layout) => Inspect(layout).ConvertAll(f => f.Text);
 
         /// <param name="parentScrolls">**直近の親**が巻物か。⭐ 「親の枠から縦へはみ出し」を
         /// 見逃す唯一の場合。</param>
@@ -835,57 +984,81 @@ namespace EggCommand.Core
         /// ⚠️ null なら骨組みに書いてある `上` をそのまま使う。</param>
         private static void Walk(string id, LayoutNode node,
             float parentX, float parentY, float parentW, float parentH,
-            bool parentScrolls, bool insideScroll, List<string> problems,
+            bool parentScrolls, bool insideScroll, List<Fault> problems,
             float? flowTop = null)
         {
+            // ⭐ 字を組む場所は今までと同じ（1バイトも変えない）。Boxes/Lines/Focus だけ
+            //    ここでまとめて足す ── call site ごとに手で書くと、いつか1つ書き忘れる。
+            void Add(FaultKind kind, string text, IReadOnlyList<int> lines,
+                IReadOnlyList<Box> boxes, Box? focus = null)
+                => problems.Add(new Fault(kind, id, text, lines, boxes, focus));
+
             // ⭐ **効く上端はここ1か所で決める。**⚠️ 以降で node.Top を直に読まない
             //    ── 読んだ場所だけ詰める前の数を見て、検査が嘘になる。
             float top = flowTop ?? node.Top;
-            bool known = false;
-            for (int i = 0; i < Kinds.Length; i++) if (Kinds[i] == node.Kind) { known = true; break; }
-            if (!known) problems.Add($"{id}/{node.Name}: 知らない種類「{node.Kind}」");
-
+            // ⚠️ 🔴 x・y（絶対座標）は、種類の検査より前に出す ── `box` は「知らない種類」
+            //    の不備にも要る（枠は種類が分からなくても場所は言える）。
             float x = parentX + node.Left;
             float y = parentY + top;
+            var box = new Box(x, y, node.Width, node.Height);
+
+            bool known = false;
+            for (int i = 0; i < Kinds.Length; i++) if (Kinds[i] == node.Kind) { known = true; break; }
+            if (!known)
+                Add(FaultKind.UnknownKind, $"{id}/{node.Name}: 知らない種類「{node.Kind}」",
+                    new[] { node.LineNumber }, new[] { box });
 
             if (node.Width <= 0f || node.Height <= 0f)
-                problems.Add($"{id}/{node.Name}: 大きさが 0 以下（{node.Width}x{node.Height}）");
+                Add(FaultKind.ZeroSize, $"{id}/{node.Name}: 大きさが 0 以下（{node.Width}x{node.Height}）",
+                    new[] { node.LineNumber }, new[] { box });
 
             // ⚠️ 条件の名前が空だと、何で出し分けるのか誰にも分からない
             if (node.Option("when") != null && string.IsNullOrEmpty(WhenOf(node)))
-                problems.Add($"{id}/{node.Name}: when= の名前が空");
+                Add(FaultKind.EmptyWhenName, $"{id}/{node.Name}: when= の名前が空",
+                    new[] { node.LineNumber }, new[] { box });
 
             // ⚠️ **同じ場所に2つの出所を置かない。**⭐ どちらが勝つかを
             //    描く側の順序が決めることになり、直したのに効かないが生まれる。
             if (node.Option("text") != null && node.Option("bind") != null)
-                problems.Add($"{id}/{node.Name}: text= と bind= の両方がある（字の出所は1つ）");
+                Add(FaultKind.TextAndBind,
+                    $"{id}/{node.Name}: text= と bind= の両方がある（字の出所は1つ）",
+                    new[] { node.LineNumber }, new[] { box });
 
             // ⚠️ 字を出さない種類に text= を書いても**どこにも出ない**
             if (node.Option("text") != null && !IsText(node.Kind) && !IsTappable(node.Kind))
-                problems.Add($"{id}/{node.Name}: 「{node.Kind}」は字を出さないのに text= がある");
+                Add(FaultKind.TextOnNonText,
+                    $"{id}/{node.Name}: 「{node.Kind}」は字を出さないのに text= がある",
+                    new[] { node.LineNumber }, new[] { box });
 
             // ⚠️ **中を知らないと宣言した枠に、子を書かせない。**
             //    ⭐ 書けるなら host ではなく、普通の入れ物（box）ですむ。
             if (IsHost(node) && node.Children.Count > 0)
-                problems.Add($"{id}/{node.Name}: host の中に子がある"
-                    + $"（{node.Children.Count}個）── 書けるなら box にする");
+                Add(FaultKind.HostWithChildren,
+                    $"{id}/{node.Name}: host の中に子がある（{node.Children.Count}個）── 書けるなら box にする",
+                    new[] { node.LineNumber }, new[] { box });
 
             // ⚠️ **絵の印には名前が要る。**⭐ `pic=` か `bind=`（描く側が選ぶ）。
             //    ⚠️ どちらも無いと、**何も出ない四角**が黙って置かれる。
             if (node.Kind == "icon" && node.Option("pic") == null && node.Option("bind") == null)
-                problems.Add($"{id}/{node.Name}: icon に pic= も bind= も無い（何の絵か言えていない）");
+                Add(FaultKind.IconMissingSource,
+                    $"{id}/{node.Name}: icon に pic= も bind= も無い（何の絵か言えていない）",
+                    new[] { node.LineNumber }, new[] { box });
 
             // ⚠️ **`flow=` は down しか無い。**⭐ 綴り違いが黙って
             //    「詰めない」に落ちると、重なった画面がそのまま出る。
             if (node.Option("flow") != null && !Flows(node))
-                problems.Add($"{id}/{node.Name}: flow=「{node.Option("flow")}」は知らない（down だけ）");
+                Add(FaultKind.UnknownFlow,
+                    $"{id}/{node.Name}: flow=「{node.Option("flow")}」は知らない（down だけ）",
+                    new[] { node.LineNumber }, new[] { box });
 
             // ⚠️ 知らない付け足しを黙って無視しない（#5）
             foreach (var pair in node.Options)
             {
                 bool listed = false;
                 for (int i = 0; i < Options.Length; i++) if (Options[i] == pair.Key) { listed = true; break; }
-                if (!listed) problems.Add($"{id}/{node.Name}: 知らない付け足し「{pair.Key}=」");
+                if (!listed)
+                    Add(FaultKind.UnknownOption, $"{id}/{node.Name}: 知らない付け足し「{pair.Key}=」",
+                        new[] { node.LineNumber }, new[] { box });
             }
 
             // ⚠️ **覆いは画面いっぱいでなければ意味がない。**
@@ -895,8 +1068,9 @@ namespace EggCommand.Core
                     || Math.Abs(node.Height - ScreenHeight) > 0.5f
                     || Math.Abs(node.Left) > 0.5f || Math.Abs(node.Top) > 0.5f))
             {
-                problems.Add($"{id}/{node.Name}: 覆いが画面いっぱいでない"
-                    + $"（{node.Left},{node.Top} {node.Width}x{node.Height}）── 隙間から後ろが押せる");
+                Add(FaultKind.VeilNotFullScreen,
+                    $"{id}/{node.Name}: 覆いが画面いっぱいでない（{node.Left},{node.Top} {node.Width}x{node.Height}）── 隙間から後ろが押せる",
+                    new[] { node.LineNumber }, new[] { box }, VeilGap(x, y, node.Width, node.Height));
             }
 
             // ⚠️ **検査する枠と、実際に描かれる枠を食い違わせない**（#3）。
@@ -905,8 +1079,10 @@ namespace EggCommand.Core
             if ((node.Kind == "pixel" || node.Kind == "round" || node.Kind == "icon")
                 && Math.Abs(node.Width - node.Height) > 0.5f)
             {
-                problems.Add($"{id}/{node.Name}: {node.Kind} は正方形で描かれる"
-                    + $"（{node.Width}x{node.Height} と書いても {Math.Min(node.Width, node.Height)} 角になる）");
+                float side = Math.Min(node.Width, node.Height);
+                Add(FaultKind.NotSquare,
+                    $"{id}/{node.Name}: {node.Kind} は正方形で描かれる（{node.Width}x{node.Height} と書いても {side} 角になる）",
+                    new[] { node.LineNumber }, new[] { box }, new Box(x, y, side, side));
             }
 
             // ⚠️ 親の外へ出ていないか。
@@ -917,16 +1093,25 @@ namespace EggCommand.Core
             {
                 if (node.Left < -0.5f || node.Left + node.Width > parentW + 0.5f)
                 {
-                    problems.Add($"{id}/{node.Name}: 親の枠から横へはみ出し"
-                        + $"（子 左{node.Left} 幅{node.Width} / 親 幅{parentW}）");
+                    // ⭐ 左右どちらへ出たかで帯の向きが変わる（両方は無い ── 幅が親を超えない限り）。
+                    Box focus = node.Left < -0.5f
+                        ? new Box(x, y, parentX - x, node.Height)
+                        : new Box(parentX + parentW, y, (x + node.Width) - (parentX + parentW), node.Height);
+                    Add(FaultKind.OverflowParentX,
+                        $"{id}/{node.Name}: 親の枠から横へはみ出し（子 左{node.Left} 幅{node.Width} / 親 幅{parentW}）",
+                        new[] { node.LineNumber }, new[] { box }, focus);
                 }
             }
             if (parentH > 0f && !parentScrolls)
             {
                 if (top < -0.5f || top + node.Height > parentH + 0.5f)
                 {
-                    problems.Add($"{id}/{node.Name}: 親の枠から縦へはみ出し"
-                        + $"（子 上{top} 高{node.Height} / 親 高{parentH}）");
+                    Box focus = top < -0.5f
+                        ? new Box(x, y, node.Width, parentY - y)
+                        : new Box(x, parentY + parentH, node.Width, (y + node.Height) - (parentY + parentH));
+                    Add(FaultKind.OverflowParentY,
+                        $"{id}/{node.Name}: 親の枠から縦へはみ出し（子 上{top} 高{node.Height} / 親 高{parentH}）",
+                        new[] { node.LineNumber }, new[] { box }, focus);
                 }
             }
 
@@ -936,16 +1121,30 @@ namespace EggCommand.Core
             if (!insideScroll && (y < -0.5f || y + node.Height > ScreenHeight + 0.5f)) offScreen = true;
             if (offScreen)
             {
-                problems.Add($"{id}/{node.Name}: 画面の外（{x},{y} {node.Width}x{node.Height}）");
+                // ⭐ 横→縦の順に見て、最初に成り立った側の帯を出す
+                //    （どちらも成り立つ角の場合は横を優先 ── 単一の Focus しか持てないため）。
+                Box focus;
+                if (x < -0.5f) focus = new Box(x, y, -x, node.Height);
+                else if (x + node.Width > ScreenWidth + 0.5f)
+                    focus = new Box(ScreenWidth, y, (x + node.Width) - ScreenWidth, node.Height);
+                else if (!insideScroll && y < -0.5f) focus = new Box(x, y, node.Width, -y);
+                else focus = new Box(x, ScreenHeight, node.Width, (y + node.Height) - ScreenHeight);
+                Add(FaultKind.OffScreen, $"{id}/{node.Name}: 画面の外（{x},{y} {node.Width}x{node.Height}）",
+                    new[] { node.LineNumber }, new[] { box }, focus);
             }
 
             if (IsTappable(node.Kind) && node.Height < TapHeight - 0.5f)
             {
-                problems.Add($"{id}/{node.Name}: 押しどころの高さが {node.Height}"
-                    + $"。{TapHeight} 以上にする（指で押せない）");
+                Add(FaultKind.TapTooShort,
+                    $"{id}/{node.Name}: 押しどころの高さが {node.Height}。{TapHeight} 以上にする（指で押せない）",
+                    new[] { node.LineNumber }, new[] { box },
+                    new Box(x, y + node.Height, node.Width, TapHeight - node.Height));
             }
 
-            Siblings(id, node.Name, node.Children, TopsOf(node, null, null), problems);
+            // ⭐ **詰めた結果の上端の出所は1つ。**⚠️ ここで1度だけ数えて使い回す
+            //    ── 下のはみ出し検査（Exclusive）と最後の再帰、両方がこの並びを要る。
+            var tops = TopsOf(node, null, null);
+            Siblings(id, node.Name, x, y, node.Children, tops, problems);
 
             // ⭐ **並びの検査。**`repeat=` を持つ札は、`cols=` 枚が親の幅に収まるか。
             // ⚠️ ここを見ないと「3列で置いたら右端が切れる」が実機まで分からない。
@@ -958,10 +1157,13 @@ namespace EggCommand.Core
                 //    （実測 2026-08-22: 分解の一覧で 4列目が 22px 出ていた）。
                 float need = node.Left + cols * node.Width + (cols - 1) * gap;
                 if (cols < 1)
-                    problems.Add($"{id}/{node.Name}: cols= が {cols}（1以上）");
+                    Add(FaultKind.InvalidCols, $"{id}/{node.Name}: cols= が {cols}（1以上）",
+                        new[] { node.LineNumber }, new[] { box });
                 else if (parentW > 0f && need > parentW + 0.5f)
-                    problems.Add($"{id}/{node.Name}: {cols}列が親の幅に収まらない"
-                        + $"（左{node.Left} + 要る {need - node.Left} = {need} / 親 {parentW}）");
+                    Add(FaultKind.ColsOverflow,
+                        $"{id}/{node.Name}: {cols}列が親の幅に収まらない（左{node.Left} + 要る {need - node.Left} = {need} / 親 {parentW}）",
+                        new[] { node.LineNumber }, new[] { box },
+                        new Box(parentX + parentW, y, need - parentW, node.Height));
 
                 // ⚠️ **巻物の外で繰り返すなら、何段までかを宣言させる**（#7）。
                 //    ⭐ 繰り返しの数はデータ次第なので、検査は「何個来るか」を知らない。
@@ -971,15 +1173,19 @@ namespace EggCommand.Core
                     int max = node.Number("max", 0);
                     if (max <= 0)
                     {
-                        problems.Add($"{id}/{node.Name}: 巻物の外の繰り返しには max=（上限の個数）が要る");
+                        Add(FaultKind.RepeatMissingMax,
+                            $"{id}/{node.Name}: 巻物の外の繰り返しには max=（上限の個数）が要る",
+                            new[] { node.LineNumber }, new[] { box });
                     }
                     else if (parentH > 0f)
                     {
                         int rows = (max + cols - 1) / cols;
                         float deep = top + rows * StepOf(node) - gap;
                         if (deep > parentH + 0.5f)
-                            problems.Add($"{id}/{node.Name}: max={max} だと親の枠から縦へはみ出す"
-                                + $"（要る {deep} / 親 高{parentH}）");
+                            Add(FaultKind.RepeatMaxOverflow,
+                                $"{id}/{node.Name}: max={max} だと親の枠から縦へはみ出す（要る {deep} / 親 高{parentH}）",
+                                new[] { node.LineNumber }, new[] { box },
+                                new Box(x, parentY + parentH, node.Width, deep - parentH));
                     }
                 }
             }
@@ -997,15 +1203,21 @@ namespace EggCommand.Core
                 for (int i = 0; i < node.Children.Count; i++)
                     for (int j = i + 1; j < node.Children.Count; j++)
                         if (Exclusive(node.Children[i], node.Children[j]))
-                            problems.Add($"{id}/{node.Name}: 詰める中に入れ替わる2つ"
-                                + $"「{node.Children[i].Name}」×「{node.Children[j].Name}」"
-                                + "── 決め打ちの位置か、別の骨組みに置く");
+                        {
+                            var ci = node.Children[i];
+                            var cj = node.Children[j];
+                            Add(FaultKind.ExclusivePairInFlow,
+                                $"{id}/{node.Name}: 詰める中に入れ替わる2つ「{ci.Name}」×「{cj.Name}」── 決め打ちの位置か、別の骨組みに置く",
+                                new[] { ci.LineNumber, cj.LineNumber },
+                                new[]
+                                {
+                                    new Box(x + ci.Left, y + tops[i], ci.Width, ci.Height),
+                                    new Box(x + cj.Left, y + tops[j], cj.Width, cj.Height),
+                                });
+                        }
             }
 
             bool scrolls = node.Kind == "scroll";
-            // ⭐ **詰めた結果の上端で降りる。**⚠️ `TopsOf` が唯一の出所
-            //    ── 描く側と別々に数えたら、検査は別の画面を見ていることになる。
-            var tops = TopsOf(node, null, null);
             for (int i = 0; i < node.Children.Count; i++)
                 Walk(id, node.Children[i], x, y, node.Width, node.Height,
                     scrolls, insideScroll || scrolls, problems, tops[i]);
@@ -1021,15 +1233,24 @@ namespace EggCommand.Core
             return tops;
         }
 
-        private static void Siblings(string id, string owner,
-            IReadOnlyList<LayoutNode> list, float[] tops, List<string> problems)
+        /// <param name="ownerX">親（<paramref name="owner"/>）の絶対 X。⚠️ 根っこの一覧を
+        /// 見るときは 0（親が無い＝画面原点）。</param>
+        /// <param name="ownerY">親の絶対 Y。同上。</param>
+        private static void Siblings(string id, string owner, float ownerX, float ownerY,
+            IReadOnlyList<LayoutNode> list, float[] tops, List<Fault> problems)
         {
             for (int i = 0; i < list.Count; i++)
             {
+                var aBox = new Box(ownerX + list[i].Left, ownerY + tops[i], list[i].Width, list[i].Height);
                 for (int j = i + 1; j < list.Count; j++)
                 {
+                    var bBox = new Box(ownerX + list[j].Left, ownerY + tops[j], list[j].Width, list[j].Height);
+                    var lines = new[] { list[i].LineNumber, list[j].LineNumber };
+                    var boxes = new[] { aBox, bBox };
+
                     if (list[i].Name == list[j].Name)
-                        problems.Add($"{id}/{owner}: 「{list[i].Name}」が2つある");
+                        problems.Add(new Fault(FaultKind.DuplicateName, id,
+                            $"{id}/{owner}: 「{list[i].Name}」が2つある", lines, boxes, null));
 
                     if (!Overlaps(list[i], tops[i], list[j], tops[j])) continue;
                     // ⭐ 条件で入れ替わる2つは、同時には出ない
@@ -1038,8 +1259,9 @@ namespace EggCommand.Core
                     // ⭐ 字どうし。⚠️ 面（card）と字が重なるのは当たり前なので見ない
                     if (IsText(list[i].Kind) && IsText(list[j].Kind))
                     {
-                        problems.Add($"{id}/{owner}: 字の重なり"
-                            + $"「{list[i].Name}」×「{list[j].Name}」");
+                        problems.Add(new Fault(FaultKind.LabelOverlap, id,
+                            $"{id}/{owner}: 字の重なり「{list[i].Name}」×「{list[j].Name}」",
+                            lines, boxes, Intersect(aBox, bBox)));
                         continue;
                     }
 
@@ -1047,8 +1269,9 @@ namespace EggCommand.Core
                     //    2026-08-22 の初版は字しか見ておらず、釦が2枚重なっても素通りした。
                     if (Tappable(list[i]) && Tappable(list[j]))
                     {
-                        problems.Add($"{id}/{owner}: 押しどころの重なり"
-                            + $"「{list[i].Name}」×「{list[j].Name}」── 片方に指が届かない");
+                        problems.Add(new Fault(FaultKind.TapOverlap, id,
+                            $"{id}/{owner}: 押しどころの重なり「{list[i].Name}」×「{list[j].Name}」── 片方に指が届かない",
+                            lines, boxes, Intersect(aBox, bBox)));
                     }
                 }
             }
@@ -1058,6 +1281,39 @@ namespace EggCommand.Core
         /// ⚠️ 重なりの検査では長押しも数える ── 重なれば片方に指が届かないのは同じ。</summary>
         private static bool Tappable(LayoutNode node) =>
             IsTappable(node.Kind) || node.Option("tap") != null || node.Option("hold") != null;
+
+        /// <summary>2つの枠の交差。⭐ 字・押しどころの重なりの `Focus`。
+        /// ⚠️ 交差しない2つに呼ぶと幅か高さが 0 の枠になる（呼ぶ前に重なりを確かめてあること）。</summary>
+        private static Box Intersect(Box a, Box b)
+        {
+            float ix = Math.Max(a.X, b.X);
+            float iy = Math.Max(a.Y, b.Y);
+            float right = Math.Min(a.X + a.W, b.X + b.W);
+            float bottom = Math.Min(a.Y + a.H, b.Y + b.H);
+            return new Box(ix, iy, Math.Max(0f, right - ix), Math.Max(0f, bottom - iy));
+        }
+
+        /// <summary>覆いが画面いっぱいでないときの、覆えていない隙間。
+        /// ⭐ 4方向ぶんの候補（帯）を作り、**面積がいちばん大きい1つ**を返す
+        /// （複数の隙間があるとき、埋めるべきものから直せるように）。</summary>
+        private static Box? VeilGap(float x, float y, float w, float h)
+        {
+            Box? best = null;
+            float bestArea = 0f;
+            foreach (var gap in new[]
+            {
+                new Box(0f, 0f, x, ScreenHeight),                         // 左
+                new Box(x + w, 0f, ScreenWidth - (x + w), ScreenHeight),  // 右
+                new Box(0f, 0f, ScreenWidth, y),                          // 上
+                new Box(0f, y + h, ScreenWidth, ScreenHeight - (y + h)),  // 下
+            })
+            {
+                if (gap.W <= 0f || gap.H <= 0f) continue;
+                float area = gap.W * gap.H;
+                if (area > bestArea) { bestArea = area; best = gap; }
+            }
+            return best;
+        }
 
         /// <summary>⚠️ 上端は**詰めた結果**を渡すこと。⭐ 骨組みに書いてある `上` で
         /// 比べると、`flow=down` の中は全部が同じ位置に見えて偽の重なりが出る。</summary>
@@ -1103,7 +1359,10 @@ namespace EggCommand.Core
                 //    ⭐ 上に足したいものがあるとき、順番で言えるようにする。
                 var deeper = new List<string>(seen) { use };
                 foreach (var inner in part.Roots)
-                    kids.Add(Rename(node.Name + "-", Splice(use, inner, find, deeper)));
+                    // ⭐ `use` をそのまま「この段の部品ファイル名」として渡す ──
+                    //    Rename はこれを PartId に刻む（さらに内側の出所が
+                    //    無い節点だけ。入れ子の内側はもう決まっているので上書きしない）。
+                    kids.Add(Rename(node.Name + "-", use, Splice(use, inner, find, deeper)));
             }
 
             foreach (var child in node.Children) kids.Add(Splice(id, child, find, seen));
@@ -1114,9 +1373,13 @@ namespace EggCommand.Core
             //    ⭐ ここを短いコンストラクタ（LineNumber 既定 -1）のままにすると、
             //    `use=` を1つも使っていない骨組みまで**丸ごと**選べなくなる
             //    （エディタの `data-line` の土台が全部 -1 になるため）。
+            //    ⚠️ `node` はここでは常に「まだ Rename を通っていない」節点
+            //    （Parse 直後の生の木を辿っているだけ）なので PartId は常に null ──
+            //    そのまま渡す（何もしないのと同じだが、出所を明示するため書く）。
             return new LayoutNode(node.Name, node.Kind, node.Left, node.Top,
                 node.Width, node.Height, node.Options, kids,
-                node.LineNumber, node.Indent, node.Fields, node.Trailing, node.Terminator);
+                node.LineNumber, node.Indent, node.Fields, node.Trailing, node.Terminator,
+                node.PartId, node.PartLine);
         }
 
         /// <summary>⭐ **差した部品の名前に、差した枠の名前を冠する。**
@@ -1127,10 +1390,13 @@ namespace EggCommand.Core
         ///
         /// ⚠️ 冠は**部品の中身すべて**に付ける ── 根だけだと孫が重なる。
         /// ⭐ 読むときの利も大きい（`pa-art` で「左の親の絵」と分かる）。</summary>
-        private static LayoutNode Rename(string crown, LayoutNode node)
+        /// <param name="partId">⭐ **この段で差している部品ファイルの名前**
+        /// （`Splice` の `use`）。⚠️ 節点がまだ出所を持っていない（＝この部品ファイルの
+        /// 自前の行）ときだけ、ここで `PartId`/`PartLine` に刻む。</param>
+        private static LayoutNode Rename(string crown, string partId, LayoutNode node)
         {
             var kids = new List<LayoutNode>();
-            foreach (var child in node.Children) kids.Add(Rename(crown, child));
+            foreach (var child in node.Children) kids.Add(Rename(crown, partId, child));
 
             // ⭐ **差し込み口にも冠を付ける。**⚠️ 付けないと、配合の左右2枚が
             //    同じ `bind=art` を持ち、**どちらの親の絵か言えなくなる**。
@@ -1153,8 +1419,26 @@ namespace EggCommand.Core
                 options[pair.Key] = value;
             }
 
+            // ⭐ **一番内側（いちばん具体的）の出所を残す。**⚠️ 決めた理由:
+            //    エディタが次にやりたいのは「この節点が書いてある部品ファイルへ
+            //    切り替える」こと。入れ子の `use=` では、外側の部品ファイルには
+            //    その節点自身の行が無い（`use=` の参照が1行あるだけ）ので、
+            //    外側を刻んでも切り替え先として意味がない。
+            //    ⭐ `node.PartId` が既に付いていれば、それはさらに内側（もっと深い
+            //    `use=`）で決まった出所 ── ここでは触らずそのまま運ぶ。
+            //    ⚠️ 付いていなければ、`node.LineNumber` が「今まさに差している
+            //    `partId` のファイルの中での行」そのものなので、それを刻む。
+            string outPartId = node.PartId;
+            int outPartLine = node.PartLine;
+            if (outPartId == null && node.LineNumber >= 0)
+            {
+                outPartId = partId;
+                outPartLine = node.LineNumber;
+            }
+
             return new LayoutNode(crown + node.Name, node.Kind, node.Left, node.Top,
-                node.Width, node.Height, options, kids);
+                node.Width, node.Height, options, kids,
+                -1, 0, null, "", "\n", outPartId, outPartLine);
         }
 
         /// <summary>不備があれば投げる。⚠️ 起動時に1度呼んで、**黙って壊れた画面を出さない**。</summary>

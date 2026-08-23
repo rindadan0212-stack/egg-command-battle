@@ -94,14 +94,52 @@
   background: #bdebff;
 }
 /* ⭐ 選んでいる節点を輪で囲む。⚠️ 塗り潰さない（この作品の約束・stage.css の
-   `.n.card.lead` と同じ考え方） */
+   `.n.card.lead` と同じ考え方）。
+   ⚠️ **盤（#edstage）の外の層に置く**（EditPage.razor 参照）── #edstage には
+   scale(k) が掛かるので、輪の中に掴みどころを置くと盤を縮めるほど一緒に縮んで
+   指で押せなくなる。外に出せば実寸（screen px）だけで置ける。 */
 .edring {
   position: absolute;
   display: none;
   pointer-events: none;
   box-shadow: 0 0 0 4px #f59e0b, inset 0 0 0 4px #f59e0b;
   border-radius: 4px;
+  z-index: 2;
 }
+/* ⭐ 大きさを変える掴みどころ。8個・盤の倍率の影響を受けない固定の実寸
+   （.edring が盤の外に居るからこそ成立する）。 */
+.edhandle {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  background: #f59e0b;
+  border: 2px solid #12151f;
+  border-radius: 4px;   /* ⭐ 押せる要素なので角丸（作法どおり ── 区切りには使わない） */
+  pointer-events: auto;
+  touch-action: none;
+  transform: translate(-50%, -50%);
+}
+.edhandle[data-handle="nw"] { left: 0;    top: 0;    cursor: nwse-resize; }
+.edhandle[data-handle="n"]  { left: 50%;  top: 0;    cursor: ns-resize; }
+.edhandle[data-handle="ne"] { left: 100%; top: 0;    cursor: nesw-resize; }
+.edhandle[data-handle="e"]  { left: 100%; top: 50%;  cursor: ew-resize; }
+.edhandle[data-handle="se"] { left: 100%; top: 100%; cursor: nwse-resize; }
+.edhandle[data-handle="s"]  { left: 50%;  top: 100%; cursor: ns-resize; }
+.edhandle[data-handle="sw"] { left: 0;    top: 100%; cursor: nesw-resize; }
+.edhandle[data-handle="w"]  { left: 0;    top: 50%;  cursor: ew-resize; }
+
+/* ⭐ 吸い付いた瞬間だけ見せる細い線。⚠️ 面で塗らない・線は一辺だけ
+   （画面の作法「区切りは余白で」と同じ約束をここでも守る）。 */
+.edguide {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  background: #f59e0b;
+  z-index: 2;
+}
+.edguide-x { width: 1px; }
+.edguide-y { height: 1px; }
+
 /* ⭐ 透明な覆い。盤のいちばん上（DOM の最後）に置き、遊びの押しどころより先に拾う */
 .edcap {
   position: absolute;
