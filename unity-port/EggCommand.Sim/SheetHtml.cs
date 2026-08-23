@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text;
 using EggCommand.Core;
 
@@ -24,10 +25,20 @@ namespace EggCommand.Sim
     {
         public static string Write(string path)
         {
+            // ⚠️ **この瞬間の帳面を丸ごと HTML に焼き込む。**そのあと sheets/*.txt が
+            //    手で直されても、開いたままのこの頁は気づかない（2026-08-23 の監査で発覚 ──
+            //    エディタ.html を書き出した11分後に技.txt が手で更新され、
+            //    古い頁のまま保存すれば足した行が消えるところだった）。
+            // ⭐ だから「いつの写しか」を人が読める形で焼き込む。時刻だけでなく
+            //    内容のハッシュも持たせる ── 時刻がずれていなくても中身が違えば気づける形にする。
+            var generatedAt = DateTime.Now;
             var html = new StringBuilder();
+            html.Append("<!-- 帳面エディタ ── ").Append(generatedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture))
+                .Append(" 時点の sheets/*.txt を写したもの。それより後に手で直した行があるなら、")
+                .Append("保存する前に「帳面を開く」で読み込み直すこと。 -->\n");
             Head(html);
             Body(html);
-            html.Append("<script>const D=").Append(Data()).Append(";</script>");
+            html.Append("<script>const D=").Append(Data(generatedAt)).Append(";</script>");
             Script(html);
             html.Append("</body></html>");
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
@@ -35,10 +46,20 @@ namespace EggCommand.Sim
             return Path.GetFullPath(path);
         }
 
+        /// <summary>内容の指紋。⚠️ セキュリティ用途ではないので短く切ってよい ──
+        /// 「さっき見た内容と同じかどうか」を人の目で見分けられれば足りる。</summary>
+        private static string ShortHash(string text)
+        {
+            byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(text));
+            var sb = new StringBuilder(8);
+            for (int i = 0; i < 4; i++) sb.Append(hash[i].ToString("x2", CultureInfo.InvariantCulture));
+            return sb.ToString();
+        }
+
         // ══ 埋め込むデータ ═════════════════════════════
         // ⚠️ 依存を足さずに書く（プロジェクトの決めごと）。手で組み立てる。
 
-        private static string Data()
+        private static string Data(DateTime generatedAt)
         {
             var mid = MiddleUnit();
             int one = Battle.DamageOf(Skills.DamagePowerOf(PowerTier.Medium), mid.Atk, mid.Def, 1.0);
@@ -102,9 +123,24 @@ namespace EggCommand.Sim
             //    書きかけを持ったまま画面から保存すると**丸ごと消えた**
             //    （2026-08-19。`sim sheet write` に空いていたのと同じ穴が、画面側にもあった）。
             // ⭐ 帳面が無ければ空文字。画面は実装のほうを種にする（初回）。
-            j.Append("\"sheetSkill\":").Append(Str(Slurp(Sheet.SkillFile))).Append(',');
-            j.Append("\"sheetSpecies\":").Append(Str(Slurp(Sheet.SpeciesFile))).Append(',');
-            j.Append("\"sheetTrait\":").Append(Str(Slurp(Sheet.TraitFile))).Append(',');
+            string sheetSkillText = Slurp(Sheet.SkillFile);
+            string sheetSpeciesText = Slurp(Sheet.SpeciesFile);
+            string sheetTraitText = Slurp(Sheet.TraitFile);
+            j.Append("\"sheetSkill\":").Append(Str(sheetSkillText)).Append(',');
+            j.Append("\"sheetSpecies\":").Append(Str(sheetSpeciesText)).Append(',');
+            j.Append("\"sheetTrait\":").Append(Str(sheetTraitText)).Append(',');
+
+            // ⭐ **陳腐化した写しを黙って保存させないための指紋。**
+            // ⚠️ ブラウザからは実物のディスクを読めないので「保存前に現物と突き合わせる」は
+            //    できない。せめて「これはいつ・どの中身の写しか」を人が気づける形で持たせる
+            //    （2026-08-23 の監査 ── エディタ.html を書き出した11分後に技.txt が手で
+            //    更新され、古い頁のまま保存すれば消えるところだった）。
+            j.Append("\"snapshot\":{");
+            j.Append("\"at\":").Append(Str(generatedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture))).Append(',');
+            j.Append("\"skillHash\":").Append(Str(ShortHash(sheetSkillText))).Append(',');
+            j.Append("\"speciesHash\":").Append(Str(ShortHash(sheetSpeciesText))).Append(',');
+            j.Append("\"traitHash\":").Append(Str(ShortHash(sheetTraitText)));
+            j.Append("},");
 
             // ── 特性 ──
             j.Append("\"traits\":[");
@@ -347,6 +383,9 @@ input[type=number]{font-variant-numeric:tabular-nums}
 #top .grow{flex:1}
 #self{font-size:12px;color:var(--good)}
 #self.ng{color:var(--bad);font-weight:700}
+/* ⚠️ 常に見える場所に「いつの写しか」を出す ── 自己検査の1行に混ぜると、
+   スクロールや他の警告に埋もれて気づかれない（2026-08-23 の監査）。 */
+#snapshot{font-size:12px;color:var(--dim)}
 .auto{color:var(--ink);font-size:14px;flex:1}
 .file{cursor:pointer;background:var(--band);padding:7px 14px;border-radius:6px;font-size:15px}
 .file:hover{background:var(--line)}
@@ -463,6 +502,7 @@ label{display:block;font-size:12px;color:var(--dim);margin-bottom:3px}
 <div id=top>
   <h1>帳面</h1>
   <span id=self>自己検査</span>
+  <span id=snapshot></span>
   <span class=grow></span>
   <label class=file>帳面を開く<input type=file id=load accept='.txt' multiple hidden></label>
   <button id=copy>この1件をコピー</button>
@@ -869,6 +909,12 @@ const outOf=o=>(tab==='skill'?blockOf(o):tab==='species'?blockOfSp(o):blockOfTr(
   if(bad.length){ n.className='ng'; n.textContent=`🚧 自己検査 ${bad.length}件ずれ: `+bad.slice(0,3).join(' / '); }
   else n.textContent=`⭐ 自己検査 ${D.skills.length+D.traits.length}件一致`;
 })();
+
+// ⚠️ **常に見える場所に「いつの写しか」を出す。**ブラウザからは実物のディスクを
+//    読めないので、保存前に現物と突き合わせることはできない。せめて
+//    「この頁がいつの sheets/*.txt を写したものか」を毎回思い出せるようにする
+//    （2026-08-23 の監査 ── 開いたままの古い頁で保存すると、あとから手で足した行が消える）。
+if(D.snapshot) $('#snapshot').textContent=`写し: ${D.snapshot.at} 時点`;
 
 // ══ 検査 ════════════════════════════════════════
 // ⚠️ **3色に分ける。**🚧＝実装が受け取れない／✍️＝手で書く必要がある／⚠️＝通るが疑わしい。
@@ -1607,6 +1653,18 @@ $('#save').onclick=()=>{
   if(dirty.species) jobs.push(['種族.txt',mk(D.headSpecies,P,blockOfSp)]);
   if(dirty.trait) jobs.push(['特性.txt',mk(D.headTrait,T,blockOfTr)]);
   if(!jobs.length){ $('#save').textContent='変わっていません'; setTimeout(()=>$('#save').textContent='保存',1400); return; }
+  // ⚠️ **黙って古い写しで上書きさせない。**ディスクの現物とは突き合わせられないので、
+  //    せめて「これは○○時点の写しだ」を保存の直前にもう一度突きつける
+  //    （2026-08-23 の監査 ── 一呼吸置くだけで、開いたままの古い頁が
+  //    あとから手で足した行を消す事故を防げる）。
+  if(D.snapshot){
+    const names=jobs.map(j=>j[0]).join('・');
+    const ok=confirm(`${names} を保存します。\n`
+      +`この頁は ${D.snapshot.at} 時点の sheets/*.txt の写しです。\n`
+      +`それより後に手で直接ファイルへ足した行があれば、保存で消えます。\n\n`
+      +`このまま保存してよいですか？`);
+    if(!ok) return;
+  }
   jobs.forEach(([n,t],i)=>setTimeout(()=>dl(n,t),i*250));
   $('#save').textContent=jobs.map(j=>j[0]).join(' / ')+' を保存';
   setTimeout(()=>{$('#save').textContent='保存';},2000);

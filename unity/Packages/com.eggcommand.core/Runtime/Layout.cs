@@ -4,6 +4,29 @@ using System.Text;
 
 namespace EggCommand.Core
 {
+    /// <summary>節点の1行にあった、空白区切りの欄1つぶん。
+    ///
+    /// ⭐ **「欄の字」と「開始桁」の対。**⚠️ `text=` は行末までで1つの欄として持つ
+    /// （中に空白があっても割らない ── 割ると書き出しで元の桁に戻せない）。
+    ///
+    /// ⭐ **これが桁揃えの唯一の出所。**この骨組みは手で桁を揃えてあるので、
+    /// 値の桁数が変わっても後ろの欄をこの桁へ合わせて詰め直せる
+    /// （<see cref="LayoutNode.RenderLine"/> が使う）。</summary>
+    public sealed class LayoutField
+    {
+        /// <summary>元の綴りそのまま。⚠️ 数の `0` と `0.0` の違いや、
+        /// `text=` の `\n` 展開前の字は、ここにしか残っていない。</summary>
+        public readonly string Text;
+        /// <summary>行頭からの開始桁（0始まり）。</summary>
+        public readonly int Column;
+
+        public LayoutField(string text, int column)
+        {
+            Text = text;
+            Column = column;
+        }
+    }
+
     /// <summary>画面の骨組み1つ。⭐ **座標はここにしか無い。**
     ///
     /// ⚠️ コードに座標を書かせないための型です（2026-08-22・作者の指示
@@ -26,8 +49,33 @@ namespace EggCommand.Core
         public readonly IReadOnlyDictionary<string, string> Options;
         public readonly IReadOnlyList<LayoutNode> Children;
 
+        /// <summary>元の行の番号（0始まり）。⚠️ <see cref="Layouts.Parse"/> を通さずに
+        /// 組み立てた節点（<see cref="Layouts.Splice"/> の差し込み後など）は -1。
+        /// ⭐ <see cref="Layouts.Write"/> はこれで「原文のどの行を置き換えるか」を知る。</summary>
+        public readonly int LineNumber;
+        /// <summary>行頭の空白の数（字下げ）。</summary>
+        public readonly int Indent;
+        /// <summary>元の行にあった欄の並び（名前・種類・左上幅高・付け足し）。
+        /// ⚠️ 空なら「元の行を知らない」節点 ── <see cref="RenderLine"/> は詰め直さず
+        /// 素直な1個空白区切りで書く。</summary>
+        public readonly IReadOnlyList<LayoutField> Fields;
+        /// <summary>最後の欄のあとに残っていた空白（あれば・普通は空）。</summary>
+        public readonly string Trailing;
+        /// <summary>この行の終端文字。`"\r\n"` / `"\n"` / `""`（最終行で改行が無い）。</summary>
+        public readonly string Terminator;
+
         public LayoutNode(string name, string kind, float left, float top, float width, float height,
             IReadOnlyDictionary<string, string> options, IReadOnlyList<LayoutNode> children)
+            : this(name, kind, left, top, width, height, options, children, -1, 0, null, "", "\n")
+        {
+        }
+
+        /// <summary>⚠️ <see cref="Layouts.Parse"/> 専用。行の情報まで持つ節点を組み立てる。
+        /// ⭐ 上の（短い）コンストラクタは、行を知らない節点用 ── 呼び分ける理由が無い限り
+        /// 使わない（コードでは座標を作らない）。</summary>
+        public LayoutNode(string name, string kind, float left, float top, float width, float height,
+            IReadOnlyDictionary<string, string> options, IReadOnlyList<LayoutNode> children,
+            int lineNumber, int indent, IReadOnlyList<LayoutField> fields, string trailing, string terminator)
         {
             Name = name;
             Kind = kind;
@@ -37,6 +85,11 @@ namespace EggCommand.Core
             Height = height;
             Options = options ?? new Dictionary<string, string>();
             Children = children ?? new List<LayoutNode>();
+            LineNumber = lineNumber;
+            Indent = indent;
+            Fields = fields ?? new List<LayoutField>();
+            Trailing = trailing ?? "";
+            Terminator = terminator ?? "";
         }
 
         public string Option(string key)
@@ -56,6 +109,210 @@ namespace EggCommand.Core
 
         public override string ToString() =>
             $"{Name}({Kind}) {Left},{Top} {Width}x{Height}";
+
+        // ── 書き出し（⭐ Layouts.Write の中核）────────────
+
+        /// <summary>元の綴りの「text=」の頭。⚠️ <see cref="Layouts.TextMark"/>（先頭に区切りの
+        /// 空白を持つ）と1つの出所を保つため、そこから削って作る。</summary>
+        private static readonly string TextFieldPrefix = Layouts.TextMark.Substring(1);
+
+        /// <summary>組み直す欄1つぶん。⚠️ 元の行に無かった（今の <see cref="Options"/> にだけ
+        /// 在る）欄は桁の記録が無いので、<see cref="HasColumn"/> を false にして区別する
+        /// （<see cref="RenderLine"/> はこれを見て、詰め直さず空白1つで足す）。</summary>
+        private sealed class Slot
+        {
+            public readonly string Text;
+            public readonly bool HasColumn;
+            public readonly int Column;
+
+            public Slot(string text, bool hasColumn, int column)
+            {
+                Text = text;
+                HasColumn = hasColumn;
+                Column = column;
+            }
+        }
+
+        /// <summary>この節点の行を、保持した欄から組み直す。
+        ///
+        /// ⚠️ 🔴 **原文の行を丸ごと返さない。**ここが echo だと、「値を直したのに
+        /// 書き出しへ反映されない」を検査が見つけられなくなる（空回り）。
+        /// ⭐ 欄ごとに「値が変わっていないか」を見て、変わっていなければ元の綴り
+        /// （`0` と `0.0` の違い等）を、変わっていれば今の値を書く。
+        ///
+        /// ⭐ **後ろの欄は元の桁に合わせて詰め直す。**⚠️ 既にその桁を過ぎていたら、
+        /// 欄どうしがくっつかないよう空白1つへ縮退する（壊さないため）。</summary>
+        public string RenderLine()
+        {
+            var sb = new StringBuilder();
+            if (Fields.Count == 0)
+            {
+                // ⚠️ 元の行を知らない節点（Parse を通していない）。
+                //    ⭐ 詰め直す基準が無いので、素直な1個空白区切りで書く。
+                sb.Append(' ', Math.Max(0, Indent));
+                AppendPlain(sb);
+                return sb.ToString() + Terminator;
+            }
+
+            var slots = BuildSlots();
+            int pos = 0;
+            for (int i = 0; i < slots.Count; i++)
+            {
+                var slot = slots[i];
+                int pad;
+                if (!slot.HasColumn)
+                {
+                    // ⚠️ 元の行に無かった欄（付け足しの新顔）── 桁の記録が無いので空白1つで足す。
+                    pad = 1;
+                }
+                else
+                {
+                    pad = slot.Column - pos;
+                    // ⚠️ 最初の欄だけ、桁 0（字下げ無し）を空白 0 で許す。
+                    //    ⭐ 2番目以降は、欄どうしが**くっつかない**よう最低1個は空ける。
+                    if (i == 0) pad = Math.Max(0, pad);
+                    else if (pad < 1) pad = 1;
+                }
+                sb.Append(' ', pad);
+                sb.Append(slot.Text);
+                pos += pad + slot.Text.Length;
+            }
+            sb.Append(Trailing);
+            return sb.ToString() + Terminator;
+        }
+
+        /// <summary>組み直す欄の並びを作る。⭐ 3つを順に並べるだけ:
+        /// ① 名前・種類・左上幅高（常に6欄、消えることは無い）
+        /// ② 元の行にあった付け足し（`text=` を除く。<see cref="Options"/> から
+        ///    消えていたら欄ごと省く）
+        /// ③ 今の <see cref="Options"/> にだけある付け足し（新顔。並び順は Options の
+        ///    列挙順に従う ── 元に無かった欄には、他に基準にできる並びが無い）
+        /// そして最後に `text=`（元に在れば更新、無くて今だけ在れば新規、両方無ければ無し）。
+        ///
+        /// ⚠️ 🔴 **`text=` を先に処理しない。**ここの並び順がそのまま書き出しの並びになる
+        /// ── 先に置くと、新しく足した付け足しが `text=` の後ろに来て事故る
+        /// （実際に釦へ「あきらめる when=!done」と字が出た罠と同じ形）。</summary>
+        private List<Slot> BuildSlots()
+        {
+            var slots = new List<Slot>(Fields.Count)
+            {
+                new Slot(Name, true, Fields[0].Column),
+                new Slot(Kind, true, Fields[1].Column),
+                new Slot(FormatNumber(Fields[2].Text, Left), true, Fields[2].Column),
+                new Slot(FormatNumber(Fields[3].Text, Top), true, Fields[3].Column),
+                new Slot(FormatNumber(Fields[4].Text, Width), true, Fields[4].Column),
+                new Slot(FormatNumber(Fields[5].Text, Height), true, Fields[5].Column),
+            };
+
+            var kept = new HashSet<string>();
+            string textRaw = null;
+            int textColumn = -1;
+            for (int i = 6; i < Fields.Count; i++)
+            {
+                string raw = Fields[i].Text;
+                if (raw.StartsWith(TextFieldPrefix, StringComparison.Ordinal))
+                {
+                    textRaw = raw;
+                    textColumn = Fields[i].Column;
+                    continue;
+                }
+                string key = KeyOf(raw);
+                if (Option(key) == null) continue;   // ⚠️ Options から消えた ── 欄ごと無くなる
+                kept.Add(key);
+                slots.Add(new Slot(CurrentOptionText(raw), true, Fields[i].Column));
+            }
+
+            // ⭐ 新顔（元の行に無かった付け足し）。⚠️ 桁の記録が無いので空白1つで足す。
+            foreach (var pair in Options)
+            {
+                if (pair.Key == "text" || kept.Contains(pair.Key)) continue;
+                slots.Add(new Slot(pair.Key + "=" + pair.Value, false, -1));
+            }
+
+            // ⚠️ `text=` は必ず最後（規約）。
+            if (textRaw != null)
+            {
+                if (Option("text") != null) slots.Add(new Slot(CurrentOptionText(textRaw), true, textColumn));
+                // else: 消された ── 欄ごと無くなる
+            }
+            else if (Option("text") != null)
+            {
+                slots.Add(new Slot(TextFieldPrefix + Option("text").Replace("\n", "\\n"), false, -1));
+            }
+
+            return slots;
+        }
+
+        /// <summary>`key=value` の欄から `key` だけを取り出す。</summary>
+        private static string KeyOf(string keyValue) => keyValue.Substring(0, keyValue.IndexOf('='));
+
+        /// <summary>数の欄。⚠️ 値が変わっていなければ元の綴りを守る
+        /// （float に落とすと `0` と `0.0` の違いが消えるため）。
+        /// ⭐ 変わっていれば今の値を書く ── そこだけは元の綴りを再現できない。</summary>
+        private static string FormatNumber(string raw, float current)
+        {
+            float parsed;
+            if (float.TryParse(raw, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out parsed)
+                && parsed == current)
+                return raw;
+            return current.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>`key=value` か `text=...`（行末までの1欄）を、今の値で書き直す。</summary>
+        private string CurrentOptionText(string raw)
+        {
+            if (raw.StartsWith(TextFieldPrefix, StringComparison.Ordinal))
+            {
+                // ⭐ `text=` は「展開前の字」で持っている。⚠️ 変わっていなければそのまま、
+                //    変わっていれば今の値を `\n` → `\\n` へ戻して書く（読み込みの逆）。
+                string rawLiteral = raw.Substring(TextFieldPrefix.Length);
+                string originalExpanded = rawLiteral.Replace("\\n", "\n");
+                string current = Option("text") ?? "";
+                return current == originalExpanded
+                    ? raw
+                    : TextFieldPrefix + current.Replace("\n", "\\n");
+            }
+
+            int eq = raw.IndexOf('=');
+            string key = raw.Substring(0, eq);
+            string rawValue = raw.Substring(eq + 1);
+            string value = Option(key);
+            return value == rawValue ? raw : key + "=" + (value ?? "");
+        }
+
+        /// <summary>欄の位置を知らないときの、素直な書き方（1個空白区切り）。</summary>
+        private void AppendPlain(StringBuilder sb)
+        {
+            sb.Append(Name).Append(' ').Append(Kind).Append(' ')
+              .Append(Left.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append(' ')
+              .Append(Top.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append(' ')
+              .Append(Width.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append(' ')
+              .Append(Height.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            foreach (var pair in Options)
+            {
+                if (pair.Key == "text") continue;   // ⭐ text= は行末へ回すので後で足す
+                sb.Append(' ').Append(pair.Key).Append('=').Append(pair.Value);
+            }
+            string text = Option("text");
+            if (text != null) sb.Append(' ').Append(TextFieldPrefix).Append(text.Replace("\n", "\\n"));
+        }
+    }
+
+    /// <summary>原文の行1つぶん（節点の行かどうかは問わない）。⭐ 終端文字ごと持つ。
+    /// <see cref="Layouts.Write"/> はこれを土台にして、節点の行だけ組み直した文字を差し込む。</summary>
+    public sealed class RawLine
+    {
+        /// <summary>終端文字を含まない中身。</summary>
+        public readonly string Text;
+        /// <summary>この行の終端文字。`"\r\n"` / `"\n"` / `""`（最終行で改行が無い）。</summary>
+        public readonly string Terminator;
+
+        public RawLine(string text, string terminator)
+        {
+            Text = text;
+            Terminator = terminator;
+        }
     }
 
     /// <summary>1画面ぶんの骨組み。</summary>
@@ -63,11 +320,36 @@ namespace EggCommand.Core
     {
         public readonly string Id;
         public readonly IReadOnlyList<LayoutNode> Roots;
+        /// <summary>原文の行、全部。⭐ コメント・空行を <see cref="Layouts.Write"/> が
+        /// そのまま通す元 ── 節点の行はここでなく <see cref="LayoutNode"/> 自身が持つ。</summary>
+        public readonly IReadOnlyList<RawLine> Lines;
+        /// <summary>⭐ <see cref="Layouts.Resolve"/> を通した（`use=` を差し替え済みの）木か。
+        ///
+        /// ⚠️ 差し替えは <see cref="Layouts.Splice"/> / <see cref="Layouts.Rename"/> が
+        /// **毎回新しい節点を作り直す**ので、差し替え後の木は部品がインライン展開され、
+        /// 節点の行番号（<see cref="LayoutNode.LineNumber"/>）もすべて失われている。
+        /// ⭐ この旗を見て <see cref="Layouts.Write"/> が断る ── 黙って原文に無いものを
+        /// 書き出すのが一番困る。</summary>
+        public readonly bool Resolved;
 
         public Layout(string id, IReadOnlyList<LayoutNode> roots)
+            : this(id, roots, null, false)
+        {
+        }
+
+        /// <summary>⚠️ <see cref="Layouts.Parse"/> 専用。原文の行まで持つ骨組みを組み立てる。</summary>
+        public Layout(string id, IReadOnlyList<LayoutNode> roots, IReadOnlyList<RawLine> lines)
+            : this(id, roots, lines, false)
+        {
+        }
+
+        /// <summary>⚠️ <see cref="Layouts.Resolve"/> 専用。解決済みの旗を立てて組み立てる。</summary>
+        public Layout(string id, IReadOnlyList<LayoutNode> roots, IReadOnlyList<RawLine> lines, bool resolved)
         {
             Id = id;
             Roots = roots;
+            Lines = lines ?? new List<RawLine>();
+            Resolved = resolved;
         }
     }
 
@@ -254,31 +536,83 @@ namespace EggCommand.Core
 
         // ── 読み込み ────────────────────────────────────
 
+        /// <summary>その行が節点を持たない行か（空行・コメント）。
+        /// ⚠️ <see cref="Parse"/> の読み飛ばしと <see cref="Write"/> の素通しは、
+        /// **同じ規則**でなければ食い違う（節点が消えた行を空行と間違えて残す等）。
+        /// ⭐ だから1か所にまとめる。</summary>
+        private static bool IsSkippable(string raw)
+        {
+            string body = raw.Trim();
+            return body.Length == 0 || body[0] == '#';
+        }
+
+        /// <summary>原文を行ごとに割る。⚠️ `Split('\n')` は終端文字を捨ててしまうので、
+        /// ここでは終端文字（`"\r\n"` / `"\n"` / `""`）を1行ごとに別で持たせる
+        /// ── <see cref="Write"/> がバイト単位で元に戻すために要る。
+        ///
+        /// ⭐ 中身の割り方は今までと同じ（`\r\n` / `\n` / 裸の `\r` を区切りとみなす）。
+        /// 最後の1行は、ファイルが改行で終わっていれば空、終わっていなければ
+        /// 残りの字そのもの ── どちらも終端文字は `""`。</summary>
+        private static List<RawLine> SplitLines(string text)
+        {
+            var result = new List<RawLine>();
+            int start = 0;
+            int i = 0;
+            while (i < text.Length)
+            {
+                char c = text[i];
+                if (c != '\r' && c != '\n') { i++; continue; }
+                string content = text.Substring(start, i - start);
+                string terminator;
+                if (c == '\r' && i + 1 < text.Length && text[i + 1] == '\n')
+                {
+                    terminator = "\r\n";
+                    i += 2;
+                }
+                else
+                {
+                    terminator = c.ToString();
+                    i += 1;
+                }
+                result.Add(new RawLine(content, terminator));
+                start = i;
+            }
+            result.Add(new RawLine(text.Substring(start), ""));
+            return result;
+        }
+
+        /// <summary>空白区切りの欄へ割る。⚠️ `Split(' ', RemoveEmptyEntries)` と
+        /// 同じ結果（連続する空白は1つの区切りとみなす）だが、**各欄の開始桁も残す**
+        /// ── 桁揃えを保った書き出しに要る。</summary>
+        /// <param name="offset">`body` が原文の何桁目から始まっているか。</param>
+        private static List<LayoutField> Tokenize(string body, int offset)
+        {
+            var fields = new List<LayoutField>();
+            int i = 0;
+            while (i < body.Length)
+            {
+                if (body[i] == ' ') { i++; continue; }
+                int start = i;
+                while (i < body.Length && body[i] != ' ') i++;
+                fields.Add(new LayoutField(body.Substring(start, i - start), offset + start));
+            }
+            return fields;
+        }
+
         public static Layout Parse(string id, string text)
         {
             if (text == null) throw new ArgumentNullException(nameof(text));
-            var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            var rawLines = SplitLines(text);
 
             var roots = new List<LayoutNode>();
-            var pending = new List<object[]>();   // [depth, name, kind, l, t, w, h, options]
+            var pending = new List<object[]>();   // [depth, name, kind, l, t, w, h, options, line, indent, fields, trailing, terminator]
 
-            for (int i = 0; i < lines.Length; i++)
+            for (int i = 0; i < rawLines.Count; i++)
             {
-                string raw = lines[i];
+                string raw = rawLines[i].Text;
                 if (raw.IndexOf('\t') >= 0)
                     throw new ArgumentException($"{id}: {i + 1}行目にタブがある（空白2つで1段）");
-                string body = raw.Trim();
-                if (body.Length == 0 || body[0] == '#') continue;
-
-                // ⭐ **`text=` は行の最後まで全部。**⚠️ 空白で切る前に外す
-                //    ── 切ってから繋ぎ直すと、二重空白や全角空白が失われる。
-                string literal = null;
-                int mark = body.IndexOf(TextMark, StringComparison.Ordinal);
-                if (mark >= 0)
-                {
-                    literal = body.Substring(mark + TextMark.Length);
-                    body = body.Substring(0, mark);
-                }
+                if (IsSkippable(raw)) continue;
 
                 int spaces = 0;
                 while (spaces < raw.Length && raw[spaces] == ' ') spaces++;
@@ -286,29 +620,47 @@ namespace EggCommand.Core
                     throw new ArgumentException($"{id}: {i + 1}行目の字下げが奇数（空白2つで1段）");
                 int depth = spaces / 2;
 
-                var parts = body.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length < 6)
+                // ⚠️ **`.Trim()` は行末の余りも削る。**⭐ ここで差を取り出しておかないと
+                //    `Write` が元の行末の空白を再現できない（普通は空だが、念のため）。
+                string trimmedBody = raw.Trim();
+                string trailing = raw.Substring(spaces + trimmedBody.Length);
+
+                // ⭐ **`text=` は行の最後まで全部。**⚠️ 空白で切る前に外す
+                //    ── 切ってから繋ぎ直すと、二重空白や全角空白が失われる。
+                string literal = null;
+                string fieldsBody = trimmedBody;
+                int textColumn = -1;
+                int mark = trimmedBody.IndexOf(TextMark, StringComparison.Ordinal);
+                if (mark >= 0)
+                {
+                    literal = trimmedBody.Substring(mark + TextMark.Length);
+                    fieldsBody = trimmedBody.Substring(0, mark);
+                    textColumn = spaces + mark + 1;   // ⚠️ TextMark 先頭の区切り空白を飛ばす
+                }
+
+                var fields = Tokenize(fieldsBody, spaces);
+                if (fields.Count < 6)
                     throw new ArgumentException(
-                        $"{id}: {i + 1}行目「{body}」── 名前 種類 左 上 幅 高 が要る");
+                        $"{id}: {i + 1}行目「{fieldsBody}」── 名前 種類 左 上 幅 高 が要る");
 
                 // ⚠️ **名前に `#` を使わせない。**⭐ 繰り返しの複製が `名前#0` を作るので、
                 //    元の名前に `#` があると「読む→書く→読む」が同じ木に戻らない
                 //    ── エディタは往復が閉じている形式の上にしか載らない。
-                if (parts[0].IndexOf('#') >= 0)
+                if (fields[0].Text.IndexOf('#') >= 0)
                     throw new ArgumentException($"{id}: {i + 1}行目 名前に # は使えない（繰り返しが使う）");
 
                 var options = new Dictionary<string, string>();
-                for (int p = 6; p < parts.Length; p++)
+                for (int p = 6; p < fields.Count; p++)
                 {
-                    int eq = parts[p].IndexOf('=');
+                    int eq = fields[p].Text.IndexOf('=');
                     if (eq <= 0)
-                        throw new ArgumentException($"{id}: {i + 1}行目「{parts[p]}」は key=value でない");
+                        throw new ArgumentException($"{id}: {i + 1}行目「{fields[p].Text}」は key=value でない");
                     // ⚠️ **後勝ちで黙って通さない。**⭐ 名前の重複は落とすのに
                     //    付け足しの重複を見逃すと、直したつもりの値が効かない
-                    string key = parts[p].Substring(0, eq);
+                    string key = fields[p].Text.Substring(0, eq);
                     if (options.ContainsKey(key))
                         throw new ArgumentException($"{id}: {i + 1}行目「{key}=」が2つある");
-                    options[key] = parts[p].Substring(eq + 1);
+                    options[key] = fields[p].Text.Substring(eq + 1);
                 }
                 // ⚠️ 空の `text=` は「書いたのに何も出ない」になる。⭐ 落とす
                 if (literal != null)
@@ -331,14 +683,18 @@ namespace EggCommand.Core
                     //    これが無いと2行の字（「空き／（自動で埋まる）」）が書けない。
                     //    ⭐ 規約はこれ1つだけ ── 他のエスケープは作らない。
                     options["text"] = literal.Replace("\\n", "\n");
+                    // ⚠️ 欄としては「text=」から行末までを**1つ**で持つ（展開前の字のまま）
+                    //    ── ここで割ってしまうと、書き出しで元の綴りへ戻せない。
+                    fields.Add(new LayoutField(TextMark.Substring(1) + literal, textColumn));
                 }
 
                 pending.Add(new object[]
                 {
-                    depth, parts[0], parts[1],
-                    Num(id, i, parts[2]), Num(id, i, parts[3]),
-                    Num(id, i, parts[4]), Num(id, i, parts[5]),
+                    depth, fields[0].Text, fields[1].Text,
+                    Num(id, i, fields[2].Text), Num(id, i, fields[3].Text),
+                    Num(id, i, fields[4].Text), Num(id, i, fields[5].Text),
                     options,
+                    i, spaces, fields, trailing, rawLines[i].Terminator,
                 });
             }
 
@@ -359,12 +715,14 @@ namespace EggCommand.Core
                     (string)pending[i][1], (string)pending[i][2],
                     (float)pending[i][3], (float)pending[i][4],
                     (float)pending[i][5], (float)pending[i][6],
-                    (Dictionary<string, string>)pending[i][7], kids);
+                    (Dictionary<string, string>)pending[i][7], kids,
+                    (int)pending[i][8], (int)pending[i][9],
+                    (List<LayoutField>)pending[i][10], (string)pending[i][11], (string)pending[i][12]);
             }
             for (int i = 0; i < pending.Count; i++)
                 if ((int)pending[i][0] == 0) roots.Add(built[i]);
 
-            return new Layout(id, roots);
+            return new Layout(id, roots, rawLines);
         }
 
         private static float Num(string id, int line, string text)
@@ -374,6 +732,62 @@ namespace EggCommand.Core
                     System.Globalization.CultureInfo.InvariantCulture, out value))
                 throw new ArgumentException($"{id}: {line + 1}行目「{text}」が数でない");
             return value;
+        }
+
+        // ── 書き出し ────────────────────────────────────
+
+        /// <summary>骨組みを、原文の書式へ組み直す。⭐ これから作る GUI 編集の「往復」の
+        /// 出口 ── `Write(Parse(t)) == t`（実物32枚すべて）が閉じていることで保証する。
+        ///
+        /// ⚠️ 🔴 **原文を丸ごと返す echo ではない。**節点の行は、必ず節点が持つ
+        /// <see cref="LayoutNode.RenderLine"/> から組み直す。コメント・空行だけ、
+        /// <see cref="Layout.Lines"/> をそのまま通す。
+        ///
+        /// ⭐ **節点が消えていたら、その行も消える。**⚠️ 逆に増えた節点（`LineNumber` が
+        /// -1 ── 原文の行を持たない）は、末尾へ足す。差し込み先を木の形から言い当てる
+        /// ことはしない ── それは GUI 編集ツール（このコミットでは作らない）の仕事。
+        ///
+        /// ⚠️ 🔴 **書き戻してよいのは `Parse` 直後の生の木だけ。**<see cref="Resolve"/> を
+        /// 通した木（<see cref="Layout.Resolved"/>）は落とす ── 部品がインライン展開され、
+        /// 節点の行番号も失われているので、黙って渡すと原文に無いものが並ぶ。</summary>
+        public static string Write(Layout layout)
+        {
+            if (layout == null) throw new ArgumentNullException(nameof(layout));
+            if (layout.Resolved)
+                throw new InvalidOperationException(
+                    $"{layout.Id}: 解決済みの木は書き戻せない（Resolve は use= を展開し、"
+                    + "節点の行番号も失う ── Parse 直後の生の木を渡すこと）");
+
+            var claimed = new Dictionary<int, LayoutNode>();
+            var appended = new List<LayoutNode>();
+            foreach (var root in layout.Roots) Collect(root, claimed, appended);
+
+            var sb = new StringBuilder();
+            for (int i = 0; i < layout.Lines.Count; i++)
+            {
+                LayoutNode node;
+                if (claimed.TryGetValue(i, out node))
+                {
+                    sb.Append(node.RenderLine());
+                }
+                else if (IsSkippable(layout.Lines[i].Text))
+                {
+                    sb.Append(layout.Lines[i].Text).Append(layout.Lines[i].Terminator);
+                }
+                // ⚠️ else: 元は節点の行だったのに、今の木には無い ── 消えた節点として省く
+                //    （コメント・空行でないのに手元の木に居ないなら、消された節点の行）。
+            }
+            foreach (var node in appended) sb.Append(node.RenderLine());
+
+            return sb.ToString();
+        }
+
+        /// <summary>木を辿って、節点を「元の行番号」と「新顔（末尾へ足す）」に仕分ける。</summary>
+        private static void Collect(LayoutNode node, Dictionary<int, LayoutNode> claimed, List<LayoutNode> appended)
+        {
+            if (node.LineNumber >= 0) claimed[node.LineNumber] = node;
+            else appended.Add(node);
+            foreach (var child in node.Children) Collect(child, claimed, appended);
         }
 
         // ── 検査（⭐ エンジン不要）────────────────────────
@@ -653,7 +1067,8 @@ namespace EggCommand.Core
             var seen = new List<string> { layout.Id };
             var roots = new List<LayoutNode>();
             foreach (var node in layout.Roots) roots.Add(Splice(layout.Id, node, find, seen));
-            return new Layout(layout.Id, roots);
+            // ⚠️ `resolved: true` ── これで書き出そうとすると Write が断る。
+            return new Layout(layout.Id, roots, layout.Lines, true);
         }
 
         private static LayoutNode Splice(string id, LayoutNode node,

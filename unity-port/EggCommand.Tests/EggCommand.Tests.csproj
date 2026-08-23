@@ -52,4 +52,12 @@
     <None Include="..\..\unity\Assets\Scripts\View\*.cs" Link="view\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- 技・特性・種族の帳面そのもの（1文字も変えず読むだけ）。
+       ⚠️ SheetRoundTripTests が「読んで書いて元に戻るか」を数えるための元本。
+       ⭐ 実物の CWD に依存せず読めるよう、ビルド時にテスト出力へ写す
+          （records/goldens/layouts と同じ「読むだけ」の型）。 -->
+  <ItemGroup>
+    <None Include="..\..\sheets\*.txt" Link="sheets\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
