@@ -139,16 +139,31 @@ namespace EggCommand.Sim
         {
             Directory.CreateDirectory(Dir);
             var utf8 = new UTF8Encoding(false);
-            int a = Put(SkillFile, "技", SkillSheet(), utf8);
-            int b = Put(SpeciesFile, "種族", SpeciesSheet(), utf8);
-            int c = Put(TraitFile, "特性", TraitSheet(), utf8);
+            var a = Put(SkillFile, "技", SkillSheet(), utf8);
+            var b = Put(SpeciesFile, "種族", SpeciesSheet(), utf8);
+            var c = Put(TraitFile, "特性", TraitSheet(), utf8);
             Console.WriteLine($"帳面を書き出した: {Path.GetFullPath(Dir)}");
             Console.WriteLine($"  {SkillFile}   … 技 {Skills.All.Count} 件"
-                + (a > 0 ? $"（＋ 書きかけ {a} 件を残した）" : ""));
+                + (a.Orphans > 0 ? $"（＋ 書きかけ {a.Orphans} 件を残した）" : ""));
+            WriteBackNote(a.WrittenBack, "Skills.cs");
             Console.WriteLine($"  {SpeciesFile} … 種族 {SpeciesTable.All.Count} 件"
-                + (b > 0 ? $"（＋ 書きかけ {b} 件を残した）" : ""));
+                + (b.Orphans > 0 ? $"（＋ 書きかけ {b.Orphans} 件を残した）" : ""));
+            WriteBackNote(b.WrittenBack, "Species.cs");
             Console.WriteLine($"  {TraitFile}   … 特性 {Traits.All.Count} 件"
-                + (c > 0 ? $"（＋ 書きかけ {c} 件を残した）" : ""));
+                + (c.Orphans > 0 ? $"（＋ 書きかけ {c.Orphans} 件を残した）" : ""));
+            WriteBackNote(c.WrittenBack, "Trait.cs");
+        }
+
+        /// <summary>「帳面に無かった id を実装から書き戻した」ことを言う。
+        /// ⭐ **0件なら何も出さない**（この直後の「書きかけ」表示と同じ約束）。
+        /// ⚠️ 件数だけ出しても作り手は次に何をすればよいか分からないので、
+        /// なぜそうなるか（実装が正）・どうすれば消えるか（どの表を直すか）まで添える
+        /// （2026-08-23、「帳面から消したのに戻ってくる」と誤解された監査より）。</summary>
+        private static void WriteBackNote(int writtenBack, string implFile)
+        {
+            if (writtenBack == 0) return;
+            Console.WriteLine($"    ⚠️ 帳面に無かった {writtenBack} 件を実装から書き戻しました"
+                + $"（実装が正 ── 消すなら {implFile} から）");
         }
 
         /// <summary>書き出す。⭐ **書きかけを消さない。**
@@ -159,106 +174,315 @@ namespace EggCommand.Sim
         /// ⭐ そこで:
         /// <list type="bullet">
         /// <item>実装にある id … 実装から作り直す（＝直したことが反映される）。
-        ///   ただし手で足した <c>メモ</c> の行は**そのまま持ち越す**</item>
+        ///   ただし手で足した <c>メモ</c>／自由記述の行と // コメントは**元の位置**へ差し戻す</item>
         /// <item>実装に無い id … **1文字も触らず**末尾へ写す</item>
         /// </list>
-        /// ⚠️ だから `write` は「実装で上書き」ではなく「実装と突き合わせて整える」。</summary>
-        private static int Put(string file, string head, string made, UTF8Encoding utf8)
+        /// ⚠️ だから `write` は「実装で上書き」ではなく「実装と突き合わせて整える」。
+        ///
+        /// ⭐ 逆向き（**帳面に無い id が実装にある**＝手で消したのに実装からは消えていない）は、
+        /// 黙らせない。戻り値の <c>WrittenBack</c> で件数を持ち帰り、<see cref="WriteBackNote"/>
+        /// が理由（実装が正）と消し方（どの表を直すか）まで添えて言う（2026-08-23）。
+        ///
+        /// ⭐ **2026-08-23 の監査で見つかった3つの実害を、骨組み側
+        /// （<see cref="EggCommand.Core.Layouts.Write"/>）と同じ考え方で直した ──
+        /// 「原文の行が正。触った行だけ差し替える。それ以外は1バイトも触らない」**:
+        /// <list type="bullet">
+        /// <item>🔴 ツール自身の書きかけ区切り線（<see cref="OrphanBanner"/>）が
+        ///   // コメントとして拾われ、write のたびに増殖していた ── 読むたびに正体を見抜いて捨て、
+        ///   書くたびに（要るときだけ）1組だけ作り直す</item>
+        /// <item>🔴 技.txt は CRLF・種族.txt/特性.txt は LF なのに、常に LF で上書きしていた ──
+        ///   原文の終端文字（<see cref="RawLine"/>）を見て、ファイルの流儀に合わせる</item>
+        /// <item>⚠️ 札の上に書いたコメントが、救出のとき「空行が来たら」＝レコード末尾へ
+        ///   流れていた ── どの札の直前にあったかを覚え、同じ札の直前へ差し戻す</item>
+        /// </list></summary>
+        private static (int Orphans, int WrittenBack) Put(string file, string head, string made, UTF8Encoding utf8)
         {
             string path = Path.Combine(Dir, file);
-            var kept = new Dictionary<string, List<string>>();   // id → メモの行
-            var orphan = new List<string>();                     // 実装に無い1件まるごと
-
-            if (File.Exists(path))
+            if (!File.Exists(path))
             {
-                var known = new HashSet<string>();
-                foreach (var line in made.Split('\n'))
-                {
-                    if (!line.StartsWith("# " + head + " ")) continue;
-                    known.Add(line.Substring(head.Length + 3).Trim());
-                }
-
-                string? id = null;
-                var buffer = new List<string>();
-                void Flush()
-                {
-                    if (id == null) return;
-                    if (known.Contains(id))
-                    {
-                        // ⚠️ **手で足した行を全部持ち越す。**メモだけ拾っていた頃、
-                        //    実装済みの技に足した「効果 = 自由記述 …」と「// コメント」が
-                        //    `write` のたびに**黙って消えて**いた（2026-08-19 の監査）。
-                        //    ⭐ 自由記述は「まだ書けないこと」を託す唯一の場所なので、
-                        //    消えると「実装したつもり」で完成してしまう。
-                        // ⚠️ 札の切り出しは空白の数に頼らない（`メモ=` も `メモ = ` も同じ）。
-                        var mine = new List<string>();
-                        foreach (var l in buffer)
-                        {
-                            string t = Normalize(l).Trim();
-                            if (t.StartsWith("//")) { mine.Add(l.TrimEnd()); continue; }
-                            int eq = t.IndexOf('=');
-                            if (eq < 0) continue;
-                            string key = t.Substring(0, eq).Trim();
-                            string val = t.Substring(eq + 1).Trim();
-                            if (key == MemoKey) mine.Add($"{MemoKey} = {val}");
-                            else if (key == "効果" && val.StartsWith(FreeKind)) mine.Add($"効果 = {val}");
-                        }
-                        if (mine.Count > 0) kept[id] = mine;
-                    }
-                    else
-                    {
-                        orphan.AddRange(buffer);
-                        orphan.Add("");
-                    }
-                    id = null;
-                    buffer.Clear();
-                }
-
-                foreach (var raw in File.ReadAllLines(path))
-                {
-                    string t = Normalize(raw).Trim();
-                    if (t.StartsWith("# " + head + " "))
-                    {
-                        Flush();
-                        id = t.Substring(head.Length + 3).Trim();
-                        buffer.Add(raw);
-                        continue;
-                    }
-                    if (id != null) buffer.Add(raw);
-                }
-                Flush();
+                // ⚠️ 新規ファイルには「元の流儀」が無い。made の \n のまま書く
+                //    （既存3枚は必ず在るので、ここを通るのは新しい帳面を増やした日だけ）。
+                File.WriteAllText(path, made, utf8);
+                // ⭐ 「書き戻し」は原文からの欠落を数えるもの。原文そのものが無い初回は
+                //    数える相手がいない（＝真っさらな初回書き出しを警告扱いにしない）。
+                return (0, 0);
             }
 
-            // ⭐ メモを本文へ差し戻す
+            string original = File.ReadAllText(path);
+            // ⭐ CRLF/LF はファイルの中身で決める（SheetRoundTripDiff と同じ判定）。
+            //    ⚠️ ここが唯一「ファイル単位」の判断 ── 実装から作り直す行に使う流儀を1つに決めるため。
+            //    ⚠️ 1バイトも触らずに運ぶ書きかけ（Gap・孤児）だけは、この後 RawLine 自身の
+            //    終端文字をそのまま使うので、混在があってもそちらは行ごとに正しい。
+            //    ⚠️ 一方で救出した // コメント・メモ・自由記述（Before/Extra/Trailing）は
+            //    **文字列としてしか持たない**（元の終端文字を捨てて再構成する）ので、
+            //    書き出すときは他の作り直した行と同じ eol を使う ── 個々の元の終端は再現しない。
+            string eol = original.Contains("\r\n") ? "\r\n" : "\n";
+            var lines = SplitLines(original);
+
+            var known = new HashSet<string>();
+            foreach (var line in made.Split('\n'))
+            {
+                if (!line.StartsWith("# " + head + " ")) continue;
+                known.Add(line.Substring(head.Length + 3).Trim());
+            }
+
+            var kept = new Dictionary<string, KeptInfo>();
+            var orphanChunks = new List<List<RawLine>>();   // 実装に無い1件ずつ、原文のまま
+            var originalIds = new HashSet<string>();        // ⭐ 元の帳面に実在した id（書き戻し数えの分母）
+
+            int i = 0;
+            while (i < lines.Count && !IsHeading(lines[i].Text, head)) i++;   // 前書きは読み飛ばす（毎回作り直す領域）
+
+            while (i < lines.Count)
+            {
+                int start = i;
+                string id = Normalize(lines[i].Text).Trim().Substring(head.Length + 3).Trim();
+                originalIds.Add(id);
+                i++;
+                int extentEnd = i;
+                while (extentEnd < lines.Count && !IsHeading(lines[extentEnd].Text, head)) extentEnd++;
+
+                if (known.Contains(id))
+                {
+                    kept[id] = ExtractKept(lines, i, extentEnd);
+                }
+                else
+                {
+                    // ⚠️ **1文字も触らない。**書きかけ区切り線の増殖分だけを取り除いて、
+                    //    それ以外（内部の空行・コメントも含めて）は原文のバイトのまま運ぶ。
+                    var chunk = new List<RawLine> { lines[start] };
+                    for (int k = i; k < extentEnd; k++)
+                    {
+                        if (IsBannerLine(Normalize(lines[k].Text).Trim())) continue;
+                        chunk.Add(lines[k]);
+                    }
+                    orphanChunks.Add(chunk);
+                }
+                i = extentEnd;
+            }
+
+            // ⭐ 実装から作り直した本文（made）を歩いて、既知の id には
+            //    ・救出したコメントを、それが付いていた札の**直前**へ
+            //    ・メモ／自由記述と、末尾に残ったコメントを、ブロックの終わりへ
+            //    ・触っていない「空行〜次の見出しの手前」（Gap）を、原文のまま
+            //    差し戻す。
             var sb = new StringBuilder();
             string? now = null;
+            KeptInfo? current = null;
+            Dictionary<string, int>? fieldOcc = null;
+
             foreach (var line in made.Split('\n'))
             {
                 if (line.StartsWith("# " + head + " "))
-                    now = line.Substring(head.Length + 3).Trim();
-                // 1件の終わり（空行）で、持ち越したメモを足す
-                if (line.Length == 0 && now != null && kept.TryGetValue(now, out var memos))
                 {
-                    foreach (var m in memos) sb.Append(m).Append('\n');
-                    now = null;
+                    now = line.Substring(head.Length + 3).Trim();
+                    current = kept.TryGetValue(now, out var ki) ? ki : null;
+                    fieldOcc = new Dictionary<string, int>();
+                    sb.Append(line).Append(eol);
+                    continue;
                 }
-                sb.Append(line).Append('\n');
-            }
-            // 末尾の余分な改行を1つ落とす（made は既に \n で終わる）
-            if (sb.Length > 0 && sb[sb.Length - 1] == '\n') sb.Length--;
 
-            int count = 0;
-            if (orphan.Count > 0)
+                if (line.Length == 0)
+                {
+                    if (current != null)
+                    {
+                        foreach (var c in current.Trailing) sb.Append(c).Append(eol);
+                        // ⚠️ 🔴 **付け先が実装の作り直しで消えていたら、Trailing と同じ扱いで運ぶ。**
+                        //    Before は「この札の N 番目の出現の直前」で拾ったコメントだが、
+                        //    実装側で効果を減らした・パッシブを外した等で出現回数が減ると、
+                        //    その N 番目はもう作り直した本文に現れない ── 何もしなければ
+                        //    このコメントは黙って消える（コードレビューで発覚、2026-08-23）。
+                        //    ⭐ Trailing の doc が元々「付け先の札が実装から消えていた等の受け皿」
+                        //    と謳っていた場所なので、ここへ落とすのが素直。
+                        if (current.Before.Count > 0 && fieldOcc != null)
+                        {
+                            foreach (var pair in current.Before)
+                            {
+                                int seen = fieldOcc.TryGetValue(pair.Key.Key, out var s) ? s : 0;
+                                if (pair.Key.Occurrence < seen) continue;   // 出現した ── 上で差し戻し済み
+                                foreach (var c in pair.Value) sb.Append(c).Append(eol);
+                            }
+                        }
+                        foreach (var (comments, text) in current.Extra)
+                        {
+                            foreach (var c in comments) sb.Append(c).Append(eol);
+                            sb.Append(text).Append(eol);
+                        }
+                        if (current.Gap.Count > 0)
+                            foreach (var rl in current.Gap) sb.Append(rl.Text).Append(rl.Terminator);
+                        else
+                            sb.Append(line).Append(eol);
+                    }
+                    else sb.Append(line).Append(eol);
+                    now = null; current = null; fieldOcc = null;
+                    continue;
+                }
+
+                if (current != null && fieldOcc != null)
+                {
+                    int eq = line.IndexOf('=');
+                    if (eq >= 0)
+                    {
+                        string key = line.Substring(0, eq).Trim();
+                        int occ = fieldOcc.TryGetValue(key, out var c0) ? c0 : 0;
+                        fieldOcc[key] = occ + 1;
+                        if (current.Before.TryGetValue((key, occ), out var pre))
+                            foreach (var c in pre) sb.Append(c).Append(eol);
+                    }
+                }
+                sb.Append(line).Append(eol);
+            }
+            // 末尾の余分な改行を1つ落とす（made は最後の1件のあとにも区切りの空行を持つ）
+            if (sb.Length >= eol.Length && sb.ToString(sb.Length - eol.Length, eol.Length) == eol)
+                sb.Length -= eol.Length;
+
+            int count = orphanChunks.Count;
+            if (count > 0)
             {
-                sb.Append("\n// ══ ここから下は、まだ実装に入っていない書きかけ ══════\n");
-                sb.Append("// ⭐ `sim sheet write` はここを**1文字も触りません**。\n");
-                sb.Append("// ⚠️ 実装に入れたら、次の write で上の並びへ移ります。\n\n");
-                foreach (var l in orphan) sb.Append(l).Append('\n');
-                foreach (var l in orphan) if (l.TrimStart().StartsWith("# " + head + " ")) count++;
+                sb.Append(eol);
+                foreach (var b in OrphanBanner) sb.Append(b).Append(eol);
+                sb.Append(eol);
+                foreach (var chunk in orphanChunks)
+                    foreach (var rl in chunk) sb.Append(rl.Text).Append(rl.Terminator);
             }
 
             File.WriteAllText(path, sb.ToString(), utf8);
-            return count;
+
+            // ⚠️ **黙って書き戻さない。**known（いま実装にある id）のうち、原文に一度も
+            //    出てこなかったものが「帳面から手で消しても実装からは消えない」の正体 ──
+            //    作り手からは「消したのに戻ってくる」としか見えない（2026-08-23 の監査）。
+            //    ⭐ 振る舞い（実装が正・書き戻す）自体は変えない。ここは**数えるだけ**。
+            int writtenBack = 0;
+            foreach (var id in known) if (!originalIds.Contains(id)) writtenBack++;
+
+            return (count, writtenBack);
+        }
+
+        /// <summary>ツール自身が書く「書きかけ」区切り線。⭐ **唯一の出所。**
+        /// ⚠️ 書く側（<see cref="Put"/> 末尾）と読む側（<see cref="IsBannerLine"/>）が
+        /// 別々の文字列を持つと、片方だけ直る（症状2の元凶がまさにこれだった）。</summary>
+        private static readonly string[] OrphanBanner =
+        {
+            "// ══ ここから下は、まだ実装に入っていない書きかけ ══════",
+            "// ⭐ `sim sheet write` はここを**1文字も触りません**。",
+            "// ⚠️ 実装に入れたら、次の write で上の並びへ移ります。",
+        };
+
+        /// <summary>この行はツール自身の区切り線か。⚠️ **これを読む側で見抜いて捨てないと、
+        /// 一度どこかに紛れ込んだ区切り線が「// コメント」として救出され、
+        /// write のたびに増え続ける**（実測: tailwind に4回・nimble に2回・tenacity に6回）。</summary>
+        private static bool IsBannerLine(string normalizedTrimmed)
+        {
+            foreach (var b in OrphanBanner) if (b == normalizedTrimmed) return true;
+            return false;
+        }
+
+        /// <summary>この行が「# 見出し語 」で始まる見出し行か。</summary>
+        private static bool IsHeading(string raw, string head) =>
+            Normalize(raw).Trim().StartsWith("# " + head + " ", StringComparison.Ordinal);
+
+        /// <summary>既知の1件（見出しの次の行 〜 次の見出しの手前）から、
+        /// 元の位置へ差し戻すための情報を作る。⭐ 骨組み側の <c>Splice</c> と同じ発想 ──
+        /// 触らない行は原文のまま、触る行（実装から作り直す札）だけ後で差し替える。</summary>
+        private sealed class KeptInfo
+        {
+            /// <summary>(札の名前, その札の中で何番目の出現か) → 直前にあったコメント行。
+            /// ⚠️ 「効果 = 」のように同じ札が何度も出るので、出現回数まで見ないと
+            /// どの1行の上に付いていたコメントかを取り違える。</summary>
+            public readonly Dictionary<(string Key, int Occurrence), List<string>> Before = new();
+            /// <summary>最後の札より後、ブロックの終わり（空行）までに残っていたコメント。
+            /// ⚠️ 付け先の札が実装から消えていた等、行き先が言えないときの受け皿。</summary>
+            public readonly List<string> Trailing = new();
+            /// <summary>手で足した「メモ = 」「効果 = 自由記述 …」。⭐ 直前のコメントごと運ぶ。</summary>
+            public readonly List<(List<string> Comments, string Line)> Extra = new();
+            /// <summary>ブロックを閉じる空行 〜 次の見出しの手前。⭐ **触っていないので原文のまま**
+            /// （終端文字も込み）。⚠️ ただしツール自身の区切り線（<see cref="IsBannerLine"/>）が
+            /// 1本でも混じっていたら、**この Gap ごと空にする**（1行だけ除いて残りを運ぶと、
+            /// 区切り線の周りの空行が write のたびに増え続ける）。</summary>
+            public readonly List<RawLine> Gap = new();
+        }
+
+        private static KeptInfo ExtractKept(List<RawLine> lines, int from, int extentEnd)
+        {
+            var info = new KeptInfo();
+            var pending = new List<string>();          // まだどの札にも付いていないコメント
+            var occurrence = new Dictionary<string, int>();
+            int cut = from;
+            while (cut < extentEnd && lines[cut].Text.Trim().Length != 0)
+            {
+                string raw = lines[cut].Text;
+                string t = Normalize(raw).Trim();
+                if (IsBannerLine(t)) { cut++; continue; }
+                if (t.StartsWith("//"))
+                {
+                    // ⚠️ TrimEnd しない。行末の空白を保つ（症状5）。先頭側は元々 raw のまま。
+                    pending.Add(raw);
+                    cut++;
+                    continue;
+                }
+                int eq = t.IndexOf('=');
+                if (eq < 0) { cut++; continue; }   // 姿の格子など。⚠️ pending はクリアしない（次の札まで持ち越す）
+                string key = t.Substring(0, eq).Trim();
+                string val = t.Substring(eq + 1).Trim();
+                if (key == MemoKey)
+                {
+                    info.Extra.Add((new List<string>(pending), $"{MemoKey} = {val}"));
+                    pending.Clear();
+                }
+                else if (key == "効果" && val.StartsWith(FreeKind))
+                {
+                    info.Extra.Add((new List<string>(pending), $"効果 = {val}"));
+                    pending.Clear();
+                }
+                else
+                {
+                    int occ = occurrence.TryGetValue(key, out var c) ? c : 0;
+                    occurrence[key] = occ + 1;
+                    if (pending.Count > 0)
+                    {
+                        info.Before[(key, occ)] = new List<string>(pending);
+                        pending.Clear();
+                    }
+                }
+                cut++;
+            }
+            info.Trailing.AddRange(pending);
+
+            // ⚠️ 🔴 **区切り線が混じっていたら Gap ごと捨てる。**書きかけの節（先頭の空行・
+            //    区切り線・区切り線の後ろの空行）は Put() の末尾が毎回作り直す「ツール自身の
+            //    整形」なので、ここで運んでしまうと write のたびに ── 前回作った整形 ＋
+            //    今回また作った整形 ── と**空行が増え続ける**（実測: 2回書き出しただけで
+            //    2行→4行に倍増した。IsBannerLine で行1本ずつ除いても、整形の周りの空行まで
+            //    運ぶと同じ壊れ方になる）。⭐ 区切り線が無いときだけ、原文の空行を忠実に運ぶ
+            //    （doom-clock の後ろにある10行の空行のような、本当に手で空けた分はそのまま残る）。
+            bool sawBanner = false;
+            for (int k = cut; k < extentEnd; k++)
+                if (IsBannerLine(Normalize(lines[k].Text).Trim())) { sawBanner = true; break; }
+            if (!sawBanner)
+                for (int k = cut; k < extentEnd; k++) info.Gap.Add(lines[k]);
+            return info;
+        }
+
+        /// <summary>原文を行ごとに割る。⚠️ 終端文字（<c>\r\n</c> / <c>\n</c> / 裸の <c>\r</c>）ごと
+        /// 持つ ── 技.txt が CRLF・種族.txt/特性.txt が LF という混在が実在するので、
+        /// ファイル単位でなく行単位で扱う（骨組み側 <c>Layouts.SplitLines</c> と同じ考え方）。</summary>
+        private static List<RawLine> SplitLines(string text)
+        {
+            var result = new List<RawLine>();
+            int start = 0, i = 0;
+            while (i < text.Length)
+            {
+                char c = text[i];
+                if (c != '\r' && c != '\n') { i++; continue; }
+                string content = text.Substring(start, i - start);
+                string terminator;
+                if (c == '\r' && i + 1 < text.Length && text[i + 1] == '\n') { terminator = "\r\n"; i += 2; }
+                else { terminator = c.ToString(); i += 1; }
+                result.Add(new RawLine(content, terminator));
+                start = i;
+            }
+            result.Add(new RawLine(text.Substring(start), ""));
+            return result;
         }
 
         /// <summary>技の帳面の前書き。⭐ **HTML 版もこれを書く。**

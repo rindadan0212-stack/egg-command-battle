@@ -16,6 +16,7 @@ internal static class SheetRoundTripDiff
     public sealed class Report
     {
         public bool OriginalHasCrlf;
+        public bool ProducedHasCrlf;
         public int OriginalLines;
         public int ProducedLines;
 
@@ -44,7 +45,14 @@ internal static class SheetRoundTripDiff
     /// どちらも**1文字も実ファイルへは書いていない**（呼び出し側の責任）。</summary>
     public static Report Analyze(string original, string produced, string head)
     {
-        var report = new Report { OriginalHasCrlf = original.Contains("\r\n") };
+        var report = new Report
+        {
+            OriginalHasCrlf = original.Contains("\r\n"),
+            // ⭐ Put() の直し（2026-08-23）で、書き出しはファイル自身の流儀（CRLF/LF）に
+            //    合わせるようになった。⚠️ ここを見ずに OriginalHasCrlf だけで
+            //    「書き出しは LF に化ける」と決め打ちすると、直った後も嘘の警告を出し続ける。
+            ProducedHasCrlf = produced.Contains("\r\n"),
+        };
 
         // ⚠️ 改行コードそのものの差は別枠で数える（CRLF→LF は1行ごとの「内容の変化」ではなく
         //    ファイル全体の性質なので、ここで畳んでおかないと本文の差分が丸ごと汚染される）。
