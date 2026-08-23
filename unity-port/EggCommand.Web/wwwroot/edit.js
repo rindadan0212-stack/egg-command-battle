@@ -9,6 +9,35 @@
 //    ここも「盤の上に透明な覆いを1枚」＋「離れた指の座標から探す」で拾う。
 
 window.eggEdit = {
+  /** ⭐ **いま選べる対象が「部品」か。**null／空なら今までどおり `data-line` で探す。
+   *
+   * ⚠️ `EditPage` が `_of` を変えるたび呼び直す（`Scenes.Of(_of).ByPart` の値）。
+   * ⭐ ポインタの listener を張り直さずに済むよう、`listen()` とは別の小さな入口にした
+   * ── `_of` が変わるたびに `listen()` 全体（`setPointerCapture` まわり）を
+   * 再実行する必要は無い。
+   * @param {string|null} partId 部品の id（`cell` 等）。単独の骨組み／コードから描かれる
+   * `unit`/`square`/`walker`/`frame` は null（それらは `use=` を通らず、
+   * 差し込まれた側でも自分の `data-line` を持つ ── 今までどおりの探し方でよい）。 */
+  setPart(partId) {
+    this._partId = partId || null
+  },
+
+  /** ⭐ **節点の探し方を1本化。**部品を選んでいるかで `data-line` と
+   * `data-part`＋`data-part-line` を切り替える。⚠️ 呼び出し側（`nodeAt` / `rering` /
+   * `_drawGuide`）で個別に分岐を書くと、いつか1か所だけ直し忘れる。 */
+  _selector(line) {
+    return this._partId
+      ? '[data-part="' + this._partId + '"][data-part-line="' + line + '"]'
+      : '[data-line="' + line + '"]'
+  },
+
+  /** その節点の「いま編集している文書の中の行」。⚠️ 部品なら `data-part-line`
+   * （`cell.txt` 等・自分のファイルの行）、そうでなければ `data-line`。 */
+  _lineOf(node) {
+    if (!node) return ''
+    return this._partId ? (node.dataset.partLine || '') : (node.dataset.line || '')
+  },
+
   /** 盤を器（列）に合わせて縮める。⚠️ 器のサイズが変わるたび呼び直す。
    * @param {string} wrapId 器の id @param {string} stageId 盤（1080x1920）の id */
   fit(wrapId, stageId) {
@@ -53,17 +82,24 @@ window.eggEdit = {
     let k = 1
 
     // ⭐ 覆いをどけて、その真下に何が描かれているかを見る（一瞬だけ）。
+    // ⚠️ **部品を選んでいるときは `data-part="<_of>"` だけを探す。**
+    //    ⭐ 他の部品や土台自身の節点（`data-line` しか持たない）は拾わない
+    //    ── `[data-part="X"]` は X という部品自身の節点にしか付かない
+    //    （`LayoutDom.cs` が `PartId` からそのまま出す）。
     const nodeAt = (x, y) => {
       cap.style.pointerEvents = 'none'
       const el = document.elementFromPoint(x, y)
       cap.style.pointerEvents = 'auto'
-      return el instanceof Element ? el.closest('[data-line]') : null
+      if (!(el instanceof Element)) return null
+      return this._partId
+        ? el.closest('[data-part="' + this._partId + '"]')
+        : el.closest('[data-line]')
     }
 
     const down = (e) => {
       e.preventDefault()
       const node = nodeAt(e.clientX, e.clientY)
-      line = node ? node.dataset.line : null
+      line = node ? this._lineOf(node) : null
       from = { x: e.clientX, y: e.clientY }
       dragging = false
       const stage = document.getElementById('edstage')
@@ -97,7 +133,7 @@ window.eggEdit = {
         // ⭐ 動かさずに離した＝いままでどおり「選ぶ」。
         const node = nodeAt(e.clientX, e.clientY)
         if (node) this._ringTo(node); else this._ringHide()
-        owner.invokeMethodAsync('Picked', node ? node.dataset.line : '')
+        owner.invokeMethodAsync('Picked', node ? this._lineOf(node) : '')
       }
       from = null; line = null; dragging = false
     }
@@ -175,10 +211,11 @@ window.eggEdit = {
   },
 
   /** 選んでいる行の輪を描き直す（木から選んだとき・数を直して盤を組み直したときに使う
-   * ── そのときは指の座標が無いので、盤の中から同じ `data-line` を持つ最初の1枚を探す）。
+   * ── そのときは指の座標が無いので、盤の中から同じ行を持つ最初の1枚を探す）。
+   * ⚠️ **部品を選んでいるときは同じ探し方に切り替える**（`_selector` が唯一の出所）。
    * @param {string} line 空文字なら輪を隠す */
   rering(line) {
-    const node = line ? document.querySelector('#edstage [data-line="' + line + '"]') : null
+    const node = line ? document.querySelector('#edstage ' + this._selector(line)) : null
     if (node) this._ringTo(node); else this._ringHide()
   },
 
@@ -227,10 +264,13 @@ window.eggEdit = {
     //    数はちゃんと吸い付く。見せる線が無いだけ。
     if (!token || token === 'step') { el.style.display = 'none'; return }
 
+    // ⚠️ **`line:N:edge` の N も、部品を選んでいるときは `_selector` で探す。**
+    //    ⭐ C# 側（`EditPage.TargetsX`/`TargetsY`）が渡す行番号は、いま編集している
+    //    文書（部品なら部品自身のファイル）の中の番号 ── `rering` と同じ探し方が要る。
     const parts = token.split(':')
     const target = parts[0] === 'stage'
       ? document.getElementById('edstage')
-      : document.querySelector('#edstage [data-line="' + parts[1] + '"]')
+      : document.querySelector('#edstage ' + this._selector(parts[1]))
     const edge = parts[0] === 'stage' ? parts[1] : parts[2]
     const wrap = document.getElementById('edwrap')
     if (!target || !wrap) { el.style.display = 'none'; return }

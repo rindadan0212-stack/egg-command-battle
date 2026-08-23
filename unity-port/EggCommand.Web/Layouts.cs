@@ -26,8 +26,16 @@ namespace EggCommand.Web
         public static void SetOverride(string id, string? text)
         {
             if (text == null) Overrides.Remove(id); else Overrides[id] = text;
-            // ⭐ 古い解決結果を捨てる ── 次の Of() で読み直させる（差し替えなければ埋め込みへ戻る）
-            Cache.Remove(id);
+            // 🔴 **`id` だけでなく、キャッシュを丸ごと捨てる。**
+            //    ⚠️ 実測 2026-08-23: `Cache.Remove(id)` だけだと、`id` が部品
+            //    （`cell` 等）で、その部品を `use=` で差している土台（`box` 等）が
+            //    既に解決済みでキャッシュに載っているとき、土台の中に**古い部品が
+            //    焼き込まれたまま**残る ── `Resolve`/`Splice` は差した瞬間の部品の中身を
+            //    「インライン展開」するので、部品だけを読み直させても土台には効かない。
+            //    ⭐ どの土台がどの部品を差しているかを逆引きせず、単純にキャッシュを
+            //    空にする ── 骨組みは数十行の小さな字なので、直後の1回だけ余分に
+            //    Parse+Resolve しても実用上のコストにならない（エディタの操作でしか呼ばれない）。
+            Cache.Clear();
         }
 
         public static EggCommand.Core.Layout Of(string id)

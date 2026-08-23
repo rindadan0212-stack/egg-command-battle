@@ -27,11 +27,23 @@
   <div class="edtop">
     <label class="edwho">
       骨組み
+      @* ⭐ 32枚を1つの select に並べると読めないので、画面／部品で分ける
+         （`Scenes.All` が唯一の出所 ── 増えたらここも自動で増える）。 *@
       <select value="@_of" @onchange="OnOfChange">
-        @foreach (var id in KnownSheets)
-        {
-          <option value="@id">@id</option>
-        }
+        <optgroup label="画面">
+          @foreach (var s in Scenes.All)
+          {
+            if (s.IsPart) continue;
+            <option value="@s.Id">@s.Id（@s.Why）</option>
+          }
+        </optgroup>
+        <optgroup label="部品">
+          @foreach (var s in Scenes.All)
+          {
+            if (!s.IsPart) continue;
+            <option value="@s.Id">@s.Id（@s.Why）</option>
+          }
+        </optgroup>
       </select>
     </label>
 
@@ -168,9 +180,8 @@
 </div>
 
 @code {
-    /// <summary>骨組みごとに、どの `Sheets` を呼ぶか（対応表）。⭐ **まず4枚だけ通す。**
-    /// 残りを足すときは、この一覧と <see cref="Dispatch"/> の case を1つ増やすだけでよい。</summary>
-    private static readonly string[] KnownSheets = { "box", "home", "nests", "breed" };
+    // ⭐ 骨組み32枚ぶんの対応表は `Scenes.cs` へ集めた（`Scenes.All`/`Scenes.Of`/`Scenes.Draw`）。
+    //    ⚠️ ここに一覧を持たせない ── 「どの実データで・どの画面の中に描くか」の出所は1つ。
 
     [SupplyParameterFromQuery(Name = "of")] public string? OfQuery { get; set; }
 
@@ -228,13 +239,23 @@
 
     private DotNetObjectReference<EditPage>? _me;
 
+    /// <summary>⭐ その骨組みが「部品」なら自分の id、そうでなければ null
+    /// （`eggEdit.setPart` へ渡す ── JS 側の選び方（`data-part` か `data-line` か）を切り替える）。</summary>
+    private static string? PartIdOf(string of) => Scenes.Of(of).ByPart ? of : null;
+
+    /// <summary>⚠️ JS（`eggEdit`）と繋がる前（初回描画より前）に `InvokeVoidAsync` を
+    /// 呼ばせないための旗。<see cref="OnAfterRenderAsync"/> の firstRender で立つ。</summary>
+    private bool _ready;
+
     protected override void OnParametersSet()
     {
-        var want = !string.IsNullOrEmpty(OfQuery) && Array.IndexOf(KnownSheets, OfQuery) >= 0
-            ? OfQuery! : "box";
+        var want = !string.IsNullOrEmpty(OfQuery) && Scenes.Has(OfQuery!) ? OfQuery! : "box";
         if (want == _of && _html.Length > 0) return;
         _of = want;
         RefreshView();
+        // ⚠️ 初回描画より前は呼ばない（`_ready` が立つのは OnAfterRenderAsync の firstRender）
+        //    ── そちらが `_of` の最終値を読んでまとめて呼ぶので、ここでは二重に呼ばない。
+        if (_ready) _ = Js.InvokeVoidAsync("eggEdit.setPart", PartIdOf(_of));
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -247,8 +268,10 @@
         if (_demo) LoadDemo();
         await Js.InvokeVoidAsync("eggEdit.start", "edwrap", "edstage");
         await Js.InvokeVoidAsync("eggEdit.listen", _me, "edcap");
+        await Js.InvokeVoidAsync("eggEdit.setPart", PartIdOf(_of));
         await Js.InvokeVoidAsync("eggEdit.resize", _me);
         await Js.InvokeVoidAsync("eggEdit.keys", _me);
+        _ready = true;
         StateHasChanged();
     }
 
@@ -297,7 +320,7 @@
     private async Task OnOfChange(ChangeEventArgs e)
     {
         var next = Convert.ToString(e.Value) ?? "box";
-        if (Array.IndexOf(KnownSheets, next) < 0) next = "box";
+        if (!Scenes.Has(next)) next = "box";
         ClearOverrides();
         _of = next;
         _raw = null;
@@ -309,6 +332,9 @@
         _undo.Clear();
         _redo.Clear();
         RefreshView();
+        // 🔴 **選び方（data-part か data-line か）を切り替える。**⚠️ ここを忘れると、
+        //    部品⇄画面を行き来したとき、前の骨組みの探し方のまま拾ってしまう。
+        await Js.InvokeVoidAsync("eggEdit.setPart", PartIdOf(_of));
         await Js.InvokeVoidAsync("eggEdit.rering", "");
         if (_demo) LoadDemo();
         else if (!string.IsNullOrEmpty(_folder)) await LoadFile();
@@ -793,40 +819,14 @@
 
     private void RefreshView()
     {
-        var resolved = LayoutStore.Of(_of);
+        var scene = Scenes.Of(_of);
+        // 🔴 **検査は土台（HostId）を見る。**⚠️ 部品だけを単独で検査すると嘘になる
+        //    ── 部品は親の中の座標で生きているのに、画面 1080x1920 に対して測ることに
+        //    なってしまう。⭐ 土台こそが「実際に起きている状況」（`_of` が画面そのもの
+        //    のときは HostId == Id なので、今までと同じ）。
+        var resolved = LayoutStore.Of(scene.HostId);
         _faults = Core.Layouts.Faults(resolved);
-        _html = Dispatch(_of);
-    }
-
-    /// <summary>⭐ **対応表そのもの。**骨組みの id → どの `Sheets` を、どんな実データで呼ぶか。
-    /// ⚠️ ここは「確かめ用の頁」（`Pages/BoxPage.razor` 等）と同じ組み方
-    /// （`Demo.Game()` の固定 seed）── 遊ぶ頁と確かめる頁で描き方を分けない。
-    /// 残りの画面を足すときは、この switch に1行足し、上の <see cref="KnownSheets"/>
-    /// にも id を足すだけでよい。</summary>
-    private static string Dispatch(string of)
-    {
-        switch (of)
-        {
-            case "home":
-            {
-                var shell = new Shell(Demo.Game(), Demo.Now);
-                Demo.Incubate(shell.Game, shell.Now, 3);
-                return Sheets.Home(shell);
-            }
-            case "nests":
-                return Sheets.Wilds(new Shell(Demo.Game(), Demo.Now));
-            case "breed":
-            {
-                var shell = new Shell(Demo.Game(), Demo.Now);
-                var sorted = shell.Sorted();
-                if (sorted.Count > 0) shell.ParentA = sorted[0].Id;
-                if (sorted.Count > 1) shell.ParentB = sorted[1].Id;
-                return Sheets.Breed(shell);
-            }
-            case "box":
-            default:
-                return Sheets.Box(new Shell(Demo.Game(), Demo.Now));
-        }
+        _html = Scenes.Draw(scene.HostId);
     }
 
     // ── 保存 ────────────────────────────────────────
