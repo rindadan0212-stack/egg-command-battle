@@ -91,7 +91,9 @@ namespace EggCommand.Core
         public int Shield;
         /// <summary>飛ばす手番の残り。</summary>
         public int Stun;
-        /// <summary>味方への単体攻撃を引き受ける残り回数。</summary>
+        /// <summary>⭐ **掛けてきた相手しか狙えなくなる**残り回数。
+        /// ⚠️ 札は**掛けられた側**に乗る（味方に付ける強化ではない ── 意味が変わった。
+        /// `効果の種類.md` の「挑発の意味が変わりました」）。狙い先は <see cref="TauntBy"/>。</summary>
         public int Taunt;
         /// <summary>挑発を掛けてきた相手の <see cref="Unit.Key"/>。
         /// ⭐ 挑発は**相手に付ける弱化**なので、単体攻撃の狙い先がここに固定される。</summary>
@@ -1917,15 +1919,18 @@ namespace EggCommand.Core
                 Sign(s.Def.Percent) + "%" + Ever(s.Def), s.Def.Percent > 0));
             if (IsOn(s.Spd)) output.Add(new StatusBadge(StatusKind.Spd,
                 Sign(s.Spd.Percent) + "%" + Ever(s.Spd), s.Spd.Percent > 0));
-            // ⚠️ 良い/悪いは「この個体にとって」で判じる。毒＝悪い、リジェネ＝良い、のように
-            //    弱化・強化の意味そのままではなく、**受けている側の得失**で決める
-            //    （挑発は自分に掛ける守りの構えなので良い側、ブロックは
-            //    外からの回復・強化を弾かれてしまうので悪い側 ── 割り切り。詳細は課題.md）。
+            // ⚠️ 良い/悪いは「**この札を持っている個体にとって**」で判じる。
+            //    ⭐ 掛けた側の得失ではない ── 敵に付けた弱化は、敵の列に**悪い側の色**で出る。
+            //    🔴 挑発を良い側にしていた（2026-08-23 修正）。挑発は**相手に付ける弱化**
+            //       （`Taunted` の説明・`効果の種類.md`）なので悪い側。
+            //       ⚠️ 緑で出ると「相手が強くなった」と読めてしまう ── 狙い先を選ぶ、
+            //       まさにその瞬間に逆の意味を出していた。
+            //    ⭐ ブロックも悪い側（外からの回復・強化を弾かれてしまう）。
             if (s.Poison.Turns > 0) output.Add(new StatusBadge(StatusKind.Poison, "×" + s.Poison.Stacks, false));
             if (s.Regen.Turns > 0) output.Add(new StatusBadge(StatusKind.Regen, "×" + s.Regen.Stacks, true));
             if (s.Shield > 0) output.Add(new StatusBadge(StatusKind.Shield, s.Shield.ToString(), true));
             if (s.Stun > 0) output.Add(new StatusBadge(StatusKind.Stun, s.Stun.ToString(), false));
-            if (s.Taunt > 0) output.Add(new StatusBadge(StatusKind.Taunt, s.Taunt.ToString(), true));
+            if (s.Taunt > 0) output.Add(new StatusBadge(StatusKind.Taunt, s.Taunt.ToString(), false));
             if (s.Guts > 0) output.Add(new StatusBadge(StatusKind.Guts, s.Guts.ToString(), true));
             if (s.Immune > 0) output.Add(new StatusBadge(StatusKind.Immune, s.Immune.ToString(), true));
             if (s.Sleep > 0) output.Add(new StatusBadge(StatusKind.Sleep, s.Sleep.ToString(), false));
