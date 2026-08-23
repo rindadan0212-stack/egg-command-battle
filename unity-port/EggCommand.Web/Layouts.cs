@@ -15,23 +15,48 @@ namespace EggCommand.Web
     {
         private static readonly Dictionary<string, EggCommand.Core.Layout> Cache = new Dictionary<string, Layout>();
 
+        /// <summary>⭐ **エディタ専用**（`/edit`）の差し替え。ディスクから読んだ生の字で、
+        /// 次の <see cref="Of"/> の出所を一時的に埋め込み資源から差し替える。
+        ///
+        /// ⚠️ **遊ぶ頁（`/app`）はこれを一切呼ばない。**⭐ 呼ぶのはエディタ（`EditPage`）だけ
+        /// ── 呼ばれない限り、`Of` は今までどおり埋め込みだけを読む。
+        /// ⚠️ `text` に null を渡すと差し替えを解いて埋め込みへ戻る。</summary>
+        private static readonly Dictionary<string, string> Overrides = new Dictionary<string, string>();
+
+        public static void SetOverride(string id, string? text)
+        {
+            if (text == null) Overrides.Remove(id); else Overrides[id] = text;
+            // ⭐ 古い解決結果を捨てる ── 次の Of() で読み直させる（差し替えなければ埋め込みへ戻る）
+            Cache.Remove(id);
+        }
+
         public static EggCommand.Core.Layout Of(string id)
         {
             if (Cache.TryGetValue(id, out var found)) return found;
 
-            var asm = typeof(LayoutStore).Assembly;
-            // ⚠️ 名前は「アセンブリ名.Layouts.<id>.txt」になる
-            string path = asm.GetName().Name + ".Layouts." + id + ".txt";
-            using var stream = asm.GetManifestResourceStream(path);
-            if (stream == null)
+            string text;
+            if (Overrides.TryGetValue(id, out var overridden))
             {
-                // ⚠️ 黙って空を返さない。⭐ 何が無いのかを名前ごと言う
-                var had = string.Join(", ", asm.GetManifestResourceNames());
-                throw new FileNotFoundException($"骨組みが無い: {path}（在るもの: {had}）");
+                text = overridden;
             }
-            using var reader = new StreamReader(stream);
+            else
+            {
+                var asm = typeof(LayoutStore).Assembly;
+                // ⚠️ 名前は「アセンブリ名.Layouts.<id>.txt」になる
+                string path = asm.GetName().Name + ".Layouts." + id + ".txt";
+                using var stream = asm.GetManifestResourceStream(path);
+                if (stream == null)
+                {
+                    // ⚠️ 黙って空を返さない。⭐ 何が無いのかを名前ごと言う
+                    var had = string.Join(", ", asm.GetManifestResourceNames());
+                    throw new FileNotFoundException($"骨組みが無い: {path}（在るもの: {had}）");
+                }
+                using var reader = new StreamReader(stream);
+                text = reader.ReadToEnd();
+            }
+
             // ⭐ `use=` を先に差し替える（Unity 版と同じ約束）
-            found = Core.Layouts.Resolve(Core.Layouts.Parse(id, reader.ReadToEnd()), Of);
+            found = Core.Layouts.Resolve(Core.Layouts.Parse(id, text), Of);
 
             // ⚠️ **読んだ場で検査する。**⭐ アセットだけ直してテストを回し忘れたときに拾う
             foreach (var line in Core.Layouts.Faults(found))

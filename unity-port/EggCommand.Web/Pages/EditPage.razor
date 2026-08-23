@@ -1,0 +1,484 @@
+@page "/edit"
+@using System.Globalization
+@using EggCommand.Core
+@using EggCommand.Web
+@implements IDisposable
+@inject IJSRuntime Js
+
+@*
+  骨組み（`Assets/Resources/Layouts/*.txt`）を GUI で直して、ファイルへ書き戻す道具。
+
+  ⚠️ **この頁は `/app`（遊ぶ頁）とは完全に別物。**`Shell` / `Sheets.*` は呼ぶだけで、
+  中身には触らない。⭐ 掴んで動かす・吸い付き・取り消しは**まだ作っていない**
+  （今回の完成条件は「開く→選ぶ→直す→保存→その行だけ変わる」の背骨1本）。
+
+  ⭐ **編集面は遊ぶ画面そのもの**（`wiki/開発/web移行計画.md` §11「別プレビューを作らない」）。
+  盤は `Sheets.*` を呼んで実データで描く ── `LayoutStore` にディスクの生の字を
+  一時的に差し込んで（`SetOverride`）、Sheets 側は今までどおり `LayoutStore.Of` を
+  呼ぶだけで済むようにしてある（Sheets.cs は1文字も変えていない）。
+
+  ⚠️ **時間で動くものは無い。**AppPage のような `System.Threading.Timer`
+  （戦いの拍・すごろくの拍）をそもそも作っていない ── 測る対象が拍ごとに動くと、
+  選択も検査も「いま何を見ているか」が揺れて嘘になる。
+*@
+
+<div class="edroot">
+  <div class="edtop">
+    <label class="edwho">
+      骨組み
+      <select value="@_of" @onchange="OnOfChange">
+        @foreach (var id in KnownSheets)
+        {
+          <option value="@id">@id</option>
+        }
+      </select>
+    </label>
+
+    <button type="button" @onclick="PickFolder" disabled="@(!_supported)">
+      📂 フォルダを選ぶ@(string.IsNullOrEmpty(_folder) ? "" : $"（{_folder}）")
+    </button>
+
+    <button type="button" @onclick="Save" disabled="@(_raw is null)">💾 保存</button>
+
+    @if (!_checkedSupport)
+    {
+      <span class="edmuted">対応を確かめています…</span>
+    }
+    else if (!_supported)
+    {
+      <span class="edwarn">
+        ⚠️ このブラウザは File System Access API に対応していません（Chrome / Edge で開いてください）。
+      </span>
+    }
+
+    @if (!string.IsNullOrEmpty(_status))
+    {
+      <span class="edstatus">@_status</span>
+    }
+  </div>
+
+  <div class="edmain">
+    @* ── 木 ─────────────────────────────────────── *@
+    <div class="edtree">
+      @if (_raw is null)
+      {
+        <div class="edhint">フォルダを選ぶと、原文の行の順で並びます。</div>
+      }
+      else
+      {
+        @foreach (var row in Flatten())
+        {
+          <div class="edrow @(row.Node.LineNumber == _selectedLine ? "on" : "")"
+               style="padding-left:@(8 + row.Depth * 14)px"
+               @onclick="() => SelectLine(row.Node.LineNumber)">
+            <span class="edname">@row.Node.Name</span>
+            <span class="edkind">@row.Node.Kind</span>
+          </div>
+        }
+      }
+    </div>
+
+    @* ── 盤 ─────────────────────────────────────── *@
+    <div class="edboardwrap" id="edwrap">
+      <div class="edstagewrap">
+        <div class="edstage" id="edstage">
+          @((MarkupString)_html)
+          @* ⭐ 選んでいる節点を輪で囲む（塗り潰さない）。⚠️ 盤の外枠より前に置いて、
+             盤の組み直し（@_html の差し替え）の影響を受けない層にしたいところだが、
+             ここは1本だけなので `edit.js` が毎回位置を数で置き直す方式で足りる。 *@
+          <div id="edring" class="edring"></div>
+          @* ⭐ **透明な覆い。**盤のいちばん上（DOM の最後）に置いて、遊びの押しどころ
+             （`data-tap`）より先に指を受け止める。中身は空 ── 押しどころは覆いの
+             「下に何が描かれているか」を JS 側が `elementFromPoint` で探して拾う。 *@
+          <div id="edcap" class="edcap"></div>
+        </div>
+      </div>
+    </div>
+
+    @* ── その1つ ───────────────────────────────── *@
+    <div class="edinspector">
+      @{ var sel = _raw is null || _selectedLine < 0 ? null : Find(_raw.Roots, _selectedLine); }
+      @if (sel is null)
+      {
+        <div class="edhint">盤の部品を押すか、木から選んでください。</div>
+      }
+      else
+      {
+        <div class="edhead">@sel.Name <span class="edkind">@sel.Kind</span></div>
+
+        <div class="edfieldrow">
+          @Field("左", _left, v => ApplyLeft(v))
+          @Field("上", _top, v => ApplyTop(v))
+        </div>
+        <div class="edfieldrow">
+          @Field("幅", _width, v => ApplyWidth(v))
+          @Field("高", _height, v => ApplyHeight(v))
+        </div>
+
+        <div class="edstepwrap">
+          <span>きざみ</span>
+          <input class="edstepnum" type="number" value="@_step"
+                 @onchange="e => _step = ParseF(e.Value, _step)" />
+        </div>
+      }
+    </div>
+  </div>
+
+  @* ── 不備 ───────────────────────────────────────── *@
+  <div class="edbottom">
+    @if (_raw is null)
+    {
+      <span class="edmuted">● フォルダを選ぶと検査が動きます</span>
+    }
+    else if (_faults.Count == 0)
+    {
+      <span class="edok">● 不備 0件</span>
+    }
+    else
+    {
+      <span class="edbad">● @(_faults.Count)件</span>
+      <span class="edfaultline">@_faults[0]</span>
+    }
+  </div>
+</div>
+
+@code {
+    /// <summary>骨組みごとに、どの `Sheets` を呼ぶか（対応表）。⭐ **まず4枚だけ通す。**
+    /// 残りを足すときは、この一覧と <see cref="Dispatch"/> の case を1つ増やすだけでよい。</summary>
+    private static readonly string[] KnownSheets = { "box", "home", "nests", "breed" };
+
+    [SupplyParameterFromQuery(Name = "of")] public string? OfQuery { get; set; }
+
+    private string _of = "box";
+    private bool _checkedSupport;
+    private bool _supported;
+    private string _folder = "";
+    private string? _originalText;
+    private Core.Layout? _raw;
+    private int _selectedLine = -1;
+    private string _html = "";
+    private List<string> _faults = new();
+    private string _status = "";
+    private float _left, _top, _width, _height;
+    private float _step = 10f;
+
+    /// <summary>このページが差し替えた骨組みの id。⚠️ 離れるとき必ず解く
+    /// （`LayoutStore` は静的＝プロセス全体で共有なので、解かずに `/app` へ移ると
+    /// 遊ぶ頁が編集中の未保存の姿を見てしまう）。</summary>
+    private readonly HashSet<string> _touched = new();
+
+    private DotNetObjectReference<EditPage>? _me;
+
+    protected override void OnParametersSet()
+    {
+        var want = !string.IsNullOrEmpty(OfQuery) && Array.IndexOf(KnownSheets, OfQuery) >= 0
+            ? OfQuery! : "box";
+        if (want == _of && _html.Length > 0) return;
+        _of = want;
+        RefreshView();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _me = DotNetObjectReference.Create(this);
+        _supported = await Js.InvokeAsync<bool>("eggDisk.supported");
+        _checkedSupport = true;
+        await Js.InvokeVoidAsync("eggEdit.start", "edwrap", "edstage");
+        await Js.InvokeVoidAsync("eggEdit.listen", _me, "edcap");
+        StateHasChanged();
+    }
+
+    // ── フォルダ ────────────────────────────────────
+
+    private async Task PickFolder()
+    {
+        bool ok = await Js.InvokeAsync<bool>("eggDisk.pick");
+        if (!ok) { _status = "フォルダを選べませんでした"; return; }
+        _folder = await Js.InvokeAsync<string>("eggDisk.folderName");
+        await LoadFile();
+    }
+
+    private async Task OnOfChange(ChangeEventArgs e)
+    {
+        var next = Convert.ToString(e.Value) ?? "box";
+        if (Array.IndexOf(KnownSheets, next) < 0) next = "box";
+        ClearOverrides();
+        _of = next;
+        _raw = null;
+        _originalText = null;
+        _selectedLine = -1;
+        _status = "";
+        RefreshView();
+        await Js.InvokeVoidAsync("eggEdit.rering", "");
+        if (!string.IsNullOrEmpty(_folder)) await LoadFile();
+    }
+
+    /// <summary>⚠️ `LayoutStore` は静的（プロセス全体で共有）。未保存の姿を
+    /// 埋め込みへ戻す ── 他の頁（`/app`）に絶対に漏らさない。</summary>
+    private void ClearOverrides()
+    {
+        foreach (var id in _touched) LayoutStore.SetOverride(id, null);
+        _touched.Clear();
+    }
+
+    private async Task LoadFile()
+    {
+        string? text = await Js.InvokeAsync<string?>("eggDisk.read", _of);
+        if (text is null)
+        {
+            _status = $"⚠️ {_of}.txt が見つかりません（選んだフォルダの中に無いか、読めません）";
+            _raw = null;
+            _originalText = null;
+            RefreshView();
+            return;
+        }
+        _originalText = text;
+        _raw = Core.Layouts.Parse(_of, text);
+        _selectedLine = -1;
+        _status = "";
+        Refresh();
+        await Js.InvokeVoidAsync("eggEdit.rering", "");
+    }
+
+    // ── 選ぶ ────────────────────────────────────────
+
+    /// <summary>盤の透明な覆い（`edcap`）が拾った押しどころから呼ばれる。
+    /// ⚠️ 空文字なら選択解除（`use=` で差した部品の中など、行が無い場所を押した）。</summary>
+    [JSInvokable]
+    public void Picked(string line)
+    {
+        _selectedLine = int.TryParse(line, out var n) ? n : -1;
+        SyncFields();
+        StateHasChanged();
+    }
+
+    private async Task SelectLine(int line)
+    {
+        _selectedLine = line;
+        SyncFields();
+        await Js.InvokeVoidAsync("eggEdit.rering", line.ToString(CultureInfo.InvariantCulture));
+        StateHasChanged();
+    }
+
+    private void SyncFields()
+    {
+        var n = _raw is null || _selectedLine < 0 ? null : Find(_raw.Roots, _selectedLine);
+        if (n is null) return;
+        _left = n.Left; _top = n.Top; _width = n.Width; _height = n.Height;
+    }
+
+    // ── 直す ────────────────────────────────────────
+
+    private void ApplyLeft(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, v, n.Top, n.Width, n.Height,
+        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator));
+    private void ApplyTop(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, n.Left, v, n.Width, n.Height,
+        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator));
+    private void ApplyWidth(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, n.Left, n.Top, v, n.Height,
+        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator));
+    private void ApplyHeight(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, n.Left, n.Top, n.Width, v,
+        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator));
+
+    private void Apply(Func<LayoutNode, LayoutNode> edit)
+    {
+        if (_raw is null || _selectedLine < 0) return;
+        var roots = ReplaceLine(_raw.Roots, _selectedLine, edit);
+        _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
+        SyncFields();
+        Refresh();
+        _ = Js.InvokeVoidAsync("eggEdit.rering", _selectedLine.ToString(CultureInfo.InvariantCulture));
+        StateHasChanged();
+    }
+
+    /// <summary>不変の木を「その1本の行だけ」差し替えて組み直す。
+    /// ⚠️ 名前・種類・付け足し・出所（行番号・字下げ・原文の欄・終端）はすべて元のまま
+    /// ── <see cref="edit"/> が渡された節点だけを新しい座標で作り直す。</summary>
+    private static List<LayoutNode> ReplaceLine(
+        IReadOnlyList<LayoutNode> list, int line, Func<LayoutNode, LayoutNode> edit)
+    {
+        var result = new List<LayoutNode>(list.Count);
+        foreach (var n in list)
+        {
+            if (n.LineNumber == line) { result.Add(edit(n)); continue; }
+            var kids = ReplaceLine(n.Children, line, edit);
+            result.Add(new LayoutNode(n.Name, n.Kind, n.Left, n.Top, n.Width, n.Height,
+                n.Options, kids, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator));
+        }
+        return result;
+    }
+
+    private static LayoutNode? Find(IReadOnlyList<LayoutNode> list, int line)
+    {
+        foreach (var n in list)
+        {
+            if (n.LineNumber == line) return n;
+            var found = Find(n.Children, line);
+            if (found is not null) return found;
+        }
+        return null;
+    }
+
+    private List<(int Depth, LayoutNode Node)> Flatten()
+    {
+        var flat = new List<(int, LayoutNode)>();
+        if (_raw is not null) foreach (var root in _raw.Roots) Walk(root, 0, flat);
+        return flat;
+    }
+
+    private static void Walk(LayoutNode node, int depth, List<(int, LayoutNode)> into)
+    {
+        into.Add((depth, node));
+        foreach (var child in node.Children) Walk(child, depth + 1, into);
+    }
+
+    private static float ParseF(object? value, float fallback)
+    {
+        var s = Convert.ToString(value);
+        return float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : fallback;
+    }
+
+    // ── 描く ────────────────────────────────────────
+
+    /// <summary>編集中の字を <see cref="LayoutStore"/> へ差し込んでから描き直す。
+    /// ⭐ **`Sheets.*` はいつもどおり `LayoutStore.Of` を呼ぶだけ**（Sheets.cs は無傷）
+    /// ── 差し込み先を変えているのはこのページだけ。</summary>
+    private void Refresh()
+    {
+        if (_raw is not null)
+        {
+            LayoutStore.SetOverride(_of, Core.Layouts.Write(_raw));
+            _touched.Add(_of);
+        }
+        RefreshView();
+    }
+
+    private void RefreshView()
+    {
+        var resolved = LayoutStore.Of(_of);
+        _faults = Core.Layouts.Faults(resolved);
+        _html = Dispatch(_of);
+    }
+
+    /// <summary>⭐ **対応表そのもの。**骨組みの id → どの `Sheets` を、どんな実データで呼ぶか。
+    /// ⚠️ ここは「確かめ用の頁」（`Pages/BoxPage.razor` 等）と同じ組み方
+    /// （`Demo.Game()` の固定 seed）── 遊ぶ頁と確かめる頁で描き方を分けない。
+    /// 残りの画面を足すときは、この switch に1行足し、上の <see cref="KnownSheets"/>
+    /// にも id を足すだけでよい。</summary>
+    private static string Dispatch(string of)
+    {
+        switch (of)
+        {
+            case "home":
+            {
+                var shell = new Shell(Demo.Game(), Demo.Now);
+                Demo.Incubate(shell.Game, shell.Now, 3);
+                return Sheets.Home(shell);
+            }
+            case "nests":
+                return Sheets.Wilds(new Shell(Demo.Game(), Demo.Now));
+            case "breed":
+            {
+                var shell = new Shell(Demo.Game(), Demo.Now);
+                var sorted = shell.Sorted();
+                if (sorted.Count > 0) shell.ParentA = sorted[0].Id;
+                if (sorted.Count > 1) shell.ParentB = sorted[1].Id;
+                return Sheets.Breed(shell);
+            }
+            case "box":
+            default:
+                return Sheets.Box(new Shell(Demo.Game(), Demo.Now));
+        }
+    }
+
+    // ── 保存 ────────────────────────────────────────
+
+    private async Task Save()
+    {
+        if (_raw is null || _originalText is null) return;
+
+        string candidate = Core.Layouts.Write(_raw);
+
+        // 🔴 **書く前に、書こうとしている字が読み直しても同じに戻るかを確かめる。**
+        //    ⚠️ 戻らなければ書かない（ConfigUpdater の `validate_format` と同じ守り）。
+        string roundTrip;
+        try { roundTrip = Core.Layouts.Write(Core.Layouts.Parse(_of, candidate)); }
+        catch (Exception e)
+        {
+            _status = "⚠️ 保存を止めました（書いた字が読み直せません）: " + e.Message;
+            StateHasChanged();
+            return;
+        }
+        if (roundTrip != candidate)
+        {
+            _status = "⚠️ 保存を止めました（往復が閉じません ── 書き出しの器を疑ってください）";
+            StateHasChanged();
+            return;
+        }
+
+        string how = await Js.InvokeAsync<string>("eggDisk.write", _of, _originalText, candidate);
+        switch (how)
+        {
+            case "wrote":
+                _originalText = candidate;
+                // ⭐ 書いた字そのものから読み直す ── 出所を1つに保つ
+                _raw = Core.Layouts.Parse(_of, candidate);
+                _status = "保存しました";
+                break;
+            case "changed":
+                _status = "⚠️ このファイルは開いた後に外部で変わっています。保存を中止しました。"
+                    + "フォルダを選び直してから、もう一度開いてください。";
+                break;
+            default:
+                _status = "⚠️ 保存に失敗しました";
+                break;
+        }
+        StateHasChanged();
+    }
+
+    // ── 欄（Inspector の細い欄が押しにくい、への答え。unity/Assets/Editor/EggCommandWindow.cs
+    //    「Selected()」と同じ形 ── 大きな数値欄＋矢印で少しずつ動かせる）────
+
+    private RenderFragment Field(string label, float value, Action<float> apply) => builder =>
+    {
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "edfield");
+        builder.OpenElement(2, "span");
+        builder.AddAttribute(3, "class", "edlabel");
+        builder.AddContent(4, label);
+        builder.CloseElement();
+
+        builder.OpenElement(5, "div");
+        builder.AddAttribute(6, "class", "ednum");
+
+        builder.OpenElement(7, "button");
+        builder.AddAttribute(8, "type", "button");
+        builder.AddAttribute(9, "class", "edstep-btn");
+        builder.AddAttribute(10, "onclick", EventCallback.Factory.Create(this, () => apply(value - _step)));
+        builder.AddContent(11, "−");
+        builder.CloseElement();
+
+        builder.OpenElement(12, "input");
+        builder.AddAttribute(13, "type", "number");
+        builder.AddAttribute(14, "class", "ednuminput");
+        builder.AddAttribute(15, "value", value.ToString(CultureInfo.InvariantCulture));
+        builder.AddAttribute(16, "onchange", EventCallback.Factory.CreateBinder<string?>(
+            this, s => apply(ParseF(s, value)), value.ToString(CultureInfo.InvariantCulture)));
+        builder.CloseElement();
+
+        builder.OpenElement(17, "button");
+        builder.AddAttribute(18, "type", "button");
+        builder.AddAttribute(19, "class", "edstep-btn");
+        builder.AddAttribute(20, "onclick", EventCallback.Factory.Create(this, () => apply(value + _step)));
+        builder.AddContent(21, "＋");
+        builder.CloseElement();
+
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    public void Dispose()
+    {
+        ClearOverrides();
+        _me?.Dispose();
+    }
+}

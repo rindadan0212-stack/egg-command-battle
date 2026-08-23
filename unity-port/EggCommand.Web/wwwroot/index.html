@@ -8,6 +8,9 @@
     <title>卵強奪バトル</title>
     <base href="/" />
     <link rel="stylesheet" href="stage.css" />
+    <!-- ⭐ 骨組みエディタ（`/edit`）専用の意匠（`Pages/EditPage.razor.css`）。
+         ⚠️ Blazor WASM は自動で足してくれない（hosted/server 版と違う）ので手で書く。 -->
+    <link rel="stylesheet" href="EggCommand.Web.styles.css" />
     <style>
       /* ⭐ フォントは同梱。⚠️ CDN に頼らない ── 落ちると字送りが変わり、
          Unity で詰めた座標の前提が崩れる。 */
@@ -37,6 +40,9 @@
     <script src="save.js"></script>
     <!-- ⭐ 盤の演出（⚠️ Blazor に描かせない ── 組み直すたびにやり直しになる） -->
     <script src="fx.js"></script>
+    <!-- ⭐ 骨組みエディタ（`/edit`）専用。⚠️ 遊ぶ頁（`/app`）は読み込むだけで使わない -->
+    <script src="disk.js"></script>
+    <script src="edit.js"></script>
     <script>
       // ⭐ **設計 1080x1920 を、外枠の拡大縮小だけで実機へ写す。**
       // ⚠️ 作者の決定（絶対座標のまま）の帰結。20:9 では上下に帯が出る（課題 §9-7）。

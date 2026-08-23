@@ -176,6 +176,18 @@ namespace EggCommand.Web
               .Append(" id=\"").Append(Esc(name)).Append('"')
               .Append(" class=\"").Append(cls).Append('"')
               .Append(" style=\"").Append(style).Append('"');
+            // ⭐ **骨組みエディタの掴みどころ**（`data-line` ＝ 出所の行番号）。
+            //
+            // ⚠️ `use=` で差した部品の節点（`Layouts.Rename` を通ったもの）は
+            //    `LineNumber` が -1 ── **その場合は出さない**（誤った行を選べるより、
+            //    選べないほうがまし。別ファイルの行を、いま編集中の骨組みの行として
+            //    書き戻すと事故る）。⭐ この骨組み自身の行から来た節点は、
+            //    `Resolve` を通したあとも `LineNumber` を保っている（`Layouts.Splice`）。
+            // ⭐ **繰り返し（`repeat=`）の複製は全部同じ節点 `node` を指すので、
+            //    自動的に同じ `data-line` を持つ。**何番目の複製を押しても
+            //    「1本の元の行」に行き着く ── `closest('[data-line]')` で終わる。
+            if (node.LineNumber >= 0)
+                sb.Append(" data-line=\"").Append(node.LineNumber).Append('"');
             // ⭐ **押しどころの名前と番号を、部品そのものに書いておく。**
             //
             // ⚠️ ここは字を組み立てて `MarkupString` で出しているので、Blazor の

@@ -50,8 +50,15 @@ namespace EggCommand.Core
         public readonly IReadOnlyList<LayoutNode> Children;
 
         /// <summary>元の行の番号（0始まり）。⚠️ <see cref="Layouts.Parse"/> を通さずに
-        /// 組み立てた節点（<see cref="Layouts.Splice"/> の差し込み後など）は -1。
-        /// ⭐ <see cref="Layouts.Write"/> はこれで「原文のどの行を置き換えるか」を知る。</summary>
+        /// 組み立てた節点は -1。
+        /// ⭐ <see cref="Layouts.Write"/> はこれで「原文のどの行を置き換えるか」を知る。
+        ///
+        /// ⚠️ <see cref="Layouts.Resolve"/>（`use=` の差し替え）を通ったあとも、
+        /// **この骨組み自身の行から来た節点は値を保つ**（`Layouts.Splice` が運ぶ）。
+        /// -1 になるのは、**差し込まれた側**（`use=` で差した部品の中身。
+        /// <see cref="Layouts.Rename"/> を通る）だけ ── 別ファイルの行番号を
+        /// この骨組みの選択に使うと指し示す先を取り違えるので、そこだけ意図的に捨てる。
+        /// ⭐ これがエディタの `data-line`（節点を選ぶ土台）の出所そのもの。</summary>
         public readonly int LineNumber;
         /// <summary>行頭の空白の数（字下げ）。</summary>
         public readonly int Indent;
@@ -326,10 +333,14 @@ namespace EggCommand.Core
         /// <summary>⭐ <see cref="Layouts.Resolve"/> を通した（`use=` を差し替え済みの）木か。
         ///
         /// ⚠️ 差し替えは <see cref="Layouts.Splice"/> / <see cref="Layouts.Rename"/> が
-        /// **毎回新しい節点を作り直す**ので、差し替え後の木は部品がインライン展開され、
-        /// 節点の行番号（<see cref="LayoutNode.LineNumber"/>）もすべて失われている。
-        /// ⭐ この旗を見て <see cref="Layouts.Write"/> が断る ── 黙って原文に無いものを
-        /// 書き出すのが一番困る。</summary>
+        /// **毎回新しい節点を作り直す**ので、差し替え後の木は部品がインライン展開されている。
+        /// ⚠️ **差し込まれた側**（`use=` で差した部品の中身）は行番号
+        /// （<see cref="LayoutNode.LineNumber"/>）も失われる ── 別ファイルの行を
+        /// この骨組みのものとして書き出さないため。⭐ この骨組み自身の行から来た節点は、
+        /// この旗が立っていても行番号を保ったまま（エディタの選択はここを読む）。
+        /// ⚠️ **それでも書き戻しは断る** ── 部品がインライン展開された時点で、
+        /// 原文には無い行が並ぶことに変わりはない。この旗を見て <see cref="Layouts.Write"/>
+        /// が断る ── 黙って原文に無いものを書き出すのが一番困る。</summary>
         public readonly bool Resolved;
 
         public Layout(string id, IReadOnlyList<LayoutNode> roots)
@@ -1096,8 +1107,15 @@ namespace EggCommand.Core
 
             foreach (var child in node.Children) kids.Add(Splice(id, child, find, seen));
 
+            // ⭐ **この節点自身の出所は保つ。**⚠️ 差し替わるのは「子」（`use=` が差した中身・
+            //    `Rename` を通るので下で LineNumber を落とす）だけで、node 自身は
+            //    元の原文の行から来ている（Splice はこの Layout の Roots を辿っているだけ）。
+            //    ⭐ ここを短いコンストラクタ（LineNumber 既定 -1）のままにすると、
+            //    `use=` を1つも使っていない骨組みまで**丸ごと**選べなくなる
+            //    （エディタの `data-line` の土台が全部 -1 になるため）。
             return new LayoutNode(node.Name, node.Kind, node.Left, node.Top,
-                node.Width, node.Height, node.Options, kids);
+                node.Width, node.Height, node.Options, kids,
+                node.LineNumber, node.Indent, node.Fields, node.Trailing, node.Terminator);
         }
 
         /// <summary>⭐ **差した部品の名前に、差した枠の名前を冠する。**

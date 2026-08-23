@@ -1,0 +1,176 @@
+/* 骨組みエディタ（`/edit`）の器。
+   ⚠️ 遊ぶ画面（stage.css）とは別の意匠 ── ここは道具であって、遊びの絵ではない。
+   ⭐ 3層・スクロール0（wiki `web移行計画.md` §11）。柱ぜんぶを縦に並べたときに
+   溢れたら、畳み方を間違えている合図 ── 溢れる前提の場所（木・その1つ）だけ
+   内側で `overflow-y:auto` を持つ。 */
+
+.edroot {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #12151f;
+  color: #d7dae6;
+  font: 14px/1.4 "Segoe UI", system-ui, sans-serif;
+}
+
+/* ── 上の帯 ─────────────────────────────────────── */
+.edtop {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #191d2b;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.edwho { display: flex; align-items: center; gap: 6px; color: #9aa1b8; font-size: 13px; }
+.edtop select {
+  background: #12151f;
+  color: #d7dae6;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+}
+.edtop button {
+  background: #232840;
+  color: #d7dae6;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+.edtop button:hover:not(:disabled) { background: #2b3150; }
+.edtop button:disabled { color: #565c72; cursor: default; }
+/* ⭐ 主役は保存だけ（画面内で1つだけ突出させる） */
+.edtop button:last-of-type:not(:disabled) { background: #b45309; border-color: #b45309; color: #fff; }
+.edtop button:last-of-type:not(:disabled):hover { background: #c96613; }
+
+.edwarn { color: #f0a5ad; font-size: 12px; }
+.edmuted { color: #6d7390; font-size: 12px; }
+.edstatus { color: #8fd0a3; font-size: 12px; margin-left: auto; }
+
+/* ── 3本の柱 ─────────────────────────────────────── */
+.edmain { flex: 1 1 auto; display: flex; min-height: 0; }
+
+.edtree {
+  flex: 0 0 220px;
+  overflow-y: auto;
+  border-right: 1px solid rgba(255, 255, 255, .08);
+  padding: 6px 0;
+}
+.edrow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.edrow:hover { background: rgba(255, 255, 255, .04); }
+/* ⚠️ 選んでいる行は「面」でなく「線」で示す ── 塗り潰さない約束をここでも守る */
+.edrow.on { border-left-color: #f59e0b; background: rgba(245, 158, 11, .10); }
+.edname { color: #d7dae6; }
+.edkind { color: #6d7390; font-size: 11px; }
+
+.edboardwrap {
+  flex: 1 1 auto;
+  position: relative;
+  overflow: hidden;
+  background: #05070c;
+}
+.edstagewrap { position: absolute; inset: 0; }
+.edstage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1080px;
+  height: 1920px;
+  transform-origin: center center;
+  /* ⭐ 初期値。⚠️ 実際の倍率は edit.js の ResizeObserver が上書きする */
+  transform: translate(-50%, -50%) scale(.3);
+  background: #bdebff;
+}
+/* ⭐ 選んでいる節点を輪で囲む。⚠️ 塗り潰さない（この作品の約束・stage.css の
+   `.n.card.lead` と同じ考え方） */
+.edring {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  box-shadow: 0 0 0 4px #f59e0b, inset 0 0 0 4px #f59e0b;
+  border-radius: 4px;
+}
+/* ⭐ 透明な覆い。盤のいちばん上（DOM の最後）に置き、遊びの押しどころより先に拾う */
+.edcap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1080px;
+  height: 1920px;
+  background: transparent;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.edinspector {
+  flex: 0 0 260px;
+  overflow-y: auto;
+  border-left: 1px solid rgba(255, 255, 255, .08);
+  padding: 12px;
+}
+.edhead { font-size: 15px; margin-bottom: 10px; display: flex; gap: 8px; align-items: baseline; }
+.edhint { color: #6d7390; padding: 10px; font-size: 12px; }
+
+.edfieldrow { display: flex; gap: 8px; margin-bottom: 8px; }
+.edfield { flex: 1 1 50%; min-width: 0; }
+.edlabel { display: block; color: #9aa1b8; font-size: 11px; margin-bottom: 3px; }
+.ednum { display: flex; align-items: stretch; }
+.edstep-btn {
+  flex: 0 0 30px;
+  background: #232840;
+  color: #d7dae6;
+  border: 1px solid rgba(255, 255, 255, .14);
+  font-size: 16px;
+  cursor: pointer;
+}
+.edstep-btn:first-child { border-radius: 6px 0 0 6px; border-right: 0; }
+.edstep-btn:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
+.edstep-btn:hover { background: #2b3150; }
+.ednuminput {
+  flex: 1 1 auto;
+  width: 0;
+  min-width: 0;
+  height: 34px;
+  text-align: center;
+  font-size: 15px;
+  background: #0d1220;
+  color: #eef1fa;
+  border: 1px solid rgba(255, 255, 255, .14);
+}
+.edstepwrap { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: #9aa1b8; font-size: 12px; }
+.edstepnum {
+  width: 56px;
+  height: 26px;
+  background: #0d1220;
+  color: #eef1fa;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 4px;
+  text-align: center;
+}
+
+/* ── 下の帯（不備） ─────────────────────────────── */
+.edbottom {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  background: #191d2b;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+  font-size: 12px;
+}
+.edok { color: #2fa84a; }
+.edbad { color: #e04f5f; }
+.edfaultline { color: #b9bfd4; }
