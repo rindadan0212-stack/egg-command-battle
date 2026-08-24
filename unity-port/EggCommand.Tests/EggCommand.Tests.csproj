@@ -33,6 +33,9 @@
        `EditAttrs.cs` は `EggCommand.Core` にしか依存しないので、この形で問題なく載る。 -->
   <ItemGroup>
     <Compile Include="..\EggCommand.Web\EditAttrs.cs" Link="EditAttrs.cs" />
+    <!-- 骨組みエディタ 段階2 Pass A「揃える・等間隔」の純関数。EditAttrs.cs と同じ理由・
+         同じ形（Core にも Web の他の型にも依存しないので、そのまま直接コンパイルできる）。 -->
+    <Compile Include="..\EggCommand.Web\EditAlign.cs" Link="EditAlign.cs" />
   </ItemGroup>
 
   <!-- いまの実装の出力を凍らせた記録。⚠️ 移植の証拠ではない。

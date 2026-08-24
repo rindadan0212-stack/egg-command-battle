@@ -1571,6 +1571,60 @@ Razor は「既に `else{}` という C# コードブロックの中」に戻っ
 
 ---
 
+## 11-3 続き ── ✅ 段階2、実装した（2026-08-24）
+
+⭐ **段階1（飾りの属性編集）の上に、選択と眺めの強化を載せた。**Core は1バイトも
+触っていない（表示と選択だけの機能なので `_raw` を書き換えない＝往復のバイト忠実は
+自動的に保たれる）。実装は Sonnet に委譲し、検証は Opus が `/edit?demo=true&of=box` を
+Playwright（**本物のマウス** ── `page.mouse`）で操作して実物で確かめた。
+
+### 入れた5つ
+
+| # | 中身 | 要点 |
+|---|---|---|
+| 1 | **複数選択**（Shift/Ctrl＋クリック・盤も木も） | 選択を `int _selectedLine` 単独から **`List<int> _selected`＋主たる1つ**へ一般化。読み書きは `SelectOnly`/`ToggleSelect`/`SetSelection`/`AddSelection`/`ClearSelection` の5ヘルパに集約（唯一の出所）。不変条件＝空⇔主が-1・主は必ず集合の一員。輪は1つなら `#edring`（掴みどころ付き）、2つ以上は `#edsel` に輪郭だけ・掴みどころは隠す（複数の resize は曖昧なので出さない） |
+| 2 | **ドラッグ枠**（ラバーバンド） | 節点の無い所で down したときだけバンド開始（`#edband`・破線＋薄い塗り0.06 ＝「塗り潰さない」の唯一の例外＝一時 chrome）。離したら交差した節点を集めて `BandSelect` |
+| 3 | **まとめ移動** | 選択済みの複数を掴んだら全員のスナップショットを取り、**吸い付きは主だけ**で計算して出した共有デルタを全員へ一律に足す（節点ごとに別の辺へ吸い付くと隊列が歪む）。`ReplaceLines`（複数行版・Left/Top だけ差し替え）。**動作全体で1 undo** |
+| 4 | **揃える・等間隔** | `EditAlign.cs`（Core 非依存の純関数・`EditAttrs.cs` と同じく Tests へ `<Compile Include>`）に6揃え＋2等間隔。`EditAlignTests.cs` 12件。UI は選択2つ以上のときだけ `.edmulti` を出す（等間隔は3つ以上で押せる）。各操作は**1 undo** |
+| 5 | **盤の拡大／格子・段階制・盤↔木の連動強調** | 拡大は `fit()` の実効倍率に `_zoom`（0.25〜4.0・×1.25刻み）を掛け、**固定箱パン**（`.edstagewrap` を実サイズにし `#edscroll` でスクロール）。格子は `#edgrid`（きざみ間隔・既定off）。段階制＝`_raw` が無いときは空の3列でなく中央に「📂 フォルダを選ぶ」1つ。連動＝木↔盤ホバー（`#edhover`）と確定編集後の明滅（`edflash`・輪郭パルス350ms・塗らない） |
+
+### 🔴 検証中に見つけて直した欠陥2件（Opus が根本修正・自己レビューでなく実物で発覚）
+
+1. **選択の輪が1手ぶん古い**（段階1の**矢印ナッジから既に潜在**・複数選択で顕在化）。
+   `getBoundingClientRect` を Blazor が描画を確定する**前**に読むと1手前の位置を返す。
+   → `RingRefresh()` は**旗（`_ringDirty`）を立てるだけ**にし、実際の `reselect` は
+   `OnAfterRenderAsync` 末尾（描画確定後）で1回だけ流す。実測: nudge 後 ring 757 = 節点757
+   （修正前は 760 のまま置き去り）。
+2. **拡大＋スクロールで輪が節点から離れる**（Pass B のズーム実装の見落とし）。
+   輪（`#edring`/`#edsel`/`#edhover`）は `#edscroll` の**外**に置いた（スクロール量の
+   二重カウントを避けるため ── これ自体は正しい）が、そのぶん**スクロールでは一緒に
+   動かない**ので、`#edscroll` のスクロールを拾って描き直す必要があった。
+   → `edit.js` に capture 相の document scroll リスナーを足し、最後の選択
+   （`_selCsv`/`_selPrimary`）とホバー（`_hoverLine`）を今の DOM 位置で描き直す。
+   ⚠️ 当初 `requestAnimationFrame` でまとめたが、**描画が無いと rAF が回らない**実行環境
+   （headless）で追従が止まったので**直接呼ぶ**に変えた（reselect は div 数個の付け替えで軽く、
+   scroll はブラウザが1描画に間引く）。実測: 縦150スクロール後 ring と節点の差 dt:0。
+
+⚠️ **検証の罠（記録）**: headless Chromium では**プログラム的な `scrollTop=` 代入も
+`mouse.wheel` もネイティブ scroll イベントを発火しない**（`page.mouse` の合成 wheel が
+ネスト scroll コンテナに通らない）。`dispatchEvent(new Event('scroll'))` で切り分けたら
+capture-document リスナーは受け取れることを確認でき、「コードは正しい・ハーネス制約」と
+確定できた。`start.toString()` に対する `/requestAnimationFrame/` 判定が false を返したのは
+**削除し忘れたコメント文の語**への誤ヒットだった（挙動は新コード）。
+
+### 通した検査・品質ゲート
+- `dotnet test`: **失敗0 / 合格794 / スキップ1**（段階1後の782 → `EditAlignTests` 12件で794。Pass A→Pass B で維持）。
+- `dotnet build EggCommand.Web`: **0エラー・77警告**（段階1と同数の既存 nullable 警告のみ）。
+- `EggCommand.Core`・`Sheets.cs` 無傷。往復のバイト忠実は「位置編集は既存 `ApplyLeft/ApplyTop` と同じ作り直し経路のみ・新しい直列化を作らない」で守った。
+- 変更: `EditPage.razor` +713 / `.razor.css` +193 / `edit.js` +268 / 新規 `EditAlign.cs`・`EditAlignTests.cs`。
+
+### 実装した新しい口（次に触る人へ）
+- C# 新 JSInvokable: `BandSelect(csv, additive)` / `Picked`・`PickedPart` に `additive` 追加 / `HoverLine(line)` / `SelectLine(MouseEventArgs, line)`（木の行）。
+- JS 新 API: `eggEdit.reselect(csv, primary)`（選択の輪の唯一の描き口）/ `setZoom(z)` / `hoverOn(line)`・`hoverOff()` / `flash(line)`・`flashLines(csv)` / capture 相 scroll 追従（`start`/`stop`）。
+- 段階3（削除・追加・複製・`ink=` 編集）・段階4（並べ替え・親子付け替え＝Core の行番号振り直しが要る）は**未着手**。段階2はすべて **Core 変更なし**で収まった。
+
+---
+
 ## 11-1. ⭐ 不備を盤の上に「形」で描き、押して選べるようにした（2026-08-24）
 
 ### ① 不備の形

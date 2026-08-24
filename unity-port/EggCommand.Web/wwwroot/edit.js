@@ -39,15 +39,32 @@ window.eggEdit = {
   },
 
   /** 盤を器（列）に合わせて縮める。⚠️ 器のサイズが変わるたび呼び直す。
+   * ⭐ Pass B: `fitK`（器に収まる倍率）に、ユーザー操作のズーム `_zoom`（既定1）を
+   * 掛けた**実効倍率** `k` を使う。`stage.dataset.scale` にはこの実効 k を入れ続ける
+   * （`Dragging`/`Resizing` 等の dx/k 計算はここを読むので、読み手を壊さない）。
    * @param {string} wrapId 器の id @param {string} stageId 盤（1080x1920）の id */
   fit(wrapId, stageId) {
+    // ⭐ setZoom から引数無しで呼び直せるよう、最後に使った id を覚えておく。
+    this._wrapId = wrapId
+    this._stageId = stageId
     const wrap = document.getElementById(wrapId)
     const stage = document.getElementById(stageId)
     if (!wrap || !stage) return
     const r = wrap.getBoundingClientRect()
     // ⚠️ 0 除算・負値を避ける（器がまだ描かれていない拍で呼ばれることがある）
-    const k = Math.max(0.05, Math.min(r.width / 1080, r.height / 1920))
-    const t = 'translate(-50%, -50%) scale(' + k + ')'
+    const fitK = Math.max(0.05, Math.min(r.width / 1080, r.height / 1920))
+    const zoom = this._zoom || 1
+    const k = fitK * zoom
+    // ⭐ Pass B: 盤を包む固定サイズの箱（`.edstagewrap`）を、見た目の実サイズ
+    //    （1080*k × 1920*k）にする。⚠️ `#edstage`/`#edfaults`/`#edgrid` は
+    //    左上基準（`transform-origin:0 0`）へ変えてある（CSS 側）ので、
+    //    ここで箱のサイズを合わせないと右・下にはみ出す／余白が空く。
+    const stagewrap = document.getElementById('edstagewrap')
+    if (stagewrap) {
+      stagewrap.style.width = (1080 * k) + 'px'
+      stagewrap.style.height = (1920 * k) + 'px'
+    }
+    const t = 'scale(' + k + ')'
     stage.style.transform = t
     stage.dataset.scale = String(k)
     // ⭐ 不備の層（#edfaults）は #edstage と**同じ倍率**を持つ別の DOM（EditPage.razor
@@ -55,6 +72,18 @@ window.eggEdit = {
     //    不備の枠が実物からずれる。
     const faults = document.getElementById('edfaults')
     if (faults) faults.style.transform = t
+    // ⭐ Pass B: 格子も同じ倍率（盤の設計 px そのままの層なので、間隔の換算は要らない）。
+    const grid = document.getElementById('edgrid')
+    if (grid) grid.style.transform = t
+  },
+
+  /** ⭐ Pass B: ユーザー操作のズーム倍率を変える。⚠️ ここでは `fit()` を呼び直すだけ
+   * （盤の実効倍率だけが変わる ── `RefreshView` は要らない）。選択の輪の再フィットは
+   * `EditPage.SetZoom` が `RingRefresh()`（旗を立てるだけ）で描画拍へ回す。
+   * @param {number} z ズーム倍率（例 1.0＝等倍）。クランプは C# 側で済ませてから渡す。 */
+  setZoom(z) {
+    this._zoom = z
+    if (this._wrapId && this._stageId) this.fit(this._wrapId, this._stageId)
   },
 
   /** 器の大きさの変化を見張って、盤を追従させる。 */
@@ -65,6 +94,24 @@ window.eggEdit = {
     this._ro = new ResizeObserver(() => this.fit(wrapId, stageId))
     this._ro.observe(wrap)
     this.fit(wrapId, stageId)
+    // ⭐ Pass B 拡大パンの後始末（2026-08-24 の実測バグ修正）:
+    //    輪／ホバーは `#edscroll` の**外**（`#edwrap` 直下）に居るので、`#edscroll` を
+    //    スクロールしても一緒には動かない ── 節点だけがスクロールで動いて、輪が置き去りに
+    //    なる（縦120スクロールで輪が節点から120ずれるのを Playwright で確認）。⭐ だから
+    //    `#edscroll` のスクロールを拾って、最後に描いた選択（`_selCsv`/`_selPrimary`）と
+    //    ホバー（`_hoverLine`）を実 DOM の今の位置で描き直す。⚠️ scroll は bubble しないので
+    //    **capture 相**で document に付ける（`#edscroll` が段階制で後から生まれても効く）。
+    if (!this._scrollBound) {
+      // ⚠️ scroll ハンドラで**直接**描き直す（rAF で間引かない）── 輪の描き直しは
+      //    数個の div の付け替えだけで軽く、scroll イベント自体ブラウザが1描画に間引く。
+      //    ⭐ rAF に頼ると「描画が無いと rAF が回らない」実行環境で追従が止まる。
+      this._scrollBound = (e) => {
+        if (!(e.target instanceof Element) || e.target.id !== 'edscroll') return
+        if (this._selCsv) this.reselect(this._selCsv, this._selPrimary)
+        if (this._hoverLine) this.hoverOn(this._hoverLine)
+      }
+      document.addEventListener('scroll', this._scrollBound, true)
+    }
   },
 
   /** ⭐ **透明な覆い**（`capId`）で「選ぶ」と「掴んで動かす」の両方を拾う。
@@ -87,6 +134,10 @@ window.eggEdit = {
     let dragging = false  // PLAY を超えて実際に「掴んで動かす」を始めたか
     let k = 1
     let repeatIndex = ''  // ⭐③ 掴んだ複製の番号（無ければ空文字）
+    let banding = false   // ⭐④ 節点の無い所で down したか（ラバーバンドの候補）
+    let bandFrom = null   // バンドの起点（実画面座標）
+    let bandActive = false // ⭐④ PLAY を超えて実際にバンドを描き始めたか
+    let lastHover = ''    // ⭐ Pass B 盤→木: 直前に木へ知らせた行（間引くための記憶）
 
     // ⭐ 覆いをどけて、その真下に何が描かれているかを見る（一瞬だけ）。
     // ⚠️ **部品を選んでいるときは `data-part="<_of>"` だけを探す。**
@@ -139,6 +190,11 @@ window.eggEdit = {
       dragging = false
       const stage = document.getElementById('edstage')
       k = Number((stage && stage.dataset.scale) || '1')
+      // ⭐④ 節点の無い所で down したら、ラバーバンドの候補にする（up で PLAY を超えて
+      //    いたかどうかで、本当にバンドを引いたかを見分ける ── move と同じ「遊び」）。
+      banding = line === null
+      bandFrom = banding ? { x: e.clientX, y: e.clientY } : null
+      bandActive = false
       // ⚠️ 失敗しても以降を止めない（`releasePointerCapture` と同じ扱い）。
       //    捕まえ損ねても、この後の move/up は cap 自身に直接届く分には困らない
       //    ── 困るのは「盤の外まで指が出た」ときだけで、それは実使用では稀。
@@ -146,7 +202,30 @@ window.eggEdit = {
     }
 
     const move = (e) => {
-      if (!from || line === null) return
+      if (banding) {
+        const dx = e.clientX - bandFrom.x
+        const dy = e.clientY - bandFrom.y
+        if (!bandActive) {
+          // 🔴 数px揺れただけではバンドにしない。PLAY を超えて初めて描き始める。
+          if (Math.abs(dx) <= PLAY && Math.abs(dy) <= PLAY) return
+          bandActive = true
+        }
+        this._bandDraw(bandFrom.x, e.clientX, bandFrom.y, e.clientY)
+        return
+      }
+      if (!from) {
+        // ⭐ Pass B 盤→木: 押してもバンドもしていない、ただの通りすがりの移動。
+        //    ⚠️ 掴んで動かす（`nodeAt`）と同じ探し方（部品を選んでいるときはその部品の
+        //    中だけ）。下の節点が変わったときだけ木へ知らせる（間引く）。
+        const node = nodeAt(e.clientX, e.clientY)
+        const hoverLine = node ? this._lineOf(node) : ''
+        if (hoverLine !== lastHover) {
+          lastHover = hoverLine
+          owner.invokeMethodAsync('HoverLine', hoverLine)
+        }
+        return
+      }
+      if (line === null) return
       const dx = e.clientX - from.x
       const dy = e.clientY - from.y
       if (!dragging) {
@@ -162,6 +241,24 @@ window.eggEdit = {
 
     const up = (e) => {
       try { cap.releasePointerCapture(e.pointerId) } catch { /* 既に外れていてもよい */ }
+      const additive = (e.shiftKey || e.ctrlKey || e.metaKey) ? 'add' : ''
+
+      // ⭐④ バンドが実際に「遊び」を超えて描かれていたら、交差した節点を集めて終わる
+      //    （タップ選択の分岐へは落とさない ── 別の動作として扱う）。
+      if (banding && bandActive) {
+        const rect = {
+          left: Math.min(bandFrom.x, e.clientX), right: Math.max(bandFrom.x, e.clientX),
+          top: Math.min(bandFrom.y, e.clientY), bottom: Math.max(bandFrom.y, e.clientY),
+        }
+        this._bandHide()
+        const lines = this._bandCollect(rect)
+        owner.invokeMethodAsync('BandSelect', lines.join(','), additive)
+        banding = false; bandFrom = null; bandActive = false
+        from = null; line = null; dragging = false; repeatIndex = ''
+        return
+      }
+      banding = false; bandFrom = null; bandActive = false
+
       if (dragging) {
         owner.invokeMethodAsync('DragEnd')
       } else {
@@ -172,11 +269,11 @@ window.eggEdit = {
         if (node && node.dataset.part) {
           // ⭐ 押した先が部品 ── ②「その部品のファイルへ切り替えて、その節点を選ぶ」。
           //    同じ部品を直している最中なら、C# 側で「ただの選び直し」に落ちる。
-          owner.invokeMethodAsync('PickedPart', node.dataset.part, node.dataset.partLine || '-1')
+          owner.invokeMethodAsync('PickedPart', node.dataset.part, node.dataset.partLine || '-1', additive)
         } else {
           // ⭐ `data-line` のみ ── 自前の行、または（部品を直している最中なら）
           //    土台の行。どちらかは C# 側（`Scenes.Of(_of).ByPart`）が判じる。
-          owner.invokeMethodAsync('Picked', node ? (node.dataset.line || '') : '')
+          owner.invokeMethodAsync('Picked', node ? (node.dataset.line || '') : '', additive)
         }
       }
       from = null; line = null; dragging = false; repeatIndex = ''
@@ -186,10 +283,22 @@ window.eggEdit = {
       // ⚠️ 途中で指が奪われた（他のジェスチャに割り込まれた等）。⭐ 動いていたなら、
       //    そこまでの分を1つの動作として確定する（宙ぶらりんにしない）。
       if (dragging) owner.invokeMethodAsync('DragEnd')
+      if (banding) this._bandHide()
+      banding = false; bandFrom = null; bandActive = false
       from = null; line = null; dragging = false; repeatIndex = ''
     }
 
-    this._bound = [['pointerdown', down], ['pointermove', move], ['pointerup', up], ['pointercancel', cancel]]
+    // ⭐ Pass B 盤→木: 指が盤の覆いから出たら、木のハイライトも解く
+    //    （出たままだと、もう盤の上に無い節点が木にハイライトされ続けて嘘になる）。
+    const leave = () => {
+      if (lastHover !== '') {
+        lastHover = ''
+        owner.invokeMethodAsync('HoverLine', '')
+      }
+    }
+
+    this._bound = [['pointerdown', down], ['pointermove', move], ['pointerup', up],
+      ['pointercancel', cancel], ['pointerleave', leave]]
     for (const [t, f] of this._bound) cap.addEventListener(t, f)
   },
 
@@ -253,10 +362,11 @@ window.eggEdit = {
         ? e.target.closest('[data-part],[data-line]') : null
       if (!el) return
       e.stopPropagation()
+      // ⚠️③④ 不備一覧・Focus からの選択は常に単独選択（additive でない）。
       if (el.dataset.part) {
-        owner.invokeMethodAsync('PickedPart', el.dataset.part, el.dataset.partLine || '-1')
+        owner.invokeMethodAsync('PickedPart', el.dataset.part, el.dataset.partLine || '-1', '')
       } else {
-        owner.invokeMethodAsync('Picked', el.dataset.line || '')
+        owner.invokeMethodAsync('Picked', el.dataset.line || '', '')
       }
     }
     this._fBound = fn
@@ -321,6 +431,8 @@ window.eggEdit = {
    * listener だけは、DOM が消えても自然には外れない。 */
   stop() {
     if (this._keyBound) { document.removeEventListener('keydown', this._keyBound); this._keyBound = null }
+    // ⭐ Pass B: 拡大パンのスクロール追従も外す（`keys` と同じ document 直付けの後始末）。
+    if (this._scrollBound) { document.removeEventListener('scroll', this._scrollBound, true); this._scrollBound = null }
   },
 
   /** 選んでいる行の輪を描き直す（木から選んだとき・数を直して盤を組み直したときに使う
@@ -330,6 +442,49 @@ window.eggEdit = {
   rering(line) {
     const node = line ? document.querySelector('#edstage ' + this._selector(line)) : null
     if (node) this._ringTo(node); else this._ringHide()
+  },
+
+  /** ⭐②④ 段階2 Pass A: 選択の輪の多重化（`EditPage.RingRefresh` から呼ばれる ──
+   * 既存の全 `rering` 直接呼び出しの置き換え先）。
+   *
+   * ⚠️ **`#edring`（8つの掴みどころ）は選択がちょうど1つのときだけ**主の節点に出す
+   * （<see cref="rering"/> に一本化 ── 2つ以上は曖昧な resize を避けて隠す）。
+   * ⭐ 2つ以上のときは `#edsel` へ、選択中それぞれの輪郭だけの枠を作り直す（数は多くて
+   * 数十 ── 毎回作り直してよい）。
+   * @param {string} linesCsv 選択中の行番号（部品なら part-line）の csv。空文字なら無選択。
+   * @param {string} primaryLine 主たる選択の行番号（空文字なら無し）。 */
+  reselect(linesCsv, primaryLine) {
+    // ⭐ Pass B: スクロール追従（`start` の scroll ハンドラ）が、指の座標なしで同じ選択を
+    //    描き直せるよう、最後に描いた選択を覚えておく。
+    this._selCsv = linesCsv; this._selPrimary = primaryLine
+    const lines = linesCsv ? linesCsv.split(',').filter(s => s !== '') : []
+    const sel = document.getElementById('edsel')
+    if (sel) sel.innerHTML = ''
+
+    if (lines.length <= 1) {
+      // ⭐ 1つ（または0）── 今までどおり #edring に一本化。#edsel は空のまま。
+      this.rering(lines.length === 1 ? lines[0] : '')
+      return
+    }
+
+    // ⭐ 2つ以上 ── #edring は隠し、#edsel に各節点の輪郭を描く。
+    this._ringHide()
+    if (!sel) return
+    const wrap = document.getElementById('edwrap')
+    if (!wrap) return
+    const wr = wrap.getBoundingClientRect()
+    for (const line of lines) {
+      const node = document.querySelector('#edstage ' + this._selector(line))
+      if (!node) continue
+      const nr = node.getBoundingClientRect()
+      const box = document.createElement('div')
+      box.className = 'edselbox' + (line === primaryLine ? ' edselbox-primary' : '')
+      box.style.left = (nr.left - wr.left) + 'px'
+      box.style.top = (nr.top - wr.top) + 'px'
+      box.style.width = nr.width + 'px'
+      box.style.height = nr.height + 'px'
+      sel.appendChild(box)
+    }
   },
 
   /** ⚠️ 輪は選んでいる節点を**囲むだけ**（塗り潰さない ── この作品の約束）。
@@ -353,6 +508,103 @@ window.eggEdit = {
   _ringHide() {
     const ring = document.getElementById('edring')
     if (ring) ring.style.display = 'none'
+  },
+
+  /** ⭐ Pass B 木→盤: 木の行にマウスを乗せたとき、対応する盤の節点を薄い枠で強調する。
+   * ⚠️ **選択の輪（`#edring`/`#edsel`）とは別レイヤ・別関数**（`EditPage.TreeHoverOn`
+   * からだけ呼ぶ）── 混ぜない、の指示どおり。`_ringTo` と同じ置き方（盤の外の層・
+   * 実寸 screen px・`getBoundingClientRect` の差分）なので、拡大＋スクロールでも
+   * 同じ理由でそのまま正しく追従する。
+   * @param {string|number} line 対応する行（部品なら part-line）。 */
+  hoverOn(line) {
+    this._hoverLine = line   // ⭐ Pass B: スクロール追従で描き直せるよう覚える（reselect と同じ）
+    const node = document.querySelector('#edstage ' + this._selector(line))
+    const hover = document.getElementById('edhover')
+    if (!hover) return
+    if (!node) { hover.style.display = 'none'; return }
+    const wrap = document.getElementById('edwrap')
+    if (!wrap) return
+    const wr = wrap.getBoundingClientRect()
+    const nr = node.getBoundingClientRect()
+    hover.style.left = (nr.left - wr.left) + 'px'
+    hover.style.top = (nr.top - wr.top) + 'px'
+    hover.style.width = nr.width + 'px'
+    hover.style.height = nr.height + 'px'
+    hover.style.display = 'block'
+  },
+
+  hoverOff() {
+    this._hoverLine = null   // ⭐ Pass B: スクロール追従の対象から外す
+    const hover = document.getElementById('edhover')
+    if (hover) hover.style.display = 'none'
+  },
+
+  /** ⭐ Pass B 変更点の明滅: 「確定した1動作」の直後に、その節点を一瞬だけ光らせる。
+   * ⚠️ ドラッグ中の毎フレームからは呼ばない（`EditPage` 側 ── `Apply`/`Nudge`/
+   * `ApplyHistory`/揃える等間隔/`DragEnd`/`ResizeEnd` の後だけ）。
+   * ⭐ 塗らない（`edflash` は輪郭のパルスだけ・CSS アニメ）。連続で呼ばれても安全なように、
+   * 一度クラスを外してから reflow を挟んで付け直す（同じクラスを連続して付けても
+   * アニメが再始動しないブラウザ既定の挙動への対策）。
+   * @param {string|number} line 光らせる行（部品なら part-line）。 */
+  flash(line) {
+    this.flashLines(String(line))
+  },
+
+  /** ⭐ まとめ移動・揃える等間隔用の複数行版。@param {string} csv 行番号の csv。 */
+  flashLines(csv) {
+    const lines = csv ? String(csv).split(',').filter(s => s !== '') : []
+    for (const line of lines) {
+      const node = document.querySelector('#edstage ' + this._selector(line))
+      if (!node) continue
+      node.classList.remove('edflash')
+      void node.offsetWidth   // ⭐ reflow を挟んで、除去を確定させる（再始動できるように）
+      node.classList.add('edflash')
+    }
+  },
+
+  /** ⭐④ ドラッグ枠（ラバーバンド）を、その瞬間だけ見せる（`#edwrap` 基準の実寸 ──
+   * `_ringTo` と同じ置き方）。@param {number} x1,x2,y1,y2 実画面座標（順不同でよい）。 */
+  _bandDraw(x1, x2, y1, y2) {
+    const band = document.getElementById('edband')
+    const wrap = document.getElementById('edwrap')
+    if (!band || !wrap) return
+    const wr = wrap.getBoundingClientRect()
+    const left = Math.min(x1, x2), top = Math.min(y1, y2)
+    band.style.left = (left - wr.left) + 'px'
+    band.style.top = (top - wr.top) + 'px'
+    band.style.width = Math.abs(x2 - x1) + 'px'
+    band.style.height = Math.abs(y2 - y1) + 'px'
+    band.style.display = 'block'
+  },
+
+  _bandHide() {
+    const band = document.getElementById('edband')
+    if (band) band.style.display = 'none'
+  },
+
+  /** ⭐④ ドラッグ枠と交差する節点を集める（バンドを離したとき）。⚠️ 候補は「通常文書
+   * なら `[data-line]`、部品文書なら `[data-part="<_of>"]`」── `nodeAt` と同じ絞り方
+   * （別の部品へ迷い込まない）。行番号が数（≥0）のものだけ・重複は行番号で除外。
+   * @param {{left:number, top:number, right:number, bottom:number}} rect 実画面座標の矩形
+   * @returns {number[]} 交差した行番号の一覧（重複無し）。 */
+  _bandCollect(rect) {
+    const stage = document.getElementById('edstage')
+    if (!stage) return []
+    const nodes = stage.querySelectorAll(this._partId ? '[data-part="' + this._partId + '"]' : '[data-line]')
+    const seen = new Set()
+    const out = []
+    nodes.forEach(el => {
+      const lineStr = this._lineOf(el)
+      if (lineStr === '') return
+      const n = Number(lineStr)
+      if (!Number.isFinite(n) || n < 0 || seen.has(n)) return
+      const r = el.getBoundingClientRect()
+      const overlap = !(r.right < rect.left || rect.right < r.left || r.bottom < rect.top || rect.bottom < r.top)
+      if (!overlap) return
+      seen.add(n)
+      out.push(n)
+    })
+    return out
   },
 
   /** ⭐ 吸い付いた線を、その瞬間だけ見せる。

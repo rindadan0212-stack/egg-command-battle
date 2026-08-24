@@ -52,8 +52,58 @@
 .edmuted { color: #6d7390; font-size: 12px; }
 .edstatus { color: #8fd0a3; font-size: 12px; margin-left: auto; }
 
+/* ⭐ Pass B: 拡大（ズーム）操作。⚠️ 控えめに ── 主役は保存の1つだけ（作法どおり）
+   なので、ここは無彩色のまま。角丸は押せる要素だけ（区切りには使わない）。 */
+.edzoom { display: flex; align-items: stretch; }
+.edzoom button {
+  background: #232840;
+  color: #d7dae6;
+  border: 1px solid rgba(255, 255, 255, .12);
+  padding: 5px 9px;
+  font: inherit;
+  cursor: pointer;
+}
+.edzoom button:first-child { border-radius: 6px 0 0 6px; border-right: 0; }
+.edzoom button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
+.edzoom button:hover:not(:disabled) { background: #2b3150; }
+.edzoom button:disabled { color: #565c72; cursor: default; }
+.edzoomval { min-width: 52px; font-variant-numeric: tabular-nums; }
+.edgridtoggle { margin-left: 2px; }
+
 /* ── 3本の柱 ─────────────────────────────────────── */
 .edmain { flex: 1 1 auto; display: flex; min-height: 0; }
+
+/* ⭐ Pass B 段階制: フォルダを選ぶ前は、空の3列を見せず1つの入口だけ
+   （pixelizer の教訓）。⚠️ `.edmain`（3列）はまだ何も読んでいないとき丸ごと出さない
+   （`EditPage.razor` の `@if (_raw is null)` 側）── 木・盤・Inspector の空カラムを
+   個別に隠すのではなく、この状態そのものを別の見た目にする。 */
+.edstart {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.edstartbox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 40px;
+}
+/* ⭐ 画面内の主役はこの1つだけ（作法どおり ── 塗りで突出させ、他は引っ込める）。 */
+.edstartbtn {
+  background: #b45309;
+  color: #fff;
+  border: 1px solid #b45309;
+  border-radius: 8px;
+  padding: 16px 30px;
+  font: inherit;
+  font-size: 17px;
+  cursor: pointer;
+}
+.edstartbtn:hover:not(:disabled) { background: #c96613; }
+.edstartbtn:disabled { background: #232840; border-color: rgba(255, 255, 255, .12); color: #565c72; cursor: default; }
+.edstarthint { color: #6d7390; font-size: 12px; max-width: 320px; text-align: center; }
 
 .edtree {
   flex: 0 0 220px;
@@ -110,6 +160,11 @@
 .edrow:hover { background: rgba(255, 255, 255, .04); }
 /* ⚠️ 選んでいる行は「面」でなく「線」で示す ── 塗り潰さない約束をここでも守る */
 .edrow.on { border-left-color: #f59e0b; background: rgba(245, 158, 11, .10); }
+/* ⭐③④ 主以外の選択（複数選択）。⚠️ `.on` より薄い ── 主が1つだけ突出する（作法どおり）。 */
+.edrow.sel { border-left-color: rgba(245, 158, 11, .5); background: rgba(245, 158, 11, .05); }
+/* ⭐ Pass B 盤→木ホバー。⚠️ 選択（`.on`/`.sel`・アンバー系）と混ざらないよう、
+   新しい色は増やさず無彩色の面だけ足す（`:hover` の既存の薄い背景と同じ考え方）。 */
+.edrow.hover { background: rgba(255, 255, 255, .08); }
 .edname { color: #d7dae6; }
 .edkind { color: #6d7390; font-size: 11px; }
 
@@ -119,16 +174,41 @@
   overflow: hidden;
   background: #05070c;
 }
-.edstagewrap { position: absolute; inset: 0; }
+/* ⭐ Pass B: 拡大時にスクロールで盤の全域を見て回れるようにする層。
+   ⚠️ **`#edring`/`#edsel`/`#edband`/guide/`#edhover` は、この層の外
+   （`#edwrap` 直下）に置いたまま** ── ここに入れると、それらは「スクロールする
+   コンテンツの一部」になってしまい、`getBoundingClientRect` の差分（viewport 基準）で
+   置いた screen-px の輪の計算式（`nr.left - wr.left`）がスクロール量ぶんだけ
+   二重に効いてずれる。`#edwrap` 自身は今までどおりスクロールしない（この層
+   `#edscroll` だけが `overflow:auto`）ので、`#edwrap` を基準にした差分計算は
+   スクロール状態によらず常に正しい（詳細は EditPage.razor の註）。
+   ⭐ `display:flex` + 子（`.edstagewrap`）の `margin:auto` で中央寄せする ──
+   `justify-content:center`/`align-items:center` は使わない（器より子が大きいとき、
+   はみ出した先頭側がスクロールで届かなくなる既知の不具合があるため。`margin:auto`
+   は空きが無くなると素直に 0 へ落ちるので、その不具合が起きない）。 */
+.edscroll {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  display: flex;
+}
+.edstagewrap {
+  position: relative;
+  margin: auto;   /* ⭐ 小さいときは中央、器より大きいときは左上起点でスクロール可能 */
+  flex: 0 0 auto;
+  /* ⭐ 初期値（edit.js の fit() が上書き）。#edstage の初期 scale(.3) と揃えておく。 */
+  width: 324px;
+  height: 576px;
+}
 .edstage {
   position: absolute;
-  left: 50%;
-  top: 50%;
+  left: 0;
+  top: 0;
   width: 1080px;
   height: 1920px;
-  transform-origin: center center;
+  transform-origin: 0 0;
   /* ⭐ 初期値。⚠️ 実際の倍率は edit.js の ResizeObserver が上書きする */
-  transform: translate(-50%, -50%) scale(.3);
+  transform: scale(.3);
   background: #bdebff;
 }
 /* ⭐ 不備を描く層。⚠️ #edstage と**同じ位置・同じ倍率**（edit.js の fit() が
@@ -137,14 +217,31 @@
    #edcap のいちばん上に不備の絵を重ねると、盤全体の掴み・押しどころを覆ってしまう）。 */
 .edfaults {
   position: absolute;
-  left: 50%;
-  top: 50%;
+  left: 0;
+  top: 0;
   width: 1080px;
   height: 1920px;
-  transform-origin: center center;
-  transform: translate(-50%, -50%) scale(.3);   /* ⭐ 初期値。edit.js の fit() が上書き */
+  transform-origin: 0 0;
+  transform: scale(.3);   /* ⭐ 初期値。edit.js の fit() が上書き */
   pointer-events: none;
   z-index: 1;   /* ⚠️ #edstage/#edcap の上・#edring/#edguide（2）の下 */
+}
+/* ⭐ Pass B: 格子（きざみ間隔の薄い線）。⚠️ #edstage と同じ基準・同じ倍率
+   （edit.js の fit() が3層まとめて scale する）── だから間隔はそのまま `_step` px
+   でよい（実寸換算は要らない）。既定 off（`EditPage._grid`）・塗り面ではなく極薄の線のみ
+   （塗り潰さない約束）。`#edcap` より下（指を奪わない ── そもそも pointer-events:none）。 */
+.edgrid {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1080px;
+  height: 1920px;
+  transform-origin: 0 0;
+  transform: scale(.3);   /* ⭐ 初期値。edit.js の fit() が上書き */
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(to right, rgba(255, 255, 255, .10) 0 1px, transparent 1px var(--edstep, 10px)),
+    repeating-linear-gradient(to bottom, rgba(255, 255, 255, .10) 0 1px, transparent 1px var(--edstep, 10px));
 }
 /* ⚠️ 🔴 **`::deep` が要る。**`.edfault-box`/`.edfault-focus` は Razor の要素ではなく
    `(MarkupString)_faultHtml`（C# が組み立てた生の HTML 文字列）の中身 ── Blazor の
@@ -187,6 +284,50 @@
   pointer-events: none;
   box-shadow: 0 0 0 4px #f59e0b, inset 0 0 0 4px #f59e0b;
   border-radius: 4px;
+  z-index: 2;
+}
+/* ⭐②④ 選択の輪の多重化（`eggEdit.reselect` が中身を作り直す）。⚠️ `.edring` と同じく
+   盤の外の層 ── 実寸（screen px）だけで置ける。塗らない（輪郭だけ）。
+   🔴 `::deep` が要る（`.edfault-box` と同じ理由 ── 中身は JS が作る素の DOM で、
+   Razor の CSS 分離スコープの対象外）。 */
+#edsel {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+#edsel ::deep .edselbox {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid rgba(245, 158, 11, .55);
+}
+/* ⭐ 主の節点だけ、他の選択より少し濃い輪郭にする（主役が1つ、の作法どおり）。 */
+#edsel ::deep .edselbox-primary {
+  border-width: 2px;
+  border-color: #f59e0b;
+}
+/* ⭐ Pass B 木→盤ホバー。⚠️ **選択の輪（`#edring`/`#edsel`）とは別レイヤ**
+   （`eggEdit.hoverOn`/`hoverOff` だけが触る・混ぜない）。輪の外の層と同じ理由
+   （盤の倍率の影響を受けない実寸 screen px）で `#edwrap` 基準に置く。
+   ⚠️ 塗らない（輪郭だけ）。破線＋同じアンバー系だが選択の輪より細く・薄く ──
+   新しい色を増やさず、太さ／実線か破線かで「選択」と「ホバー」を区別する
+   （UI 作法「アクセントは1〜2色を点で」に沿う）。 */
+#edhover {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  border: 1px dashed rgba(245, 158, 11, .65);
+  border-radius: 4px;
+  z-index: 2;
+}
+/* ⭐④ ドラッグ枠（ラバーバンド）。⚠️ 塗り潰さない約束の**唯一の例外**
+   （一時的な道具の chrome ── edguide と同じ位置づけ）。 */
+.edband {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  border: 1px dashed #f59e0b;
+  background: rgba(245, 158, 11, .06);
   z-index: 2;
 }
 /* ⭐ 大きさを変える掴みどころ。8個・盤の倍率の影響を受けない固定の実寸
@@ -235,6 +376,20 @@
   touch-action: none;
 }
 
+/* ⭐ Pass B 変更点の明滅。⚠️ `eggEdit.flash`/`flashLines` が盤の節点自身（`#edstage`
+   の中・`(MarkupString)_html` の中身）へ一時クラス `edflash` を付ける。
+   🔴 **`::deep` が要る**（`.edfault-box` と同じ理由 ── `_html` は Razor が知らない
+   MarkupString の中身なので、`::deep` を付けない素の `.edflash` は一致しない）。
+   ⚠️ 塗らない（輪郭のパルスのみ）・面は増やさない。 */
+@keyframes edflashpulse {
+  0%   { box-shadow: 0 0 0 0 rgba(245, 158, 11, .85); }
+  60%  { box-shadow: 0 0 0 5px rgba(245, 158, 11, .35); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+#edstage ::deep .edflash {
+  animation: edflashpulse .35s ease-out;
+}
+
 .edinspector {
   flex: 0 0 260px;
   overflow-y: auto;
@@ -243,6 +398,26 @@
 }
 .edhead { font-size: 15px; margin-bottom: 10px; display: flex; gap: 8px; align-items: baseline; }
 .edhint { color: #6d7390; padding: 10px; font-size: 12px; }
+
+/* ⭐⑥ 揃える・等間隔（`_selected.Count>=2` のときだけ出す）。⚠️ 通常の Inspector 欄
+   （左/上/幅/高・属性表）とは同じ画面で混ぜない ── どちらかしか出ない。
+   区切りは余白で（線で囲わない）・角丸は押せる釦だけ、の作法どおり。 */
+.edmultihead { font-size: 15px; margin-bottom: 10px; color: #d7dae6; }
+.edmultirow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.edalign-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: #232840;
+  color: #d7dae6;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 6px;   /* ⭐ 押せる要素なので角丸（作法どおり） */
+  padding: 7px 6px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.edalign-btn:hover:not(:disabled) { background: #2b3150; }
+.edalign-btn:disabled { color: #565c72; cursor: default; }
 
 .edfieldrow { display: flex; gap: 8px; margin-bottom: 8px; }
 .edfield { flex: 1 1 50%; min-width: 0; }
