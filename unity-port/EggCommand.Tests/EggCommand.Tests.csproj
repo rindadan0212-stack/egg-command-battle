@@ -27,6 +27,14 @@
     <ProjectReference Include="..\EggCommand.Sim\EggCommand.Sim.csproj" />
   </ItemGroup>
 
+  <!-- 骨組みエディタの属性表。⚠️ 唯一の出所は `EggCommand.Web`（写さない・直接コンパイル）。
+       ⭐ ProjectReference は張らない ── `dotnet test` は Web（Blazor WASM）を建てない、
+       という既存の約束（下の `SeriesRecord.cs` 等と同じ理由）を守るため。
+       `EditAttrs.cs` は `EggCommand.Core` にしか依存しないので、この形で問題なく載る。 -->
+  <ItemGroup>
+    <Compile Include="..\EggCommand.Web\EditAttrs.cs" Link="EditAttrs.cs" />
+  </ItemGroup>
+
   <!-- いまの実装の出力を凍らせた記録。⚠️ 移植の証拠ではない。
        遊びを意図して変えたときだけ sim の record で作り直す。 -->
   <ItemGroup>

@@ -89,14 +89,38 @@
       }
       else
       {
-        @foreach (var row in Flatten())
-        {
-          <div class="edrow @(row.Node.LineNumber == _selectedLine ? "on" : "")"
-               style="padding-left:@(8 + row.Depth * 14)px"
-               @onclick="() => SelectLine(row.Node.LineNumber)">
-            <span class="edname">@row.Node.Name</span>
-            <span class="edkind">@row.Node.Kind</span>
+        @* ⭐③ 作者の Unity 版 `PartList()` に倣う ── さがす（× で消せる）と
+           出ているものだけ（既定 ON）。 *@
+        <div class="edtreetools">
+          <div class="edfind">
+            <input type="text" class="edfindinput" placeholder="さがす"
+                   value="@_find" @oninput="OnFindInput" />
+            @if (_find.Length > 0)
+            {
+              <button type="button" class="edfindclear" title="さがすを消す" @onclick="ClearFind">×</button>
+            }
           </div>
+          <label class="edtoggle edonlyvisible">
+            <input type="checkbox" checked="@_onlyVisible" @onchange="OnToggleOnlyVisible" />
+            <span>出ているものだけ</span>
+          </label>
+        </div>
+        var rows = FilteredRows();
+        @if (rows.Count == 0)
+        {
+          <div class="edhint">見つかりません</div>
+        }
+        else
+        {
+          @foreach (var row in rows)
+          {
+            <div class="edrow @(row.Node.LineNumber == _selectedLine ? "on" : "")"
+                 style="padding-left:@(8 + row.Depth * 14)px"
+                 @onclick="() => SelectLine(row.Node.LineNumber)">
+              <span class="edname">@row.Node.Name</span>
+              <span class="edkind">@row.Node.Kind</span>
+            </div>
+          }
         }
       }
     </div>
@@ -167,12 +191,14 @@
           @Field("高", _height, v => ApplyHeight(v))
         </div>
 
-        @* ⭐③ `repeat=` を持つ節点だけ、その間隔（gap）も直に打てるようにする。
-           ⚠️ 持たない節点では出さない（空の欄を先に見せない、の教訓）。 *@
-        @if (sel.Option("repeat") != null)
+        @* ⭐①属性表（EditAttrs.All）から自動で欄を生む ── 効かない種類・条件
+           （例: gap は repeat= を持つ節点だけ）では出さない
+           （作者の pixelizer の教訓「空の欄を先に見せない」）。 *@
+        @foreach (var attr in EggCommand.Web.EditAttrs.All)
         {
-          <div class="edfieldrow">
-            @Field("gap", _gap, v => ApplyGap(v))
+          if (!attr.AppliesTo(sel)) continue;
+          <div class="edattrrow">
+            @AttrField(attr, sel)
           </div>
         }
 
@@ -250,11 +276,18 @@
     private string _faultHtml = "";
     private string _status = "";
     private float _left, _top, _width, _height;
-    /// <summary>⭐③ `repeat=` を持つ節点だけの欄（Inspector に条件つきで出す）。
-    /// ⚠️ 持たない節点では意味を持たない値なので、欄自体を出さない
-    /// （作者の pixelizer の教訓「空の欄を先に見せない」）。</summary>
-    private float _gap;
     private float _step = 10f;
+
+    // ── ③ 木パネル「さがす」「出ているものだけ」 ─────
+    // ⭐ 作者の Unity 版 `EggCommandWindow.PartList()` に倣う（既定値も同じ ── 出ているものだけ = true）。
+
+    private string _find = "";
+    private bool _onlyVisible = true;
+    /// <summary>⭐ 盤（#edstage）に実際に描かれている `data-line`／`data-part` の集合。
+    /// ⚠️ null は「まだ数えていない／トグル OFF」の印 ── その場合 <see cref="IsVisible"/> は
+    /// 素通しで true を返す（フィルタを掛けない）。JS から1回もらう
+    /// （`when=` をここで評価し直さない ── 実際に盤に出ているかで判定する設計どおり）。</summary>
+    private HashSet<string>? _visibleKeys;
 
     /// <summary>⭐ 吸い付きは**設計 px**で8以内だけ（唯一の出所）。
     /// ⚠️ 兄弟・親の辺も、きざみ（<see cref="_step"/>）も、同じ物差しで比べる。</summary>
@@ -345,6 +378,9 @@
         await Js.InvokeVoidAsync("eggEdit.resize", _me);
         await Js.InvokeVoidAsync("eggEdit.keys", _me);
         _ready = true;
+        // ⭐③ `_ready` が立つ前の `RefreshView`（`LoadDemo`/`OnParametersSet` 経由）は
+        //    「出ているものだけ」の JS 呼び出しを見送っている ── ここで一度だけ数え直す。
+        _ = RefreshVisibleSet();
         StateHasChanged();
     }
 
@@ -571,7 +607,9 @@
         var n = _raw is null || _selectedLine < 0 ? null : Find(_raw.Roots, _selectedLine);
         if (n is null) return;
         _left = n.Left; _top = n.Top; _width = n.Width; _height = n.Height;
-        _gap = n.Number("gap", 0);   // ⭐③ repeat= が無い節点では使われないが、同期はしておく
+        // ⚠️ 属性表（EditAttrs）の欄は AttrField が sel から毎回読み直すので、
+        //    ここで個別にキャッシュしない（増えるたびフィールドを足す形を避ける ──
+        //    「専用メソッドを増やさない」という属性表そのものの狙いと同じ）。
     }
 
     // ── 直す ────────────────────────────────────────
@@ -594,24 +632,40 @@
         n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
             n.PartId, n.PartLine));
 
-    /// <summary>⭐③ `gap=` は `Left`/`Top`/`Width`/`Height` と違い専用フィールドを持たない
-    /// （`Options` の中の1つ）── 差し替えるのは節点そのものでなく `Options` 辞書。
-    /// ⚠️ 0未満にしない（`Left`/`幅` と同じ考え方。エディタが壊れた値を作らない）。</summary>
-    private void ApplyGap(float v) => Apply(n => WithGap(n, Math.Max(0f, v)));
+    // ── ①② 属性表（EditAttrs）の唯一の書き換え経路 ─────────
+    //
+    // ⭐ 段階1の設計（wiki `web移行計画.md` §11-3）:
+    //   「座標4つ（Left/Top/Width/Height）は LayoutNode の専用フィールドなので別のままで
+    //    よいが、付け足しは必ず1経路にする」── `ApplyLeft` 等はそのまま、付け足しは
+    //    ここ（`SetOption`）の1本にまとめる。`WithGap`（③・2026-08-24 実装済み）が雛形。
 
-    /// <summary>`n` の `gap=` だけを書き換えた新しい節点。⚠️ 元の欄（桁・並び順）は
-    /// <see cref="LayoutNode.RenderLine"/> が `Options["gap"]` を読み直して詰め直す
-    /// （既に `gap=` があれば値だけ差し替え、無ければ末尾に新顔として足す）。</summary>
-    private static LayoutNode WithGap(LayoutNode n, float gap)
+    /// <summary>属性表（<see cref="EggCommand.Web.EditAttrs"/>）の欄1つを直す。
+    /// ⭐ **これで1つの取り消し**（<see cref="Apply"/> が Begin〜Commit の対を通す）。
+    /// ⚠️ `value` が null なら付け足しごと消す ── 切替の OFF・選択肢を「（既定）」に戻す・
+    /// 字を空にする、の3つすべてがここを通る（`ink=` のように空文字だけ残して
+    /// 「効かないのに行に残る」を作らない）。</summary>
+    private void ApplyOption(string key, string? value) => Apply(n => SetOption(n, key, value));
+
+    /// <summary>`n` の `key=` だけを書き換えた（または消した）新しい節点。⚠️ 元の欄
+    /// （桁・並び順）は <see cref="LayoutNode.RenderLine"/> が <see cref="LayoutNode.Options"/>
+    /// を読み直して詰め直す（既に在れば値だけ差し替え、無ければ末尾に新顔として足す、
+    /// `Options` から消せば欄ごと消える ── すべて <c>LayoutWriteTests</c> §7 が守っている）。</summary>
+    private static LayoutNode SetOption(LayoutNode n, string key, string? value)
     {
-        var options = new Dictionary<string, string>(n.Options)
-        {
-            ["gap"] = gap.ToString("0.##", CultureInfo.InvariantCulture)
-        };
+        var options = new Dictionary<string, string>(n.Options);
+        if (value == null) options.Remove(key);
+        else options[key] = value;
         return new LayoutNode(n.Name, n.Kind, n.Left, n.Top, n.Width, n.Height,
             options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
             n.PartId, n.PartLine);
     }
+
+    /// <summary>⭐③ `gap=` 専用の薄い包み（2026-08-24 実装・掴んで動かす側の
+    /// <see cref="DraggingGap"/> が直接呼ぶ ── ドラッグ中は毎フレーム呼ぶので
+    /// <see cref="Apply"/>（Begin/Commit つき）を通さない）。⚠️ いまは <see cref="SetOption"/>
+    /// の薄い包みに畳んである（属性表への統合で二重管理をやめた・挙動は変えていない）。</summary>
+    private static LayoutNode WithGap(LayoutNode n, float gap) =>
+        SetOption(n, "gap", gap.ToString("0.##", CultureInfo.InvariantCulture));
 
     /// <summary>数を打った1回（＋ − や欄の入力）。⭐ **これで1つの取り消し**（Begin〜Commit
     /// を1回で閉じる）。⚠️ ドラッグ中の毎フレーム呼び出し（<see cref="Dragging"/>）は
@@ -665,6 +719,34 @@
 
     [JSInvokable]
     public void Redo() => ApplyHistory(_redo, _undo);
+
+    // ── ② 矢印キーで動かす（ナッジ） ────────────────
+    //
+    // ⭐ 作者の Unity 版 `EggCommandWindow.Nudge` と同じ ── 選んでいる節点を
+    //    ←→↑↓ で「きざみ」ぶん動かす。⚠️ `edit.js` の `keys()` が
+    //    Ctrl+Z/Ctrl+Shift+Z と**同じ場所**（document の keydown）で受け、字を打っている
+    //    最中（input/textarea/select に焦点）は素通しにする（JS 側で判定）。
+
+    /// <param name="dx">-1/0/1（左右の向き）。</param>
+    /// <param name="dy">-1/0/1（上下の向き）。⚠️ この骨組みの座標系は**下が＋**
+    /// （CSS の `top` と同じ・Unity の RectTransform とは逆）なので、Unity 版のような
+    /// 符号反転は要らない ── ↑（ArrowUp）は素直に `dy=-1` を渡すだけでよい。</param>
+    [JSInvokable]
+    public void Nudge(int dx, int dy)
+    {
+        if (_raw is null || _selectedLine < 0) return;
+        var node = Find(_raw.Roots, _selectedLine);
+        if (node is null) return;
+        // ⭐ 1回＝1つの取り消し（Apply が Begin/CommitAction の対を通す）。
+        //    ⚠️ 掴んで動かす（Dragging）と違い、吸い付き（SnapMove）は掛けない ──
+        //    きざみで既に丸い数のはずで、1回の移動量が小さいぶん兄弟の辺への
+        //    偶然の一致がノイズになりやすいため（作者の Unity 版にも吸い付きは無い）。
+        float left = node.Left + dx * _step;
+        float top = node.Top + dy * _step;
+        Apply(n => new LayoutNode(n.Name, n.Kind, left, top, n.Width, n.Height,
+            n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+    }
 
     private void ApplyHistory(List<string> from, List<string> to)
     {
@@ -1050,6 +1132,75 @@
         foreach (var child in node.Children) Walk(child, depth + 1, into);
     }
 
+    // ── ③ 木パネル「さがす」「出ているものだけ」 ─────
+    // ⭐ 作者の Unity 版 `EggCommandWindow.PartList()` に倣う ──
+    //    さがすは名前・種類の部分一致、出ているものだけは実際に盤へ描かれているかで絞る。
+
+    /// <summary><see cref="Flatten"/> を「さがす」「出ているものだけ」で絞った並び。
+    /// ⚠️ 木そのもの（親子・深さ）は変えない ── 絞るのは行の**表示・非表示**だけ
+    /// （途中の親だけ隠すと、子の字下げが宙に浮いて読めなくなる事故を避けるため、
+    /// 親子関係を保ったまま行単位で判定する。今の骨組みは深さが浅いのでこれで十分）。</summary>
+    private List<(int Depth, LayoutNode Node)> FilteredRows()
+    {
+        var all = Flatten();
+        if (_find.Length == 0 && !_onlyVisible) return all;
+        var result = new List<(int, LayoutNode)>(all.Count);
+        foreach (var row in all)
+        {
+            if (_find.Length > 0
+                && row.Node.Name.IndexOf(_find, StringComparison.OrdinalIgnoreCase) < 0
+                && row.Node.Kind.IndexOf(_find, StringComparison.OrdinalIgnoreCase) < 0)
+                continue;
+            if (_onlyVisible && !IsVisible(row.Node)) continue;
+            result.Add(row);
+        }
+        return result;
+    }
+
+    /// <summary>その節点が、いま盤（#edstage）に実際に描かれているか。
+    /// ⚠️ <see cref="_visibleKeys"/> が null（まだ数えていない・トグル OFF）なら
+    /// 素通しで true ── フィルタを掛けない側へ倒す（誤って全部隠すより安全）。
+    ///
+    /// ⭐ 部品ファイルを開いているとき（<c>Scenes.Of(_of).ByPart</c>）は、盤の DOM 側は
+    /// `data-part="_of"` + `data-part-line=N` を持つ（`LayoutDom.cs`）── 木の行 `N`
+    /// （この部品ファイル自身の `LineNumber`）と同じ数なので、キーの作り方を
+    /// `eggEdit._selector` と揃える。</summary>
+    private bool IsVisible(LayoutNode node)
+    {
+        if (_visibleKeys is null) return true;
+        string key = Scenes.Of(_of).ByPart
+            ? "part:" + _of + ":" + node.LineNumber.ToString(CultureInfo.InvariantCulture)
+            : "line:" + node.LineNumber.ToString(CultureInfo.InvariantCulture);
+        return _visibleKeys.Contains(key);
+    }
+
+    private void OnFindInput(ChangeEventArgs e) => _find = Convert.ToString(e.Value) ?? "";
+
+    private void ClearFind() => _find = "";
+
+    private void OnToggleOnlyVisible(ChangeEventArgs e)
+    {
+        _onlyVisible = e.Value is bool b && b;
+        _ = RefreshVisibleSet();
+    }
+
+    /// <summary>⭐ 盤に実際に描かれている `data-line`／`data-part` の集合を JS から1回もらう。
+    /// ⚠️ トグル OFF なら呼ばない（無駄な JS 往復をしない）。<see cref="_ready"/> より前
+    /// （JS 側とまだ繋がっていない）も呼ばない ── <see cref="RefreshView"/> は
+    /// <see cref="OnParametersSet"/> からも呼ばれるため。</summary>
+    private async Task RefreshVisibleSet()
+    {
+        if (!_onlyVisible)
+        {
+            if (_visibleKeys is not null) { _visibleKeys = null; StateHasChanged(); }
+            return;
+        }
+        if (!_ready) return;
+        var keys = await Js.InvokeAsync<string[]>("eggEdit.visibleLines");
+        _visibleKeys = new HashSet<string>(keys);
+        StateHasChanged();
+    }
+
     private static float ParseF(object? value, float fallback)
     {
         var s = Convert.ToString(value);
@@ -1085,6 +1236,10 @@
         _faults = Core.Layouts.Inspect(resolved);
         _html = Scenes.Draw(scene.HostId);
         _faultHtml = DrawFaults(_faults);
+        // ⭐③ 盤が組み直るたびに「出ているものだけ」の集合も数え直す（唯一の出所を
+        //    ここ1か所にまとめる ── 呼び出し元6箇所それぞれに書かせない）。
+        //    ⚠️ fire-and-forget（`rering` 等、既存の他の JS 呼び出しと同じ作法）。
+        _ = RefreshVisibleSet();
     }
 
     // ── 不備を盤に描く ──────────────────────────────
@@ -1234,6 +1389,113 @@
         builder.CloseElement();
 
         builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    // ── ①属性表（EditAttrs）から欄を自動で生む ─────────
+    //
+    // ⭐ `AttrField` が型（Number/Toggle/Choice/Text）で振り分け、実体は下の4つの
+    //    RenderFragment ビルダー。⚠️ 増えるたびここに if を足さない ── 型そのものが
+    //    4つで閉じている（`EggCommand.Web.AttrKind`）ので、switch 式で足りる。
+
+    private RenderFragment AttrField(EggCommand.Web.Attr attr, LayoutNode sel) => attr.Kind switch
+    {
+        EggCommand.Web.AttrKind.Number => Field(attr.Label,
+            sel.Number(attr.Key, DefaultNumber(attr.Key, sel)),
+            v => ApplyOption(attr.Key, Math.Clamp(v, attr.Min, attr.Max)
+                .ToString("0.##", CultureInfo.InvariantCulture))),
+        EggCommand.Web.AttrKind.Toggle => ToggleField(attr, sel),
+        EggCommand.Web.AttrKind.Choice => ChoiceField(attr, sel),
+        EggCommand.Web.AttrKind.Text => TextField(attr, sel),
+        _ => (builder) => { },
+    };
+
+    /// <summary>⭐ `size` は種類で既定が違う（`LayoutDom.cs` の
+    /// <c>node.Number("size", node.Kind == "button" ? 34 : 26)</c> と同じ数）。
+    /// ⚠️ 骨組みに書いていないときに欄へ出す「今の値」がこれ ── 実際に効いている値と
+    /// 欄の表示を食い違わせないために要る。</summary>
+    private static int DefaultNumber(string key, LayoutNode sel) => key switch
+    {
+        "size" => sel.Kind == "button" ? 34 : 26,
+        _ => 0,
+    };
+
+    /// <summary>切替。⚠️ OFF は付け足しごと消す（<see cref="ApplyOption"/> に null を渡す）
+    /// ── `foe=` を書き残さない、という段階1の必須要件そのもの。</summary>
+    private RenderFragment ToggleField(EggCommand.Web.Attr attr, LayoutNode sel) => builder =>
+    {
+        bool on = sel.Option(attr.Key) != null;
+        builder.OpenElement(0, "label");
+        builder.AddAttribute(1, "class", "edtoggle");
+        builder.OpenElement(2, "input");
+        builder.AddAttribute(3, "type", "checkbox");
+        builder.AddAttribute(4, "checked", on);
+        builder.AddAttribute(5, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(
+            this, e => ApplyOption(attr.Key, (e.Value is bool b && b) ? "yes" : null)));
+        builder.CloseElement();
+        builder.OpenElement(6, "span");
+        builder.AddContent(7, attr.Label);
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    /// <summary>決まった値からしか選べない。⚠️ 先頭に「（既定）」を足す ──
+    /// 選ぶと <see cref="ApplyOption"/> に null が渡り、付け足しごと消える
+    /// （骨組みに書かない＝描く側の既定値に戻る、と同じ意味）。</summary>
+    private RenderFragment ChoiceField(EggCommand.Web.Attr attr, LayoutNode sel) => builder =>
+    {
+        string current = sel.Option(attr.Key) ?? "";
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "edfield");
+        builder.OpenElement(2, "span");
+        builder.AddAttribute(3, "class", "edlabel");
+        builder.AddContent(4, attr.Label);
+        builder.CloseElement();
+
+        builder.OpenElement(5, "select");
+        builder.AddAttribute(6, "class", "edselect");
+        builder.AddAttribute(7, "value", current);
+        builder.AddAttribute(8, "onchange", EventCallback.Factory.CreateBinder<string?>(
+            this, v => ApplyOption(attr.Key, string.IsNullOrEmpty(v) ? null : v), current));
+
+        builder.OpenElement(9, "option");
+        builder.AddAttribute(10, "value", "");
+        builder.AddContent(11, "（既定）");
+        builder.CloseElement();
+
+        int seq = 12;
+        foreach (var choice in attr.Choices ?? Array.Empty<string>())
+        {
+            builder.OpenElement(seq++, "option");
+            builder.AddAttribute(seq++, "value", choice);
+            builder.AddContent(seq++, choice);
+            builder.CloseElement();
+        }
+        builder.CloseElement();   // select
+        builder.CloseElement();   // div
+    };
+
+    /// <summary>動かない字そのもの。⚠️ 空にしたら付け足しごと消す（`Layouts.Parse` は
+    /// `text= が空` を拒む ── 空文字を書いて往復検査に落ちるより、ここで消す）。
+    /// ⭐ `\n` は改行として打てる（`<textarea>` の複数行がそのまま `Option("text")` の値）。</summary>
+    private RenderFragment TextField(EggCommand.Web.Attr attr, LayoutNode sel) => builder =>
+    {
+        string current = sel.Option(attr.Key) ?? "";
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "edfield edfield-text");
+        builder.OpenElement(2, "span");
+        builder.AddAttribute(3, "class", "edlabel");
+        builder.AddContent(4, attr.Label);
+        builder.CloseElement();
+
+        builder.OpenElement(5, "textarea");
+        builder.AddAttribute(6, "class", "edtextarea");
+        builder.AddAttribute(7, "rows", 2);
+        builder.AddAttribute(8, "value", current);
+        builder.AddAttribute(9, "onchange", EventCallback.Factory.CreateBinder<string?>(
+            this, v => ApplyOption(attr.Key, string.IsNullOrEmpty(v) ? null : v), current));
+        builder.CloseElement();
+
         builder.CloseElement();
     };
 

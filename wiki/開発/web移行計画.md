@@ -1377,6 +1377,200 @@ tracker／選択モデル）と、**作者自身の Unity 版エディタ**（`A
 
 ---
 
+## 11-3 続き ── ✅ 段階1、実装した（2026-08-24）
+
+⭐ **属性表（`unity-port/EggCommand.Web/EditAttrs.cs`・新規）を背骨として通し、
+飾りの属性を直せるようにした**＋**矢印ナッジ**＋**木の「さがす」「出ているものだけ」**。
+3つとも入った。
+
+### ① 属性表に載せた10個・意図して外した12個
+
+`Core.Layouts.Options`（22個）のうち:
+
+| 載せた（10） | 型 | 効く種類（`LayoutDom.cs` の実装から1対1で導いた） |
+|---|---|---|
+| `size` 字の大きさ | 数（8〜140） | label／button |
+| `text` 字そのもの | 字 | label／button |
+| `anchor` 寄せ | 選択肢6 | label だけ |
+| `ink` 色 | 選択肢6 | 全部（if/else 両分岐で読む） |
+| `wrap` 折り返す | 切替 | label だけ |
+| `lead` 主役にする | 切替 | 全部 |
+| `foe` 左右反転 | 切替 | pixel だけ（`Dots()` の中でしか読まない） |
+| `crisp` 縁をにじませない | 切替 | icon だけ |
+| `turn` 回す角度 | 数（-360〜360） | label 以外全部（else 分岐） |
+| `gap` 隙間（既存・§11-2） | 数（0〜500） | `repeat=` を持つ節点だけ（種類でなく付け足しの有無） |
+
+⚠️ 外した12個（`EditAttrs.Excluded` に理由つきで記録・全部「遊びの意味が変わる」）:
+`bind` `tap` `hold` `repeat` `cols` `rows` `max` `when` `use` `flow` `dock`
+── 段階1は飾りだけ、という作者の判断どおり。
+
+🔴 **`pic`（絵の名前）は載せなかった。** ⚠️ 理由: `IconManifest`（`EggCommand.Web`
+専用の埋め込みリソース）に一覧が依存する。この属性表は `dotnet test` が Web
+（Blazor WASM）を建てないという既存の約束（`SeriesRecord.cs`/`Determinism.cs`/
+`SaveJson.cs` と同じ）を守るため、`EggCommand.Tests` へ ProjectReference は張らず
+`<Compile Include>` で `EditAttrs.cs` を**直接コンパイル**している ──
+`IconManifest` に依存させると、Tests 側では埋め込みリソースが読めず一覧が空になり、
+表が嘘をつく（Web では動くのに Tests では常に空、という食い違いが生まれる）。
+Core 語彙（`Layouts.Options`）だけで組む単純さを優先して段階1では見送った
+（絵の名前を打ち間違えても `icon-missing` の「？」印で気づける道は既にある ──
+実害は小さいと判断）。
+
+### ② `ink` の色名 ── web と Unity は同じ6つを知っている（食い違いなし）
+
+`stage.css` の `.ink-*`（`dim` `faint` `accent` `danger` `good` `on-lead`）と、
+Unity 側 `Ui.cs` の `InkDim` `InkFaint` `AccentInk` `DangerInk` `GoodInk` `OnLead`
+を突き合わせ、**6つとも1対1で対応**（食い違いなし）。`anchor` の6値
+（`left` `center` `right` `upper-left` `upper-center` `upper-right`）も、
+実物の骨組み（`unity/Assets/Resources/Layouts/*.txt`）を grep して導いた
+（決め打ちで書いていない）。
+
+### ③ ずれない検査（`EditAttrsTests.cs`・34件）
+
+`Layouts.Options` の22個すべてが `EditAttrs.All`（表）か `EditAttrs.Excluded`
+（除外一覧）の**どちらか一方**に載っていることを固定（両方・どちらでもない、は落とす）。
+⚠️ `EditAttrs.cs` は `EggCommand.Web` に置くが、`EggCommand.Tests.csproj` は
+`<Compile Include="..\EggCommand.Web\EditAttrs.cs">` でファイルそのものを
+直接コンパイルする（`EditAttrs.cs` が `EggCommand.Core` にしか依存しないので成立する）
+── ProjectReference を張ると `dotnet test` が Blazor WASM を建てることになり、
+既存の約束（このセクション冒頭「関門1」参照）を破る。
+
+`dotnet test`: **780 pass / 1 skip / 0 fail**（段階1着手前 746 → 780。
++34件はすべて `EditAttrsTests`。減っていない）。
+
+### ④ `SetOption` へ1経路化
+
+`ApplyLeft`/`Top`/`Width`/`Height` はそのまま（座標4つは `LayoutNode` の専用フィールド）。
+付け足しは `EditPage.SetOption(node, key, value)` の1本 ── `value=null` で消す
+（切替 OFF・選択肢を「（既定）」に戻す・字を空にする、の3つすべてがここを通る）。
+`WithGap`（③・2026-08-24 実装済み）は `SetOption` の薄い包みに畳み直した
+（挙動は変えていない ── `WithGap(n, gap) => SetOption(n, "gap", gap.ToString(...))`）。
+
+### ⑤ Inspector は属性表を舐めて自動で欄を生む
+
+`AttrField(attr, sel)` が `attr.Kind` で `Field`（数・±釦つき）／`ToggleField`
+（切替）／`ChoiceField`（選択肢・先頭に「（既定）」＝消す）／`TextField`
+（字・空にしたら消す）へ振り分ける。増える属性は `EditAttrs.All` に1行足すだけ
+（`ApplyXxx` のような専用メソッドを増やさない）。
+
+### ⑥ 矢印ナッジ
+
+`edit.js` の `keys()`（Ctrl+Z と**同じ場所** ── document keydown）に矢印4方向を
+足した。`input`/`textarea`/`select` に焦点があるときは素通し。
+`EditPage.Nudge(dx,dy)` が `Apply`（Begin/CommitAction の対）を通すので、
+1回＝1つの取り消し。⚠️ Shift 等の修飾キー（大きく動かす）は**付けていない**
+── 「きざみ」欄が既にステップ幅を自由に変えられるので冗長と判断（要らないと判断）。
+⚠️ `repeat=` の複製（列によって `gap` を動かす §11-2 のドラッグ挙動）は**踏襲していない**
+── 常に「左」「上」を動かす。Unity 版の Nudge に「繰り返し」の概念がそもそも無く、
+web だけの都合でキーボード操作を複雑にしないと判断した（ドラッグでの `gap` 編集は
+マウス操作のまま健在）。
+
+### ⑦ 木パネル「さがす」「出ているものだけ」
+
+作者の Unity 版 `EggCommandWindow.PartList()` に倣う（既定値も同じ ──
+「出ているものだけ」= 既定 ON）。「出ているものだけ」は `eggEdit.visibleLines()` が
+`#edstage` の実際の `data-line`／`data-part`＋`data-part-line` を集めて返し、
+**`when=` をここで評価し直さない**（実際に盤に出ているかで判定・推測ではなく実物を見る）。
+
+### 実測9項目（`/edit?demo=true` を Playwright で操作。`Layouts.Write` の結果は
+一時的な `[JSInvokable] DebugWrite()` ＋ `window.eggEdit._owner` で読んだ ──
+実測後に**両方とも削除済み**、最終コードには残っていない）
+
+| # | 何を | 前 | 後 |
+|---|---|---|---|
+| 1 | `bfuse`（button）の `size` を32へ | `size=20 tap=fuse text=分解` | `size=32 tap=fuse text=分解` |
+| 2 | 同、`text` を書き換え | `...text=分解` | `...text=分解する` |
+| 3 | 同、`lead` を ON（**text= の後ろに新規で足す**）| `...tap=fuse text=分解する` | `...tap=fuse lead=yes text=分解する` |
+| 4 | 同、`lead` を OFF | `...tap=fuse lead=yes text=分解する` | `...tap=fuse text=分解する`（`lead=` が跡形もなく消えた）|
+| 5 | `name`（label）の `anchor` を変更 | `size=38 anchor=left bind=name` | `size=38 anchor=upper-right bind=name` |
+| 6 | 同、`ink` を追加 | `anchor=upper-right bind=name` | `anchor=upper-right bind=name ink=danger` |
+| 7 | `art`（pixel）の `foe` を ON→OFF | `bind=art` | `bind=art foe=yes` → `bind=art`（往復） |
+| 8 | `face`（icon）の `crisp` を ON→OFF | `bind=face` | `bind=face crisp=yes` → `bind=face`（往復） |
+| 9 | `lv`（**既に `bind=lv` を持つ節点**）に `text` を**新規追加**、次に空にして削除 | `...anchor=right bind=lv` | `...anchor=right bind=lv text=Lv 5` → `...anchor=right bind=lv`（`text=` が消えて元どおり）|
+
+⭐ **9 は「`text=` を新しく足す」場合の検査そのもの** ── `bind=` を既に持つ節点に
+`text=` を足すと `TextAndBind` 不備（`text= と bind= の両方がある`）が正しく検出される
+ことも副次的に確認した（`box/detail-lv: text= と bind= の両方がある（字の出所は1つ）`）。
+検査は不備を1件だけ立てて（`● 1件`）、`text=` を消すと即座に `● 不備 0件` へ戻った。
+
+⭐ **`text=` が行の最後に居続けること**: #3（既存の `text=` の後ろに新顔 `lead=` を足す）
+と #9（`text=` そのものを新規に足す）の**両方**で確認 ── どちらも `text=` が
+行の一番最後のまま（`BuildSlots` が「新顔は `text=` より前に挿し込み、`text=` は
+必ず最後に処理する」という既存の並び規約をそのまま使っているため、追加コード不要）。
+
+⭐ **切替 OFF で付け足しが消えること**: #4（`lead=yes` → 跡形もなく消える）・
+#7（`foe=yes` → 消える）・#8（`crisp=yes` → 消える）の3種で確認。
+
+⭐ **往復が閉じること**: 上記すべての操作のあと、変更を1つずつ Undo で戻し、
+最終的な `Layouts.Write` の全文が原本の `panel.txt`（2,843 バイト）と
+**バイト数・末尾とも完全一致**することを確認（差分検査に相当）。
+⚠️ 加えて、`SetOption`/`WithGap` は既存の `RenderLine`/`BuildSlots`
+（`LayoutWriteTests` が62件で守っている経路）をそのまま再利用しているだけで、
+新しい書き出し経路を足していない ── 構造的にも往復が保証される。
+
+⭐ **矢印ナッジ**（`きざみ=10`、`name` の `左=448`）: `ArrowLeft` を1回 →
+`左=438`（10減）・取り消し `⟲2 → ⟲3`。数値欄に焦点を移してから `ArrowLeft` を
+押すと `左` は変わらず、取り消しも積まれない（`⟲3` のまま）。Undo で `左=448` に戻る。
+属性の変更（`size` 等）も Undo で戻ることを別途確認。
+
+⭐ **さがす**: `box`（「出ているものだけ」OFF＝11行）に「cell」と打つと2行
+（`cellA`/`cellB`）に絞られ、`×` を押すと11行へ戻る（数で確認）。
+
+⭐ **出ているものだけ**（既定 ON）: `box`（`SortOpen=true` で描画・`gridA`/`cellA` は
+`when=!open` で今は出ない）で、既定 ON の状態は**9行**（`gridA`/`cellA` が落ちている）。
+OFF にすると**11行**に戻る（落ちた数＝2件、を数で確認）。
+
+⭐ **効かない種類には欄を出さない**: `button`（5欄: 字の大きさ・字そのもの・色・
+主役にする・回す角度）／`label`（6欄: 字の大きさ・字そのもの・寄せ・色・折り返す・
+主役にする）／`pixel`（4欄: 色・主役にする・左右反転・回す角度）／`icon`（4欄:
+色・主役にする・縁をにじませない・回す角度）／`card`＋`repeat=`（4欄: 色・主役に
+する・回す角度・隙間）── いずれも実際の Inspector 表示を数えて確認、`EditAttrs`
+の `AppliesTo` 定義どおり。
+
+⭐ **数の安全な範囲**: `size` に 500 を打つと `140`（Max）に丸まる。
+
+### 通した検査（すべて既存の合格条件から変わっていない）
+
+| 検査 | 結果 |
+|---|---|
+| `dotnet test` | ⭐ **780 pass / 1 skip / 0 fail**（746 → 780・+34 は `EditAttrsTests`） |
+| `dotnet build EggCommand.Web` | 0 エラー（警告77件・段階1着手前と同数・無関係な既存警告） |
+| `node scripts/inspect.mjs` | ⭐ **71画面×3サイズ・不備18件のまま**（変わっていない） |
+| `node scripts/inspect-selftest.mjs` | ⭐ 20件すべて正しく捕まえた（空回りしていない） |
+| `node scripts/play.mjs` | 0（触っても壊れない） |
+| `node scripts/loop.mjs` | 0（遊びの輪が閉じている） |
+| `node scripts/audit.mjs` | 0（`inspect.mjs` が読む本体・単体実行は読み込みの確認のみ） |
+
+### 踏んだ罠
+
+⚠️ 🔴 **Razor の入れ子ブロックで `@{ }` が RZ1010 で落ちる。**
+`else { <div>...</div> @{ var x = ...; } }` の形 ── `<div>` が閉じた時点で、
+Razor は「既に `else{}` という C# コードブロックの中」に戻っている。そこへ
+`@{ }` を書くと「もう code の中なのに `@` で code に入ろうとしている」と怒られる
+（"Unexpected \"{\" after \"@\" character"）。直しは `@{ }` を外して素の C# 文にする
+だけ（`var rows = FilteredRows();`）。
+
+⚠️ `LayoutNode.Number(key, fallback)` は内部で `int.TryParse` を使っている
+（既存実装・今回は触っていない）── 小数を書き込むと読めずに fallback へ落ちる。
+`_step`（きざみ）を整数運用している限りは実害が無いが、将来 `_step` を小数に
+拡張するときは踏む可能性がある、と記録だけ残す。
+
+⚠️ Unity 側と web 側は座標系の上下が逆（Unity: 上が＋／web: 下が＋、CSS の `top`
+と同じ）── 矢印ナッジの ↑↓ の符号を Unity 版の `Nudge` からそのまま持ってくると
+逆に動く。web は反転不要（`ArrowUp` は素直に `dy=-1`）。
+
+### できなかったこと・迷ったこと（正直に）
+
+- `pic`（絵の名前の選択肢）── ②で報告した理由により段階1では見送った。
+- 矢印ナッジの Shift 修飾（大きく動かす）は付けていない（要らないと判断・理由は⑥）。
+- 矢印ナッジは `repeat=` の複製に対する列ごとの `gap` 操作（§11-2 のドラッグ挙動）を
+  持たない（意図的・理由は⑥）。
+- `gap` の Min/Max（0〜500）・`size`（8〜140）・`turn`（-360〜360）は実物の値の分布
+  （`size` は実測13〜110・`gap` は実測0〜12 程度）から余裕を持たせた「安全な範囲」で、
+  Core 側に絶対的な上限があるわけではない（ゲームロジックの制約ではなく、エディタが
+  壊れた値を作らないための目安）。
+
+---
+
 ## 11-1. ⭐ 不備を盤の上に「形」で描き、押して選べるようにした（2026-08-24）
 
 ### ① 不備の形

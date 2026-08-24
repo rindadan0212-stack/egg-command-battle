@@ -270,18 +270,51 @@ window.eggEdit = {
     return window.confirm('保存していない直しがあります。捨てて切り替えますか？')
   },
 
-  /** ⭐ Ctrl+Z / Ctrl+Shift+Z。⚠️ **document 全体**で聞く（数値欄にフォーカスが
-   * あっても効くように）── だから離れるとき必ず外す（`stop`）。外さないと、
-   * `/app`（遊ぶ頁）へ移っても生き残って Ctrl+Z を奪い続ける。 */
+  /** ⭐ Ctrl+Z / Ctrl+Shift+Z（取り消し／やり直し）と、⭐② 矢印キー（ナッジ）。
+   * ⚠️ **document 全体**で聞く（数値欄にフォーカスがあっても Ctrl+Z が効くように）
+   * ── だから離れるとき必ず外す（`stop`）。外さないと、`/app`（遊ぶ頁）へ移っても
+   * 生き残って奪い続ける。
+   *
+   * ⚠️②矢印キーは Ctrl+Z と**同じ場所**に足す（道を2つに割らない、の指示）。
+   * ⭐ ただし矢印は「字を打っている最中」は素通し ── `input`/`textarea`/`select` に
+   * 焦点があるときは、値の入力や `<select>` の選び直しを矢印キーで邪魔しない。 */
   keys(owner) {
     if (this._keyBound) document.removeEventListener('keydown', this._keyBound)
+    // ⭐② 矢印 → (dx, dy) の向き（-1/0/1）。「きざみ」ぶんの掛け算は C# 側（`EditPage.Nudge`）
+    //    がする ── ここは向きだけを渡す（`Dragging` の dx/dy が設計px の実量なのとは違う）。
+    const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
     const fn = (e) => {
-      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        owner.invokeMethodAsync(e.shiftKey ? 'Redo' : 'Undo')
+        return
+      }
+      const dir = ARROWS[e.key]
+      if (!dir) return
+      // ⚠️ 字を打っている最中（数値欄・字そのもの欄・寄せ/色の <select>）は矢印を素通しする
+      //    ── でないと、欄の中でカーソルを動かすつもりが節点を動かしてしまう。
+      const tag = document.activeElement && document.activeElement.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       e.preventDefault()
-      owner.invokeMethodAsync(e.shiftKey ? 'Redo' : 'Undo')
+      owner.invokeMethodAsync('Nudge', dir[0], dir[1])
     }
     this._keyBound = fn
     document.addEventListener('keydown', fn)
+  },
+
+  /** ⭐③ 木パネル「出ているものだけ」用 ── いま盤（#edstage）に実際に描かれている
+   * `data-line`／`data-part`＋`data-part-line` を集める。⚠️ `when=` をここで評価し
+   * 直さない（実際に盤に描かれているかで判定する ── 推測でなく実物を見る設計どおり）。
+   * @returns {string[]} `"line:42"` か `"part:cell:3"` の形の一覧（`EditPage.IsVisible`
+   * が組み立てるキーと同じ形 ── 出所を2つに割らない）。 */
+  visibleLines() {
+    const stage = document.getElementById('edstage')
+    if (!stage) return []
+    const out = []
+    stage.querySelectorAll('[data-line]').forEach(el => out.push('line:' + el.dataset.line))
+    stage.querySelectorAll('[data-part]').forEach(el =>
+      out.push('part:' + el.dataset.part + ':' + el.dataset.partLine))
+    return out
   },
 
   /** 頁を離れるときの後片付け（`EditPage.Dispose`）。⚠️ `keys()` の document 直付けの

@@ -148,6 +148,73 @@ public class LayoutWriteTests
         Assert.Contains("Gamma", written);
     }
 
+    // ── 属性の出し入れ（エディタ段階1の `SetOption` が依存する不変）──────
+    //
+    // ⚠️ 変更ロジックそのもの（`SetOption`/`WithGap`）は `EditPage.razor` の中に
+    //    あってユニットテストしづらい。⭐ だが土台は「`LayoutNode` の `Options` を
+    //    差し替えて `Write`」── ここを Core 水準で固めれば、後で誰かが
+    //    `RenderLine`/`BuildSlots` を触ったときに、下の2つの不変が崩れれば落ちる。
+
+    /// <summary>🔴 **`text=` は必ず行の最後。**付け足しを**新しく足す**とき、
+    /// `text=` を持つ節点では `text=` より**前**に入らなければならない
+    /// （`Parse` は `text=` の後に既知の key が来たら投げる ── そのまま `Write` すると
+    /// 読み直せない字を吐く）。⭐ エディタの「色を付ける」等がこの経路を通る。</summary>
+    [Fact]
+    public void textを持つ節点に付け足しを足してもtextは最後に残る()
+    {
+        const string original = "a label 0 0 100 40 text=Alpha\n";
+        var layout = Layouts.Parse("t", original);
+        var a = layout.Roots[0];
+
+        // ⭐ `SetOption(a, "ink", "danger")` がすることと同じ ── Options に ink を足す。
+        //    ⚠️ 元の Options（text=Alpha）を保ったまま、新顔 ink を加える。
+        var options = new Dictionary<string, string>(a.Options) { ["ink"] = "danger" };
+        var edited = new LayoutNode(a.Name, a.Kind, a.Left, a.Top, a.Width, a.Height,
+            options, a.Children, a.LineNumber, a.Indent, a.Fields, a.Trailing, a.Terminator,
+            a.PartId, a.PartLine);
+        var tree = new Layout(layout.Id, new List<LayoutNode> { edited }, layout.Lines);
+
+        string written = Layouts.Write(tree);
+        string line = written.Replace("\r\n", "\n").TrimEnd('\n');
+
+        // ⚠️ **ink が落ちていないことを先に確かめる** ── 落ちていると下の
+        //    `IndexOf("ink=")` が -1 になり、比較が空振りで通ってしまう。
+        Assert.Contains("ink=danger", line);
+        // 🔴 ink は text より前。⚠️ 逆だと `Parse` が投げる（下の往復で確かめる）。
+        Assert.True(line.IndexOf("ink=", System.StringComparison.Ordinal)
+                    < line.IndexOf("text=", System.StringComparison.Ordinal),
+            $"text= が最後でない: 「{line}」");
+        Assert.EndsWith("text=Alpha", line);
+
+        // 🔴 往復が閉じる（読み直しても同じ字に戻る）。
+        Assert.Equal(written, Layouts.Write(Layouts.Parse("t", written)));
+    }
+
+    /// <summary>🔴 **切替を OFF にしたら、付け足しは跡形なく消える**（`foe=` と書き残さない）。
+    /// ⭐ エディタの toggle（`foe`/`crisp`/`wrap`/`lead`）がこの経路を通る。
+    /// ⚠️ 消したあとも往復が閉じること（欄を詰め直せること）。</summary>
+    [Fact]
+    public void 付け足しを消すと跡形なく消えて往復が閉じる()
+    {
+        const string original = "a pixel 0 0 100 100 bind=art foe=yes\n";
+        var layout = Layouts.Parse("t", original);
+        var a = layout.Roots[0];
+
+        // ⭐ `SetOption(a, "foe", null)`（＝ OFF）がすることと同じ ── Options から foe を除く。
+        var options = new Dictionary<string, string>(a.Options);
+        options.Remove("foe");
+        var edited = new LayoutNode(a.Name, a.Kind, a.Left, a.Top, a.Width, a.Height,
+            options, a.Children, a.LineNumber, a.Indent, a.Fields, a.Trailing, a.Terminator,
+            a.PartId, a.PartLine);
+        var tree = new Layout(layout.Id, new List<LayoutNode> { edited }, layout.Lines);
+
+        string written = Layouts.Write(tree);
+
+        Assert.DoesNotContain("foe", written);   // 跡形なく消える
+        Assert.Contains("bind=art", written);    // 残した付け足しは無傷
+        Assert.Equal(written, Layouts.Write(Layouts.Parse("t", written)));  // 往復が閉じる
+    }
+
     // ── #3 桁揃えが保たれる ────────────────────────────
 
     /// <summary>⭐ **値の桁数が増えても、後ろの欄は同じ列に残る**（詰め直す余地がある時）。
