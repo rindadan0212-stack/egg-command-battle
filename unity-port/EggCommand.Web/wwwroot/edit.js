@@ -109,6 +109,8 @@ window.eggEdit = {
         if (!(e.target instanceof Element) || e.target.id !== 'edscroll') return
         if (this._selCsv) this.reselect(this._selCsv, this._selPrimary)
         if (this._hoverLine) this.hoverOn(this._hoverLine)
+        // ⭐ D-3: その場の入力欄も、輪・ホバーと同じ理由でスクロール追従が要る。
+        if (this._editFocusLine) this.editAt(this._editFocusLine)
       }
       document.addEventListener('scroll', this._scrollBound, true)
     }
@@ -240,6 +242,15 @@ window.eggEdit = {
     }
 
     const up = (e) => {
+      // 🔴 **この覆いで始まっていない指は、触らない**（2026-08-24 の実測バグ修正）。
+      //    ⚠️ 覆い（`#edcap`）は盤いっぱいに広がっているので、**道具箱から掴んできた指**
+      //    （`paletteListen` の掴み）が盤の上で離れると、この `up` にも届く。すると
+      //    「動かさずに離した＝タップで選ぶ」の枝へ落ち、`pickAt` が拾った先が部品だと
+      //    **別の骨組みファイルへ切り替わって**しまう ── 落としたはずの節点が
+      //    「今開いている文書」から消えたように見える（実測: 盤の節点は増えず、
+      //    木には別ファイルの名前が並んだ）。
+      //    ⭐ `from` は覆いの `down` でだけ立つ ── 立っていなければ他所の指。
+      if (!from) return
       try { cap.releasePointerCapture(e.pointerId) } catch { /* 既に外れていてもよい */ }
       const additive = (e.shiftKey || e.ctrlKey || e.metaKey) ? 'add' : ''
 
@@ -297,8 +308,22 @@ window.eggEdit = {
       }
     }
 
+    // ⭐ D-3: 盤の上でその場の文字入力（label/button のダブルクリック）。
+    // ⚠️ `#edcap` が指を先に取るので、ここ（cap 側）で拾う ── 下にある節点は
+    // `pickAt`（近い方優先の探し方）で見る。⚠️ いま開いている文書自身の節点だけを対象にする
+    // （部品への切り替えはしない ── その場で直す操作なので、別の文書へ飛ぶ驚きを避ける）。
+    const dblclick = (e) => {
+      const node = pickAt(e.clientX, e.clientY)
+      if (!node) return
+      const sameDoc = this._partId ? (node.dataset.part === this._partId) : !node.dataset.part
+      if (!sameDoc) return
+      const line = this._lineOf(node)
+      if (line === '') return
+      owner.invokeMethodAsync('BeginTextEdit', line)
+    }
+
     this._bound = [['pointerdown', down], ['pointermove', move], ['pointerup', up],
-      ['pointercancel', cancel], ['pointerleave', leave]]
+      ['pointercancel', cancel], ['pointerleave', leave], ['dblclick', dblclick]]
     for (const [t, f] of this._bound) cap.addEventListener(t, f)
   },
 
@@ -373,6 +398,121 @@ window.eggEdit = {
     layer.addEventListener('pointerup', fn)
   },
 
+  /** ⭐ D-2: 道具箱（種類パレット）から盤へ掴んで落とす。⚠️ pointer events で統一
+   * （drag&drop は使わない ── この頁は既に pointer で統一されている）。
+   *
+   * ⭐ 押しただけ（`PLAY` 以内で離した）は何もしない ── ネイティブの `click` が
+   * ボタンの上でそのまま起きるので、既存の `@onclick`（`EditPage.AddKind`）が
+   * 今までどおり拾う（ここでは `preventDefault` を呼ばない）。
+   *
+   * @param {object} owner .NET 側の受け口
+   * @param {string} paletteId 「足す」の釦が並ぶ行の id（`.edadd-btn` の親）。 */
+  paletteListen(owner, paletteId) {
+    const row = document.getElementById(paletteId)
+    if (!row) return
+    if (this._pBound) for (const [t, f] of this._pBound) row.removeEventListener(t, f)
+
+    const PLAY = 12   // ⭐ tap.js/edit.js の他の掴みと同じ「遊び」のしきい値
+    let btn = null, kind = null, from = null, dragging = false
+
+    const down = (e) => {
+      const el = e.target instanceof Element ? e.target.closest('.edadd-btn') : null
+      if (!el) return
+      btn = el
+      kind = el.dataset.kind
+      from = { x: e.clientX, y: e.clientY }
+      dragging = false
+      // ⚠️ ここでは e.preventDefault() しない ── 動かさずに離したときのネイティブ
+      //    click（既存の @onclick → AddKind）をそのまま残す。
+      //
+      // 🔴 **`setPointerCapture` は使わない**（2026-08-24 の実測バグ修正）。
+      //    ⚠️ 釦が指を掴み続けると、盤の上で離しても `pointerup`＋`click` が**釦へ引き戻される**
+      //    ── ブラウザが釦の click を出し、`@onclick`（`AddKind`）が**既定の位置にもう1つ**
+      //    作ってしまう（実測: 1回落として2つできた／取り消しも2）。
+      //    ⭐ 掴んでいる間だけ document で move/up を聞けば、指が盤へ出ても追える。
+      //    こうすると mousedown（釦）と mouseup（盤）が別の要素になるので、
+      //    ブラウザは釦の click を出さない ── 二重に作られる道が根から消える。
+      document.addEventListener('pointermove', move)
+      document.addEventListener('pointerup', up)
+      document.addEventListener('pointercancel', cancel)
+    }
+    /** ⚠️ 掴みが終わったら必ず document から降りる（付けっぱなしにしない）。 */
+    const unhook = () => {
+      document.removeEventListener('pointermove', move)
+      document.removeEventListener('pointerup', up)
+      document.removeEventListener('pointercancel', cancel)
+    }
+    const move = (e) => {
+      if (!from || !kind) return
+      const dx = e.clientX - from.x, dy = e.clientY - from.y
+      if (!dragging) {
+        // 🔴 数px揺れただけでは動かさない。PLAY を超えて初めて「掴んで動かす」を始める。
+        if (Math.abs(dx) <= PLAY && Math.abs(dy) <= PLAY) return
+        dragging = true
+      }
+      this._ghostShow(e.clientX, e.clientY, kind)
+    }
+    const up = (e) => {
+      unhook()   // ⚠️ 掴みの間だけの document 聞き耳を降ろす（`down` の註）
+      if (dragging) {
+        this._ghostHide()
+        const stage = document.getElementById('edstage')
+        // ⭐ 覆い越しに下を見る（`listen()` の `nodeAt`/`pickAt` と同じ理由 ──
+        //    ここは覆いを挟まないので、そのまま `elementFromPoint` でよい）。
+        const el = document.elementFromPoint(e.clientX, e.clientY)
+        const overBoard = !!(stage && el && el.closest('#edstage'))
+        if (overBoard) {
+          // ⭐ 落とした画面座標 → 設計座標。#edstage の左上を原点に、実効倍率 k で割る
+          //    （拡大・スクロールが効いていても getBoundingClientRect は画面基準なので
+          //    このままで正しい ── 段階2の掴んで動かすと同じ理屈）。
+          const r = stage.getBoundingClientRect()
+          const k = Number(stage.dataset.scale || '1')
+          const left = (e.clientX - r.left) / k
+          const top = (e.clientY - r.top) / k
+          owner.invokeMethodAsync('AddKindAt', kind, left, top)
+        }
+        // ⚠️ 盤の外で離したら何もしない（作らない）。
+      }
+      // ⚠️ dragging が false（動かさずに離した）ならここでは何もしない ── ブラウザの
+      //    ネイティブ click が @onclick（AddKind）を今までどおり起こす。
+      btn = null; kind = null; from = null; dragging = false
+    }
+    const cancel = () => {
+      unhook()
+      this._ghostHide()
+      btn = null; kind = null; from = null; dragging = false
+    }
+
+    // ⚠️ 釦の上で始まる `pointerdown` だけを列（`row`）で聞く。動かしている間の
+    //    move/up は `down` が document へ付ける（釦に指を縛らないため ── 上の註）。
+    this._pBound = [['pointerdown', down]]
+    for (const [t, f] of this._pBound) row.addEventListener(t, f)
+  },
+
+  /** ⭐ D-2: ゴースト（作ろうとしている四角の輪郭）を指へ合わせる。⚠️ `#edghost` は
+   * `position:fixed`（viewport 座標）── ドラッグの起点はパレット（盤の外）なので、
+   * `#edwrap` の `overflow:hidden` に巻き込まれない場所に置いてある。
+   * @param {number} x,y 実画面座標（指の位置＝四角の中心にする）。
+   * @param {string} kind 掴んだ種類（既定寸法の見た目合わせに使う）。 */
+  _ghostShow(x, y, kind) {
+    const g = document.getElementById('edghost')
+    if (!g) return
+    const stage = document.getElementById('edstage')
+    const k = Number((stage && stage.dataset.scale) || '1')
+    const small = kind === 'label' || kind === 'button'
+    const w = 300 * k, h = (small ? 90 : 120) * k
+    g.style.left = (x - w / 2) + 'px'
+    g.style.top = (y - h / 2) + 'px'
+    g.style.width = w + 'px'
+    g.style.height = h + 'px'
+    g.style.display = 'block'
+  },
+
+  _ghostHide() {
+    const g = document.getElementById('edghost')
+    if (g) g.style.display = 'none'
+  },
+
   /** ⭐ 未保存の直しを捨てる前に、1度だけ確かめる。⚠️ 新しい UI を作らず、
    * ブラウザ標準の `confirm` を使う（過剰な抽象化を避ける指示どおり）。
    * `EditPage.ConfirmSwitchIfDirty` からだけ呼ぶ。 */
@@ -396,16 +536,20 @@ window.eggEdit = {
     //    がする ── ここは向きだけを渡す（`Dragging` の dx/dy が設計px の実量なのとは違う）。
     const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
     const fn = (e) => {
+      // ⚠️ 字を打っている最中（数値欄・字そのもの欄・寄せ/色の <select>・D-3 のその場
+      //    入力欄）は矢印・Delete・**Ctrl+Z も**素通しする ── でないと、欄の中で
+      //    カーソルを動かす／字を消す／打ち間違いをブラウザ既定の undo で戻すつもりが、
+      //    節点を動かす／消す／盤の取り消しのほうへ暴発する。
+      //    🔴 D-3 で実測: Ctrl+Z だけこの判定より**前**にあり、`typing` を素通ししていなかった
+      //    （矢印・Delete は既に素通し済みだった ── ここだけ判定の位置を先頭へ揃える）。
+      const tag = document.activeElement && document.activeElement.tagName
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        if (typing) return
         e.preventDefault()
         owner.invokeMethodAsync(e.shiftKey ? 'Redo' : 'Undo')
         return
       }
-      // ⚠️ 字を打っている最中（数値欄・字そのもの欄・寄せ/色の <select>）は矢印・Delete を
-      //    素通しする ── でないと、欄の中でカーソルを動かす／字を消すつもりが
-      //    節点を動かす／消すほうへ暴発する。
-      const tag = document.activeElement && document.activeElement.tagName
-      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
       // ⭐ 段階3: Delete キーで選択を消す（確認ダイアログは出さない ── undo が安全網）。
       if (e.key === 'Delete') {
         if (typing) return
@@ -548,6 +692,46 @@ window.eggEdit = {
     this._hoverLine = null   // ⭐ Pass B: スクロール追従の対象から外す
     const hover = document.getElementById('edhover')
     if (hover) hover.style.display = 'none'
+  },
+
+  /** ⭐ D-3: その場の文字入力欄（`#edtextedit`）を、対象節点の実位置へ合わせる。
+   * ⚠️ **輪と同じ作法**（`_ringTo` と同じ ── 盤の外の層・実寸 screen px・
+   * `getBoundingClientRect` の差分）。⭐ 最初の1回だけ焦点を移して全選択する
+   * （`_editFocusLine` で二重に奪わない ── 毎描画のあとに呼ばれても安全にするため）。
+   * @param {string} line 対象の行（部品なら part-line）。 */
+  editAt(line) {
+    const box = document.getElementById('edtextedit')
+    if (!box) return
+    const node = document.querySelector('#edstage ' + this._selector(line))
+    const wrap = document.getElementById('edwrap')
+    if (!node || !wrap) { box.style.display = 'none'; return }
+    const wr = wrap.getBoundingClientRect()
+    const nr = node.getBoundingClientRect()
+    box.style.left = (nr.left - wr.left) + 'px'
+    box.style.top = (nr.top - wr.top) + 'px'
+    box.style.width = nr.width + 'px'
+    box.style.height = nr.height + 'px'
+    box.style.display = 'block'
+    if (this._editFocusLine !== line) {
+      this._editFocusLine = line
+      const input = document.getElementById('edtexteditinput')
+      if (input) { input.focus(); input.select() }
+    }
+  },
+
+  /** 入力欄の「いま打っている値」を読む（`EditPage.CommitTextEdit` から）。
+   * ⚠️ 打っている最中は Blazor の双方向バインディングを使わない（キー入力のたびに
+   * 再描画を起こさないため）── 確定するその1回だけ、実 DOM の値を読みに来る。 */
+  editValue() {
+    const input = document.getElementById('edtexteditinput')
+    return input ? input.value : ''
+  },
+
+  /** 入力欄を閉じる（確定・取り消しの両方から呼ぶ）。 */
+  editEnd() {
+    this._editFocusLine = null
+    const box = document.getElementById('edtextedit')
+    if (box) box.style.display = 'none'
   },
 
   /** ⭐ Pass B 変更点の明滅: 「確定した1動作」の直後に、その節点を一瞬だけ光らせる。

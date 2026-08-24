@@ -97,6 +97,35 @@
     }
   </div>
 
+  @* ⭐ **道具箱は上の帯に置く**（2026-08-24・実測で分かった作り直し）。
+     ⚠️ もともと Inspector の中に入れていたが、D-1 で Inspector を畳めるようにした結果
+     **畳むと道具箱ごと消えて、何も足せなくなった**（作者の望みは「盤を大きく・脇は細く」
+     と「道具箱から掴んで落とす」の両方 ── 畳んだら置けない、では噛み合わない）。
+     ⭐ 道具箱は盤とセットで使うものなので、脇のパネルではなく**常に見える上の帯**に置く。
+     ⚠️ 出所は1つ（ここだけ）── Inspector 側には複製を作らない。 *@
+  @if (_raw is not null)
+  {
+    <div class="edtools">
+      <div class="edstructrow">
+        <button type="button" class="edalign-btn eddel-btn" disabled="@(_selected.Count == 0)"
+                title="消す（Delete キーでも）" @onclick="DeleteSelected">🗑 消す</button>
+        <button type="button" class="edalign-btn eddup-btn" disabled="@(_selected.Count != 1)"
+                title="複製" @onclick="DuplicateSelected">複製</button>
+      </div>
+      @* ⭐ D-2: この行の札は掴んで盤へドラッグできる（`eggEdit.paletteListen` が id で見つける）。
+         ⚠️ 押しただけ（動かさず離した）は今までどおりネイティブ click →`@onclick`（`AddKind`）。 *@
+      <div class="edstructrow" id="edaddpalette">
+        <span class="edstructlabel">足す</span>
+        @foreach (var k in AddKindPalette)
+        {
+          var kind = k.Kind;
+          <button type="button" class="edalign-btn edadd-btn" data-kind="@kind"
+                  title="@(k.Label)を足す（掴んで盤へ落とすと、その場所に出る）" @onclick="() => AddKind(kind)">@k.Label</button>
+        }
+      </div>
+    </div>
+  }
+
   @* ⭐ Pass B 段階制: まだ何も読んでいない（<see cref="_raw"/> が null。demo は
      `FirstRenderSetup`/`ApplyOf` の中で即 `_raw` が入るので、ここには来ない）ときは、
      空の3列（木・盤・Inspector）を見せず、中央に1つの入口だけ見せる
@@ -131,49 +160,59 @@
   {
   <div class="edmain">
     @* ── 木 ─────────────────────────────────────── *@
-    <div class="edtree">
-      @if (_raw is null)
+    @* ⭐ D-1: 盤を主役にする ── 木は細く、畳めるように。畳んでも `.edpaneltoggle` は
+       常に見える（つまみ自身は本文の外）。本文（`.edtreebody`）は畳んだとき render しない
+       （空の道具を描き続けない・タブ移動でも触れなくする）。 *@
+    <div class="edtree @(_treeCollapsed ? "edtree-collapsed" : "")">
+      @if (!_treeCollapsed)
       {
-        <div class="edhint">フォルダを選ぶと、原文の行の順で並びます。</div>
-      }
-      else
-      {
-        @* ⭐③ 作者の Unity 版 `PartList()` に倣う ── さがす（× で消せる）と
-           出ているものだけ（既定 ON）。 *@
-        <div class="edtreetools">
-          <div class="edfind">
-            <input type="text" class="edfindinput" placeholder="さがす"
-                   value="@_find" @oninput="OnFindInput" />
-            @if (_find.Length > 0)
-            {
-              <button type="button" class="edfindclear" title="さがすを消す" @onclick="ClearFind">×</button>
-            }
-          </div>
-          <label class="edtoggle edonlyvisible">
-            <input type="checkbox" checked="@_onlyVisible" @onchange="OnToggleOnlyVisible" />
-            <span>出ているものだけ</span>
-          </label>
-        </div>
-        var rows = FilteredRows();
-        @if (rows.Count == 0)
-        {
-          <div class="edhint">見つかりません</div>
-        }
-        else
-        {
-          @foreach (var row in rows)
+        <div class="edtreebody">
+          @if (_raw is null)
           {
-            <div class="edrow @(row.Node.LineNumber == _selectedLine ? "on" : _selected.Contains(row.Node.LineNumber) ? "sel" : "") @(row.Node.LineNumber == _hoverLine ? "hover" : "")"
-                 style="padding-left:@(8 + row.Depth * 14)px"
-                 @onclick="e => SelectLine(e, row.Node.LineNumber)"
-                 @onmouseover="() => TreeHoverOn(row.Node.LineNumber)"
-                 @onmouseout="TreeHoverOff">
-              <span class="edname">@row.Node.Name</span>
-              <span class="edkind">@row.Node.Kind</span>
-            </div>
+            <div class="edhint">フォルダを選ぶと、原文の行の順で並びます。</div>
           }
-        }
+          else
+          {
+            @* ⭐③ 作者の Unity 版 `PartList()` に倣う ── さがす（× で消せる）と
+               出ているものだけ（既定 ON）。 *@
+            <div class="edtreetools">
+              <div class="edfind">
+                <input type="text" class="edfindinput" placeholder="さがす"
+                       value="@_find" @oninput="OnFindInput" />
+                @if (_find.Length > 0)
+                {
+                  <button type="button" class="edfindclear" title="さがすを消す" @onclick="ClearFind">×</button>
+                }
+              </div>
+              <label class="edtoggle edonlyvisible">
+                <input type="checkbox" checked="@_onlyVisible" @onchange="OnToggleOnlyVisible" />
+                <span>出ているものだけ</span>
+              </label>
+            </div>
+            var rows = FilteredRows();
+            @if (rows.Count == 0)
+            {
+              <div class="edhint">見つかりません</div>
+            }
+            else
+            {
+              @foreach (var row in rows)
+              {
+                <div class="edrow @(row.Node.LineNumber == _selectedLine ? "on" : _selected.Contains(row.Node.LineNumber) ? "sel" : "") @(row.Node.LineNumber == _hoverLine ? "hover" : "")"
+                     style="padding-left:@(8 + row.Depth * 14)px"
+                     @onclick="e => SelectLine(e, row.Node.LineNumber)"
+                     @onmouseover="() => TreeHoverOn(row.Node.LineNumber)"
+                     @onmouseout="TreeHoverOff">
+                  <span class="edname">@row.Node.Name</span>
+                  <span class="edkind">@row.Node.Kind</span>
+                </div>
+              }
+            }
+          }
+        </div>
       }
+      <button type="button" class="edpaneltoggle" @onclick="ToggleTree"
+              title="@(_treeCollapsed ? "木を開く" : "木を畳む")">@(_treeCollapsed ? "▶" : "◀")</button>
     </div>
 
     @* ── 盤 ─────────────────────────────────────── *@
@@ -248,94 +287,101 @@
       @* ⭐④ ドラッグ枠（ラバーバンド）。⚠️ 塗り潰さない約束の唯一の例外
          （一時的な道具の chrome ── guide と同じ位置づけ）。 *@
       <div id="edband" class="edband"></div>
+      @* ⭐ D-3: 盤の上でその場の文字入力。⚠️ #edring と同じ作法（#edscroll の外・
+         #edwrap 基準の実寸）── `eggEdit.editAt` が対象節点の実位置へ合わせる。
+         label/button をダブルクリックしたときだけ現れる。 *@
+      @if (_editingLine >= 0)
+      {
+        <div id="edtextedit" class="edtextedit">
+          <input type="text" id="edtexteditinput" value="@_editingText"
+                 @onkeydown="OnTextEditKeyDown" @onblur="CommitTextEdit" />
+        </div>
+      }
     </div>
 
     @* ── その1つ ───────────────────────────────── *@
-    <div class="edinspector">
-      @* ⭐ 段階3: 削除・追加・複製（構造編集）。⚠️ 揃える・等間隔（.edmulti）や通常の欄と
-         ぶつからないよう、選択数にかかわらず常に出す帯として独立させる（追加は選択不要）。
-         削除は1つ以上・複製はちょうど1つのときだけ押せる（「押せないことも示す」作法）。 *@
-      <div class="edstruct">
-        <div class="edstructrow">
-          <button type="button" class="edalign-btn eddel-btn" disabled="@(_selected.Count == 0)"
-                  title="消す（Delete キーでも）" @onclick="DeleteSelected">🗑 消す</button>
-          <button type="button" class="edalign-btn eddup-btn" disabled="@(_selected.Count != 1)"
-                  title="複製" @onclick="DuplicateSelected">複製</button>
-        </div>
-        <div class="edstructrow">
-          <span class="edstructlabel">足す</span>
-          @foreach (var k in AddKindPalette)
-          {
-            var kind = k.Kind;
-            <button type="button" class="edalign-btn edadd-btn" data-kind="@kind"
-                    title="@(k.Label)を足す" @onclick="() => AddKind(kind)">@k.Label</button>
-          }
-        </div>
-      </div>
-
-      @if (_raw is not null && _selected.Count >= 2)
+    @* ⭐ D-1: Inspector も細く・畳めるように。つまみ（盤との境目＝左端）は
+       `.edinspectorbody` の外に置くので、畳んでも常に見える。 *@
+    <div class="edinspector @(_inspectorCollapsed ? "edinspector-collapsed" : "")">
+      <button type="button" class="edpaneltoggle" @onclick="ToggleInspector"
+              title="@(_inspectorCollapsed ? "Inspector を開く" : "Inspector を畳む")">@(_inspectorCollapsed ? "◀" : "▶")</button>
+      @if (!_inspectorCollapsed)
       {
-        @* ⭐⑥ 揃える・等間隔。⚠️ 2個以上のときだけ出す（作者の pixelizer の教訓
-           「空の道具を先に見せない」）。主1つに対する編集（下の通常欄）とは同じ画面で
-           混ぜない ── どちらかしか出さない。 *@
-        <div class="edmulti">
-          <div class="edmultihead">@(_selected.Count)個 選択中</div>
-          <div class="edmultirow">
-            <button type="button" class="edalign-btn" title="左揃え" @onclick="() => ApplyAlign(EditAlign.AlignLeft)">左</button>
-            <button type="button" class="edalign-btn" title="右揃え" @onclick="() => ApplyAlign(EditAlign.AlignRight)">右</button>
-            <button type="button" class="edalign-btn" title="上揃え" @onclick="() => ApplyAlign(EditAlign.AlignTop)">上</button>
-            <button type="button" class="edalign-btn" title="下揃え" @onclick="() => ApplyAlign(EditAlign.AlignBottom)">下</button>
-            <button type="button" class="edalign-btn" title="左右中央" @onclick="() => ApplyAlign(EditAlign.AlignCenterX)">左右中央</button>
-            <button type="button" class="edalign-btn" title="上下中央" @onclick="() => ApplyAlign(EditAlign.AlignCenterY)">上下中央</button>
-          </div>
-          <div class="edmultirow">
-            @* ⚠️ 等間隔は3個未満だと「間」が定義できない（EditAlign.DistributeH/V が空を返す
-               のと同じ理由）── 押せないことも示す。 *@
-            <button type="button" class="edalign-btn" disabled="@(_selected.Count < 3)"
-                    title="横に等間隔" @onclick="() => ApplyAlign(EditAlign.DistributeH)">横に等間隔</button>
-            <button type="button" class="edalign-btn" disabled="@(_selected.Count < 3)"
-                    title="縦に等間隔" @onclick="() => ApplyAlign(EditAlign.DistributeV)">縦に等間隔</button>
-          </div>
-        </div>
-      }
-      else
-      {
-        // ⚠️ ここは既に @if/else の中（C# コード文脈）── @{ } は要らない（RZ1010）。
-        var sel = _raw is null || _selectedLine < 0 ? null : Find(_raw.Roots, _selectedLine);
-        @if (sel is null)
-        {
-          <div class="edhint">盤の部品を押すか、木から選んでください。</div>
-        }
-        else
-        {
-          <div class="edhead">@sel.Name <span class="edkind">@sel.Kind</span></div>
-
-          <div class="edfieldrow">
-            @Field("左", _left, v => ApplyLeft(v))
-            @Field("上", _top, v => ApplyTop(v))
-          </div>
-          <div class="edfieldrow">
-            @Field("幅", _width, v => ApplyWidth(v))
-            @Field("高", _height, v => ApplyHeight(v))
-          </div>
-
-          @* ⭐①属性表（EditAttrs.All）から自動で欄を生む ── 効かない種類・条件
-             （例: gap は repeat= を持つ節点だけ）では出さない
-             （作者の pixelizer の教訓「空の欄を先に見せない」）。 *@
-          @foreach (var attr in EggCommand.Web.EditAttrs.All)
+        <div class="edinspectorbody">
+          @* ⚠️ 構造の帯（消す・複製・足す）は**上の帯（`.edtools`）へ移した** ──
+             Inspector を畳むと道具箱ごと消える問題のため。ここには複製を置かない（出所は1つ）。 *@
+          @if (_raw is not null && _selected.Count >= 2)
           {
-            if (!attr.AppliesTo(sel)) continue;
-            <div class="edattrrow">
-              @AttrField(attr, sel)
+            @* ⭐⑥ 揃える・等間隔。⚠️ 2個以上のときだけ出す（作者の pixelizer の教訓
+               「空の道具を先に見せない」）。主1つに対する編集（下の通常欄）とは同じ画面で
+               混ぜない ── どちらかしか出さない。 *@
+            <div class="edmulti">
+              <div class="edmultihead">@(_selected.Count)個 選択中</div>
+              <div class="edmultirow">
+                <button type="button" class="edalign-btn" title="左揃え" @onclick="() => ApplyAlign(EditAlign.AlignLeft)">左</button>
+                <button type="button" class="edalign-btn" title="右揃え" @onclick="() => ApplyAlign(EditAlign.AlignRight)">右</button>
+                <button type="button" class="edalign-btn" title="上揃え" @onclick="() => ApplyAlign(EditAlign.AlignTop)">上</button>
+                <button type="button" class="edalign-btn" title="下揃え" @onclick="() => ApplyAlign(EditAlign.AlignBottom)">下</button>
+                <button type="button" class="edalign-btn" title="左右中央" @onclick="() => ApplyAlign(EditAlign.AlignCenterX)">左右中央</button>
+                <button type="button" class="edalign-btn" title="上下中央" @onclick="() => ApplyAlign(EditAlign.AlignCenterY)">上下中央</button>
+              </div>
+              <div class="edmultirow">
+                @* ⚠️ 等間隔は3個未満だと「間」が定義できない（EditAlign.DistributeH/V が空を返す
+                   のと同じ理由）── 押せないことも示す。 *@
+                <button type="button" class="edalign-btn" disabled="@(_selected.Count < 3)"
+                        title="横に等間隔" @onclick="() => ApplyAlign(EditAlign.DistributeH)">横に等間隔</button>
+                <button type="button" class="edalign-btn" disabled="@(_selected.Count < 3)"
+                        title="縦に等間隔" @onclick="() => ApplyAlign(EditAlign.DistributeV)">縦に等間隔</button>
+              </div>
             </div>
           }
+          else
+          {
+            // ⚠️ ここは既に @if/else の中（C# コード文脈）── @{ } は要らない（RZ1010）。
+            var sel = _raw is null || _selectedLine < 0 ? null : Find(_raw.Roots, _selectedLine);
+            @if (sel is null)
+            {
+              <div class="edhint">盤の部品を押すか、木から選んでください。</div>
+            }
+            else
+            {
+              <div class="edhead">@sel.Name <span class="edkind">@sel.Kind</span></div>
 
-          <div class="edstepwrap">
-            <span>きざみ</span>
-            <input class="edstepnum" type="number" value="@_step"
-                   @onchange="e => _step = ParseF(e.Value, _step)" />
-          </div>
-        }
+              @* ⭐ D-4: 左/上/幅/高＋きざみ は既定で畳む（微調整のときだけ開く）。
+                 ⚠️ 中身（Field）は変えない ── 見せ方だけ。 *@
+              <button type="button" class="edcollapsebtn" @onclick="ToggleNumbers">
+                @(_numbersOpen ? "▾" : "▸") 数字で細かく
+              </button>
+              @if (_numbersOpen)
+              {
+                <div class="edfieldrow">
+                  @Field("左", _left, v => ApplyLeft(v))
+                  @Field("上", _top, v => ApplyTop(v))
+                </div>
+                <div class="edfieldrow">
+                  @Field("幅", _width, v => ApplyWidth(v))
+                  @Field("高", _height, v => ApplyHeight(v))
+                </div>
+                <div class="edstepwrap">
+                  <span>きざみ</span>
+                  <input class="edstepnum" type="number" value="@_step"
+                         @onchange="e => _step = ParseF(e.Value, _step)" />
+                </div>
+              }
+
+              @* ⭐①属性表（EditAttrs.All）から自動で欄を生む ── 効かない種類・条件
+                 （例: gap は repeat= を持つ節点だけ）では出さない
+                 （作者の pixelizer の教訓「空の欄を先に見せない」）。 *@
+              @foreach (var attr in EggCommand.Web.EditAttrs.All)
+              {
+                if (!attr.AppliesTo(sel)) continue;
+                <div class="edattrrow">
+                  @AttrField(attr, sel)
+                </div>
+              }
+            }
+          }
+        </div>
       }
     </div>
   </div>
@@ -374,6 +420,13 @@
       </div>
     }
   </div>
+
+  @* ⭐ D-2: 道具箱から掴んだ「作ろうとしている四角」の輪郭（ゴースト）。
+     ⚠️ 盤の倍率・スクロールの影響を受けない位置に置く（`position:fixed`・
+     viewport 座標そのまま）── ドラッグの起点はパレット（Inspector 側）で、
+     盤に入る前から出したいので、`#edwrap` の中（`overflow:hidden`）には置けない。
+     塗らない（輪郭＋ごく薄い面だけ ── `.edband` と同じ「一時的な道具」の扱い）。 *@
+  <div id="edghost" class="edghost"></div>
 </div>
 
 @code {
@@ -415,6 +468,25 @@
     private string _status = "";
     private float _left, _top, _width, _height;
     private float _step = 10f;
+
+    // ── ⭐ D-1: 盤を主役に ── 木・Inspector を畳む ─────────
+    // ⚠️ 状態は覚えない（単純に保つ・作者の指示）── ページを開き直すたびに既定（開いた
+    //    状態）へ戻ってよい。
+
+    private bool _treeCollapsed;
+    private bool _inspectorCollapsed;
+
+    // ── ⭐ D-4: 左/上/幅/高＋きざみ の畳み（既定で畳む・微調整のときだけ開く） ──
+
+    private bool _numbersOpen;
+
+    // ── ⭐ D-3: 盤の上でその場の文字入力 ─────────────────
+
+    /// <summary>いま入力欄を開いている行。-1 なら閉じている。</summary>
+    private int _editingLine = -1;
+    /// <summary>入力欄の初期値（`value="@_editingText"` は最初の1回だけ効く ──
+    /// 以降は打っている最中の実体を JS 側（`eggEdit.editValue`）から確定時に読む。</summary>
+    private string _editingText = "";
 
     // ── ⭐ Pass B: 盤の拡大（ズーム）＋格子 ─────────────
     // ⭐ 実効倍率 k（`edit.js` の `fit()`）= 器に収まる倍率（fitK）× この `_zoom`。
@@ -567,6 +639,13 @@
             string primary = _selectedLine >= 0 ? _selectedLine.ToString(CultureInfo.InvariantCulture) : "";
             await Js.InvokeVoidAsync("eggEdit.reselect", csv, primary);
         }
+        // ⭐ D-3: 入力欄が開いていれば、対象節点の実位置へ合わせる（描画確定後に読む ──
+        //    `_ringDirty` と同じ理由）。⚠️ 焦点を奪うのは JS 側で最初の1回だけに絞ってある
+        //    （`eggEdit.editAt` の `_editFocusLine`）ので、ここは毎描画で呼んでも安全。
+        if (_editingLine >= 0 && _ready)
+        {
+            await Js.InvokeVoidAsync("eggEdit.editAt", _editingLine.ToString(CultureInfo.InvariantCulture));
+        }
     }
 
     /// <summary>⚠️ 初回描画のあと1回だけの配線（listen/resize/keys 等）。
@@ -607,6 +686,9 @@
         await Js.InvokeVoidAsync("eggEdit.faultsListen", _me);
         await Js.InvokeVoidAsync("eggEdit.setPart", PartIdOf(_of));
         await Js.InvokeVoidAsync("eggEdit.resize", _me);
+        // ⭐ D-2: 道具箱（種類パレット）から盤へ掴んで落とす配線。⚠️ パレットは Inspector
+        //    （盤と同じ段階制の中）にしか無いので、盤と一緒に張り直す。
+        await Js.InvokeVoidAsync("eggEdit.paletteListen", _me, "edaddpalette");
         // ⭐ 盤が出た直後は倍率（`dataset.scale`）が入ったばかり ── 選んでいるものが
         //    あれば輪を描き直す（旗を立てるだけ・実際の描き直しは次の描画拍）。
         RingRefresh();
@@ -1004,6 +1086,106 @@
         StateHasChanged();
     }
 
+    // ── ⭐ D-1: 盤を主役に ── 木・Inspector を畳む ─────────
+    //
+    // ⚠️ ここでは JS を直接呼ばない ── 畳む／広げるは CSS の幅（`.edtree-collapsed`/
+    //    `.edinspector-collapsed`）を切り替えるだけで、`#edwrap` の実サイズが変わる。
+    //    それを拾って `fit()` を呼び直すのは、`start()` で張った既存の ResizeObserver の
+    //    仕事（触らない・条件を弱めない）。⭐ こちらの仕事は、節点の画面位置が動く分だけ
+    //    選択の輪を追従させること ── `RingRefresh()`（旗を立てるだけ）で次の描画拍に乗せる
+    //    （`SetZoom`/`_ringDirty` と同じ形）。
+
+    private void ToggleTree()
+    {
+        _treeCollapsed = !_treeCollapsed;
+        RingRefresh();
+        StateHasChanged();
+    }
+
+    private void ToggleInspector()
+    {
+        _inspectorCollapsed = !_inspectorCollapsed;
+        RingRefresh();
+        StateHasChanged();
+    }
+
+    // ── ⭐ D-4: 左/上/幅/高＋きざみ の畳み ─────────────────
+
+    /// <summary>⚠️ 見せ方だけの状態 ── <see cref="Field"/>/<see cref="AttrField"/> の
+    /// 中身は変えない（呼び出しを `@if` でくくるだけ）。</summary>
+    private void ToggleNumbers()
+    {
+        _numbersOpen = !_numbersOpen;
+        StateHasChanged();
+    }
+
+    // ── ⭐ D-3: 盤の上でその場の文字入力 ─────────────────
+    //
+    // ⚠️ 確定は既存の `ApplyOption("text", 値)` を通す ── `Apply` が Begin/CommitAction の
+    //    対を1回だけ通すので、これで1つの取り消し（往復の守りもそのまま）。
+
+    /// <summary>`eggEdit.listen` の `dblclick`（`#edcap` 側で拾う）から呼ばれる。
+    /// ⚠️ 対象外の種類（`text=` を持てない）は何もしない。⭐ 選択も同時に済ませる
+    /// （<see cref="SelectOnly"/> と同じ ── 開いた入力欄がどの節点のものか、輪でも分かる）。
+    /// <param name="line">いま開いている文書の中の行（部品ならその部品自身のファイルの行・
+    /// JS 側の `_lineOf` が既に文書の別を吸収済み）。</param></summary>
+    [JSInvokable]
+    public void BeginTextEdit(string line)
+    {
+        int n = int.TryParse(line, out var v) ? v : -1;
+        if (_raw is null || n < 0) return;
+        var node = Find(_raw.Roots, n);
+        if (node is null) return;
+        if (node.Kind != "label" && node.Kind != "button") return;   // ⚠️ 対象外の種類
+
+        SelectOnly(n);   // ⭐ 輪・Inspector も追従させる
+        _editingLine = n;
+        _editingText = node.Option("text") ?? "";
+        StateHasChanged();
+    }
+
+    /// <summary>入力欄の中でだけ効く（`@onkeydown`）。⚠️ 盤の document キー
+    /// （矢印ナッジ・Delete・Ctrl+Z）とは別経路 ── そちらは `edit.js` の `keys` が
+    /// `document.activeElement` を見て素通しにしている（この入力欄もその対象）。</summary>
+    private async Task OnTextEditKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CommitTextEdit();
+        else if (e.Key == "Escape") CancelTextEdit();
+    }
+
+    /// <summary>⚠️ 取り消し ── 値は捨てる（`ApplyOption` を通さない＝undo を積まない）。</summary>
+    private void CancelTextEdit()
+    {
+        _editingLine = -1;
+        _editingText = "";
+        _ = Js.InvokeVoidAsync("eggEdit.editEnd");
+        StateHasChanged();
+    }
+
+    /// <summary>確定 ── Enter か、欄から離れる（blur）。⚠️ Escape の直後にも blur が
+    /// 飛んでくることがあるが、<see cref="_editingLine"/> が既に -1 なのでここで無害に
+    /// 弾かれる（二重確定・二重取り消しにならない）。
+    ///
+    /// ⭐ 値は JS（`eggEdit.editValue`）から読む ── 打っている最中は Blazor の
+    /// 双方向バインディングを使わない（キー入力のたびに再描画が走ると、ドラッグ中の
+    /// 毎フレーム更新と同じ理由でカーソル位置が暴れうる。<c>value="@_editingText"</c> は
+    /// 最初の1回だけ効けばよい）。</summary>
+    private async Task CommitTextEdit()
+    {
+        if (_editingLine < 0) return;
+        int line = _editingLine;
+        string value = await Js.InvokeAsync<string>("eggEdit.editValue");
+        _editingLine = -1;
+        _editingText = "";
+        _ = Js.InvokeVoidAsync("eggEdit.editEnd");
+        if (_raw is not null && _selectedLine == line && Find(_raw.Roots, line) is not null)
+        {
+            // ⚠️ 空にしたら text= ごと消す（TextField・段階1の必須要件と同じ扱い）。
+            ApplyOption("text", string.IsNullOrEmpty(value) ? null : value);
+        }
+        StateHasChanged();
+    }
+
     // ── ⭐ Pass B: 盤↔木の連動強調（ホバー） ─────────────
 
     /// <summary>木の行にマウスを乗せた（木→盤）。⚠️ 盤側の描画（`#edhover`）は
@@ -1355,12 +1537,32 @@
         StateHasChanged();   // ⭐ JSInvokable（Delete キー）経由でも再描画されるように
     }
 
-    // ── 2) 追加（種類パレット） ──────────────────────────
+    // ── 2) 追加（種類パレット・押しただけ／掴んで落とす） ──────
 
-    /// <summary>⭐ 種類パレットから新しいルート節点を末尾へ足す。⚠️ JS から来た値を
-    /// そのまま信用しない（パレット外の種類は無視）。**これで1つの取り消し**。</summary>
+    /// <summary>⭐ 種類パレットを**押しただけ**（動かさず離した）ときの入口。
+    /// ⚠️ 今までどおり既定位置（盤の (390,900) を左上に、300×90/120）へ足す ──
+    /// 後戻りさせない（作者の指示）。⭐ 実装は <see cref="AddKindAt"/> の薄い包み
+    /// （今までと寸分違わぬ最終位置になるよう、その左上から「中心」を逆算して渡す）。</summary>
     [JSInvokable]
     public void AddKind(string kind)
+    {
+        bool small = kind == "label" || kind == "button";
+        AddKindAt(kind, 390f + 150f, 900f + (small ? 45f : 60f));
+    }
+
+    /// <summary>⭐ D-2: 道具箱から**掴んで盤へ落とした**ときの入口 ── 種類パレットから
+    /// 新しいルート節点を末尾へ足す、唯一の出所（<see cref="AddKind"/> もここを通る）。
+    /// ⚠️ JS から来た値をそのまま信用しない（パレット外の種類は無視）。
+    /// **これで1つの取り消し**。⚠️ 往復の守り（<see cref="EnsureTrailingTerminator"/>→
+    /// <see cref="NewNode"/>→<see cref="SelectNewRoot"/>）は今までの <see cref="AddKind"/> と
+    /// 寸分同じ経路 ── 座標だけ差し替える。⚠️ 入れ物の中には入らない（新しいルートとして
+    /// 末尾へ足す ── 「盤の外なら作らない」を満たすのは呼び出し側（JS の `paletteListen`）で、
+    /// ここは渡された座標をそのまま使う）。
+    /// <param name="left">落とした点の設計 px。**四角の中心**として扱う（「落とした所に出る」
+    /// 体感にするため、ここで幅・高さの半分を引いて左上へ変換する）。</param>
+    /// <param name="top">同上（縦）。</param></summary>
+    [JSInvokable]
+    public void AddKindAt(string kind, double left, double top)
     {
         if (_raw is null) return;
         if (Array.FindIndex(AddKindPalette, k => k.Kind == kind) < 0) return;   // ⚠️ 知らない種類は無視
@@ -1368,12 +1570,18 @@
         EnsureTrailingTerminator();
 
         bool small = kind == "label" || kind == "button";
+        const float width = 300f;
+        float height = small ? 90f : 120f;
         var options = new Dictionary<string, string>();
         if (kind == "label") options["text"] = "字";
         else if (kind == "button") options["text"] = "押す";
 
+        // ⭐ 中心 → 左上へ変換したあと、「きざみ」へ丸める（既存の吸い付きと同じ気持ち）。
+        float nodeLeft = SnapStep((float)left - width / 2f);
+        float nodeTop = SnapStep((float)top - height / 2f);
+
         string name = UniqueRootName(kind);
-        var node = NewNode(name, kind, 390f, 900f, 300f, small ? 90f : 120f,
+        var node = NewNode(name, kind, nodeLeft, nodeTop, width, height,
             options, new List<LayoutNode>(), 0);
         var roots = new List<LayoutNode>(_raw.Roots) { node };
         _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
@@ -1383,6 +1591,10 @@
         CommitAction();
         StateHasChanged();
     }
+
+    /// <summary>⭐ D-2: 落とした位置を「きざみ」へ丸める（既存の吸い付きと同じ物差し・
+    /// <see cref="_step"/> が唯一の出所）。</summary>
+    private float SnapStep(float v) => _step > 0 ? MathF.Round(v / _step) * _step : v;
 
     // ── 3) 複製 ──────────────────────────────────────
 
