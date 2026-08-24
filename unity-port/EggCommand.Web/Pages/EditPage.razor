@@ -465,6 +465,12 @@
     /// 追従するので、むしろ正確になる）。</summary>
     private bool _ringDirty;
 
+    /// <summary>盤に指の配線（<see cref="WireBoard"/>）が張れているか。⚠️ 盤は段階制で
+    /// 出たり消えたりする（`_raw` が無いうちは出さない）── 出た拍で張り直し、消えたら降ろす
+    /// ための旗。🔴 これが無いと「フォルダを選んで盤が出ても掴めない」状態になる
+    /// （2026-08-24 に実測した不具合そのもの）。</summary>
+    private bool _boardWired;
+
     // ⭐ 取り消し／やり直し。**木ごと積む**（`Layouts.Write` の文字列）── 差分ではない
     // （作者の指示「実装は木ごと差し替えるのが安全」をそのまま踏襲）。
     private readonly List<string> _undo = new();
@@ -535,6 +541,22 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender) await FirstRenderSetup();
+        // 🔴 **盤が現れた拍で、指の配線をやり直す。**（2026-08-24 の実測バグ修正）
+        //    ⚠️ 段階制（`_raw` が無いうちは盤を出さない）を入れた日から、実際に使う道
+        //    ── `/edit` を開く → まだ盤が無い状態で初回描画 → そこで1度だけ配線を試みて
+        //    **`#edcap`/`#edwrap`/`#edring` がまだ無いので JS 側が全部空振り**（`if (!cap) return`）
+        //    → その後フォルダを選んで盤が出ても、誰も張り直さない ── になっていた。
+        //    実測（Playwright）: `/edit` では `_bound`/`_ro`/`_rbound`/`_fBound` が全部 false、
+        //    `?demo=true`（盤が最初から在る道）だけ true。だから**掴んでも何も起きない**。
+        //    ⭐ 盤の在り／無しが変わった拍で張り直す（JS 側の3つは呼び直しても安全 ──
+        //    `listen`/`resize`/`faultsListen` は張る前に前回の分を外す・`start` は
+        //    前の ResizeObserver を disconnect する）。
+        bool boardShown = _raw is not null;
+        if (_ready && boardShown != _boardWired)
+        {
+            _boardWired = boardShown;
+            if (boardShown) await WireBoard();
+        }
         // ⭐ 盤の DOM が確定したこの拍で、溜まっていれば選択の輪を1回だけ流す
         //    （<see cref="_ringDirty"/> の註 ── ここが唯一の `reselect` 呼び出し口。
         //    `getBoundingClientRect` が古い位置を返さないよう、描画確定後に読む）。
@@ -558,20 +580,36 @@
         _checkedSupport = true;
         _demo = DemoQuery == "true";
         if (_demo) LoadDemo();
-        await Js.InvokeVoidAsync("eggEdit.start", "edwrap", "edstage");
-        await Js.InvokeVoidAsync("eggEdit.listen", _me, "edcap");
-        // ⭐ 不備の Focus（実体の外に出ることがある形）だけ、自分の押しどころを持つ。
-        //    ⚠️ `#edfaults` は静的な Razor 要素（毎回作り直さない）なので、1回だけ張ればよい
-        //    （`listen`/`resize` と同じ「初回描画のあとに1回」の作法）。
-        await Js.InvokeVoidAsync("eggEdit.faultsListen", _me);
-        await Js.InvokeVoidAsync("eggEdit.setPart", PartIdOf(_of));
-        await Js.InvokeVoidAsync("eggEdit.resize", _me);
+        await WireBoard();
+        _boardWired = _raw is not null;   // ⭐ 盤が在る状態で張れたときだけ「配線済み」
+        // ⚠️ キー（Ctrl+Z・矢印・Delete）は document 直付けなので盤の在り無しと無関係 ──
+        //    ここで1回だけ張る（`stop` で外す）。
         await Js.InvokeVoidAsync("eggEdit.keys", _me);
         _ready = true;
         // ⭐③ `_ready` が立つ前の `RefreshView`（`LoadDemo`/`OnParametersSet` 経由）は
         //    「出ているものだけ」の JS 呼び出しを見送っている ── ここで一度だけ数え直す。
         _ = RefreshVisibleSet();
         StateHasChanged();
+    }
+
+    /// <summary>🔴 **盤（`#edwrap`/`#edstage`/`#edcap`/`#edring`/`#edfaults`）に指を通す配線。**
+    /// ⚠️ 盤が DOM に**在るときにしか効かない**（JS 側は要素が無ければ黙って空振りする）ので、
+    /// 初回描画だけでなく<see cref="OnAfterRenderAsync"/>の「盤が現れた拍」からも呼ぶ
+    /// ── 段階制でフォルダを選ぶまで盤が無い道があるため（そこが 2026-08-24 の実測バグの正体）。
+    /// ⭐ 呼び直しても安全: `listen`/`resize`/`faultsListen` は張る前に前回の分を外し、
+    /// `start` は前の ResizeObserver を disconnect する。</summary>
+    private async Task WireBoard()
+    {
+        if (_me is null) return;
+        await Js.InvokeVoidAsync("eggEdit.start", "edwrap", "edstage");
+        await Js.InvokeVoidAsync("eggEdit.listen", _me, "edcap");
+        // ⭐ 不備の Focus（実体の外に出ることがある形）だけ、自分の押しどころを持つ。
+        await Js.InvokeVoidAsync("eggEdit.faultsListen", _me);
+        await Js.InvokeVoidAsync("eggEdit.setPart", PartIdOf(_of));
+        await Js.InvokeVoidAsync("eggEdit.resize", _me);
+        // ⭐ 盤が出た直後は倍率（`dataset.scale`）が入ったばかり ── 選んでいるものが
+        //    あれば輪を描き直す（旗を立てるだけ・実際の描き直しは次の描画拍）。
+        RingRefresh();
     }
 
     // ── フォルダ ────────────────────────────────────
