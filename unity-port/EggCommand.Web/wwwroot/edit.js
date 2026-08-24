@@ -493,14 +493,17 @@ window.eggEdit = {
    * `position:fixed`（viewport 座標）── ドラッグの起点はパレット（盤の外）なので、
    * `#edwrap` の `overflow:hidden` に巻き込まれない場所に置いてある。
    * @param {number} x,y 実画面座標（指の位置＝四角の中心にする）。
-   * @param {string} kind 掴んだ種類（既定寸法の見た目合わせに使う）。 */
+   * @param {string} kind 掴んだ種類（既定寸法の見た目合わせに使う ── `EditPage.DefaultSize`
+   *   と同じ数、`icon` だけ 64x64。C# 側と二重の出所になるが、こちらは見た目だけの
+   *   ゴースト ── 実際に作る大きさの唯一の出所は `AddKindAt`/`DefaultSize` のまま）。 */
   _ghostShow(x, y, kind) {
     const g = document.getElementById('edghost')
     if (!g) return
     const stage = document.getElementById('edstage')
     const k = Number((stage && stage.dataset.scale) || '1')
     const small = kind === 'label' || kind === 'button'
-    const w = 300 * k, h = (small ? 90 : 120) * k
+    const w = (kind === 'icon' ? 64 : 300) * k
+    const h = (kind === 'icon' ? 64 : small ? 90 : 120) * k
     g.style.left = (x - w / 2) + 'px'
     g.style.top = (y - h / 2) + 'px'
     g.style.width = w + 'px'

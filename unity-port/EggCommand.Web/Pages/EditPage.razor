@@ -369,6 +369,35 @@
                 </div>
               }
 
+              @* ⭐ E-4: `icon` を選んでいるときだけ「絵を変える」＋今の絵の小さな
+                 サムネイルと名前。⚠️ `pic=` は `EditAttrs`（属性表）に載せていない
+                 （`EditAttrs.Excluded["pic"]` の理由コメント参照 ── `IconManifest` に
+                 `EggCommand.Tests` から届かないため）ので、専用の1ブロックをここに
+                 直に書く。`icon` 以外を選んでいるときは出さない（空の道具を見せない）。 *@
+              @if (sel.Kind == "icon")
+              {
+                var picName = sel.Option("pic");
+                <div class="edattrrow edpicrow">
+                  <span class="edlabel">絵</span>
+                  <div class="edpicpreview">
+                    @if (picName is null)
+                    {
+                      <span class="edmuted">（未選択）</span>
+                    }
+                    else if (IconExists(picName))
+                    {
+                      <img class="edpicthumb" src="@IconThumbSrc(picName)" alt="" />
+                      <span class="edname">@picName</span>
+                    }
+                    else
+                    {
+                      <span class="edwarn">この名前の絵が見つかりません（@picName）</span>
+                    }
+                  </div>
+                  <button type="button" class="edalign-btn" @onclick="OpenIconPicker">絵を変える</button>
+                </div>
+              }
+
               @* ⭐①属性表（EditAttrs.All）から自動で欄を生む ── 効かない種類・条件
                  （例: gap は repeat= を持つ節点だけ）では出さない
                  （作者の pixelizer の教訓「空の欄を先に見せない」）。 *@
@@ -427,6 +456,65 @@
      盤に入る前から出したいので、`#edwrap` の中（`overflow:hidden`）には置けない。
      塗らない（輪郭＋ごく薄い面だけ ── `.edband` と同じ「一時的な道具」の扱い）。 *@
   <div id="edghost" class="edghost"></div>
+
+  @* ── ⭐ 段E: 絵を選ぶ小窓（E-2）── サムネイルを目で見て選ぶ・名前は打たせない ──
+     ⚠️ 盤の覆い（`#edcap`）や道具箱とは別の一時的な chrome（`.edband`/`.edghost` と
+     同じ「押した瞬間だけ現れる道具」の扱い）。開き方は2つ（E-1: 絵を新しく置いた直後
+     ／E-4: Inspector の「絵を変える」）── どちらも `OpenIconPicker` の1つの入口。 *@
+  @if (_iconPickerOpen)
+  {
+    <div class="edmodal" @onclick="CloseIconPicker">
+      <div class="edmodalbox" @onclick:stopPropagation="true">
+        <div class="edmodalhead">
+          <span>絵を選ぶ</span>
+          <button type="button" class="edmodalclose" title="閉じる" @onclick="CloseIconPicker">×</button>
+        </div>
+        <div class="edmodaltools">
+          <input type="text" class="edfindinput" placeholder="さがす" value="@_iconPickerFind"
+                 @oninput="e => _iconPickerFind = Convert.ToString(e.Value) ?? string.Empty" />
+          @* ⭐ E-3: 絵のフォルダを選ぶ（`unity\Assets\Resources\UI\icon` を選ぶよう案内）。
+             ⚠️ File System Access API 非対応ブラウザでは出さない（`PickFolder` と同じ判定）。 *@
+          @if (_supported)
+          {
+            <button type="button" class="edalign-btn" @onclick="PickArtFolder"
+                    title="絵のフォルダを選ぶ（unity\Assets\Resources\UI\icon）">
+              📂 絵のフォルダ@(string.IsNullOrEmpty(_artFolder) ? "" : $"（{_artFolder}）")
+            </button>
+          }
+        </div>
+        @* ⭐ E-3: 「絵を取り込む」── 絵のフォルダを選んでいるときだけ出す（空の道具を見せない）。 *@
+        @if (!string.IsNullOrEmpty(_artFolder))
+        {
+          <div class="edmodalimport">
+            <label class="edalign-btn edimport-btn">
+              絵を取り込む
+              <input type="file" accept="image/png" multiple hidden
+                     @ref="_importInput" @onchange="OnImportFiles" />
+            </label>
+            <span class="edmuted">ゲーム本体にも入れるには、いちど建て直してください</span>
+          </div>
+        }
+        @{ var iconNames = FilteredIconNames(); }
+        @if (iconNames.Count == 0)
+        {
+          <div class="edhint">見つかりません</div>
+        }
+        else
+        {
+          <div class="edicongrid">
+            @foreach (var name in iconNames)
+            {
+              var pickName = name;
+              <button type="button" class="edicon-item" title="@pickName" @onclick="() => ChooseIcon(pickName)">
+                <img src="@IconThumbSrc(pickName)" alt="" />
+                <span>@pickName</span>
+              </button>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
 </div>
 
 @code {
@@ -487,6 +575,26 @@
     /// <summary>入力欄の初期値（`value="@_editingText"` は最初の1回だけ効く ──
     /// 以降は打っている最中の実体を JS 側（`eggEdit.editValue`）から確定時に読む。</summary>
     private string _editingText = "";
+
+    // ── ⭐ 段E: 絵を選ぶ小窓／自作 PNG ─────────────────
+    // ⚠️ 単純に保つ（作者の指示） ── 「開いているか」「さがす」「選んでいる絵のフォルダ名」の
+    //    3つの薄い状態だけ。中身（一覧そのもの）は状態に持たせず、描くたびに
+    //    `IconManifest.Names`／`IconOverrides.Names` から組み直す（唯一の出所を保つ）。
+
+    /// <summary>「絵を選ぶ」小窓が開いているか。⚠️ 開き方は2つ（E-1: 絵を新しく置いた
+    /// 直後 ／ E-4: Inspector の「絵を変える」）── どちらも <see cref="OpenIconPicker"/> の
+    /// 1つの入口を通る。</summary>
+    private bool _iconPickerOpen;
+    /// <summary>小窓の中の「さがす」欄。⚠️ 開くたびに空へ戻す（<see cref="OpenIconPicker"/>）。</summary>
+    private string _iconPickerFind = "";
+    /// <summary>⭐ E-3: いま選んでいる「絵のフォルダ」の名前。⚠️ 空 = まだ選んでいない
+    /// （そのときは「絵を取り込む」の押しどころを出さない ── 空の道具を見せない）。
+    /// ⚠️ `IconOverrides` を解くとき（<see cref="ClearOverrides"/>）は、ここも一緒に空へ戻す。</summary>
+    private string _artFolder = "";
+    /// <summary>⭐ E-3: 「絵を取り込む」の生の `&lt;input type="file"&gt;`。⚠️ Blazor の
+    /// `InputFile` は使わない（File System Access API 側で直接読み書きしたいので、
+    /// JS 側へ素の DOM 要素を渡す ── `disk.js` の `showDirectoryPicker` と同じ作法）。</summary>
+    private ElementReference _importInput;
 
     // ── ⭐ Pass B: 盤の拡大（ズーム）＋格子 ─────────────
     // ⭐ 実効倍率 k（`edit.js` の `fit()`）= 器に収まる倍率（fitK）× この `_zoom`。
@@ -705,6 +813,106 @@
         await LoadFile();
     }
 
+    // ── ⭐ 段E: 絵を選ぶ小窓／自作 PNG ─────────────────
+
+    /// <summary>⭐ E-1/E-4: 「絵を選ぶ」小窓を開く**唯一の入口**。⚠️ 開くたびに
+    /// 「さがす」を空へ戻す（前回の絞り込みを持ち越さない）。</summary>
+    private void OpenIconPicker()
+    {
+        _iconPickerFind = "";
+        _iconPickerOpen = true;
+    }
+
+    /// <summary>⚠️ 何も選ばずに閉じても壊れない ── `ApplyOption` を一度も呼ばない
+    /// （新しく置いた絵は `pic=` の無いまま＝盤に「？」が残り、あとで選び直せる）。</summary>
+    private void CloseIconPicker()
+    {
+        _iconPickerOpen = false;
+    }
+
+    /// <summary>⭐ E-2: 選んだ絵を骨組みへ差す。**これで1つの取り消し**
+    /// （<see cref="ApplyOption"/> が Begin〜Commit の対を通す ── 段階1からの往復の
+    /// 守りをそのまま借りる）。⚠️ 骨組みに書くのは `pic=&lt;名前&gt;` の文字列だけ
+    /// ── 画像そのものや data URL は絶対に書かない（往復のバイト忠実を保つ）。</summary>
+    private void ChooseIcon(string name)
+    {
+        ApplyOption("pic", name);
+        CloseIconPicker();
+    }
+
+    /// <summary>⭐ E-2: 絵を選ぶ小窓に出す一覧（ゲームに在る絵＋絵のフォルダから読んだ絵の
+    /// 合わせ技）。⚠️ `IconOverrides` は「まだビルドに入っていない絵」しか持たない
+    /// （<see cref="RefreshArtList"/> が登録時に絞る）ので、単純に足し合わせるだけで重複しない。</summary>
+    private static List<string> AllIconNames()
+    {
+        var names = new List<string>(IconManifest.Names);
+        names.AddRange(IconOverrides.Names);
+        names.Sort(StringComparer.Ordinal);
+        return names;
+    }
+
+    /// <summary>「さがす」で絞った一覧。⚠️ 木の「さがす」（<see cref="OnFindInput"/> 系）とは
+    /// 別の状態（<see cref="_iconPickerFind"/>） ── 混ぜない。</summary>
+    private List<string> FilteredIconNames()
+    {
+        var all = AllIconNames();
+        if (_iconPickerFind.Length == 0) return all;
+        return all.FindAll(n => n.Contains(_iconPickerFind, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>その名前のサムネイルの `src`。⚠️ 出所は2つ ── `IconOverrides`（ディスクの
+    /// data URL）が優先、無ければ `IconManifest` の実物（`icon/&lt;名前&gt;.png`、`LayoutDom`
+    /// と同じ組み立て方）。⚠️ **どちらにも無い名前は呼び出し側で弾く**（<see cref="IconExists"/>）。</summary>
+    private static string IconThumbSrc(string name) =>
+        IconOverrides.TryGet(name, out var url) ? url! : $"icon/{name}.png";
+
+    /// <summary>⭐ E-4: Inspector の「見つからない」表示のため。`LayoutDom` の
+    /// `icon-missing` 分岐（`IconOverrides` 優先→`IconManifest.Exists`）と同じ判定。</summary>
+    private static bool IconExists(string name) => IconOverrides.TryGet(name, out _) || IconManifest.Exists(name);
+
+    /// <summary>⭐ E-3: 「絵のフォルダを選ぶ」── `PickFolder`（骨組みのフォルダ）とは
+    /// 別のフォルダ（`unity\Assets\Resources\UI\icon` を選ぶよう案内する ── そこが
+    /// `pic=` の出所だから）。選べたら中身を読み直す（<see cref="RefreshArtList"/>）。</summary>
+    private async Task PickArtFolder()
+    {
+        bool ok = await Js.InvokeAsync<bool>("eggDisk.pickArt");
+        if (!ok) return;
+        _artFolder = await Js.InvokeAsync<string>("eggDisk.artFolderName");
+        await RefreshArtList();
+    }
+
+    /// <summary>絵のフォルダの中の `*.png` を読み直し、`IconManifest` に無い名前だけ
+    /// `IconOverrides` へ登録する。⚠️ **建て直さなくてもその場で使える**（E-3 の本命）
+    /// ── ディスクが出所なので、フォルダを選び直す・「絵を取り込む」の直後に呼べば
+    /// 新顔がすぐ一覧・盤へ出る。⭐ 既に wwwroot にある28枚は `icon/&lt;名前&gt;.png` で
+    /// 足りるので、base64 を二重に抱えない（`IconManifest.Exists` で絞る）。</summary>
+    private async Task RefreshArtList()
+    {
+        var entries = await Js.InvokeAsync<ArtEntry[]>("eggDisk.listArt");
+        foreach (var e in entries)
+            if (!IconManifest.Exists(e.Name)) IconOverrides.Set(e.Name, e.DataUrl);
+        StateHasChanged();
+    }
+
+    /// <summary>⭐ E-3: 「絵を取り込む」── ふつうの `&lt;input type="file"&gt;` で選ばれた
+    /// PNG を、いま選んでいる絵のフォルダへ複製する（`eggDisk.importFiles` が書き込みまで
+    /// やる ── 同名は上書きせず名前をずらす）。書けたら一覧を読み直すだけ（唯一の出所は
+    /// <see cref="RefreshArtList"/>）。⚠️ この釦自体は絵のフォルダを選んでいるときだけ
+    /// 出す（呼び出し側の Razor ── 空の道具を見せない）。</summary>
+    private async Task OnImportFiles(ChangeEventArgs e)
+    {
+        var written = await Js.InvokeAsync<string[]>("eggDisk.importFiles", _importInput);
+        if (written.Length > 0) await RefreshArtList();
+    }
+
+    /// <summary>⭐ E-3: `eggDisk.listArt` の1件（JS の `{name, dataUrl}` と対応・
+    /// `Microsoft.JSInterop` の既定 JSON 設定は大小文字を区別しないので、そのまま合う）。</summary>
+    private sealed class ArtEntry
+    {
+        public string Name { get; set; } = "";
+        public string DataUrl { get; set; } = "";
+    }
+
     /// <summary>⭐ 埋め込みの骨組みを、ディスクを介さず直接読む（`?demo=true` 専用）。
     /// ⚠️ 読んだあとは <see cref="LoadFile"/> とまったく同じ経路（`Refresh` →
     /// `LayoutStore.SetOverride` → 離れるとき `ClearOverrides`）を通す ── 漏れを防ぐ
@@ -772,11 +980,29 @@
     }
 
     /// <summary>⚠️ `LayoutStore` は静的（プロセス全体で共有）。未保存の姿を
-    /// 埋め込みへ戻す ── 他の頁（`/app`）に絶対に漏らさない。</summary>
+    /// 埋め込みへ戻す ── 他の頁（`/app`）に絶対に漏らさない。
+    /// ⭐ 段E: `IconOverrides`（絵のフォルダから読んだ data URL）も同じ理由・同じ静的な
+    /// 共有なので、ここで一緒に解く（`Dispose`／`OnInitialized` の `RegisterLocationChangingHandler`
+    /// ／骨組みの切替（<see cref="ApplyOf"/>）のどれから呼ばれても正しい）。⚠️ 選んでいた
+    /// 絵のフォルダの表示（<see cref="_artFolder"/>）も一緒に戻す ── 中身（overrides）が
+    /// 消えたのに「選んでいる」表示だけ残ると、空の道具を見せることになる。</summary>
     private void ClearOverrides()
     {
         foreach (var id in _touched) LayoutStore.SetOverride(id, null);
         _touched.Clear();
+    }
+
+    /// <summary>⭐ E-3: 絵の上書き（<see cref="IconOverrides"/>）と、選んでいる絵のフォルダを解く。
+    /// ⚠️ **骨組みの差し替え（<see cref="ClearOverrides"/>）とは別に持つ。**
+    /// 骨組みの差し替えは「別の画面へ移る」たびに必ず解かないと遊ぶ頁へ漏れるが、
+    /// 絵の上書きは**画面をまたいでも同じ絵を指せる**（名前で引くだけ・`/app` は
+    /// この表に一度も書き込まない）── 32枚を行き来しながら絵を置く作者の使い方で、
+    /// 画面を切り替えるたびに絵のフォルダを選び直させないため。
+    /// 🔴 頁を離れるとき（<see cref="Dispose"/>・離脱の掛け金）だけ解く。</summary>
+    private void ClearArt()
+    {
+        IconOverrides.Clear();
+        _artFolder = "";
     }
 
     private async Task LoadFile()
@@ -1405,15 +1631,28 @@
     //   は変更しない ── ここは既にある「消えた節点＝行が消える／LineNumber=-1 の節点＝
     //   末尾へ追記」の仕組み（`Layouts.Write`）に乗るだけ。
 
-    /// <summary>⭐ 追加パレットの6種（`wiki/開発/web移行計画.md` §11-3）。⚠️ **除外**:
-    /// `icon`/`pixel`（`pic=` が要る）・`scroll`（`content=`）・`bar`（結線）・
-    /// `veil`/`host`（特殊） ── rect だけでは不備0にならない・段階3の属性では埋められない
-    /// （除外は UI に出さない）。</summary>
+    /// <summary>⭐ 追加パレットの7種（`wiki/開発/web移行計画.md` §11-3 の6種＋段E「絵」）。
+    /// ⚠️ **除外**: `pixel`（種族の絵 ── 名前でなく `Palette` の参照で引くので自作絵に使えない）・
+    /// `scroll`（`content=`）・`bar`（結線）・`veil`/`host`（特殊） ── rect だけでは不備0に
+    /// ならない・段階3の属性では埋められない（除外は UI に出さない）。
+    /// ⭐ `icon` は段E で解禁 ── 落とした直後に「絵を選ぶ」小窓（<see cref="OpenIconPicker"/>）が
+    /// 開くので、`pic=` を後から埋められる（段階3の時点ではその小窓が無く、除外していた）。</summary>
     private static readonly (string Kind, string Label)[] AddKindPalette =
     {
         ("box", "box"), ("card", "card"), ("label", "字"),
-        ("button", "釦"), ("line", "線"), ("round", "丸"),
+        ("button", "釦"), ("line", "線"), ("round", "丸"), ("icon", "絵"),
     };
+
+    /// <summary>⭐ 段E: 種類ごとの既定の大きさ。⚠️ `icon` だけ 64x64（実物の骨組みの実例
+    /// 「plain icon 92 64 64 64」に合わせる ── 決め打ちで書いていない）。他は今までどおり
+    /// （幅300、label/button は高さ90、それ以外120）── 既存の位置（<see cref="AddKind"/> の
+    /// 既定位置）を変えない。</summary>
+    private static (float Width, float Height) DefaultSize(string kind)
+    {
+        if (kind == "icon") return (64f, 64f);
+        bool small = kind == "label" || kind == "button";
+        return (300f, small ? 90f : 120f);
+    }
 
     /// <summary>⭐ 新規節点を作る**唯一の出所**。⚠️ 短い13引数コンストラクタ
     /// （Terminator="\n" 固定）は使わない ── CRLF ファイルで混在するため、
@@ -1540,14 +1779,15 @@
     // ── 2) 追加（種類パレット・押しただけ／掴んで落とす） ──────
 
     /// <summary>⭐ 種類パレットを**押しただけ**（動かさず離した）ときの入口。
-    /// ⚠️ 今までどおり既定位置（盤の (390,900) を左上に、300×90/120）へ足す ──
-    /// 後戻りさせない（作者の指示）。⭐ 実装は <see cref="AddKindAt"/> の薄い包み
-    /// （今までと寸分違わぬ最終位置になるよう、その左上から「中心」を逆算して渡す）。</summary>
+    /// ⚠️ 今までどおり既定位置（盤の (390,900) を左上に）へ足す ── 後戻りさせない
+    /// （作者の指示）。⭐ 実装は <see cref="AddKindAt"/> の薄い包み（今までと寸分違わぬ
+    /// 最終位置になるよう、その左上から「中心」を逆算して渡す。大きさは
+    /// <see cref="DefaultSize"/> が唯一の出所）。</summary>
     [JSInvokable]
     public void AddKind(string kind)
     {
-        bool small = kind == "label" || kind == "button";
-        AddKindAt(kind, 390f + 150f, 900f + (small ? 45f : 60f));
+        var (width, height) = DefaultSize(kind);
+        AddKindAt(kind, 390f + width / 2f, 900f + height / 2f);
     }
 
     /// <summary>⭐ D-2: 道具箱から**掴んで盤へ落とした**ときの入口 ── 種類パレットから
@@ -1569,9 +1809,7 @@
         BeginAction();
         EnsureTrailingTerminator();
 
-        bool small = kind == "label" || kind == "button";
-        const float width = 300f;
-        float height = small ? 90f : 120f;
+        var (width, height) = DefaultSize(kind);
         var options = new Dictionary<string, string>();
         if (kind == "label") options["text"] = "字";
         else if (kind == "button") options["text"] = "押す";
@@ -1590,6 +1828,11 @@
         SelectNewRoot(name);
         CommitAction();
         StateHasChanged();
+
+        // ⭐ E-1: 絵は落とした直後 `pic=` が無い（盤には「？」）── その場で選ばせる。
+        //    ⚠️ 何も選ばず閉じても壊れない（`OpenIconPicker`/`CloseIconPicker` は
+        //    ApplyOption を1回も呼ばない ── 「？」のまま残り、あとから選び直せる）。
+        if (kind == "icon") OpenIconPicker();
     }
 
     /// <summary>⭐ D-2: 落とした位置を「きざみ」へ丸める（既存の吸い付きと同じ物差し・
@@ -2552,6 +2795,7 @@
         _leaving = Nav.RegisterLocationChangingHandler(_ =>
         {
             ClearOverrides();
+            ClearArt();   // ⭐ E-3: 絵の上書きは「頁を離れるとき」だけ解く（画面の切替では保つ）
             return ValueTask.CompletedTask;
         });
     }
@@ -2560,6 +2804,7 @@
     {
         _leaving?.Dispose();   // ⚠️ 頁が消えたあとも掛け金が残ると、次の遷移で死んだ頁を呼ぶ
         ClearOverrides();     // ⭐ 念のため（上の掛け金が走らない道 ── 直接の破棄 ── のため）
+        ClearArt();           // ⭐ E-3: 絵の上書きも、頁が消えるここで確実に解く
         // ⚠️ `eggEdit.keys` は document に直接 keydown を付けている。DOM がこの頁の
         //    ものでなくなっても listener 自体は自然には外れない ── 外さないと
         //    `/app`（遊ぶ頁）へ移っても Ctrl+Z を奪い続ける。

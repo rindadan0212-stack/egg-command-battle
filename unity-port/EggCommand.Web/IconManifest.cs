@@ -30,6 +30,20 @@ namespace EggCommand.Web
             return !_loaded || _known.Contains(name);
         }
 
+        /// <summary>⭐ 段E: 「絵を選ぶ」小窓のための一覧そのもの。⚠️ <see cref="Exists"/> と
+        /// 同じ埋め込みから作る（出所は1つ）。⚠️ 読めなかったとき（<see cref="_loaded"/> が
+        /// false）は空を返す ── `Exists` と違い「読めなかったら全部 OK 扱いにする」は
+        /// できない（一覧は実物の名前しか出せない）が、実害は「選べる絵が0件になる」
+        /// だけ（`icon-missing` を誤検出するわけではない）。</summary>
+        public static IReadOnlyCollection<string> Names
+        {
+            get
+            {
+                if (_known == null) _known = Load();
+                return _known;
+            }
+        }
+
         private static HashSet<string> Load()
         {
             var set = new HashSet<string>(System.StringComparer.Ordinal);

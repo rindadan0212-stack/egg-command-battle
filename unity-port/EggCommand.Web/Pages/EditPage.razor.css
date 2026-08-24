@@ -637,3 +637,112 @@
   padding: 2px 4px;
   font: inherit;
 }
+
+/* ── 段E: 絵を選ぶ小窓／自作PNG ─────────────────────
+   ⚠️ 新しい色は増やさない ── 既存の無彩色（#12151f/#191d2b/#232840/#0d1220）と
+   アンバー系アクセント（#f59e0b）だけで組む。区切りは余白＋一辺だけの線、
+   角丸は押せる要素だけ（画面の作法どおり）。 */
+
+/* ⭐ E-2: 覆い。⚠️ 盤の覆い（`.edcap`）とは別物 ── 一時的な chrome（`.edband`/
+   `.edghost` と同じ扱い）。背景は盤の地色（#05070c）を薄く伸ばしただけ ── 新色を足さない。 */
+.edmodal {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 7, 12, .72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.edmodalbox {
+  width: min(560px, 92vw);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  background: #191d2b;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 8px;
+}
+.edmodalhead {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  font-size: 14px;
+  color: #d7dae6;
+}
+.edmodalclose {
+  background: transparent;
+  color: #9aa1b8;
+  border: 0;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.edmodalclose:hover { color: #d7dae6; }
+.edmodaltools {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.edmodalimport {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.edimport-btn { cursor: pointer; }
+
+/* ⭐ E-2: サムネイル一覧。⚠️ 名前は下に小さく（打たせない・目で見て選ぶ）。 */
+.edicongrid {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 8px;
+  padding: 14px;
+}
+.edicon-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: #232840;
+  color: #d7dae6;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 6px;   /* ⭐ 押せる要素なので角丸（作法どおり） */
+  padding: 8px 4px 6px;
+  cursor: pointer;
+  font: inherit;
+}
+.edicon-item:hover { background: #2b3150; border-color: rgba(255, 255, 255, .22); }
+.edicon-item img { width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; }
+.edicon-item span {
+  color: #9aa1b8;
+  font-size: 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ⭐ E-4: Inspector「絵を変える」。区切りは既存の `.edattrrow` の余白のみ（線は増やさない）。 */
+.edpicrow { display: flex; flex-direction: column; gap: 6px; }
+.edpicpreview { display: flex; align-items: center; gap: 8px; }
+.edpicthumb {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  background: #0d1220;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 4px;
+}

@@ -78,4 +78,109 @@ window.eggDisk = {
       return 'failed'
     }
   },
+
+  // ── 段E: 絵のフォルダ（`unity\Assets\Resources\UI\icon` 相当）────────
+  //
+  // ⚠️ **骨組みのフォルダ（`this._root`）とは別の掴み**（`this._art`）── 骨組みと絵は
+  // 別のフォルダを選ぶ想定（案内文で `unity\Assets\Resources\UI\icon` を選ぶよう明示する
+  // のは C# 側・`EditPage.razor`）。GIF は対象外（`icon` は静止画の仕組み ── `*.png` だけ拾う）。
+
+  /** ⭐ E-3: 絵のフォルダを選ばせる。以後そこから読み書きする。
+   * @returns {Promise<boolean>} 選べたか（やめたら false）。 */
+  async pickArt() {
+    if (!this.supported()) return false
+    try {
+      this._art = await window.showDirectoryPicker({ id: 'egg-art', mode: 'readwrite' })
+      return true
+    } catch (e) {
+      return false
+    }
+  },
+
+  /** いま選んでいる絵のフォルダの名前。⚠️ 何も選んでいなければ空。 */
+  artFolderName() {
+    return this._art ? this._art.name : ''
+  },
+
+  /** フォルダの中の `*.png` を全部、{name, dataUrl} の配列で返す（拡張子を除いた name）。
+   * ⚠️ **GIF は対象外**（`art/handmade/gif/*.gif` は動く絵 ── `icon` は静止画の仕組み
+   * なので一覧に出さない）。⭐ 建て直さなくてもその場で使えるように、呼ぶたび
+   * ディスクを読み直す（キャッシュしない ── 一覧が小さい前提の単純さを優先）。
+   * @returns {Promise<{name:string, dataUrl:string}[]>} */
+  async listArt() {
+    if (!this._art) return []
+    const out = []
+    for await (const [filename, handle] of this._art.entries()) {
+      if (handle.kind !== 'file') continue
+      if (!/\.png$/i.test(filename)) continue
+      try {
+        const file = await handle.getFile()
+        const dataUrl = await this._toDataUrl(file)
+        out.push({ name: filename.slice(0, -4), dataUrl })
+      } catch (e) {
+        // ⚠️ 1枚読めなくても残りは出す（黙って一覧ごと空にしない）。
+      }
+    }
+    return out
+  },
+
+  /** ⭐ `<name>.png` として絵のフォルダへ書く。⚠️ **同名は黙って上書きしない**
+   * ── 既に在れば `name-2`,`name-3`… とずらす（`罠と教訓.md` と同じ「黙って壊さない」作法）。
+   * @param {string} name 拡張子を除いた名前
+   * @param {Uint8Array|ArrayBuffer} bytes PNG の生バイト列
+   * @returns {Promise<string|null>} 実際に書いた名前（失敗したら null）。 */
+  async writeArt(name, bytes) {
+    if (!this._art) return null
+    let finalName = name
+    let i = 2
+    while (await this._artHas(finalName)) { finalName = name + '-' + i; i++ }
+    try {
+      const fh = await this._art.getFileHandle(finalName + '.png', { create: true })
+      const w = await fh.createWritable()
+      await w.write(bytes)
+      await w.close()
+      return finalName
+    } catch (e) {
+      return null
+    }
+  },
+
+  async _artHas(name) {
+    if (!this._art) return false
+    try {
+      await this._art.getFileHandle(name + '.png', { create: false })
+      return true
+    } catch (e) {
+      return false
+    }
+  },
+
+  /** ⭐ E-3: 「絵を取り込む」── ふつうの `&lt;input type="file" accept="image/png" multiple&gt;`
+   * から選ばれた PNG を、絵のフォルダへ複製する（`writeArt` を1枚ずつ通すので、
+   * 同名は黙って上書きしない・ずらす、が自動で効く）。
+   * @param {HTMLInputElement} input `EditPage.razor` の `@ref` で渡された素の DOM 要素。
+   * @returns {Promise<string[]>} 実際に書けた名前の配列。 */
+  async importFiles(input) {
+    const written = []
+    const files = input && input.files ? Array.from(input.files) : []
+    for (const f of files) {
+      if (!/\.png$/i.test(f.name)) continue   // ⚠️ PNG 以外（GIF 含む）は取り込まない
+      const bytes = new Uint8Array(await f.arrayBuffer())
+      const base = f.name.slice(0, -4)
+      const name = await this.writeArt(base, bytes)
+      if (name) written.push(name)
+    }
+    if (input) input.value = ''   // ⚠️ 同じファイルを続けて選び直せるように
+    return written
+  },
+
+  /** `File` → data URL（`FileReader.readAsDataURL` の Promise 包み）。 */
+  _toDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => resolve(r.result)
+      r.onerror = () => reject(r.error)
+      r.readAsDataURL(file)
+    })
+  },
 }

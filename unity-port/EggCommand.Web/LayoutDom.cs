@@ -221,7 +221,19 @@ namespace EggCommand.Web
                 // ⭐ **絵は抱き合わせ（mask）で出して、色は地で与える。**
                 //    ⚠️ Unity は `Image.color` で染めているので、同じ振る舞いに合わせる。
                 string pic = (has && fill?.Pic != null ? fill.Pic(bind) : null) ?? node.Option("pic");
-                if (pic != null && !IconManifest.Exists(pic))
+                // ⭐ 段E: 骨組みエディタ専用の上書き（`IconOverrides`）を**先に**見る。
+                //    ⚠️ 遊ぶ画面（`/app`）はこの表に一度も書き込まないので、`TryGet` は
+                //    常に false ── 以下の既存2分岐（`IconManifest.Exists`→`icon-missing`／
+                //    通常の `icon/<名前>.png`）は1バイトも変わらず、今までどおりのまま通る。
+                if (pic != null && IconOverrides.TryGet(pic, out var overridePic))
+                {
+                    // ⭐ まだビルド（`CopyArt`/`IconManifest`）に入っていない絵。
+                    //    絵そのものは在るので `icon-missing` にしない ── 出所はディスクから
+                    //    読んだ data URL（骨組みエディタ側が登録した文字列をそのまま使う）。
+                    sb.Append("<div class=\"n icon-art\" style=\"left:0;top:0;width:100%;height:100%;--pic:url(")
+                      .Append(Esc(overridePic)).Append(")\"></div>");
+                }
+                else if (pic != null && !IconManifest.Exists(pic))
                 {
                     // 🔴 **黙って空の四角にしない。**⚠️ 表や骨組みが指す名前でも、
                     //    実体（`Resources/UI/icon/<名前>.png`）が無ければここへ落ちる
