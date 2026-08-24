@@ -90,5 +90,15 @@ namespace EggCommand.Core
         /// <summary>倒した次の相手が、外から転がって来るのにかかる秒。
         /// ⚠️ 短いと結局パッと入れ替わって見える（0.7 では早すぎたので倍にした）。</summary>
         public const double EntrySeconds = 1.4;
+
+        // ── 祝い（Fanfare） ──────────────────────────────
+
+        /// <summary>飛び出して1度沈むまで（秒）。⭐ 卵を得た・生まれた瞬間の pop。
+        /// ⚠️ Unity 版 `View.Fanfare.PopSeconds` と同じ数（web 移植 2026-08-24 時点、
+        /// Unity 側はまだ private const のまま ── ここを直しても Unity は自動で追従しない）。</summary>
+        public const double CheerPop = 0.42;
+
+        /// <summary>後ろの光が1周する秒。⭐ Unity 版 `View.Fanfare.SpinSeconds` と同じ数。</summary>
+        public const double CheerSpin = 6.0;
     }
 }

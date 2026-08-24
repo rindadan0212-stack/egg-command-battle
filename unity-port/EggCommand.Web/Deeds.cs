@@ -207,9 +207,12 @@ public static class Deeds
         if (won)
         {
             Games.GrowParty(Games.PartyOf(s.Game));
-            Games.TakeEgg(s.Game, where!, EggOrigin.Stolen);
+            var egg = Games.TakeEgg(s.Game, where!, EggOrigin.Stolen);
             Games.RecordRaid(s.Game, where!);
-            s.Say = "卵を奪った";
+            // ⭐ 手に入れた瞬間の3つの Fanfare のうち1つ（Unity `TrailScreen.cs:939` →
+            //    `App.GainEgg` → `Fanfare.EggGot` と対応）。⚠️ Say には戻さない
+            //    （告知が Fanfare に代わっただけで、システム通知の Say とは別物）。
+            s.Cheer_ = Cheer.EggGot(egg);
             s.Now_Sheet = Sheet.Nests;
             return;
         }
@@ -658,9 +661,11 @@ public static class Deeds
             if (!s.Boss && nest != null)
             {
                 // ⭐ **戦って倒したら親は失われる。**その巣にはもう挑めない。
-                Games.TakeEgg(s.Game, nest, EggOrigin.Defeated);
+                var egg = Games.TakeEgg(s.Game, nest, EggOrigin.Defeated);
                 Encounters.Replace(s.Game, nest, s.Now);
-                s.Say = "卵を手に入れた";
+                // ⭐ 手に入れた瞬間の3つの Fanfare のうち1つ（Unity `App.cs:536` →
+                //    `App.GainEgg` → `Fanfare.EggGot` と対応）。
+                s.Cheer_ = Cheer.EggGot(egg);
                 s.Now_Sheet = Sheet.Nests;
                 return;
             }
@@ -680,7 +685,8 @@ public static class Deeds
         if (found == null) { s.Aim = at; s.Open = Panel.Eggs; return; }
         if (!Hatchery.IsReady(found, s.Now)) return;
         var born = Games.HatchEgg(s.Game, found.Egg.Id);
-        s.Say = $"{Creatures.SpeciesOf(born).Name} が孵った";
+        // ⭐ 生まれた瞬間の Fanfare（Unity `HomeScreen.cs:73` → `Fanfare.Born` と対応）。
+        s.Cheer_ = Cheer.Born(born);
     }
 
     /// <summary>在庫から卵を選んだ。⚠️ 枠が無ければ入れない（黙って捨てない）。</summary>
@@ -801,8 +807,9 @@ public static class Deeds
         s.ParentB = null;
         // ⚠️ 見ていた個体が親だったなら、見る先も外す
         s.Picked = null;
-        s.Say = $"{SpeciesTable.ById(born.Egg.SpeciesId).Name} の卵ができた"
-            + $"（{Rarities.StarsOf(born.Egg.Rarity)}）";
+        // ⭐ 手に入れた瞬間の Fanfare（Unity `BoxScreens.cs:39` の `BreedScreen.onBreed` →
+        //    `Fanfare.EggGot` と対応）。
+        s.Cheer_ = Cheer.EggGot(born.Egg);
     }
 
     // ── 編成 ────────────────────────────────────────

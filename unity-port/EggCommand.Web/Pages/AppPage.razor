@@ -101,6 +101,20 @@
         // ⚠️ **演出は一瞬しか出ない。**⭐ 静かな検査から見えるように、
         //    止めた形で開く入口を用意する（さいころ・告知）。
         if (Open == "dice") { _shell.Roam_ = Roam.Rolling; _shell.Dice = 5; }
+        // ⭐ Fanfare も同じ理由。⚠️ 遊ぶ道からは一度も辿り着かない入口
+        //    （`open=` は Panel の名前しか渡ってこない ── ここは別枝で受ける）。
+        //    `fanfare` は卵（★が出る方）・`fanfareborn` は誕生（★が出ない方）。
+        if (Open == "fanfare")
+        {
+            var egg = Nests.MakeEgg(_shell.Game.RngEgg, Nests.ById("shallow-scale"),
+                EggOrigin.Defeated, ++_shell.Game.Serial, rarity: 4,
+                element: SpeciesTable.Roll(_shell.Game.RngElement));
+            _shell.Cheer_ = Cheer.EggGot(egg);
+        }
+        else if (Open == "fanfareborn" && _shell.Game.Storage.Creatures.Count > 0)
+        {
+            _shell.Cheer_ = Cheer.Born(_shell.Game.Storage.Creatures[0]);
+        }
 
         Draw();
     }
@@ -308,7 +322,15 @@
         _over = Card(_shell.Under, "-back") + Card(_shell.Open, "-card")
             // ⭐ 演出は札の上。⚠️ さいころは回っている間だけ、告知は決着の一拍だけ
             + (_shell.Roam_ == Roam.Rolling ? Sheets.Dice(_shell, "-roll") : "")
-            + (_shell.Banner != null ? Sheets.Banner(_shell, "-tell") : "");
+            + (_shell.Banner != null ? Sheets.Banner(_shell, "-tell") : "")
+            // ⭐ Fanfare は**一番上**。⚠️ Banner/Dice と違って**自分では消えない**
+            //    （閉じるまで出しっぱなし）── それでも巻き戻らない理由は Banner/Dice と同じ
+            //    「Draw() が呼ばれない」: Fanfare が出ている間は Fight_/Roam_ が両方とも
+            //    止まっているので `Wind()` が時計を張らず、しかも覆いが画面いっぱいで
+            //    ほかの押しどころを覆うので、閉じる（`case "cheer"`）以外の Tap が届かない。
+            //    ⭐ だから `Cheer_` が生きている間 `Draw()` は**一度も呼ばれない**
+            //    （Banner/Dice の「短いから呼ばれない」より強い ── 「呼ばれる道が無い」）。
+            + (_shell.Cheer_ != null ? Sheets.Fanfare(_shell, "-fan") : "");
         _frame = _shell.Frame();
         if (_shell.Say != null) { _say = _shell.Say; _shell.Say = null; }
     }

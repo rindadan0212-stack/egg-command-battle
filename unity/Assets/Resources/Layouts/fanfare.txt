@@ -1,0 +1,30 @@
+# 手に入れた瞬間・生まれた瞬間の全画面演出 ── Unity 版 Fanfare.prefab の実測をそのまま写す
+#
+# ⚠️ **覆いは画面いっぱい。**⭐ Banner と違って後ろを完全に止める（覆いの後ろは押せない）。
+#    ⚠️ **覆い自体が押しどころ**（`tap=cheer`）── Unity も `Dim` が Image と Button を
+#    兼ねていて、画面のどこを押しても閉じる（close 専用の小さな釦は無い）。
+#
+# ⚠️ **光（burst）は絵（art）と別の器（別の根）に置く**── Unity は Burst を Pop の子にして
+#    弾む動きへ巻き込んでいるが、web は回す（`transform:rotate`）ぶん `getBoundingClientRect`
+#    の外接矩形が段によって膨らむ（正方形を回すと対角が四角の外へ出る ── 見た目は円なので
+#    絵は1px も動いていないのに、判定だけが「親からはみ出した」と読む）。⭐ さいころの
+#    `face`（`dice.txt`）と同じ理由で根に置く ── 根の子は「親からのはみ出し」を見ない
+#    （`scripts/audit.mjs` の③）。位置は pop の中に居たときと同じ絶対座標のまま。
+#    ⚠️ 代わりに失うのは「光も pop と一緒に弾む」だけ ── 円は回しても見た目が変わらないので
+#    実害はほぼ無い（弾みは pop 側の art/stars だけで十分伝わる）。
+#
+# ⚠️ ★（stars）は**卵のときだけ**出す。誕生では `Cheer.Born` が空文字を渡すので
+#    `when=stars` が丸ごと隠す（Unity は `gameObject.SetActive` で同じことをしている）。
+#
+# ⚠️ 動きの秒数はここに書かない。`stage.css` の `@keyframes cheer-pop`/`cheer-spin` が
+#    `Core.Beats.CheerPop`/`CheerSpin` と同じ数を持つ（唯一の出所は Beats）。
+# ⚠️ 字の色は `stage.css` の `#stars-fan`/`#line-fan` が持つ（濃い覆いの上で読める色に
+#    差し替えた ── Unity の実測色そのままだと web の濃い覆いの上では沈んだ・実測 1.1〜1.8:1）。
+#
+#  名前   種類    左   上    幅   高    付け足し
+dim      veil    0    0     1080 1920  tap=cheer
+burst    round   140  420   800  800   bind=burst
+pop      box     140  420   800  800
+  art    pixel   160  120   480  480   bind=art
+  stars  label   0    620   800  80    size=56 anchor=center bind=stars when=stars
+line     label   40   1330  1000 200   size=54 anchor=upper-center wrap=yes bind=line

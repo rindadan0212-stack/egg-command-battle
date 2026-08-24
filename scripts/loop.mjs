@@ -185,6 +185,12 @@ for (let step = 0; step < 60; step++) {
 say(rolls > 0, 'さいころを振れた', `${rolls} 回`)
 say(done, '一巡して探索へ戻れた', `戦闘 ${fought ? 'あり' : 'なし'} / 最後は「${await title()}」`)
 
+// ⭐ 卵を持ち帰った（盗んだ／親を倒した、どちらでも）ときは Fanfare が出ている。
+//    ⚠️ 覆いが画面いっぱいなので、閉じないと次の押しどころへ指が届かない。
+if (await has('#dim-fan')) {
+  say(await tap('#dim-fan'), '　卵の Fanfare を閉じられる')
+}
+
 // ── ホームへ戻れる ──────────────────────────────
 await tap('[id="tab#0"]')
 say((await title()) === 'EGG COMMAND', 'ホームへ戻れる', await title())

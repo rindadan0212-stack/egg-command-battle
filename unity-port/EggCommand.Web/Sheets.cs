@@ -792,6 +792,28 @@ public static class Sheets
             Tappable = key => false,
         }, crown: crown);
 
+    // ── 祝い ────────────────────────────────────────
+
+    /// <summary>手に入れた瞬間・生まれた瞬間の全画面演出。⭐ Unity にあって web に無かった
+    /// 最後の演出（`View/Fanfare.cs`）。⚠️ Banner と違って**閉じるまで出しっぱなし**
+    /// ── 覆い（`veil`）が押しどころを兼ねる（`tap=cheer`）ので、どこを押しても閉じる。</summary>
+    public static string Fanfare(Shell s, string crown = "") =>
+        LayoutDom.Render(LayoutStore.Of("fanfare"), new DomFill
+        {
+            Text = key => s.Cheer_ is not Cheer c ? "" : key switch
+            {
+                "line" => c.Line,
+                "stars" => c.Stars,
+                _ => "",
+            },
+            Sprite = key => key == "art" && s.Cheer_ is Cheer c ? c.Art : null,
+            Palette = key => key == "art" && s.Cheer_ is Cheer c ? c.Palette : null,
+            Tint = key => key == "burst" && s.Cheer_ is Cheer c ? c.Burst : null,
+            // ⭐ **★は卵のときだけ**（誕生では `Cheer.Born` が空文字を渡す）
+            When = key => key == "stars" && s.Cheer_ is Cheer c && c.Stars.Length > 0,
+            Tappable = key => true,
+        }, crown: crown);
+
     // ── 確かめる ────────────────────────────────────
 
     /// <summary>「本当にやりますか」を一度だけ聞く札。

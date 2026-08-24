@@ -31,6 +31,45 @@ public enum Roam
 public readonly record struct Spark(
     string At, string Kind, string Text, string? Tint, int Size, int Up);
 
+/// <summary>いま祝っている物（卵を得た・生まれた）。⚠️ Unity 版 `View.Fanfare` が
+/// `EggGot`/`Born` で組み立てる中身と同じ4つ（絵・パレット・★・告知の字）に、
+/// 後ろの光の色を足しただけ。
+///
+/// ⚠️ 型の名前を「Fanfare」にしなかった理由: `Sheets.Fanfare` という**同名のメソッド**が
+/// 同じ名前空間に在る（Unity 版に合わせた）── 型とメソッドが同名だと、
+/// このファイルの中で `Fanfare` と書いた瞬間にどちらを指すか揺れる。
+/// ⭐ 演出の秒（`Core.Beats.CheerPop`/`CheerSpin`）と語を合わせて `Cheer` にした。</summary>
+public readonly record struct Cheer(PixelSprite Art, Palette Palette, string Stars, string Line, string Burst)
+{
+    /// <summary>卵を手に入れた。⭐ Unity 版 `Fanfare.EggGot` と同じ中身
+    /// （絵は `EggArt` ── 卵はまだ PNG に焼いていないので SVG のまま出る）。</summary>
+    public static Cheer EggGot(Egg egg)
+    {
+        var species = SpeciesTable.ById(egg.SpeciesId);
+        return new Cheer(EggArt.Sprite, EggArt.Shell, Rarities.StarsOf(egg.Rarity),
+            $"{species.Name}のたまごをゲットした！！", BurstOf(egg.Element));
+    }
+
+    /// <summary>卵が孵った。⭐ Unity 版 `Fanfare.Born` と同じ中身。
+    /// ⚠️ **★は出さない**（卵のときだけの印 ── `Stars` を空にすると `Sheets.Fanfare` が隠す）。</summary>
+    public static Cheer Born(Creature creature)
+    {
+        var species = Creatures.SpeciesOf(creature);
+        return new Cheer(species.Sprite, Creatures.PaletteOf(creature), "",
+            $"{species.Name}がうまれた！！", BurstOf(creature.Element));
+    }
+
+    /// <summary>属性の色を、後ろの光ぶん薄める（Unity 実測 alpha .35）。
+    /// ⚠️ `Face.ElementCss` と同じ3色を rgba へ手で変換した値
+    /// （3色だけなので、ここのためだけに 16進→rgb の変換器を持ち込まない）。</summary>
+    private static string BurstOf(Element element) => element switch
+    {
+        Element.Fire => "rgba(232,122,92,.35)",
+        Element.Wood => "rgba(168,216,110,.35)",
+        _ => "rgba(110,168,216,.35)",
+    };
+}
+
 /// <summary>アプリ1つぶんの状態と、そこから出る画面。
 ///
 /// ⭐ **画面ごとの「どの値をどの差し口へ流すか」は、ここが唯一の出所。**
@@ -143,6 +182,10 @@ public sealed class Shell
     /// ⭐ ボタンは置かない ── 結果であって、選択ではない。</summary>
     public string? Banner;
 
+    /// <summary>いま出ている祝い（卵を得た・生まれた）。⚠️ 無ければ null（出さない）。
+    /// ⭐ Banner と違って**自分では消えない** ── 覆いを押す（`case "cheer"`）まで出しっぱなし。</summary>
+    public Cheer? Cheer_;
+
     // ── すごろくの拍 ──────────────────────────────────
     /// <summary>さいころ・駒がどこまで進んだか。</summary>
     public Roam Roam_;
@@ -198,6 +241,10 @@ public sealed class Shell
             // ⚠️ **閉じたら選びかけも捨てる。**⭐ 残すと、次に開いたとき
             //    身に覚えのない個体が選ばれていて、そのまま分解できてしまう
             case "close": Open = Under; Under = Panel.None; Melts.Clear(); Feeds.Clear(); break;
+
+            // ⭐ 祝い（Fanfare）を閉じる。⚠️ Unity 版も覆い全体が close ボタン
+            //    （`Fanfare.prefab` の `Dim` が Image と Button を兼ねている）── 同じ形。
+            case "cheer": Cheer_ = null; break;
 
             // ⭐ **右肩は画面ごとに中身が変わる**（Unity 版 `App.ShowExtra`）
             case "extra":

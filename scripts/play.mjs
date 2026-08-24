@@ -175,8 +175,15 @@ await page.waitForTimeout(120)
 await page.click('#go')
 await page.waitForTimeout(200)
 say((await kids()) === kidsB - 2, '配合すると親2体が消える', `${kidsB} → ${await kids()}`)
-const born = await page.evaluate(() => document.getElementById('say')?.textContent || '')
-say(born.includes('卵'), '　卵ができたと言う', born.slice(0, 40))
+// ⚠️ 「卵ができた」は Fanfare に代わった（灰色のトーストではない）。
+//    ⭐ 全画面の覆いなので、閉じてから次へ進む（force で強行しない ── 遊ぶ人と同じ道）。
+// ⚠️ 「たまご」は平仮名（Unity `Fanfare.EggGot` の字そのまま。`Cheer.EggGot` が写した）
+//    ── 旧トーストの「卵ができた」（漢字）とは綴りが違うので、新しい字で見る。
+const line = await page.evaluate(() => document.getElementById('line-fan')?.textContent || '')
+say(line.includes('たまご'), '　卵ができた Fanfare が出る', line.slice(0, 40))
+await page.click('#dim-fan')
+await page.waitForTimeout(150)
+say(!(await page.evaluate(() => !!document.getElementById('dim-fan'))), '　押すと閉じる')
 
 // ── 編成 ─────────────────────────────────────────
 await tab(0)

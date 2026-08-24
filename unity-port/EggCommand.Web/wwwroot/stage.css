@@ -292,6 +292,62 @@ html, body {
 #line-tell { color: #ffffff; letter-spacing: .12em; }
 @keyframes tell-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
+/* ── 祝い（Fanfare）───────────────────────────────────
+   ⭐ 手に入れた・生まれた瞬間の全画面演出。⚠️ 告知（tell）と違って**閉じるまで出しっぱなし**
+   ── 覆いは画面いっぱいで濃い（Unity 実測 `rgba(10,15,31,.82)`。他の覆いより暗いのは
+   意図 ── 後ろの画面を完全に止める・お祝いだけに目を向けさせる）。
+   ⚠️ 秒は `Core.Beats.CheerPop`/`CheerSpin` と同じ数（唯一の出所は Beats）── 変えるなら
+   両方直す。 */
+#dim-fan { background: rgba(10, 15, 31, .82); }
+
+/* 🔴 **「どこを押しても閉じる」を本当に画面いっぱいにする。**
+   ⚠️ `burst`/`pop`/`line` は `dim` の**兄弟**（`fanfare.txt` 参照 ── burst を pop の子に
+   しなかったのと同じ理由）なので、絵の上を押すと `closest('[data-tap]')` は**祖先しか
+   遡らず**、兄弟の `dim-fan` へは辿り着けない ── 実測: 卵の絵の真上を押しても閉じなかった。
+   ⭐ 絵・光・字はどれも押しどころを持たないので、`pointer-events:none` で**素通りさせ**、
+   実際に押されるのは常に下の `dim-fan` にする（Unity の Raycast Target とは違う道だが、
+   「どこを押しても閉じる」を字義どおり満たすのはこちら）。 */
+#pop-fan, #burst-fan, #line-fan { pointer-events: none; }
+
+/* ⭐ **飛び出して1度沈む。**⚠️ Lerp だけだと「置いた」だけに見えて弾まない
+   （Unity `Fanfare.PlayIn` の式 `k*(1+sin(k*π)*0.35)` を 10% 刻みで写した数列）。
+   ⚠️ burst はここに含めない ── `fanfare.txt` 側のコメント参照（回すと矩形が膨らむ）。 */
+#pop-fan {
+  transform-origin: center center;
+  animation: cheer-pop .42s linear both;
+}
+@keyframes cheer-pop {
+  0%   { transform: scale(0); }
+  10%  { transform: scale(.111); }
+  20%  { transform: scale(.241); }
+  30%  { transform: scale(.385); }
+  40%  { transform: scale(.533); }
+  50%  { transform: scale(.675); }
+  60%  { transform: scale(.800); }
+  70%  { transform: scale(.898); }
+  80%  { transform: scale(.965); }
+  90%  { transform: scale(.997); }
+  100% { transform: scale(1); }
+}
+
+/* ⭐ 後ろの光がゆっくり回る。⚠️ 動いているものが1つあるだけで「今起きたこと」に見える
+   （Unity `Fanfare.Update` と同じ 360°/6秒・線形）。 */
+#burst-fan {
+  transform-origin: center center;
+  animation: cheer-spin 6s linear infinite;
+}
+@keyframes cheer-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* ⭐ ★は明るい金（`--accent`）。⚠️ Unity の実測色（`--accent-ink` 相当の暗い橙）のままだと、
+   web の濃い覆い（`#dim-fan`）の上で沈む（実測 1.79:1・`scripts/audit.mjs` の基準は 2.0:1）
+   ── Unity の覆いより web のほうが暗いので、色はそのまま移せない。 */
+#stars-fan { color: var(--accent); }
+
+/* ⭐ 告知の字は白＋軽い縁取り。⚠️ 骨組みの既定色（`--ink`）のままだと、暗い覆いの上で
+   ほぼ読めない（実測 1.10:1）── Unity の実測色（白・`Outline` effectDistance 5,5・ink 色）
+   をそのまま写す。 */
+#line-fan { color: #ffffff; text-shadow: 5px -5px 0 var(--ink); }
+
 /* ── 放置の帯 ────────────────────────────────────────
    ⭐ 進んでいることは**地面が左へ流れる**ことで見せる。走者は歩幅だけ揺らす。
    ⚠️ 地面は画面幅の2倍あるので、1枚ぶん流れたら折り返す（`Core.Beats.Scroll`）。 */
@@ -321,6 +377,7 @@ html, body {
   .fx-step, .fx-stepf, .fx-shock { animation: none; }
   #face-roll, #dim-roll, #strip-tell { animation: none; }
   #dim-roll { background: rgba(0,0,0,.34); }
+  #pop-fan, #burst-fan { animation: none; }
   #ground, .idle-tuft, .idle-walk, .idle-come { animation: none; }
 }
 

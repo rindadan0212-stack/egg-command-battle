@@ -231,8 +231,18 @@ export function audit() {
     if (!stack.length) continue
 
     // ── ⑦ 覆われて見えない ──
+    // ⚠️ 🔴 **`elementsFromPoint` は「当たり順」であって「描き順」ではない。**
+    //    ⭐ `pointer-events:none` の要素は当たり判定から**抜ける**ので、上に描かれて
+    //    いても stack に出ない ── 逆に、その下の押しどころ（半透明の覆いなど）が
+    //    stack[0] に来る。実測 2026-08-24: Fanfare は Unity 忠実に「暗幕(dim)は後ろ・
+    //    告知の字は上・字は pointer-events:none でクリックを幕へ抜く」構造なので、
+    //    字は明るく見えているのに stack[0] は下の dim になり、⑦ が誤検知した。
+    //    ⭐ **`above()` と同じ土俵（DOM順＝描き順）で「本当に上か」を確かめる。**
+    //    top が el より後（＝上に描かれる）ときだけ「覆い」。
     const top = stack[0]
-    if (isText && top !== el && !el.contains(top) && !top.contains(el)) {
+    const paintsAbove = (a, b) =>
+      !!(b.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING)
+    if (isText && top !== el && !el.contains(top) && !top.contains(el) && paintsAbove(top, el)) {
       push(`覆われて見えない: ${el.id}「${el.textContent.slice(0, 12)}」← ${top.id || top.tagName}`)
       continue                                // ⚠️ 隠れているものの明暗は問わない
     }

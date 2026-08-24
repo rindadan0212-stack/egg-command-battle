@@ -109,6 +109,10 @@ const PAGES = args.length ? args : [
   '/app?seed=20260822&open=keep',
   // ⚠️ **演出は一瞬しか出ない。**⭐ 止めた形で開いて、置き方だけ見る
   '/app?seed=20260822&open=dice',
+  // ⭐ Fanfare は閉じるまで出しっぱなしなので、静かな検査でもそのまま見える。
+  //    卵（★が出る方）と誕生（★が出ない方）の両方を見る。
+  '/app?seed=20260822&open=fanfare',
+  '/app?seed=20260822&open=fanfareborn',
   '/fight?done=true&banner=win',
   '/app?seed=20260822&at=book&open=species',
   '/app?seed=20260822&at=book&open=skill',
