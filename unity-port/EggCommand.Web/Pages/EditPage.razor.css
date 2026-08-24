@@ -399,6 +399,19 @@
 .edhead { font-size: 15px; margin-bottom: 10px; display: flex; gap: 8px; align-items: baseline; }
 .edhint { color: #6d7390; padding: 10px; font-size: 12px; }
 
+/* ⭐ 段階3: 削除・追加・複製（構造編集）。⚠️ 選択数にかかわらず常に出る帯 ── 揃える・
+   等間隔（.edmulti・下）や通常の Inspector 欄とは同じ画面で混ざるので、線1本（下端だけ）
+   で区切る（区切りは余白／面／線のどれか一つ、の作法どおり）。⭐ 釦の見た目は
+   `.edalign-btn` をそのまま共有する（新しい色は増やさない）。 */
+.edstruct {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.edstructrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.edstructrow + .edstructrow { margin-top: 6px; }
+.edstructlabel { color: #9aa1b8; font-size: 11px; flex: 0 0 auto; }
+
 /* ⭐⑥ 揃える・等間隔（`_selected.Count>=2` のときだけ出す）。⚠️ 通常の Inspector 欄
    （左/上/幅/高・属性表）とは同じ画面で混ぜない ── どちらかしか出ない。
    区切りは余白で（線で囲わない）・角丸は押せる釦だけ、の作法どおり。 */

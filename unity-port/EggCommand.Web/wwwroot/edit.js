@@ -380,14 +380,16 @@ window.eggEdit = {
     return window.confirm('保存していない直しがあります。捨てて切り替えますか？')
   },
 
-  /** ⭐ Ctrl+Z / Ctrl+Shift+Z（取り消し／やり直し）と、⭐② 矢印キー（ナッジ）。
+  /** ⭐ Ctrl+Z / Ctrl+Shift+Z（取り消し／やり直し）と、⭐② 矢印キー（ナッジ）、
+   * ⭐ 段階3: Delete キー（選択を消す）。
    * ⚠️ **document 全体**で聞く（数値欄にフォーカスがあっても Ctrl+Z が効くように）
    * ── だから離れるとき必ず外す（`stop`）。外さないと、`/app`（遊ぶ頁）へ移っても
    * 生き残って奪い続ける。
    *
-   * ⚠️②矢印キーは Ctrl+Z と**同じ場所**に足す（道を2つに割らない、の指示）。
-   * ⭐ ただし矢印は「字を打っている最中」は素通し ── `input`/`textarea`/`select` に
-   * 焦点があるときは、値の入力や `<select>` の選び直しを矢印キーで邪魔しない。 */
+   * ⚠️②矢印キー・段階3 Delete キーは Ctrl+Z と**同じ場所**に足す（道を2つに割らない、
+   * の指示）。⭐ ただし矢印・Delete は「字を打っている最中」は素通し ── `input`/
+   * `textarea`/`select` に焦点があるときは、値の入力や `<select>` の選び直しを
+   * 邪魔しない（Delete は欄の中で字を消す操作とぶつかる）。 */
   keys(owner) {
     if (this._keyBound) document.removeEventListener('keydown', this._keyBound)
     // ⭐② 矢印 → (dx, dy) の向き（-1/0/1）。「きざみ」ぶんの掛け算は C# 側（`EditPage.Nudge`）
@@ -399,12 +401,21 @@ window.eggEdit = {
         owner.invokeMethodAsync(e.shiftKey ? 'Redo' : 'Undo')
         return
       }
+      // ⚠️ 字を打っている最中（数値欄・字そのもの欄・寄せ/色の <select>）は矢印・Delete を
+      //    素通しする ── でないと、欄の中でカーソルを動かす／字を消すつもりが
+      //    節点を動かす／消すほうへ暴発する。
+      const tag = document.activeElement && document.activeElement.tagName
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+      // ⭐ 段階3: Delete キーで選択を消す（確認ダイアログは出さない ── undo が安全網）。
+      if (e.key === 'Delete') {
+        if (typing) return
+        e.preventDefault()
+        owner.invokeMethodAsync('DeleteSelected')
+        return
+      }
       const dir = ARROWS[e.key]
       if (!dir) return
-      // ⚠️ 字を打っている最中（数値欄・字そのもの欄・寄せ/色の <select>）は矢印を素通しする
-      //    ── でないと、欄の中でカーソルを動かすつもりが節点を動かしてしまう。
-      const tag = document.activeElement && document.activeElement.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (typing) return
       e.preventDefault()
       owner.invokeMethodAsync('Nudge', dir[0], dir[1])
     }

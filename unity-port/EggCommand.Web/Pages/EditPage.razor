@@ -252,6 +252,27 @@
 
     @* ── その1つ ───────────────────────────────── *@
     <div class="edinspector">
+      @* ⭐ 段階3: 削除・追加・複製（構造編集）。⚠️ 揃える・等間隔（.edmulti）や通常の欄と
+         ぶつからないよう、選択数にかかわらず常に出す帯として独立させる（追加は選択不要）。
+         削除は1つ以上・複製はちょうど1つのときだけ押せる（「押せないことも示す」作法）。 *@
+      <div class="edstruct">
+        <div class="edstructrow">
+          <button type="button" class="edalign-btn eddel-btn" disabled="@(_selected.Count == 0)"
+                  title="消す（Delete キーでも）" @onclick="DeleteSelected">🗑 消す</button>
+          <button type="button" class="edalign-btn eddup-btn" disabled="@(_selected.Count != 1)"
+                  title="複製" @onclick="DuplicateSelected">複製</button>
+        </div>
+        <div class="edstructrow">
+          <span class="edstructlabel">足す</span>
+          @foreach (var k in AddKindPalette)
+          {
+            var kind = k.Kind;
+            <button type="button" class="edalign-btn edadd-btn" data-kind="@kind"
+                    title="@(k.Label)を足す" @onclick="() => AddKind(kind)">@k.Label</button>
+          }
+        </div>
+      </div>
+
       @if (_raw is not null && _selected.Count >= 2)
       {
         @* ⭐⑥ 揃える・等間隔。⚠️ 2個以上のときだけ出す（作者の pixelizer の教訓
@@ -1154,6 +1175,248 @@
         RingRefresh();
         StateHasChanged();
         Flash(_selectedLine);   // ⭐ Pass B: Undo/Redo も「確定した1動作」
+    }
+
+    // ── ⭐ 段階3: 削除・追加・複製（構造編集） ────────────────
+    //
+    // ⭐ 唯一の往復の出口は今までと同じ（`Layouts.Write`/`Layouts.Parse`）。新しい直列化は
+    //   作らない。新規節点は必ず `NewNode`（フル引数コンストラクタ・terminator は
+    //   `DocTerminator()` でファイルに合わせる）の1経路だけを通る。⚠️ Core（`Layout.cs` 等）
+    //   は変更しない ── ここは既にある「消えた節点＝行が消える／LineNumber=-1 の節点＝
+    //   末尾へ追記」の仕組み（`Layouts.Write`）に乗るだけ。
+
+    /// <summary>⭐ 追加パレットの6種（`wiki/開発/web移行計画.md` §11-3）。⚠️ **除外**:
+    /// `icon`/`pixel`（`pic=` が要る）・`scroll`（`content=`）・`bar`（結線）・
+    /// `veil`/`host`（特殊） ── rect だけでは不備0にならない・段階3の属性では埋められない
+    /// （除外は UI に出さない）。</summary>
+    private static readonly (string Kind, string Label)[] AddKindPalette =
+    {
+        ("box", "box"), ("card", "card"), ("label", "字"),
+        ("button", "釦"), ("line", "線"), ("round", "丸"),
+    };
+
+    /// <summary>⭐ 新規節点を作る**唯一の出所**。⚠️ 短い13引数コンストラクタ
+    /// （Terminator="\n" 固定）は使わない ── CRLF ファイルで混在するため、
+    /// 必ずフル引数で <see cref="DocTerminator"/> を渡す。</summary>
+    private LayoutNode NewNode(string name, string kind, float left, float top, float width, float height,
+        IReadOnlyDictionary<string, string> options, IReadOnlyList<LayoutNode> children, int indent) =>
+        new LayoutNode(name, kind, left, top, width, height,
+            options, children,
+            // ⚠️ `fields`/`partId` は Core 側で非 null 引数（Web の nullable enable では
+            //    素の null が CS8625 になる）── 値としては「行を知らない」「自前の行」を
+            //    意味する null のまま渡す（挙動は変えない・警告だけ避ける）。
+            lineNumber: -1, indent: indent, fields: Array.Empty<LayoutField>(), trailing: "",
+            terminator: DocTerminator(), partId: null!, partLine: -1);
+
+    /// <summary>⭐ この文書の終端文字（CRLF/LF）── <see cref="_raw"/>.Lines を後ろから見て、
+    /// 最初の非空の Terminator を返す（無ければ "\n"）。CRLF/LF をファイルに合わせる唯一の出所。</summary>
+    private string DocTerminator()
+    {
+        if (_raw is not null)
+            for (int i = _raw.Lines.Count - 1; i >= 0; i--)
+                if (_raw.Lines[i].Terminator.Length > 0) return _raw.Lines[i].Terminator;
+        return "\n";
+    }
+
+    /// <summary>🔴 追加/複製で -1 節点を足す**直前に必ず**呼ぶ。⚠️ 最終行の Terminator が
+    /// 空だと、末尾追記が前の行と同じ行に融合する（`Write(Parse(candidate))==candidate` が
+    /// 融合後も成り立ってしまう、保存ガードをすり抜けるサイレント破損 ── 仕様書「罠」参照）。
+    ///
+    /// ⭐ `Layouts.SplitLines`（Core）は原文の末尾に必ず「最終改行の後ろ」の空プレースホルダ
+    /// （Text=="" かつ Terminator==""）を1行足す ── だから `_raw.Lines` の最後の要素の
+    /// Text が空なら、そのファイルは既に改行で終わっている（何もしない）。Text が空でない
+    /// のに Terminator が空なら、それが「改行の無い最終行」の実体 ── その行（節点行 or
+    /// skippable）へ終端を補う。⚠️ 現行33枚は全て末尾改行ありなので通常は no-op（防御の壁）。</summary>
+    private void EnsureTrailingTerminator()
+    {
+        if (_raw is null || _raw.Lines.Count == 0) return;
+        int last = _raw.Lines.Count - 1;
+        var line = _raw.Lines[last];
+        if (line.Terminator.Length > 0 || line.Text.Length == 0) return;   // 既に改行で終わっている
+
+        var node = Find(_raw.Roots, last);
+        if (node is not null)
+        {
+            // ⭐ 節点行 ── その行を claim している節点を、Terminator だけ差し替えて作り直す。
+            var roots = ReplaceLine(_raw.Roots, last, n => new LayoutNode(
+                n.Name, n.Kind, n.Left, n.Top, n.Width, n.Height,
+                n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, DocTerminator(),
+                n.PartId, n.PartLine));
+            _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
+        }
+        else
+        {
+            // ⭐ skippable 行（コメント・空行） ── `_raw.Lines` の該当 RawLine を差し替える。
+            var lines = new List<Core.RawLine>(_raw.Lines);
+            lines[last] = new Core.RawLine(line.Text, DocTerminator());
+            _raw = new Core.Layout(_raw.Id, _raw.Roots, lines);
+        }
+    }
+
+    /// <summary>⭐ 兄弟（＝ルート）と重ならない一意名。空きなら `baseName` そのまま、
+    /// 埋まっていれば `baseName2`,`baseName3`… （`Faults.DuplicateName` を必ず避けるため）。</summary>
+    private string UniqueRootName(string baseName)
+    {
+        if (_raw is null) return baseName;
+        var used = new HashSet<string>();
+        foreach (var r in _raw.Roots) used.Add(r.Name);
+        if (!used.Contains(baseName)) return baseName;
+        int i = 2;
+        while (used.Contains(baseName + i.ToString(CultureInfo.InvariantCulture))) i++;
+        return baseName + i.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>追加/複製の直後、-1 節点を含む木を `Parse(Write(...))` で組み直してから
+    /// （＝盤が見るのと同じ、行番号が確定した木にしてから）名前で引いて選ぶ。⚠️ 新節点は
+    /// LineNumber=-1 だが、`Refresh()`（Write→Parse→Draw）を経ると新しい行番号が付くので、
+    /// これが唯一の安全な選び方 ── `_raw` もこの組み直し後の木に置き換える（以後の編集・
+    /// undo が「盤と同じ木」を触るように。この Parse し直しは undo スナップショット
+    /// ── `CommitAction` が積む Write 文字列 ── には影響しない ── 文字列は同じ）。</summary>
+    private void SelectNewRoot(string name)
+    {
+        if (_raw is null) return;
+        _raw = Core.Layouts.Parse(_of, Core.Layouts.Write(_raw));
+        foreach (var r in _raw.Roots)
+        {
+            if (r.Name == name) { SelectOnly(r.LineNumber); return; }
+        }
+    }
+
+    // ── 1) 削除 ──────────────────────────────────────
+
+    /// <summary>`list` を再帰で辿り、`lines` に含まれる節点（**と、その子孫まるごと**）を
+    /// 落とした新しい木を返す。⚠️ `_raw.Lines`（原文の生行）は触らない ── `Write` は
+    /// claim されなくなった行を自分で「消えた節点」として省く。</summary>
+    private static List<LayoutNode> RemoveLines(IReadOnlyList<LayoutNode> list, HashSet<int> lines)
+    {
+        var result = new List<LayoutNode>(list.Count);
+        foreach (var n in list)
+        {
+            if (lines.Contains(n.LineNumber)) continue;   // ⭐ 子孫には再帰しない＝丸ごと落ちる
+            var kids = RemoveLines(n.Children, lines);
+            result.Add(new LayoutNode(n.Name, n.Kind, n.Left, n.Top, n.Width, n.Height,
+                n.Options, kids, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+                n.PartId, n.PartLine));
+        }
+        return result;
+    }
+
+    /// <summary>⭐ 選択中の節点（と子孫）をまとめて消す。⚠️ 確認ダイアログは出さない
+    /// （undo が安全網）。**これで1つの取り消し**。⭐ Delete キー（`edit.js` の `keys`）
+    /// からも、Inspector の釦（<see cref="AddKindPalette"/> の隣）からも、ここが唯一の入口。</summary>
+    [JSInvokable]
+    public void DeleteSelected()
+    {
+        if (_raw is null || _selected.Count == 0) return;
+        BeginAction();
+        var roots = RemoveLines(_raw.Roots, new HashSet<int>(_selected));
+        _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
+        ClearSelection();   // ⚠️ 消した節点はもう選べない（選択・輪・Inspector 欄をまとめて空にする）
+        Refresh();
+        CommitAction();
+        StateHasChanged();   // ⭐ JSInvokable（Delete キー）経由でも再描画されるように
+    }
+
+    // ── 2) 追加（種類パレット） ──────────────────────────
+
+    /// <summary>⭐ 種類パレットから新しいルート節点を末尾へ足す。⚠️ JS から来た値を
+    /// そのまま信用しない（パレット外の種類は無視）。**これで1つの取り消し**。</summary>
+    [JSInvokable]
+    public void AddKind(string kind)
+    {
+        if (_raw is null) return;
+        if (Array.FindIndex(AddKindPalette, k => k.Kind == kind) < 0) return;   // ⚠️ 知らない種類は無視
+        BeginAction();
+        EnsureTrailingTerminator();
+
+        bool small = kind == "label" || kind == "button";
+        var options = new Dictionary<string, string>();
+        if (kind == "label") options["text"] = "字";
+        else if (kind == "button") options["text"] = "押す";
+
+        string name = UniqueRootName(kind);
+        var node = NewNode(name, kind, 390f, 900f, 300f, small ? 90f : 120f,
+            options, new List<LayoutNode>(), 0);
+        var roots = new List<LayoutNode>(_raw.Roots) { node };
+        _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
+
+        Refresh();
+        SelectNewRoot(name);
+        CommitAction();
+        StateHasChanged();
+    }
+
+    // ── 3) 複製 ──────────────────────────────────────
+
+    /// <summary>選んでいる部分木を -1 の新しいルートとして複製する。⚠️ 親（複製の根）の
+    /// left/top は選択節点の**絶対座標**＋オフセット(16,16) ── その場に重なって出る体感に
+    /// する（ルート化しても位置が飛ばない）。子孫は left/top をそのまま（親からの相対は
+    /// 不変で正しい）、indent だけ (子孫.Indent − 選択節点.Indent) で相対の深さを保つ ──
+    /// `Write` の `Collect` が DFS 前順（親→子）で積むので、末尾ブロックは
+    /// 「親(indent0)→子(indent≥1)」の整った字下げになり、`Parse` で正しく入れ子になる。</summary>
+    private LayoutNode CloneAsNewRoot(LayoutNode origin)
+    {
+        var (absLeft, absTop) = AbsolutePosition(origin.LineNumber);
+        var options = new Dictionary<string, string>(origin.Options);   // ⭐ deep copy
+        var children = new List<LayoutNode>();
+        foreach (var child in origin.Children) children.Add(CloneDescendant(child, origin.Indent));
+        string name = UniqueRootName(origin.Name);
+        return NewNode(name, origin.Kind, absLeft + 16f, absTop + 16f, origin.Width, origin.Height,
+            options, children, 0);
+    }
+
+    /// <summary>複製する子孫1つぶん。⚠️ name・left/top はそのまま（部分木内で既に一意・
+    /// 親からの相対座標は不変）。indent は `rootIndent`（元の選択節点の Indent）からの
+    /// 相対で計算し直す ── 新しい親が indent0 になるぶんだけ、一律に引き下げる。</summary>
+    private LayoutNode CloneDescendant(LayoutNode node, int rootIndent)
+    {
+        var options = new Dictionary<string, string>(node.Options);
+        var children = new List<LayoutNode>();
+        foreach (var child in node.Children) children.Add(CloneDescendant(child, rootIndent));
+        return NewNode(node.Name, node.Kind, node.Left, node.Top, node.Width, node.Height,
+            options, children, node.Indent - rootIndent);
+    }
+
+    /// <summary>その行の節点の、画面基準の絶対座標（祖先の Left/Top を足し込んだもの）。
+    /// ⚠️ `_raw`（原文の生の木）だけを見る（<see cref="Locate"/> と同じ理由）。</summary>
+    private (float Left, float Top) AbsolutePosition(int line)
+    {
+        if (_raw is not null && TryAbsolute(_raw.Roots, line, 0f, 0f, out var x, out var y)) return (x, y);
+        return (0f, 0f);
+    }
+
+    private static bool TryAbsolute(IReadOnlyList<LayoutNode> list, int line, float accX, float accY,
+        out float x, out float y)
+    {
+        foreach (var n in list)
+        {
+            float nx = accX + n.Left, ny = accY + n.Top;
+            if (n.LineNumber == line) { x = nx; y = ny; return true; }
+            if (TryAbsolute(n.Children, line, nx, ny, out x, out y)) return true;
+        }
+        x = 0f; y = 0f;
+        return false;
+    }
+
+    /// <summary>⭐ 選択が1つのときだけ有効（複数対応は任意 ── 素直な形に留める）。
+    /// **これで1つの取り消し**。</summary>
+    [JSInvokable]
+    public void DuplicateSelected()
+    {
+        if (_raw is null || _selected.Count != 1) return;
+        var origin = Find(_raw.Roots, _selected[0]);
+        if (origin is null) return;
+
+        BeginAction();
+        EnsureTrailingTerminator();
+        var clone = CloneAsNewRoot(origin);
+        var roots = new List<LayoutNode>(_raw.Roots) { clone };
+        _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
+
+        Refresh();
+        SelectNewRoot(clone.Name);
+        CommitAction();
+        StateHasChanged();
     }
 
     // ── 掴んで動かす ────────────────────────────────
