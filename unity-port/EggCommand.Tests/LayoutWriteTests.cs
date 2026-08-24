@@ -542,6 +542,62 @@ public class LayoutWriteTests
         Assert.Contains("when=!done text=あきらめる", written);
     }
 
+    // ── #7b ⭐③ `/edit` の「複製を掴んで gap を動かす」が通る道 ─────
+    //
+    // ⚠️ `EditPage.ApplyGap`/`WithGap` は #7 と**同じ土台**（`Options` 辞書を
+    // 差し替えた新しい節点を作り、`RenderLine`/`Write` に詰め直させる）に乗っている
+    // だけなので、#7 の検査で既に守られている。⭐ それでも「`gap=` という具体名」で
+    // 1本だけ固定しておく ── `repeat=` の複製を掴んで動かす機能そのものの回帰検査として。
+
+    /// <summary>既にある `gap=12` を `gap=52` に書き換えても、**その1行だけ**が変わり、
+    /// 読み直すと新しい値になる（複製ではなく元の1行を直している証拠）。</summary>
+    [Fact]
+    public void gapを書き換えるとその行だけ変わり読み直せる()
+    {
+        const string original =
+            "grid   box    0 0 984 400\n  cell card 26 0 224 200 repeat=box cols=4 gap=12 rows=212\n";
+        var layout = Layouts.Parse("t", original);
+        var cell = layout.Roots[0].Children[0];
+        Assert.Equal("12", cell.Option("gap"));
+
+        var options = new Dictionary<string, string>(cell.Options) { ["gap"] = "52" };
+        var changed = new LayoutNode(cell.Name, cell.Kind, cell.Left, cell.Top, cell.Width, cell.Height,
+            options, cell.Children, cell.LineNumber, cell.Indent, cell.Fields,
+            cell.Trailing, cell.Terminator);
+
+        string written = changed.RenderLine();
+        Assert.Equal("  cell card 26 0 224 200 repeat=box cols=4 gap=52 rows=212\n", written);
+
+        var reparsed = Layouts.Parse("t", "grid   box    0 0 984 400\n" + written);
+        Assert.Equal("52", reparsed.Roots[0].Children[0].Option("gap"));
+    }
+
+    /// <summary>`gap=` を持たない `repeat=` の節点（`nests.txt`/`panel.txt` の実物と同じ形）に
+    /// 新しく `gap=` を足しても、既存の欄（`rows=`/`max=`）は無傷で、読み直すと足した値になる。</summary>
+    [Fact]
+    public void gapが無い節点に足しても他の欄は無傷で読み直せる()
+    {
+        const string original = "card card 0 0 984 380 repeat=nests cols=1 rows=400 max=3 tap=nest\n";
+        var layout = Layouts.Parse("t", original);
+        var node = layout.Roots[0];
+        Assert.Null(node.Option("gap"));
+
+        var options = new Dictionary<string, string>(node.Options) { ["gap"] = "8" };
+        var changed = new LayoutNode(node.Name, node.Kind, node.Left, node.Top, node.Width, node.Height,
+            options, node.Children, node.LineNumber, node.Indent, node.Fields,
+            node.Trailing, node.Terminator);
+
+        string written = changed.RenderLine();
+        var reparsed = Layouts.Parse("t", written);
+        var back = reparsed.Roots[0];
+        Assert.Equal("8", back.Option("gap"));
+        // ⚠️ 元からあった欄が壊れていないことも確かめる（新顔を足す操作が既存を巻き込まない）。
+        Assert.Equal("1", back.Option("cols"));
+        Assert.Equal("400", back.Option("rows"));
+        Assert.Equal("3", back.Option("max"));
+        Assert.Equal("nest", back.Option("tap"));
+    }
+
     // ── #8 解決済みの木は書き戻せない ────────────────────
     //
     // ⚠️ `Layouts.Resolve` / `Splice` / `Rename` を通した木は、部品が展開済み・冠付きで、

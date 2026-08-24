@@ -481,9 +481,23 @@ namespace EggCommand.Core
         public IReadOnlyList<Box> Boxes;
         /// <summary>「ここが悪い」の形。⚠️ 形で示せないものを無理に埋めず null のままにする。</summary>
         public Box? Focus;
+        /// <summary>⭐ <see cref="Lines"/> と**同じ本数・同じ並び**（2026-08-24・
+        /// `課題.md`「不備を『押して選ぶ』には、Fault にも出所が要る」への手当て）。
+        ///
+        /// ⚠️ `Lines[i]` が -1（`use=` で差し込まれた側）のときだけ非 null ──
+        /// どの部品ファイルから来たかを言う（<see cref="LayoutNode.PartId"/> と同じ規約）。
+        /// `Lines[i] >= 0`（自前の行）のときは null。</summary>
+        public IReadOnlyList<string> PartIds;
+        /// <summary><see cref="PartIds"/> のファイルの中での行番号。⚠️ 対応する
+        /// <see cref="PartIds"/> が null なら -1（<see cref="LayoutNode.PartLine"/> と同じ規約）。</summary>
+        public IReadOnlyList<int> PartLines;
 
+        /// <summary>⚠️ 🔴 `partIds`/`partLines` を省略可能にしない ── `Fault` を作るのは
+        /// この 1 ファイルの中だけ（`LayoutNode` の 43 箇所とは違う）。省略できると、
+        /// 呼び出し側の1つが更新を忘れても検査でしか気づけない。</summary>
         public Fault(FaultKind kind, string id, string text,
-            IReadOnlyList<int> lines, IReadOnlyList<Box> boxes, Box? focus)
+            IReadOnlyList<int> lines, IReadOnlyList<Box> boxes, Box? focus,
+            IReadOnlyList<string> partIds, IReadOnlyList<int> partLines)
         {
             Kind = kind;
             Id = id;
@@ -491,6 +505,8 @@ namespace EggCommand.Core
             Lines = lines;
             Boxes = boxes;
             Focus = focus;
+            PartIds = partIds;
+            PartLines = partLines;
         }
     }
 
@@ -938,6 +954,8 @@ namespace EggCommand.Core
         /// 作らせないための唯一の出所（`NoLayout` と、多くの単発不備が使う）。</summary>
         private static readonly int[] NoLines = Array.Empty<int>();
         private static readonly Box[] NoBoxes = Array.Empty<Box>();
+        private static readonly string[] NoParts = Array.Empty<string>();
+        private static readonly int[] NoPartLines = Array.Empty<int>();
 
         /// <summary>骨組みの不備を、形（<see cref="Box"/>）まで持たせて数える。
         /// ⭐ **`Faults` の本体はこちら。**
@@ -953,7 +971,7 @@ namespace EggCommand.Core
             var faults = new List<Fault>();
             if (layout == null)
             {
-                faults.Add(new Fault(FaultKind.NoLayout, null, "骨組みが無い", NoLines, NoBoxes, null));
+                faults.Add(new Fault(FaultKind.NoLayout, null, "骨組みが無い", NoLines, NoBoxes, null, NoParts, NoPartLines));
                 return faults;
             }
 
@@ -989,9 +1007,15 @@ namespace EggCommand.Core
         {
             // ⭐ 字を組む場所は今までと同じ（1バイトも変えない）。Boxes/Lines/Focus だけ
             //    ここでまとめて足す ── call site ごとに手で書くと、いつか1つ書き忘れる。
+            // ⭐ `Add` を通す不備は、みな「いま見ている node」1つだけが出所（lines は必ず
+            //    1本 ── 2本の不備は下の ExclusivePairInFlow のように直に problems.Add する）。
+            //    ⚠️ だから PartId/PartLine もここで1回だけ node から作れば、
+            //    呼び出し側20箇所すべてが自動で出所を持つ（1つずつ書かせない）。
+            var onePart = new[] { node.PartId };
+            var onePartLine = new[] { node.PartLine };
             void Add(FaultKind kind, string text, IReadOnlyList<int> lines,
                 IReadOnlyList<Box> boxes, Box? focus = null)
-                => problems.Add(new Fault(kind, id, text, lines, boxes, focus));
+                => problems.Add(new Fault(kind, id, text, lines, boxes, focus, onePart, onePartLine));
 
             // ⭐ **効く上端はここ1か所で決める。**⚠️ 以降で node.Top を直に読まない
             //    ── 読んだ場所だけ詰める前の数を見て、検査が嘘になる。
@@ -1206,14 +1230,16 @@ namespace EggCommand.Core
                         {
                             var ci = node.Children[i];
                             var cj = node.Children[j];
-                            Add(FaultKind.ExclusivePairInFlow,
+                            // ⚠️ ここは `Add`（1本前提）を通さない ── 2本になるので直に problems.Add する。
+                            problems.Add(new Fault(FaultKind.ExclusivePairInFlow, id,
                                 $"{id}/{node.Name}: 詰める中に入れ替わる2つ「{ci.Name}」×「{cj.Name}」── 決め打ちの位置か、別の骨組みに置く",
                                 new[] { ci.LineNumber, cj.LineNumber },
                                 new[]
                                 {
                                     new Box(x + ci.Left, y + tops[i], ci.Width, ci.Height),
                                     new Box(x + cj.Left, y + tops[j], cj.Width, cj.Height),
-                                });
+                                }, null,
+                                new[] { ci.PartId, cj.PartId }, new[] { ci.PartLine, cj.PartLine }));
                         }
             }
 
@@ -1247,10 +1273,14 @@ namespace EggCommand.Core
                     var bBox = new Box(ownerX + list[j].Left, ownerY + tops[j], list[j].Width, list[j].Height);
                     var lines = new[] { list[i].LineNumber, list[j].LineNumber };
                     var boxes = new[] { aBox, bBox };
+                    // ⭐ 兄弟どうしの不備も2本 ── ExclusivePairInFlow と同じ理由で、
+                    //    それぞれの節点自身の PartId/PartLine を運ぶ。
+                    var parts = new[] { list[i].PartId, list[j].PartId };
+                    var partLines = new[] { list[i].PartLine, list[j].PartLine };
 
                     if (list[i].Name == list[j].Name)
                         problems.Add(new Fault(FaultKind.DuplicateName, id,
-                            $"{id}/{owner}: 「{list[i].Name}」が2つある", lines, boxes, null));
+                            $"{id}/{owner}: 「{list[i].Name}」が2つある", lines, boxes, null, parts, partLines));
 
                     if (!Overlaps(list[i], tops[i], list[j], tops[j])) continue;
                     // ⭐ 条件で入れ替わる2つは、同時には出ない
@@ -1261,7 +1291,7 @@ namespace EggCommand.Core
                     {
                         problems.Add(new Fault(FaultKind.LabelOverlap, id,
                             $"{id}/{owner}: 字の重なり「{list[i].Name}」×「{list[j].Name}」",
-                            lines, boxes, Intersect(aBox, bBox)));
+                            lines, boxes, Intersect(aBox, bBox), parts, partLines));
                         continue;
                     }
 
@@ -1271,7 +1301,7 @@ namespace EggCommand.Core
                     {
                         problems.Add(new Fault(FaultKind.TapOverlap, id,
                             $"{id}/{owner}: 押しどころの重なり「{list[i].Name}」×「{list[j].Name}」── 片方に指が届かない",
-                            lines, boxes, Intersect(aBox, bBox)));
+                            lines, boxes, Intersect(aBox, bBox), parts, partLines));
                     }
                 }
             }

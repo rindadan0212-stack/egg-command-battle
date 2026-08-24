@@ -93,6 +93,51 @@
   transform: translate(-50%, -50%) scale(.3);
   background: #bdebff;
 }
+/* ⭐ 不備を描く層。⚠️ #edstage と**同じ位置・同じ倍率**（edit.js の fit() が
+   両方へ transform を掛ける）── だから中の要素は設計 px をそのまま置くだけでよい
+   （実寸換算は要らない）。既定 pointer-events:none（Box は下の本体へ素通しする ──
+   #edcap のいちばん上に不備の絵を重ねると、盤全体の掴み・押しどころを覆ってしまう）。 */
+.edfaults {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1080px;
+  height: 1920px;
+  transform-origin: center center;
+  transform: translate(-50%, -50%) scale(.3);   /* ⭐ 初期値。edit.js の fit() が上書き */
+  pointer-events: none;
+  z-index: 1;   /* ⚠️ #edstage/#edcap の上・#edring/#edguide（2）の下 */
+}
+/* ⚠️ 🔴 **`::deep` が要る。**`.edfault-box`/`.edfault-focus` は Razor の要素ではなく
+   `(MarkupString)_faultHtml`（C# が組み立てた生の HTML 文字列）の中身 ── Blazor の
+   CSS 分離はコンパイル時に「Razor が知っている要素」だけへ scope 属性（`b-xxxxx`）を
+   振るので、MarkupString の中身は対象外になり、`::deep` を付けない素の `.edfault-box`
+   は一致しない（実測 2026-08-24: 属性が付かず `position` が `static` に落ち、`left`/`top`
+   が効かず縦積みになった）。⭐ `.n`（`_html` も同じ MarkupString）が `stage.css`
+   という**別の・分離していない**シートで描かれているのも同じ理由 ── ただしこちらは
+   `stage.css`（遊びの絵の意匠）を汚したくないので、`::deep` でこのファイルのまま守る。 */
+.edfaults ::deep .edfault-box {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid rgba(224, 79, 95, .55);
+  box-sizing: border-box;
+}
+/* ⭐ 「ここが悪い」の形。⚠️ 面で塗らず、薄い斜線だけ（輪郭は少し濃くして目立たせる）。
+   `pointer-events:auto` はここだけ ── 実体の外（画面の外・親の外・足りない高さの帯）
+   にはみ出すことがあり、下の本体だけでは拾えないため（`eggEdit.faultsListen` が受ける）。 */
+.edfaults ::deep .edfault-focus {
+  position: absolute;
+  pointer-events: auto;
+  cursor: pointer;
+  box-sizing: border-box;
+  border: 2px solid #e04f5f;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(224, 79, 95, .38) 0 8px,
+    rgba(224, 79, 95, .14) 8px 16px
+  );
+}
+
 /* ⭐ 選んでいる節点を輪で囲む。⚠️ 塗り潰さない（この作品の約束・stage.css の
    `.n.card.lead` と同じ考え方）。
    ⚠️ **盤（#edstage）の外の層に置く**（EditPage.razor 参照）── #edstage には
@@ -202,13 +247,38 @@
 .edbottom {
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
+  /* ⚠️ 一覧が複数行に畳まれても、件数の印は上端で揃える（center だと沈んで見える）。 */
+  align-items: flex-start;
   gap: 10px;
   padding: 7px 12px;
   background: #191d2b;
   border-top: 1px solid rgba(255, 255, 255, .08);
   font-size: 12px;
 }
-.edok { color: #2fa84a; }
-.edbad { color: #e04f5f; }
-.edfaultline { color: #b9bfd4; }
+.edbad { padding-top: 4px; }   /* ⭐ 一覧の釦（padding込み）と字の頭を揃える */
+.edok { color: #2fa84a; padding-top: 4px; }
+/* ⭐ 一覧。⚠️ ここだけ横スクロールでなく**下へ畳む**（`flex-wrap`）── この頁は
+   スクロール0が作法（`画面の作法.md`）だが、件数はデータ次第で読めないので、
+   唯一「帯そのものが伸びる」ことを選んだ（`edmain` が押される・溢れない）。 */
+.edfaultlist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.edfaultitem {
+  background: #232840;
+  color: #d7dae6;
+  border: 1px solid rgba(224, 79, 95, .45);
+  border-radius: 6px;   /* ⭐ 押せる要素なので角丸（区切りには使わない、の作法どおり） */
+  padding: 3px 10px;
+  font: inherit;
+  cursor: pointer;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.edfaultitem:hover { background: #2b3150; border-color: #e04f5f; }

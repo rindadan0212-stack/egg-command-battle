@@ -113,6 +113,21 @@
           <div id="edcap" class="edcap"></div>
         </div>
       </div>
+      @* ⭐ **不備の形。**盤（#edstage）と**同じ倍率**を掛けて重ねる別の層
+         （`edit.js` の `fit()` が edstage と一緒にこの層も scale する）。
+         ⚠️ **`#edcap` の中には置かない**（覆いは指を受け止める最優先の層 ──
+         そこに描くと、不備の絵が指の受け止めより手前に出て、盤全体の掴み・
+         押しどころを覆ってしまう）。⭐ 座標は `Fault.Boxes`/`Focus`（絶対 px）を
+         そのまま置くだけ ── edstage と同じ倍率なので、実寸換算の JS 計算が要らない。
+         ⚠️ 面で塗り潰さない（輪郭線と、Focus だけ薄い斜線）。既定は
+         `pointer-events:none`（Box は下の本体へ素通し ── 本体は既に data-line/
+         data-part を持つので、覆いの外でも今までどおり選べる）。
+         **Focus だけ**自分で押しどころを持つ（`eggEdit.faultsListen`）
+         ── 実体の外（画面の外・親の外・足りない高さの帯）にはみ出すことがあり、
+         下に何も無いことがあるため。 *@
+      <div id="edfaults" class="edfaults">
+        @((MarkupString)_faultHtml)
+      </div>
       @* ⭐ **輪と掴みどころは、盤の外の層に置く。**
          ⚠️ 盤（#edstage）には `scale(k)` が掛かっている。輪をその中に置くと、
          掴みどころ（8個の四角）も一緒に縮んで、盤を小さく表示しているときに
@@ -152,6 +167,15 @@
           @Field("高", _height, v => ApplyHeight(v))
         </div>
 
+        @* ⭐③ `repeat=` を持つ節点だけ、その間隔（gap）も直に打てるようにする。
+           ⚠️ 持たない節点では出さない（空の欄を先に見せない、の教訓）。 *@
+        @if (sel.Option("repeat") != null)
+        {
+          <div class="edfieldrow">
+            @Field("gap", _gap, v => ApplyGap(v))
+          </div>
+        }
+
         <div class="edstepwrap">
           <span>きざみ</span>
           <input class="edstepnum" type="number" value="@_step"
@@ -169,12 +193,29 @@
     }
     else if (_faults.Count == 0)
     {
+      @* ⚠️ 0件のときは一覧の器（`edfaultlist`）ごと出さない
+         （作者の pixelizer の教訓「空の欄を先に見せない」）。 *@
       <span class="edok">● 不備 0件</span>
     }
     else
     {
       <span class="edbad">● @(_faults.Count)件</span>
-      <span class="edfaultline">@_faults[0]</span>
+      @* ⭐ 一覧にして押せるようにした。⚠️ 横並びのまま溢れたら**下へ畳む**
+         （`flex-wrap`）── この頁の作法「溢れたら畳み方を間違えている合図」を
+         守りつつ、この帯だけは中身の件数が読めないので、唯一
+         横スクロールでなく縦に伸びることを選んだ（`edmain` が押される）。 *@
+      <div class="edfaultlist">
+        @for (var i = 0; i < _faults.Count; i++)
+        {
+          // ⚠️ for のループ変数をそのまま @onclick へ渡すと、全部の釦が
+          //    最後の i を掴んでしまう ── 1回ごとにローカルへ写す。
+          var at = i;
+          <button type="button" class="edfaultitem" title="@_faults[at].Text"
+                  @onclick="() => SelectFault(at)">
+            @_faults[at].Text
+          </button>
+        }
+      </div>
     }
   </div>
 </div>
@@ -200,9 +241,19 @@
     private Core.Layout? _raw;
     private int _selectedLine = -1;
     private string _html = "";
-    private List<string> _faults = new();
+    // ⭐ 2026-08-24: 字（`Layouts.Faults`）でなく形（`Layouts.Inspect`）を持つ ──
+    //    盤に描く（`Boxes`/`Focus`）にも、押して選ぶ（`Lines`/`PartIds`/`PartLines`）にも、
+    //    字だけの `List<string>` では足りない。
+    private List<Core.Fault> _faults = new();
+    /// <summary>⭐ 不備を盤の上に描く層（`#edfaults`）の中身。⚠️ `_html` と同じ理由で
+    /// `MarkupString` として流し込む（Blazor の `@onclick` は個々の枠に付けられない）。</summary>
+    private string _faultHtml = "";
     private string _status = "";
     private float _left, _top, _width, _height;
+    /// <summary>⭐③ `repeat=` を持つ節点だけの欄（Inspector に条件つきで出す）。
+    /// ⚠️ 持たない節点では意味を持たない値なので、欄自体を出さない
+    /// （作者の pixelizer の教訓「空の欄を先に見せない」）。</summary>
+    private float _gap;
     private float _step = 10f;
 
     /// <summary>⭐ 吸い付きは**設計 px**で8以内だけ（唯一の出所）。
@@ -228,6 +279,24 @@
     /// **この元の位置からの累計**で計算する ── 毎フレーム「今の位置」から足すと、
     /// 吸い付きで丸めた誤差が積み重なって暴れる。</summary>
     private LayoutNode? _dragOrigin;
+
+    // ── ③ repeat= の複製を掴んだときの状態 ──────────
+    // ⭐ 規則（2026-08-24・作者の指摘で確定）: **左端の列（列0）が錨。それ以外の列が
+    //    間隔（gap）を決める。** 0列目を横へ動かすと今までどおり「左」（並び全体が動く）、
+    //    1列目以降を横へ動かすと「gap」。縦はどの列を掴んでも常に「上」（並び全体）
+    //    ── 縦の段の高さは `rows=` の領分（`Layouts.StepOf`）で、`gap` は一度も効かない
+    //    （実物41箇所を洗った：`cols>=2` で複数段になる骨組みは必ず `rows=` を明示している。
+    //    `rows=` を書いていない6箇所は全部 `max==cols`＝1段だけなので、縦方向の
+    //    「`gap` が縦にも効く」場面はそもそも実在しない）。
+
+    /// <summary>掴んだ複製の番号（0始まり）。⚠️ -1 なら「複製でない普通の掴み」
+    /// （今までどおり 左/上）。DOM の id 末尾 `#N`（`LayoutDom.One` が付ける）から読む。</summary>
+    private int _repeatIndex = -1;
+    /// <summary>掴んだ節点自身の `cols=`（無ければ1）。列 = <see cref="_repeatIndex"/> % これ。</summary>
+    private int _repeatCols = 1;
+    /// <summary>掴んだ瞬間の `gap=`（無ければ0）。<see cref="_dragOrigin"/> と同じく
+    /// 「元の値からの累計」で動かすための起点。</summary>
+    private float _repeatBaseGap;
 
     private string? _resizeHandle;
     private LayoutNode? _resizeOrigin;
@@ -268,6 +337,10 @@
         if (_demo) LoadDemo();
         await Js.InvokeVoidAsync("eggEdit.start", "edwrap", "edstage");
         await Js.InvokeVoidAsync("eggEdit.listen", _me, "edcap");
+        // ⭐ 不備の Focus（実体の外に出ることがある形）だけ、自分の押しどころを持つ。
+        //    ⚠️ `#edfaults` は静的な Razor 要素（毎回作り直さない）なので、1回だけ張ればよい
+        //    （`listen`/`resize` と同じ「初回描画のあとに1回」の作法）。
+        await Js.InvokeVoidAsync("eggEdit.faultsListen", _me);
         await Js.InvokeVoidAsync("eggEdit.setPart", PartIdOf(_of));
         await Js.InvokeVoidAsync("eggEdit.resize", _me);
         await Js.InvokeVoidAsync("eggEdit.keys", _me);
@@ -321,6 +394,19 @@
     {
         var next = Convert.ToString(e.Value) ?? "box";
         if (!Scenes.Has(next)) next = "box";
+        // ⚠️ ここは今までどおり確かめずに切り替える（動いているものを
+        //    「ついでに」作り替えない）。盤の上のタップ切り替えだけ
+        //    <see cref="ConfirmSwitchIfDirty"/> を先に通す（下記 <see cref="SwitchDocument"/>）。
+        await ApplyOf(next);
+    }
+
+    /// <summary>⭐ 骨組みを切り替える中身。⚠️ **確かめるかどうかは呼び出し側の仕事**
+    /// （ここでは確かめない）── `OnOfChange`（ドロップダウン）と
+    /// <see cref="SwitchDocument"/>（盤の上のタップ）が、ここを共通の出所として通す
+    /// ── 経路が2つに割れると、片方だけ選び方（`setPart`）を切り替え忘れる事故が起きる
+    /// （もともと `OnOfChange` にあった手順を、そのまま切り出しただけ ── 字は変えていない）。</summary>
+    private async Task ApplyOf(string next)
+    {
         ClearOverrides();
         _of = next;
         _raw = null;
@@ -372,13 +458,103 @@
 
     // ── 選ぶ ────────────────────────────────────────
 
-    /// <summary>盤の透明な覆い（`edcap`）が拾った押しどころから呼ばれる。
-    /// ⚠️ 空文字なら選択解除（`use=` で差した部品の中など、行が無い場所を押した）。</summary>
+    /// <summary>盤の透明な覆い（`edcap`）が拾った押しどころ、または不備の Focus から呼ばれる。
+    /// ⚠️ 空文字なら選択解除（`use=` で差した部品の中など、行が無い場所を押した）。
+    ///
+    /// 🔴 **部品を直しているときに、土台の節点（`data-line`）を押んだら土台へ戻る**（②の逆向き）。
+    /// ⭐ `Scenes.Of(_of).ByPart` は `use=` で差し込まれる9部品だけ true ── その9部品自身の
+    /// 節点は `Rename` を通るので必ず `data-part` を持ち、**`data-line` では拾えない**
+    /// （`LayoutDom.cs` の出し分け）。だから「`ByPart` な文書を開いているのに `data-line` で
+    /// 拾えた」時点で、それは土台側の行だと確定できる ── 探し方を2つに割らずに済む。</summary>
     [JSInvokable]
-    public void Picked(string line)
+    public async Task Picked(string line)
     {
-        _selectedLine = int.TryParse(line, out var n) ? n : -1;
+        int n = int.TryParse(line, out var v) ? v : -1;
+        if (n >= 0 && Scenes.Of(_of).ByPart)
+        {
+            if (!await ConfirmSwitchIfDirty()) return;
+            await SwitchDocument(Scenes.Of(_of).HostId, n);
+            return;
+        }
+        _selectedLine = n;
         SyncFields();
+        StateHasChanged();
+    }
+
+    /// <summary>⭐ **押した先が部品（`data-part`）のときの入口**（②の順向き）。
+    /// ⚠️ いま開いている部品**自身**を押した（`partId == _of`）ときは、ただの選択
+    /// （別の節点を選び直しただけ）── 切り替えない。<see cref="SelectFault"/> からも呼ぶ
+    /// （不備一覧を押したときと、盤を直接押したときで、選ぶ経路を2つに割らないため）。</summary>
+    [JSInvokable]
+    public async Task PickedPart(string partId, string partLine)
+    {
+        int n = int.TryParse(partLine, out var v) ? v : -1;
+        if (partId == _of)
+        {
+            _selectedLine = n;
+            SyncFields();
+            StateHasChanged();
+            return;
+        }
+        // ⚠️ JS から来た値をそのまま信用しない（32枚に無い id が来たら何もしない）。
+        if (!Scenes.Has(partId)) return;
+        if (!await ConfirmSwitchIfDirty()) return;
+        await SwitchDocument(partId, n);
+    }
+
+    /// <summary>下の一覧（不備）を押したときの入口。⭐ その不備の**1本目**の出所
+    /// （`Lines[0]`／`PartIds[0]`）を選ぶ ── 盤の上の Focus を押すのと同じ着地点にする
+    /// （<see cref="Picked"/>/<see cref="PickedPart"/> をそのまま再利用）。</summary>
+    private async Task SelectFault(int i)
+    {
+        if (i < 0 || i >= _faults.Count) return;
+        var f = _faults[i];
+        if (f.Lines.Count == 0) return;   // ⚠️ NoLayout 相当（実際には起こらない ── 0件なら一覧を出さない）
+        string? partId = f.PartIds.Count > 0 ? f.PartIds[0] : null;
+        if (partId != null)
+            await PickedPart(partId, (f.PartLines.Count > 0 ? f.PartLines[0] : -1).ToString(CultureInfo.InvariantCulture));
+        else if (f.Lines[0] >= 0)
+            await Picked(f.Lines[0].ToString(CultureInfo.InvariantCulture));
+        // ⚠️ 両方とも無い（自前の行でも部品でもない）は「形で示せない」不備が
+        //    出所も持たない場合 ── 今の32枚では起きないが、黙って無視する。
+    }
+
+    /// <summary>⚠️ **未保存の直しを黙って捨てない。**⭐ 盤の上での部品⇄土台の切り替え
+    /// （<see cref="Picked"/>/<see cref="PickedPart"/>）だけ確かめる。
+    ///
+    /// ⚠️ ドロップダウン（<see cref="OnOfChange"/>）は確かめない ── 今までどおりの
+    /// 振る舞いを保つ（「動いているものをついでに作り替えない」の指示）。⭐ 新しい一手
+    /// （タップでの切り替え）だけに、確かめを足す。⭐ 別の確認 UI を新しく作らず、
+    /// ブラウザ標準の `confirm()` を使う（過剰な抽象化を避ける指示どおり）。
+    /// ⭐ 保存済み（Undo 積みは残っていても字が変わっていない）なら確かめずに進む。</summary>
+    private async Task<bool> ConfirmSwitchIfDirty()
+    {
+        if (!IsDirty) return true;
+        return await Js.InvokeAsync<bool>("eggEdit.confirmDiscard");
+    }
+
+    /// <summary>⚠️ `_undo.Count > 0` では判定しない ── 保存しても積みは捨てない作りなので
+    /// （`Save` 参照）、積みが残っていても字は最新の保存と一致していることがある。
+    /// ⭐ 本当に「いまの字」と「最後に読んだ／保存した字」が違うかで見る。</summary>
+    private bool IsDirty =>
+        _raw is not null && _originalText is not null && Core.Layouts.Write(_raw) != _originalText;
+
+    /// <summary>⭐ 盤の上のタップから、別の骨組みへ切り替える。⚠️ 呼ぶ前に必ず
+    /// <see cref="ConfirmSwitchIfDirty"/> を通すこと（ここでは確かめない）。
+    ///
+    /// ⚠️ **切り替え先がディスクから読めない**（フォルダ未選択・ファイルが無い）ときは、
+    /// 今までの「フォルダを選んでいない」と同じ姿にする（<see cref="_raw"/> が null のまま
+    /// ── 埋め込みの既定値は盤に出るが、直せない）。新しい状態を作らず、
+    /// 既にある「raw が null」の扱いにそのまま乗せる。</summary>
+    private async Task SwitchDocument(string next, int selectLine)
+    {
+        await ApplyOf(next);
+        if (selectLine >= 0)
+        {
+            _selectedLine = selectLine;
+            SyncFields();
+            await Js.InvokeVoidAsync("eggEdit.rering", selectLine.ToString(CultureInfo.InvariantCulture));
+        }
         StateHasChanged();
     }
 
@@ -395,6 +571,7 @@
         var n = _raw is null || _selectedLine < 0 ? null : Find(_raw.Roots, _selectedLine);
         if (n is null) return;
         _left = n.Left; _top = n.Top; _width = n.Width; _height = n.Height;
+        _gap = n.Number("gap", 0);   // ⭐③ repeat= が無い節点では使われないが、同期はしておく
     }
 
     // ── 直す ────────────────────────────────────────
@@ -416,6 +593,25 @@
     private void ApplyHeight(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, n.Left, n.Top, n.Width, v,
         n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
             n.PartId, n.PartLine));
+
+    /// <summary>⭐③ `gap=` は `Left`/`Top`/`Width`/`Height` と違い専用フィールドを持たない
+    /// （`Options` の中の1つ）── 差し替えるのは節点そのものでなく `Options` 辞書。
+    /// ⚠️ 0未満にしない（`Left`/`幅` と同じ考え方。エディタが壊れた値を作らない）。</summary>
+    private void ApplyGap(float v) => Apply(n => WithGap(n, Math.Max(0f, v)));
+
+    /// <summary>`n` の `gap=` だけを書き換えた新しい節点。⚠️ 元の欄（桁・並び順）は
+    /// <see cref="LayoutNode.RenderLine"/> が `Options["gap"]` を読み直して詰め直す
+    /// （既に `gap=` があれば値だけ差し替え、無ければ末尾に新顔として足す）。</summary>
+    private static LayoutNode WithGap(LayoutNode n, float gap)
+    {
+        var options = new Dictionary<string, string>(n.Options)
+        {
+            ["gap"] = gap.ToString("0.##", CultureInfo.InvariantCulture)
+        };
+        return new LayoutNode(n.Name, n.Kind, n.Left, n.Top, n.Width, n.Height,
+            options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine);
+    }
 
     /// <summary>数を打った1回（＋ − や欄の入力）。⭐ **これで1つの取り消し**（Begin〜Commit
     /// を1回で閉じる）。⚠️ ドラッグ中の毎フレーム呼び出し（<see cref="Dragging"/>）は
@@ -489,14 +685,28 @@
     // ── 掴んで動かす ────────────────────────────────
 
     /// <summary>盤の透明な覆い（`edcap`）が、遊びのしきい値（12px）を超えて動いたと
-    /// 判断した瞬間に呼ばれる。⭐ ここで選択も同時に済ませる（掴む＝選ぶ）。</summary>
+    /// 判断した瞬間に呼ばれる。⭐ ここで選択も同時に済ませる（掴む＝選ぶ）。
+    ///
+    /// <param name="repeatIndex">⭐③ 掴んだ複製の番号（`edit.js` が DOM の id 末尾
+    /// `#N` から読む）。⚠️ 空文字／数でない／節点自身が `repeat=` を持たない、のどれかなら
+    /// 「複製の掴みではない」（今までどおり 左/上）と判じる ── JS から来た値をそのまま
+    /// 信用しない。</param></summary>
     [JSInvokable]
-    public void DragStart(string line)
+    public void DragStart(string line, string repeatIndex)
     {
         if (_raw is null) return;
         _selectedLine = int.TryParse(line, out var n) ? n : -1;
         _dragOrigin = _selectedLine < 0 ? null : Find(_raw.Roots, _selectedLine);
         if (_dragOrigin is null) return;
+
+        _repeatIndex = -1;
+        if (int.TryParse(repeatIndex, out var idx) && idx >= 0 && _dragOrigin.Option("repeat") != null)
+        {
+            _repeatIndex = idx;
+            _repeatCols = Math.Max(1, _dragOrigin.Number("cols", 1));
+            _repeatBaseGap = _dragOrigin.Number("gap", 0);
+        }
+
         BeginAction();
         SyncFields();
         StateHasChanged();
@@ -509,6 +719,16 @@
     public void Dragging(double dx, double dy)
     {
         if (_raw is null || _dragOrigin is null || _selectedLine < 0) return;
+
+        // ⭐③ 列0（並びの左端）は今までどおり「左」（並び全体が動く ── 錨）。
+        //    列1以降は「gap」。⚠️ 縦はどちらでも常に「上」（`rows=` の領分、`gap` は触らない）。
+        int col = _repeatIndex >= 0 ? _repeatIndex % _repeatCols : -1;
+        if (col >= 1)
+        {
+            DraggingGap(col, dx, dy);
+            return;
+        }
+
         float left = _dragOrigin.Left + (float)dx;
         float top = _dragOrigin.Top + (float)dy;
         var (snapLeft, snapTop, guideX, guideY) = SnapMove(_dragOrigin, left, top);
@@ -518,11 +738,45 @@
         _ = Js.InvokeVoidAsync("eggEdit.guide", guideX, guideY);
     }
 
+    /// <summary>⭐③ 列1以降の複製を動かしたときの中身。⚠️ `_dragOrigin` は必ず non-null
+    /// （呼び出し元 <see cref="Dragging"/> で確かめ済み）。
+    ///
+    /// 横は `gap`＝`_repeatBaseGap + dx/col`（`LayoutDom.One` の
+    /// `left = node.Left + (i%cols)*(node.Width+gap)` の逆算 ── 列 `col` の複製を
+    /// `dx` 動かしたいなら `gap` を `dx/col` だけ変える）。
+    /// ⚠️ 兄弟・親の辺への吸い付き（`TargetsX`/`SnapAxis`）は掛けない ──
+    /// `gap` は「間隔」であって「位置」ではないので、比べる辺そのものが無い
+    /// （比べたら「たまたま」の一致でしかない）。⭐ **きざみだけは掛ける**
+    /// （`Left`/`Top` と同じく、丸い数で書きたい欲求は `gap` にもある）。
+    ///
+    /// 縦は既存の `SnapMove` と同じ物差し（Y軸だけ）で「上」を動かす。</summary>
+    private void DraggingGap(int col, double dx, double dy)
+    {
+        var dragOrigin = _dragOrigin!;
+        float rawGap = _repeatBaseGap + (float)dx / col;
+        float snappedGap = _step > 0 ? MathF.Round(rawGap / _step) * _step : rawGap;
+        float newGap = Math.Max(0f, snappedGap);
+
+        var (parent, siblings) = Locate(dragOrigin.LineNumber);
+        var yt = TargetsY(dragOrigin, parent, siblings);
+        var (snapTop, guideY) = SnapAxis(dragOrigin.Top + (float)dy, dragOrigin.Height, yt);
+
+        ApplyRaw(_selectedLine, n => WithGap(
+            new LayoutNode(n.Name, n.Kind, n.Left, snapTop, n.Width, n.Height,
+                n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+                n.PartId, n.PartLine),
+            newGap));
+        // ⚠️ 横の道しるべ（edguidex）は出さない ── gap は兄弟の辺に吸い付かないので、
+        //    描いても嘘の線になる（比べる辺が無い）。縦だけ、今までどおりの道しるべ。
+        _ = Js.InvokeVoidAsync("eggEdit.guide", null, guideY);
+    }
+
     [JSInvokable]
     public void DragEnd()
     {
         CommitAction();
         _dragOrigin = null;
+        _repeatIndex = -1;   // ⚠️③ 次の掴みへ持ち越さない
         _ = Js.InvokeVoidAsync("eggEdit.guide", null, null);
         StateHasChanged();   // ⭐ 取り消し釦の件数を更新するため
     }
@@ -825,9 +1079,72 @@
         //    なってしまう。⭐ 土台こそが「実際に起きている状況」（`_of` が画面そのもの
         //    のときは HostId == Id なので、今までと同じ）。
         var resolved = LayoutStore.Of(scene.HostId);
-        _faults = Core.Layouts.Faults(resolved);
+        // ⭐ 字だけの薄い包み（`Layouts.Faults`）でなく本体（`Inspect`）を見る ──
+        //    盤に描く形（`Boxes`/`Focus`）も、押して選ぶ出所（`Lines`/`PartIds`/`PartLines`）も、
+        //    こちらにしか無い。
+        _faults = Core.Layouts.Inspect(resolved);
         _html = Scenes.Draw(scene.HostId);
+        _faultHtml = DrawFaults(_faults);
     }
+
+    // ── 不備を盤に描く ──────────────────────────────
+
+    /// <summary>不備ごとに、`Boxes`（弱く・輪郭だけ）と `Focus`（強く・薄い斜線）を描く。
+    /// ⚠️ 面で塗り潰さない（この作品の約束・`stage.css` と同じ考え方）。
+    ///
+    /// ⭐ 座標は <see cref="Fault.Boxes"/>/<see cref="Fault.Focus"/>（絶対 px）をそのまま置く
+    /// ── `#edfaults` は `#edstage` と同じ倍率が掛かる層なので、`LayoutDom.Px` と同じ
+    /// 「設計 px をそのまま `left`/`top`/`width`/`height` に」でよい（JS 側の換算が要らない）。</summary>
+    private static string DrawFaults(List<Core.Fault> faults)
+    {
+        if (faults.Count == 0) return "";   // ⚠️ 空の器を見せない（呼び出し側で div 自体は残るが、中身は空にする）
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < faults.Count; i++)
+        {
+            var f = faults[i];
+            for (int j = 0; j < f.Boxes.Count; j++)
+            {
+                var b = f.Boxes[j];
+                sb.Append("<div class=\"edfault-box\" style=\"left:").Append(Px(b.X))
+                  .Append(";top:").Append(Px(b.Y)).Append(";width:").Append(Px(b.W))
+                  .Append(";height:").Append(Px(b.H)).Append("\"></div>");
+            }
+            if (f.Focus is { } fb)
+            {
+                // ⭐ 押しどころは「1本目の出所」に紐づける（Focus は複数の Box をまとめた
+                //    1つの形なので、複数の出所から1つを選ぶしかない ── Lines[0] が唯一の出所）。
+                string attrs = OriginAttrs(f, 0);
+                sb.Append("<div class=\"edfault-focus\" style=\"left:").Append(Px(fb.X))
+                  .Append(";top:").Append(Px(fb.Y)).Append(";width:").Append(Px(fb.W))
+                  .Append(";height:").Append(Px(fb.H)).Append('"').Append(attrs).Append("></div>");
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>その不備の i 本目が、盤の上で押せるなら `data-line` か
+    /// `data-part`＋`data-part-line` を返す。⚠️ どちらも無ければ空
+    /// （出所が無い＝形でしか示せない ── 今の32枚では起きない）。</summary>
+    private static string OriginAttrs(Core.Fault f, int i)
+    {
+        if (i >= f.Lines.Count) return "";
+        string? partId = i < f.PartIds.Count ? f.PartIds[i] : null;
+        if (partId != null)
+        {
+            int partLine = i < f.PartLines.Count ? f.PartLines[i] : -1;
+            return " data-part=\"" + Esc(partId) + "\" data-part-line=\""
+                + partLine.ToString(CultureInfo.InvariantCulture) + "\"";
+        }
+        int line = f.Lines[i];
+        return line >= 0
+            ? " data-line=\"" + line.ToString(CultureInfo.InvariantCulture) + "\""
+            : "";
+    }
+
+    private static string Px(float v) => v.ToString("0.##", CultureInfo.InvariantCulture) + "px";
+
+    private static string Esc(string s) =>
+        s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
 
     // ── 保存 ────────────────────────────────────────
 

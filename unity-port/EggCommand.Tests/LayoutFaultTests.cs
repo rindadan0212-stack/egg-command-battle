@@ -241,6 +241,81 @@ public class LayoutFaultTests
         Assert.Contains("slot-bad", f.Text);   // ⭐ 差した枠の名前を冠している
     }
 
+    // ── 6. PartId／PartLine ── 「押して選ぶ」の出所（2026-08-24）───
+
+    /// <summary>⭐ **`Lines` が -1 の不備だけ、`PartIds`/`PartLines` が出所を言う。**
+    /// `課題.md`「不備を『押して選ぶ』には、Fault にも出所が要る」への手当て ──
+    /// 直し方どおり、`Fault` にも `LayoutNode` と同じ形で運ばせた。</summary>
+    [Fact]
+    public void 差し込まれた側はPartIdとPartLineを持つ()
+    {
+        // ⚠️ 上のテストと同じ骨組み ── 「bad」は part.txt の0行目（自前は無い）。
+        var main = Layouts.Parse("main", "slot box 0 0 400 300 use=part");
+        var resolved = Layouts.Resolve(main, n => n == "part"
+            ? Layouts.Parse("part", "bad wobble 0 0 100 40")
+            : null);
+
+        var f = Find(Layouts.Inspect(resolved), FaultKind.UnknownKind);
+        Assert.NotNull(f);
+        Assert.Equal(-1, f.Lines[0]);
+        Assert.Equal("part", f.PartIds[0]);   // ⭐ どの部品ファイルか
+        Assert.Equal(0, f.PartLines[0]);      // ⭐ そのファイルの中で何行目か
+    }
+
+    /// <summary>⚠️ 自前の行（`Lines[i] >= 0`）は、逆に `PartIds[i]` が null のまま
+    /// （出所が2つに割れない ── `LayoutNode.PartId` と同じ規約）。</summary>
+    [Fact]
+    public void 自前の行はPartIdがnull()
+    {
+        var f = Only(FaultKind.ZeroSize, "t", "a label 0 0 0 40");
+        Assert.Null(f.PartIds[0]);
+        Assert.Equal(-1, f.PartLines[0]);
+    }
+
+    /// <summary>🔴 **`Lines` と `PartIds`/`PartLines` は同じ本数・同じ並び。**
+    /// ⚠️ ここがずれると「1本目の不備が1本目の出所に対応する」が崩れ、
+    /// エディタが違う節点を選んでしまう。⭐ `Cases` 全種＋骨組み無しで機械的に確かめる
+    /// （2本の不備 ── `DuplicateName`/`LabelOverlap`/`TapOverlap`/`ExclusivePairInFlow`
+    /// も、この1つの検査で一緒に踏む）。</summary>
+    [Fact]
+    public void LinesとPartIdsとPartLinesは同じ本数()
+    {
+        foreach (var c in Cases)
+            foreach (var f in Layouts.Inspect(Layouts.Parse(c.Id, c.Src)))
+            {
+                Assert.True(f.Lines.Count == f.PartIds.Count,
+                    $"{f.Kind}: Lines={f.Lines.Count} PartIds={f.PartIds.Count}");
+                Assert.True(f.Lines.Count == f.PartLines.Count,
+                    $"{f.Kind}: Lines={f.Lines.Count} PartLines={f.PartLines.Count}");
+            }
+
+        var noLayout = Layouts.Inspect(null)[0];
+        Assert.Equal(noLayout.Lines.Count, noLayout.PartIds.Count);
+        Assert.Equal(noLayout.Lines.Count, noLayout.PartLines.Count);
+    }
+
+    /// <summary>⭐ 2本の不備（兄弟どうし）でも、それぞれの節点が出所（`PartLine`）を
+    /// 別々に持つ。⚠️ `Siblings` は**同じ親の子どうし**しか比べない
+    /// （別々の `use=` に差した2枠の中身は、互いの兄弟にならない）ので、
+    /// 1つの部品ファイル `p` の中で2つが重なる形で確かめる。</summary>
+    [Fact]
+    public void 二本の不備は節点ごとに別々のPartLineを持つ()
+    {
+        var main = Layouts.Parse("main", "slot box 0 0 400 300 use=p");
+        var resolved = Layouts.Resolve(main, n => n == "p"
+            ? Layouts.Parse("p", "x button 0 0 400 112\ny button 0 60 400 112")
+            : null);
+
+        var f = Find(Layouts.Inspect(resolved), FaultKind.TapOverlap);
+        Assert.NotNull(f);
+        Assert.Equal(-1, f.Lines[0]);
+        Assert.Equal(-1, f.Lines[1]);
+        Assert.Equal("p", f.PartIds[0]);
+        Assert.Equal("p", f.PartIds[1]);
+        Assert.Equal(0, f.PartLines[0]);   // ⭐ x は p.txt の0行目
+        Assert.Equal(1, f.PartLines[1]);   // ⭐ y は p.txt の1行目
+    }
+
     // ── 5. 巻物の中の扱いが変わっていないこと ──────────
 
     [Fact]

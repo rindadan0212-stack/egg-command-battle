@@ -47,8 +47,14 @@ window.eggEdit = {
     const r = wrap.getBoundingClientRect()
     // ⚠️ 0 除算・負値を避ける（器がまだ描かれていない拍で呼ばれることがある）
     const k = Math.max(0.05, Math.min(r.width / 1080, r.height / 1920))
-    stage.style.transform = 'translate(-50%, -50%) scale(' + k + ')'
+    const t = 'translate(-50%, -50%) scale(' + k + ')'
+    stage.style.transform = t
     stage.dataset.scale = String(k)
+    // ⭐ 不備の層（#edfaults）は #edstage と**同じ倍率**を持つ別の DOM（EditPage.razor
+    //    参照 ── #edcap の中に置かない）。ここで一緒に合わせないと、盤を縮めたときだけ
+    //    不備の枠が実物からずれる。
+    const faults = document.getElementById('edfaults')
+    if (faults) faults.style.transform = t
   },
 
   /** 器の大きさの変化を見張って、盤を追従させる。 */
@@ -80,6 +86,7 @@ window.eggEdit = {
     let line = null       // 押した先の行（null＝押しどころが無い場所）
     let dragging = false  // PLAY を超えて実際に「掴んで動かす」を始めたか
     let k = 1
+    let repeatIndex = ''  // ⭐③ 掴んだ複製の番号（無ければ空文字）
 
     // ⭐ 覆いをどけて、その真下に何が描かれているかを見る（一瞬だけ）。
     // ⚠️ **部品を選んでいるときは `data-part="<_of>"` だけを探す。**
@@ -96,10 +103,38 @@ window.eggEdit = {
         : el.closest('[data-line]')
     }
 
+    // ⭐ **タップで選ぶ（離したとき）だけに使う、別の探し方。**
+    //
+    // ⚠️ `nodeAt`（上）は「いま `_partId` として選んでいる部品の中だけ」を探す ──
+    // 掴んで動かす（`down`/`move`）はこの縛りのままでよい（土台の節点を掴んで動かす
+    // ときに、途中で違う部品へ迷い込むと事故る）。
+    //
+    // ⭐ タップ選択はモードで縛らず、**近い方を勝たせる**。`data-part` を持つ子孫は
+    // 必ず `data-line` を持つ祖先より DOM で内側にいる（`Layouts.Splice` が部品の
+    // 中身を「差した節点の子」として差し込むため ── `LayoutDom.cs` 参照）。
+    // だから `closest('[data-part],[data-line]')` 1回で「いちばん近い出所」が取れる ──
+    // 押した先が別の部品なら（②）その部品を、部品を直していて土台の節点を押したら
+    // （②の逆向き）土台を、正しく指す。
+    const pickAt = (x, y) => {
+      cap.style.pointerEvents = 'none'
+      const el = document.elementFromPoint(x, y)
+      cap.style.pointerEvents = 'auto'
+      if (!(el instanceof Element)) return null
+      return el.closest('[data-part],[data-line]')
+    }
+
     const down = (e) => {
       e.preventDefault()
       const node = nodeAt(e.clientX, e.clientY)
       line = node ? this._lineOf(node) : null
+      // ⭐③ 掴んだ要素 **自身**の id 末尾 `#N`（`LayoutDom.One` が繰り返しの複製に付ける）。
+      //    ⚠️ 入れ子の繰り返し（`card#2#1` 等）でも、末尾は必ず「いま掴んでいる節点自身の
+      //    繰り返し」の番号 ── 外側の番号は先に付き、自分の番号は自分の呼び出しで
+      //    最後に足されるため（`LayoutDom.cs` の `mine = suffix + "#" + index`）。
+      //    ⚠️ 節点自身が `repeat=` を持つかどうかまでは JS 側で確かめない
+      //    （C# 側が `_dragOrigin.Option("repeat")` で確かめる ── 出所を1つに保つ）。
+      const m = node ? /#(\d+)$/.exec(node.id) : null
+      repeatIndex = m ? m[1] : ''
       from = { x: e.clientX, y: e.clientY }
       dragging = false
       const stage = document.getElementById('edstage')
@@ -118,7 +153,7 @@ window.eggEdit = {
         // 🔴 数px揺れただけでは動かさない。PLAY を超えて初めて「掴んで動かす」を始める。
         if (Math.abs(dx) <= PLAY && Math.abs(dy) <= PLAY) return
         dragging = true
-        owner.invokeMethodAsync('DragStart', line)
+        owner.invokeMethodAsync('DragStart', line, repeatIndex)
       }
       // ⭐ **k で割る。**盤には倍率が掛かっているので、指の実画面移動量を
       //    設計 px（骨組みの Left/Top と同じ単位）へ戻す。
@@ -130,19 +165,28 @@ window.eggEdit = {
       if (dragging) {
         owner.invokeMethodAsync('DragEnd')
       } else {
-        // ⭐ 動かさずに離した＝いままでどおり「選ぶ」。
-        const node = nodeAt(e.clientX, e.clientY)
+        // ⭐ 動かさずに離した＝いままでどおり「選ぶ」。⚠️ ここだけ `pickAt`（近い方優先）
+        //    を使う ── 掴んで動かす（`nodeAt`）とは別の探し方（上の註）。
+        const node = pickAt(e.clientX, e.clientY)
         if (node) this._ringTo(node); else this._ringHide()
-        owner.invokeMethodAsync('Picked', node ? this._lineOf(node) : '')
+        if (node && node.dataset.part) {
+          // ⭐ 押した先が部品 ── ②「その部品のファイルへ切り替えて、その節点を選ぶ」。
+          //    同じ部品を直している最中なら、C# 側で「ただの選び直し」に落ちる。
+          owner.invokeMethodAsync('PickedPart', node.dataset.part, node.dataset.partLine || '-1')
+        } else {
+          // ⭐ `data-line` のみ ── 自前の行、または（部品を直している最中なら）
+          //    土台の行。どちらかは C# 側（`Scenes.Of(_of).ByPart`）が判じる。
+          owner.invokeMethodAsync('Picked', node ? (node.dataset.line || '') : '')
+        }
       }
-      from = null; line = null; dragging = false
+      from = null; line = null; dragging = false; repeatIndex = ''
     }
 
     const cancel = () => {
       // ⚠️ 途中で指が奪われた（他のジェスチャに割り込まれた等）。⭐ 動いていたなら、
       //    そこまでの分を1つの動作として確定する（宙ぶらりんにしない）。
       if (dragging) owner.invokeMethodAsync('DragEnd')
-      from = null; line = null; dragging = false
+      from = null; line = null; dragging = false; repeatIndex = ''
     }
 
     this._bound = [['pointerdown', down], ['pointermove', move], ['pointerup', up], ['pointercancel', cancel]]
@@ -188,6 +232,42 @@ window.eggEdit = {
 
     this._rbound = [['pointerdown', down], ['pointermove', move], ['pointerup', up], ['pointercancel', up]]
     for (const [t, f] of this._rbound) ring.addEventListener(t, f)
+  },
+
+  /** ⭐ 不備の **Focus**（`#edfaults` の中の `.edfault-focus`）だけ、自分で押しどころを
+   * 受ける。⚠️ `.edfault-box`（弱い輪郭）は `pointer-events:none` なので、ここには
+   * 一度も届かない ── 下の本体（`#edcap` 経由）へ素通しする、既存の道のまま。
+   *
+   * ⚠️ **`listen()` の `cap` とは別の DOM 系列**（`#edfaults` は `#edstage` の外）。
+   * `pointerup` を Focus 自身に直付けする ── `elementFromPoint` に頼る `pickAt` は
+   * 「盤の中で一番手前は何か」を見る仕組みなので、`#edcap` を挟まないこの層は
+   * 自分の listener で拾うしかない（`#edfaults` は Razor が毎回作り直さない静的な
+   * 要素なので、`listen`/`resize` と同じく最初に1回だけ張ればよい）。
+   * @param {object} owner .NET 側の受け口 */
+  faultsListen(owner) {
+    const layer = document.getElementById('edfaults')
+    if (!layer) return
+    if (this._fBound) layer.removeEventListener('pointerup', this._fBound)
+    const fn = (e) => {
+      const el = e.target instanceof Element
+        ? e.target.closest('[data-part],[data-line]') : null
+      if (!el) return
+      e.stopPropagation()
+      if (el.dataset.part) {
+        owner.invokeMethodAsync('PickedPart', el.dataset.part, el.dataset.partLine || '-1')
+      } else {
+        owner.invokeMethodAsync('Picked', el.dataset.line || '')
+      }
+    }
+    this._fBound = fn
+    layer.addEventListener('pointerup', fn)
+  },
+
+  /** ⭐ 未保存の直しを捨てる前に、1度だけ確かめる。⚠️ 新しい UI を作らず、
+   * ブラウザ標準の `confirm` を使う（過剰な抽象化を避ける指示どおり）。
+   * `EditPage.ConfirmSwitchIfDirty` からだけ呼ぶ。 */
+  confirmDiscard() {
+    return window.confirm('保存していない直しがあります。捨てて切り替えますか？')
   },
 
   /** ⭐ Ctrl+Z / Ctrl+Shift+Z。⚠️ **document 全体**で聞く（数値欄にフォーカスが
