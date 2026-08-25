@@ -97,6 +97,16 @@ namespace EggCommand.Sim
                 case "import-sprite": SpriteImport.Run(".."); break;
                 // ⭐ まだ無い paint の絵を仮置きで作る（ドット絵化計画 段取り4・第3部）
                 case "paint-placeholder": PaintPlaceholder.Run(".."); break;
+                // ⭐ pixelizer で起こした画面を、絵と骨組みに落とす
+                //    （wiki/開発/画面をドット絵で組む.md）。⚠️ 既存の骨組みは上書きしない。
+                case "import-screen":
+                    if (args.Length < 2)
+                    {
+                        Console.WriteLine("sim import-screen <.pixelizer.json のパス>");
+                        Console.WriteLine("  例: sim import-screen ../art/screens/home.pixelizer.json");
+                        return 1;
+                    }
+                    return ImportScreen.Run("..", args[1]);
                 case "determinism": Console.WriteLine(Determinism.Run()); break;   // ⚠️ 他の出力と同じく cwd 相対（game から打つ）
                 case "strategy":
                     // ⭐ `sim strategy 4` で4対4。⚠️ 既定を変えない（3対3の記録が読めなくなる）

@@ -177,6 +177,47 @@ namespace EggCommand.Sim
             return png.ToArray();
         }
 
+        /// <summary>⭐ **そのままの色（RGBA）で焼く。**⚠️ 上の <see cref="Encode"/> は
+        /// 種族の絵ぶよう（パレット＋添字）だが、こちらは pixelizer から来た絵のように
+        /// **色を数えていない**ものを、色数の上限なしにそのまま書く
+        /// （[画面をドット絵で組む](../../wiki/開発/画面をドット絵で組む.md)）。
+        ///
+        /// ⚠️ `rgba` は行優先で 1 画素 4 バイト（R,G,B,A）。長さは `width*height*4` ちょうど。
+        /// ⭐ 圧縮・チャンク・CRC は <see cref="Encode"/> と同じ手順を使い回す（写さない）。</summary>
+        public static byte[] EncodeRgba(int width, int height, byte[] rgba)
+        {
+            if (rgba == null) throw new ArgumentNullException(nameof(rgba));
+            if (width <= 0 || height <= 0) throw new ArgumentException($"大きさが変: {width}x{height}");
+            if (rgba.Length != width * height * 4)
+                throw new ArgumentException($"画素の数が合わない: {rgba.Length} ≠ {width}*{height}*4");
+
+            using var png = new MemoryStream();
+            png.Write(Signature, 0, Signature.Length);
+
+            using (var ihdr = new MemoryStream())
+            {
+                Be32(ihdr, width);
+                Be32(ihdr, height);
+                ihdr.WriteByte(8);   // ビット深度
+                ihdr.WriteByte(6);   // 色の型: 真色＋アルファ（RGBA）
+                ihdr.WriteByte(0);   // 圧縮法
+                ihdr.WriteByte(0);   // フィルタ法
+                ihdr.WriteByte(0);   // インターレース無し
+                Chunk(png, "IHDR", ihdr.ToArray());
+            }
+
+            using var raw = new MemoryStream();
+            for (int y = 0; y < height; y++)
+            {
+                raw.WriteByte(0);   // フィルタ種別0（なし）── 読む側（Unfilter）と揃える
+                raw.Write(rgba, y * width * 4, width * 4);
+            }
+            Chunk(png, "IDAT", Zlib(raw.ToArray()));
+
+            Chunk(png, "IEND", Array.Empty<byte>());
+            return png.ToArray();
+        }
+
         private static Tuple<byte, byte, byte> Rgb(string hex)
         {
             // ⚠️ 「#rrggbb」以外を黙って通さない。⭐ 綴り違いが灰色として出ると気づけない
