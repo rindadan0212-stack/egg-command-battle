@@ -151,6 +151,26 @@
     -webkit-user-select: none; user-select: none;
   }
   #editorCanvas { display: block; width: 100%; height: 100%; position: relative; z-index: 2; }
+
+  /* 製図の読み取り。⭐ CAD の座標表示にあたる ── いま指がどのドットに居るか、
+     選んだ範囲が何ドットかを、常に出しておく（数えなくて済むように）。
+     ⚠️ 触れないようにする（キャンバスの操作を邪魔しない）。 */
+  #draftReadout {
+    position: absolute; left: 8px; bottom: 8px; z-index: 3;
+    pointer-events: none; user-select: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px; line-height: 1.5;
+    color: var(--muted);
+    background: rgba(0,0,0,0.55);
+    border: 1px solid var(--border-soft);
+    border-radius: 3px;
+    padding: 3px 7px;
+    white-space: pre;
+    display: none;
+  }
+  #draftReadout.on { display: block; }
+  #draftReadout .v { color: var(--text); }
+  #draftReadout .warn { color: var(--accent); }
   /* 絵の下に敷く市松/白/黒。位置と大きさは renderEditor が毎回合わせる。 */
   #spriteBg { position: absolute; left: 0; top: 0; z-index: 1; display: none; pointer-events: none; }
 
@@ -1115,6 +1135,7 @@
       <div id="canvasStage">
         <div id="spriteBg" class="bg-checker"></div>
         <canvas id="editorCanvas"></canvas>
+        <div id="draftReadout"></div>
         <div id="emptyHint">
           <div class="lead">どちらから始める？</div>
           <div class="choices">
@@ -1177,6 +1198,27 @@
             <button id="mirrorVBtn">上下</button>
             <button id="pixelPerfectBtn"
                     title="曲がり角にできる余分な点を消して、線を 1px に保つ">かど消し</button>
+          </div>
+        </div>
+        <div class="section" style="margin-top:12px;">
+          <div class="section-title">製図</div>
+          <div class="btn-row">
+            <button id="draftCenterBtn" title="キャンバスの中心に一点鎖線を引く（左右・上下）">中心線</button>
+            <button id="draftReadoutBtn" title="指の位置と、選んだ範囲のドット数をいつも出す">読み取り</button>
+          </div>
+          <label style="margin-top:8px;">
+            <span style="font-size:11px; color:var(--muted);">目盛りの線</span>
+            <select id="draftMajor">
+              <option value="0">なし</option>
+              <option value="8">8 ドットごと</option>
+              <option value="10">10 ドットごと（字1行ぶん）</option>
+              <option value="16">16 ドットごと</option>
+              <option value="28">28 ドットごと（押しどころの下限）</option>
+            </select>
+          </label>
+          <div style="font-size:11px; color:var(--muted); margin-top:6px; line-height:1.6;">
+            ⭐ この作品は <b>1 ドット = 4px</b>。読み取りは両方の数を出す。<br>
+            ⚠️ 押しどころは <b>28 ドット</b>（112px）を下回ると指で押しにくい。
           </div>
         </div>
         <details class="fold">
@@ -1620,6 +1662,10 @@ const state = {
   dragEnd: null,       // {x, y} 形状ツール現在位置
   previewPixels: null, // Uint8ClampedArray 形状ドラッグ中の overlay。commit前
   shapeFilled: false,  // 矩形/楕円: 枠 / 塗りつぶし
+  // ⭐ 製図（CAD のような下ごしらえ）。⚠️ **絵ではないので `.pixelizer.json` に入れない**
+  //    ── あれは `sim import-screen` が読む形なので、勝手に増やさない。
+  //    見え方の好みなので localStorage に別で覚える。
+  draft: { center: false, readout: true, major: 0 },
   mirrorH: false,
   pixelPerfect: false,   // 曲がり角の余分な点を消す
   lightDir: { dx: -1, dy: -1 },  // 選択的な輪郭で使う光の向き (既定は左上)
@@ -1871,6 +1917,10 @@ const el = {
   toolButtons: document.querySelectorAll('[data-tool]'),
   shapeOutlineBtn: document.getElementById('shapeOutlineBtn'),
   shapeFilledBtn: document.getElementById('shapeFilledBtn'),
+  draftCenterBtn: document.getElementById('draftCenterBtn'),
+  draftReadoutBtn: document.getElementById('draftReadoutBtn'),
+  draftMajor: document.getElementById('draftMajor'),
+  draftReadout: document.getElementById('draftReadout'),
   mirrorHBtn: document.getElementById('mirrorHBtn'),
   mirrorVBtn: document.getElementById('mirrorVBtn'),
   selCopyBtn: document.getElementById('selCopyBtn'),
@@ -3026,8 +3076,107 @@ function renderEditor() {
     ctx.stroke();
     ctx.restore();
   }
+  drawDraftOverlay(ctx);
+  // ⭐ 読み取りもここで直す ── 選択の増減・キャンバスの入れ替えは必ず描き直しを通るので、
+  //    5か所に散らさず**1か所**で追従できる。⚠️ 指の位置は渡さない（前の値を保つ）。
+  updateDraftReadout();
   renderPreview();
   scheduleSave();
+}
+
+// ============ 製図（CAD のような下ごしらえ）============
+//
+// ⭐ **この作品は 1 ドット = 4px**（骨組みの座標は必ずドット×4 になる）。
+// ⚠️ 本家 pixelizer には無い ── ここは「この作品の画面を起こす道具」なので、
+//    作品の決めごとを知っていてよい（本家は汎用のまま）。
+
+/** この作品の 1 ドットが設計 px でいくつか。 */
+const DRAFT_SCALE = 4;
+/** 押しどころの下限（ドット）。⚠️ 112px ÷ 4。これを下回ると指で押しにくい。 */
+const DRAFT_TAP_MIN = 28;
+
+function drawDraftOverlay(ctx) {
+  if (!state.pixels) return;
+  const W = state.width, H = state.height;
+  const v = state.view, d = v.dpr;
+  const left = devX(0), right = devX(W), top = devY(0), bottom = devY(H);
+
+  // ── 目盛りの線（粗い格子）────────────────────────
+  // ⚠️ 1ドットの方眼より**濃く**する。同じ濃さだと目盛りとして働かない。
+  const major = state.draft.major | 0;
+  if (major > 1 && v.cell >= 2) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(150,190,255,0.38)';
+    ctx.lineWidth = Math.max(1, d);
+    ctx.beginPath();
+    for (let i = major; i < W; i += major) {
+      const x = devX(i) + 0.5;
+      ctx.moveTo(x, top); ctx.lineTo(x, bottom);
+    }
+    for (let i = major; i < H; i += major) {
+      const y = devY(i) + 0.5;
+      ctx.moveTo(left, y); ctx.lineTo(right, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── 中心線 ──────────────────────────────────────
+  // ⭐ CAD と同じ**一点鎖線**。⚠️ 実線にすると絵の一部に見える。
+  if (state.draft.center) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,140,90,0.75)';
+    ctx.lineWidth = Math.max(1, d);
+    ctx.setLineDash([8 * d, 3 * d, 2 * d, 3 * d]);
+    const cx = devX(W / 2) + 0.5, cy = devY(H / 2) + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, top); ctx.lineTo(cx, bottom);
+    ctx.moveTo(left, cy); ctx.lineTo(right, cy);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/** 選んだ範囲の外接（ドット）。⚠️ 選択は Set<index> なので、ここで四角に直す。 */
+function draftSelectionBox() {
+  const sel = state.selection;
+  if (!sel || sel.size === 0) return null;
+  const W = state.width;
+  let minX = Infinity, minY = Infinity, maxX = -1, maxY = -1;
+  for (const idx of sel) {
+    const x = idx % W, y = (idx / W) | 0;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1, count: sel.size };
+}
+
+/** 読み取りを書き直す。⚠️ `cell` は今指が乗っているドット（無ければ null）。 */
+let _draftCell = null;
+function updateDraftReadout(cell) {
+  if (cell !== undefined) _draftCell = cell;
+  const box = el.draftReadout;
+  if (!box) return;
+  if (!state.draft.readout || !state.pixels) { box.classList.remove('on'); return; }
+
+  const px = (n) => `${n}<span class="v">・${n * DRAFT_SCALE}px</span>`;
+  const rows = [];
+  rows.push(`画布 <span class="v">${state.width}×${state.height}</span>`
+          + ` <span class="v">(${state.width * DRAFT_SCALE}×${state.height * DRAFT_SCALE}px)</span>`);
+
+  if (_draftCell) rows.push(`位置 <span class="v">${_draftCell.x}, ${_draftCell.y}</span>`);
+
+  const sel = draftSelectionBox();
+  if (sel) {
+    const small = sel.w < DRAFT_TAP_MIN || sel.h < DRAFT_TAP_MIN;
+    rows.push(`範囲 <span class="v">${sel.w}×${sel.h}</span>`
+            + ` <span class="v">(${sel.w * DRAFT_SCALE}×${sel.h * DRAFT_SCALE}px)</span>`
+            + (small ? ` <span class="warn">⚠ 押しどころなら ${DRAFT_TAP_MIN} 未満</span>` : ''));
+  }
+  box.innerHTML = rows.join('\n');
+  box.classList.add('on');
 }
 
 // state.pixels の有無に連動する見た目をまとめて合わせる
@@ -3051,6 +3200,55 @@ function renderPreview() {
   id.data.set(compositeFrame(idx));
   ctx.putImageData(id, 0, 0);
 }
+
+// ============ 製図の釦 ============
+//
+// ⚠️ 覚え先は localStorage（絵ではないので `.pixelizer.json` に混ぜない ──
+//    あれは `sim import-screen` が読む形なので、勝手に増やすと読む側が驚く）。
+const DRAFT_KEY = 'ecb-draft';
+
+function loadDraftPrefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+    if (saved && typeof saved === 'object') Object.assign(state.draft, saved);
+  } catch (e) { /* 壊れていたら既定のまま。⚠️ ここで止めない */ }
+}
+function saveDraftPrefs() {
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(state.draft)); } catch (e) {}
+}
+function syncDraftUI() {
+  el.draftCenterBtn.classList.toggle('active', state.draft.center);
+  el.draftReadoutBtn.classList.toggle('active', state.draft.readout);
+  el.draftMajor.value = String(state.draft.major | 0);
+  updateDraftReadout();
+}
+
+el.draftCenterBtn.addEventListener('click', () => {
+  state.draft.center = !state.draft.center;
+  saveDraftPrefs(); syncDraftUI(); renderEditor();
+});
+el.draftReadoutBtn.addEventListener('click', () => {
+  state.draft.readout = !state.draft.readout;
+  saveDraftPrefs(); syncDraftUI();
+});
+el.draftMajor.addEventListener('change', () => {
+  state.draft.major = parseInt(el.draftMajor.value, 10) || 0;
+  saveDraftPrefs(); renderEditor();
+});
+
+loadDraftPrefs();
+syncDraftUI();
+
+// ⭐ 指がどのドットに乗っているかを、動かすたびに読み取りへ流す。
+// ⚠️ ここは**描く処理より前に**割り込ませない（`pointermove` の本体は別に居る）。
+//    受け身で見るだけなので、既存のどの経路も邪魔しない。
+el.canvasStage.addEventListener('pointermove', (e) => {
+  if (!state.draft.readout || !state.pixels) return;
+  updateDraftReadout(pixelCoordsFromEvent(e));
+}, { passive: true });
+el.canvasStage.addEventListener('pointerleave', () => {
+  if (state.draft.readout) updateDraftReadout(null);
+}, { passive: true });
 
 // ============ Background toggle ============
 el.bgButtons.forEach(b => {
