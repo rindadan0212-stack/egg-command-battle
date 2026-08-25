@@ -47,9 +47,18 @@
       </select>
     </label>
 
-    <button type="button" @onclick="PickFolder" disabled="@(!_supported)">
-      📂 フォルダを選ぶ@(string.IsNullOrEmpty(_folder) ? "" : $"（{_folder}）")
-    </button>
+    @if (_needsConfirm)
+    {
+      <button type="button" @onclick="ReconnectFolder" disabled="@(!_supported)" title="前回選んだフォルダをもう一度使う（1クリック・選び直しではない）">
+        🔄 前回のフォルダを使う
+      </button>
+    }
+    else
+    {
+      <button type="button" @onclick="PickFolder" disabled="@(!_supported || _reconnecting)">
+        📂 フォルダを選ぶ@(string.IsNullOrEmpty(_folder) ? "" : $"（{_folder}）")
+      </button>
+    }
 
     @* ⭐ 見える押しどころ＋ Ctrl+Z / Ctrl+Shift+Z の両方（作者の指示）。
        ⭐ 数は「あと何回戻せるか」── 0件のときは字を出さず、押せないことも示す。 *@
@@ -173,22 +182,39 @@
   {
     <div class="edstart">
       <div class="edstartbox">
-        <button type="button" class="edstartbtn" @onclick="PickFolder" disabled="@(!_supported)">
-          📂 フォルダを選ぶ
-        </button>
-        @if (!_checkedSupport)
+        @if (_reconnecting)
         {
-          <span class="edmuted">対応を確かめています…</span>
+          @* 🔴 覚えているフォルダへクリック無しで繋がるか確かめている最中。
+             ⚠️ ここでボタンを出すと、繋がって一瞬で消える押しどころをチラつかせる
+             （空の道具を先に見せない、と同じ考え方）。 *@
+          <span class="edmuted">前回のフォルダを確かめています…</span>
         }
-        else if (!_supported)
+        else if (_needsConfirm)
         {
-          <span class="edwarn">
-            ⚠️ このブラウザは File System Access API に対応していません（Chrome / Edge で開いてください）。
-          </span>
+          <button type="button" class="edstartbtn" @onclick="ReconnectFolder" disabled="@(!_supported)">
+            🔄 前回のフォルダを使う
+          </button>
+          <span class="edstarthint">前回選んだフォルダを覚えています。1クリックで繋ぎ直します（選び直しではありません）。</span>
         }
         else
         {
-          <span class="edstarthint">骨組み（.txt）が入っているフォルダを選ぶと、木・盤・Inspector が開きます。</span>
+          <button type="button" class="edstartbtn" @onclick="PickFolder" disabled="@(!_supported)">
+            📂 フォルダを選ぶ
+          </button>
+          @if (!_checkedSupport)
+          {
+            <span class="edmuted">対応を確かめています…</span>
+          }
+          else if (!_supported)
+          {
+            <span class="edwarn">
+              ⚠️ このブラウザは File System Access API に対応していません（Chrome / Edge で開いてください）。
+            </span>
+          }
+          else
+          {
+            <span class="edstarthint">骨組み（.txt）が入っているフォルダを選ぶと、木・盤・Inspector が開きます。⭐ 次回からは覚えて自動で繋がります。</span>
+          }
         }
       </div>
     </div>
@@ -690,6 +716,12 @@
     private bool _checkedSupport;
     private bool _supported;
     private string _folder = "";
+    // 🔴 覚えたフォルダの繋ぎ直し（2026-08-25）。⚠️ `_reconnecting` の間は「確かめています…」
+    //    を出し、ボタン自体は出さない（クリック無しで繋がる可能性がある一瞬をチラつかせない）。
+    //    `_needsConfirm` が立ったら、ボタンは「フルに選び直す」ではなく
+    //    「前回のフォルダを使う」（`ReconnectFolder`・1クリックの確認）に変わる。
+    private bool _reconnecting;
+    private bool _needsConfirm;
     private string? _originalText;
     private Core.Layout? _raw;
     // 🔴 直近に**描けた**（Parse が例外を投げなかった）字と木。⚠️ 壊れた編集を戻す先
@@ -985,6 +1017,7 @@
         _checkedSupport = true;
         _demo = DemoQuery == "true";
         if (_demo) LoadDemo();
+        else if (_supported) await TryReconnect();
         await WireBoard();
         _boardWired = _raw is not null;   // ⭐ 盤が在る状態で張れたときだけ「配線済み」
         // ⚠️ キー（Ctrl+Z・矢印・Delete）は document 直付けなので盤の在り無しと無関係 ──
@@ -1041,8 +1074,53 @@
     {
         bool ok = await Js.InvokeAsync<bool>("eggDisk.pick");
         if (!ok) { _status = "フォルダを選べませんでした"; return; }
+        _needsConfirm = false;
         _folder = await Js.InvokeAsync<string>("eggDisk.folderName");
         _demo = false;   // ⭐ 本物のフォルダを選んだので、開発用の入口は退く
+        await LoadFile();
+    }
+
+    /// <summary>🔴 ページを開いた拍で、覚えているフォルダへ**クリック無しで**繋ぎ直せるか
+    /// 試す。⭐ 骨組みの置き場所は実質1か所（`assets/layouts`）しか無いので、毎回フルの
+    /// OS ダイアログを見せない（2026-08-25・作者の指摘「一か所しかないはずなので
+    /// スキップしたい」）。⚠️ ここでは `queryPermission` しか見ない（`requestPermission`
+    /// はユーザー操作の中でないとブラウザに拒まれる ── `disk.js` の註と同じ理由）。
+    /// 繋がらなければ何もしない ── 今までどおり <see cref="PickFolder"/> のボタンが残る。</summary>
+    private async Task TryReconnect()
+    {
+        _reconnecting = true;
+        StateHasChanged();   // ⭐ 「確かめています…」を、確かめている間だけ実際に見せる
+        string state = await Js.InvokeAsync<string>("eggDisk.reconnect");
+        if (state == "granted")
+        {
+            _folder = await Js.InvokeAsync<string>("eggDisk.folderName");
+            _demo = false;
+            await LoadFile();
+        }
+        else if (state == "prompt")
+        {
+            // ⭐ 覚えてはいるが、確認が要る（許可が薄れた等）。⚠️ フルの再選択ではなく、
+            //    ボタンを「前回のフォルダを使う」（1クリックの確認）に変える。
+            _needsConfirm = true;
+        }
+        _reconnecting = false;
+    }
+
+    /// <summary>⭐ <see cref="TryReconnect"/> が 'prompt' だったときの、1クリックの確認。
+    /// ⚠️ ボタンのクリックから呼ばれるので `requestPermission` が通る（ユーザー操作の中）。
+    /// フルの OS フォルダ選択は開かない。だめなら <see cref="PickFolder"/> へ案内する。</summary>
+    private async Task ReconnectFolder()
+    {
+        bool ok = await Js.InvokeAsync<bool>("eggDisk.reconnectConfirm");
+        if (!ok)
+        {
+            _needsConfirm = false;
+            _status = "前回のフォルダを確認できませんでした。選び直してください。";
+            return;
+        }
+        _needsConfirm = false;
+        _folder = await Js.InvokeAsync<string>("eggDisk.folderName");
+        _demo = false;
         await LoadFile();
     }
 

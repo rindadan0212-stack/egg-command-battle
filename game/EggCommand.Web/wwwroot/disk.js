@@ -8,6 +8,42 @@
 //    showDirectoryPicker → getFileHandle → createWritable をやっている。**
 //    ここはその形をそのまま借りる（コードは写さず、書き方だけ真似る）。
 
+// 🔴 **フォルダの覚え直し（2026-08-25）**── `showDirectoryPicker` は毎回フルの OS
+// ダイアログを開くが、この作品では骨組みの置き場所は実質1か所（`assets/layouts`）しか
+// 無い。一度選んだハンドルを IndexedDB へ持たせておき、次に開いたときは
+// `queryPermission` だけで（＝クリック無しで）繋ぎ直す。⚠️ 許可が薄れていたら
+// （ブラウザが時間で失効させることがある）、フルの再選択ではなく `requestPermission`
+// （軽い1クリックの確認）で足りるかをまず試す。
+
+const DiskDb = {
+  _open() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('egg-disk', 1)
+      req.onupgradeneeded = () => req.result.createObjectStore('handles')
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+  },
+  async save(key, handle) {
+    const db = await this._open()
+    return new Promise((resolve) => {
+      const tx = db.transaction('handles', 'readwrite')
+      tx.objectStore('handles').put(handle, key)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => resolve()   // ⚠️ 覚えられなくても致命的ではない（次も選べばよい）
+    })
+  },
+  async load(key) {
+    const db = await this._open()
+    return new Promise((resolve) => {
+      const tx = db.transaction('handles', 'readonly')
+      const req = tx.objectStore('handles').get(key)
+      req.onsuccess = () => resolve(req.result || null)
+      req.onerror = () => resolve(null)
+    })
+  },
+}
+
 window.eggDisk = {
   /** 対応しているブラウザか。⚠️ **押しどころを殺す判定はここを見て C# 側がする**
    * （黙って何も起きない、にしない）。 */
@@ -16,14 +52,55 @@ window.eggDisk = {
   },
 
   /** ⭐ 骨組みの入っているフォルダを選ばせる。以後そこから読み書きする。
+   * ⭐ 選べたら覚える（次回以降 <see cref="reconnect"/> が使う）。
    * @returns {Promise<boolean>} 選べたか（やめたら false）。 */
   async pick() {
     if (!this.supported()) return false
     try {
       this._root = await window.showDirectoryPicker({ id: 'egg-layouts', mode: 'readwrite' })
+      await DiskDb.save('layouts', this._root)
       return true
     } catch (e) {
       // ⚠️ ユーザーがキャンセルすると AbortError が飛ぶ ── これは失敗ではない
+      return false
+    }
+  },
+
+  /** ⭐ **クリック無しで繋ぎ直せるか試す。**⚠️ ページを開いた直後（ユーザー操作の
+   * 前）に呼ぶ想定なので、`queryPermission` だけを見る ── `requestPermission` は
+   * ブラウザがユーザー操作を要求するため、ここでは呼ばない（呼んでも黙って失敗する）。
+   * @returns {Promise<'granted'|'prompt'|'none'>}
+   *   'granted' … 繋がった（もう `this._root` が使える）
+   *   'prompt'  … 覚えているが確認が要る（<see cref="reconnectConfirm"/> をボタンから呼ぶ）
+   *   'none'    … 覚えていない（初回。<see cref="pick"/> でフルに選ばせる） */
+  async reconnect() {
+    if (!this.supported()) return 'none'
+    let handle
+    try { handle = await DiskDb.load('layouts') } catch (e) { return 'none' }
+    if (!handle) return 'none'
+    try {
+      const perm = await handle.queryPermission({ mode: 'readwrite' })
+      if (perm === 'granted') { this._root = handle; return 'granted' }
+      return 'prompt'
+    } catch (e) {
+      return 'none'   // ⚠️ ハンドルが壊れている（フォルダを消した等）── 選び直しへ
+    }
+  },
+
+  /** ⭐ <see cref="reconnect"/> が 'prompt' を返したときの、1クリックの確認。
+   * ⚠️ **ここはボタンのクリックハンドラから呼ぶこと**（ユーザー操作の中でないと
+   * `requestPermission` がブラウザに拒まれる）。フルの OS フォルダ選択は開かない。
+   * @returns {Promise<boolean>} 繋がったか。 */
+  async reconnectConfirm() {
+    let handle
+    try { handle = await DiskDb.load('layouts') } catch (e) { return false }
+    if (!handle) return false
+    try {
+      const perm = await handle.requestPermission({ mode: 'readwrite' })
+      if (perm !== 'granted') return false
+      this._root = handle
+      return true
+    } catch (e) {
       return false
     }
   },
