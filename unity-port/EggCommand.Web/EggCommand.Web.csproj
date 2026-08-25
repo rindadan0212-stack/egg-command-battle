@@ -69,6 +69,10 @@
       <Art Include="..\..\unity\Assets\Resources\UI\icon\*.png" Into="wwwroot\icon" />
       <Art Include="..\..\unity\Assets\Resources\UI\*.png" Into="wwwroot\ui" />
       <Art Include="..\..\art\sprites\display\*.png" Into="wwwroot\sprite" />
+      <!-- ⭐ 2026-08-25 ドット絵化 段取り4: `paint`（背景・部品を絵で出す種類）の絵。
+           ⚠️ 唯一の出所は `unity/Assets/Resources/UI/paint/`（`sim paint-placeholder` が
+           仮置きを書く。本物に差し替えても置き場所は変わらない）。 -->
+      <Art Include="..\..\unity\Assets\Resources\UI\paint\*.png" Into="wwwroot\paint" />
     </ItemGroup>
     <Copy SourceFiles="@(Art)" DestinationFolder="%(Art.Into)" SkipUnchangedFiles="true" />
   </Target>
@@ -103,6 +107,22 @@
                        Overwrite="true" WriteOnlyWhenDifferent="true" />
     <ItemGroup>
       <EmbeddedResource Include="$(IntermediateOutputPath)sprite-manifest.txt" Link="SpriteManifest.txt" />
+    </ItemGroup>
+  </Target>
+
+  <!-- ⭐ 2026-08-25 ドット絵化 段取り4: `paint` の絵の一覧＋大きさ（ドット数）を埋め込む。
+       ⚠️ `IconManifest`/`SpriteManifest` と違い、ここは**このビルドで作らない**
+       ── 大きさ（実ドット数）はファイルの中身を読まないと分からないので、
+       `EggCommand.Sim` の `paint-placeholder` コマンドが実物の PNG を読んで
+       `paint-manifest.txt`（`名前 幅 高さ`）をあらかじめ書いておく（チェックイン済み）。
+       ⭐ ここは、その**唯一の出所をそのまま埋め込むだけ**。
+       ⚠️ 一度も `sim paint-placeholder` を走らせていない新規クローンでは無いので、
+       無いままビルドが壊れないよう `Condition="Exists(...)"` で外す
+       （`PaintManifest.cs` は埋め込みが無ければ「読めなかった」として安全側へ倒す）。 -->
+  <Target Name="PaintManifest" BeforeTargets="BeforeBuild"
+          Condition="Exists('..\..\unity\Assets\Resources\UI\paint\paint-manifest.txt')">
+    <ItemGroup>
+      <EmbeddedResource Include="..\..\unity\Assets\Resources\UI\paint\paint-manifest.txt" Link="PaintManifest.txt" />
     </ItemGroup>
   </Target>
 

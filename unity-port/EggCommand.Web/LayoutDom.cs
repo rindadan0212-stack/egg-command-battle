@@ -38,7 +38,7 @@ namespace EggCommand.Web
         public Func<string, bool> When;
         /// <summary>`bar` の伸び具（0〜1）。⚠️ null なら 0。</summary>
         public Func<string, double> Ratio;
-        /// <summary>⭐ `icon` の絵の名前。⚠️ null なら骨組みの `pic=` のまま。</summary>
+        /// <summary>⭐ `icon`/`paint` の絵の名前。⚠️ null なら骨組みの `pic=` のまま。</summary>
         public Func<string, string> Pic;
         /// <summary>⭐ **`host` の中身**（名前 → そのまま差す HTML）。
         ///
@@ -55,6 +55,15 @@ namespace EggCommand.Web
     /// ⚠️ **中身の判断はしない。**何をどこに置くかは骨組みが持つ。</summary>
     public static class LayoutDom
     {
+        /// <summary>⭐ 今どの画面を描いているか。⚠️ 「絵が枠に合わない」警告の出所を言うためだけに使う
+        /// （<see cref="Render"/> の呼び出しごとに更新される。Blazor WASM は単一スレッドなので、
+        /// ふつうの static フィールドで足りる）。</summary>
+        private static string _layoutId = "";
+
+        /// <summary>⭐ 「絵が枠に合わない」警告を、同じ組み合わせに1回しか出さないための帳面
+        /// （ドット絵化計画 段取り4・第1部「黙って縮めない・黙ってはみ出させない」）。</summary>
+        private static readonly HashSet<string> _mismatchWarned = new HashSet<string>();
+
         /// <param name="suffix">⭐ **同じ骨組みを何枚も出すときの番号**（`"#2"` など）。
         ///
         /// ⚠️ 繰り返し（`repeat=`）は自分で番号を付けるが、
@@ -71,6 +80,7 @@ namespace EggCommand.Web
         {
             var sb = new StringBuilder();
             if (layout == null) return "<!-- 骨組みが無い -->";
+            _layoutId = layout.Id;
             foreach (var node in layout.Roots) One(sb, node, fill, node.Top, suffix, crown);
             return sb.ToString();
         }
@@ -233,6 +243,9 @@ namespace EggCommand.Web
                     // ⭐ まだビルド（`CopyArt`/`IconManifest`）に入っていない絵。
                     //    絵そのものは在るので `icon-missing` にしない ── 出所はディスクから
                     //    読んだ data URL（骨組みエディタ側が登録した文字列をそのまま使う）。
+                    // ⚠️ **「引き伸ばさない」規則の対象外**（骨組みエディタのプレビュー専用）。
+                    //    アップロードした絵の実ドット数を知らない（任意サイズの data URL）ので、
+                    //    ここだけは今までどおり枠いっぱいに出す。
                     sb.Append("<div class=\"n icon-art\" style=\"left:0;top:0;width:100%;height:100%;--pic:url(")
                       .Append(Esc(overridePic)).Append(")\"></div>");
                 }
@@ -241,16 +254,27 @@ namespace EggCommand.Web
                     // 🔴 **黙って空の四角にしない。**⚠️ 表や骨組みが指す名前でも、
                     //    実体（`Resources/UI/icon/<名前>.png`）が無ければここへ落ちる
                     //    ── 埋め込んだ一覧（`IconManifest`）と突き合わせて分かる。
-                    sb.Append("<div class=\"n icon-missing\" style=\"left:0;top:0;width:100%;height:100%\" title=\"絵が無い: ")
-                      .Append(Esc(pic)).Append(".png\">？</div>");
+                    string iconStyle = FitDotsStyle(node, "icon", IconDots, IconDots);
+                    sb.Append("<div class=\"n icon-missing\" style=\"").Append(iconStyle)
+                      .Append("\" title=\"絵が無い: ").Append(Esc(pic)).Append(".png\">？</div>");
                 }
                 else if (pic != null)
                 {
                     // ⭐ 絵の場所は1回だけ言う（`--pic`）。⚠️ 素の絵と、
                     //    その形に切った色の2枚が同じ絵を見るので、二重に書かない。
-                    sb.Append("<div class=\"n icon-art\" style=\"left:0;top:0;width:100%;height:100%;--pic:url(icon/")
+                    // 🔴 **引き伸ばさない**（段取り4・第1部）── 100%/100% で枠いっぱいに
+                    //    伸縮させていたのをやめ、実ドット数×4 で中央に置く。
+                    string iconStyle = FitDotsStyle(node, "icon", IconDots, IconDots);
+                    sb.Append("<div class=\"n icon-art\" style=\"").Append(iconStyle).Append(";--pic:url(icon/")
                       .Append(Esc(pic)).Append(".png)\"></div>");
                 }
+            }
+            else if (node.Kind == "paint")
+            {
+                // ⭐ **絵をそのまま出す（色を掛け合わせない）**── icon と違い、
+                //    抱き合わせ（mask）の層を持たない（ドット絵化計画 決定10）。
+                string pic = (has && fill?.Pic != null ? fill.Pic(bind) : null) ?? node.Option("pic");
+                Paint(sb, pic, node);
             }
             else if (node.Kind == "host")
             {
@@ -311,8 +335,9 @@ namespace EggCommand.Web
         /// `&lt;img&gt;` にすると、静かに空白へ落ちる。</summary>
         private static void Dots(StringBuilder sb, PixelSprite sprite, Palette palette, LayoutNode node)
         {
-            // ⭐ 正方形で描く（検査が「絵は正方形」を要求している）
-            float size = Math.Min(node.Width, node.Height);
+            // 🔴 **引き伸ばさない**（段取り4・第1部）── 「短い辺で正方形」に縮めていたのをやめ、
+            //    `sprite.Width * 4` × `sprite.Height * 4` で中央に置く（合わなければ警告）。
+            string style = FitDotsStyle(node, "pixel", sprite.Width, sprite.Height);
             string foeClass = node.Option("foe") == "yes" ? " foe" : "";
 
             string? stem = SpriteManifest.StemOf(sprite, palette);
@@ -323,8 +348,7 @@ namespace EggCommand.Web
                     // 🔴 **黙って空の四角にしない。**⚠️ `IconManifest` の `icon-missing` と同じ扱い
                     //    ── 種族やパレットを増やしたのに `sim sprites` を走らせ忘れると、
                     //    ここへ落ちて画面の上で気づける（テストでも `SpritePngTests` が落ちる）。
-                    sb.Append("<div class=\"n icon-missing\" style=\"left:0;top:0;width:")
-                      .Append(Px(size)).Append(";height:").Append(Px(size))
+                    sb.Append("<div class=\"n icon-missing\" style=\"").Append(style)
                       .Append("\" title=\"絵が無い: sprite/").Append(Esc(stem))
                       .Append(".png\">？</div>");
                     return;
@@ -334,19 +358,17 @@ namespace EggCommand.Web
                 //    タグの種類を問わずそのまま乗る。
                 sb.Append("<img class=\"n pixel").Append(foeClass)
                   .Append("\" src=\"sprite/").Append(Esc(stem)).Append(".png\" alt=\"\"")
-                  .Append(" style=\"left:0;top:0;width:").Append(Px(size))
-                  .Append(";height:").Append(Px(size)).Append("\" />");
+                  .Append(" style=\"").Append(style).Append("\" />");
                 return;
             }
 
             // ⚠️ 種族表に無い絵（卵など）は、まだ PNG を焼いていないので SVG のまま描く
             //    （`EggCommand.Sim/Book.cs` と同じやり方 ── 添字色 → `Palette.ColorOf` の
-            //    "#rrggbb" をそのまま矩形に）。
+            //    "#rrggbb" をそのまま矩形に）。⭐ ここも同じ「引き伸ばさない」規則（`style`）。
             sb.Append("<svg class=\"n pixel").Append(foeClass)
               .Append("\" viewBox=\"0 0 ")
               .Append(sprite.Width).Append(' ').Append(sprite.Height)
-              .Append("\" style=\"left:0;top:0;width:").Append(Px(size))
-              .Append(";height:").Append(Px(size)).Append("\">");
+              .Append("\" style=\"").Append(style).Append("\">");
             for (int y = 0; y < sprite.Height; y++)
             {
                 for (int x = 0; x < sprite.Width; x++)
@@ -360,6 +382,88 @@ namespace EggCommand.Web
             }
             sb.Append("</svg>");
         }
+
+        /// <summary>絵をそのまま出す（色を掛け合わせない・ドット絵化計画 決定10）。
+        /// ⚠️ icon と違い、色の抱き合わせ層（`::after` の mask）を持たない。
+        /// ⭐ 「引き伸ばさない」規則は icon/pixel と同じ（<see cref="FitDotsStyle"/>）、
+        /// 絵の実ドット数は <see cref="PaintManifest"/> から引く。</summary>
+        private static void Paint(StringBuilder sb, string pic, LayoutNode node)
+        {
+            if (pic == null)
+            {
+                // 🔴 黙って空にしない。⚠️ Core の検査（`IconMissingSource`）は icon にしか
+                //    掛けていない（paint は枠だけの部品もありうるため）── ここで拾う。
+                sb.Append("<div class=\"n paint-missing\" style=\"left:0;top:0;width:100%;height:100%\""
+                    + " title=\"paint に pic= が無い\">？</div>");
+                return;
+            }
+
+            var size = PaintManifest.SizeOf(pic);
+            if (size == null)
+            {
+                // ⚠️ 実ドット数が分からない（実体が無い）。⭐ 枠なりの大きさを仮に使い
+                //    （4の倍数の骨組みなら誤差は出ない）、？を出す（icon-missing と同じ扱い）。
+                string style = FitDotsStyle(node, "paint", DotsOf(node.Width), DotsOf(node.Height));
+                sb.Append("<div class=\"n paint-missing\" style=\"").Append(style)
+                  .Append("\" title=\"絵が無い: paint/").Append(Esc(pic)).Append(".png\">？</div>");
+                return;
+            }
+
+            string ok = FitDotsStyle(node, "paint", size.Value.Width, size.Value.Height);
+            sb.Append("<img class=\"n paint\" src=\"paint/").Append(Esc(pic))
+              .Append(".png\" alt=\"\" style=\"").Append(ok).Append("\" />");
+        }
+
+        /// <summary>⭐ 今ある28枚のアイコンは全部 128×128 実ピクセル（2026-08-25 実測・
+        /// `unity/Assets/Resources/UI/icon/*.png`）── 1ドット=4px の規則に当てはめると
+        /// 32×32 ドット。⚠️ アイコンをまだ 8/12/16ドットで描き直していない
+        /// （計画 §8-3・未着手）ので、いまはこの実測値を定数で持つ。将来描き直したら、
+        /// `IconManifest` を `PaintManifest` と同じ「大きさ付き一覧」に差し替えて、
+        /// この定数を消すこと。</summary>
+        private const int IconDots = 32;
+
+        /// <summary>絵を「ドット数×4px」で節点の中央に置くスタイル文字列を作る。
+        /// 🔴 **引き伸ばさない**（段取り4・第1部）── 枠に合わなければ位置だけ中央寄せし、
+        /// 大きさはそのまま（縮めない・はみ出しても隠さない）。
+        /// ⭐ 合っていなければ console に1回だけ警告する（<see cref="WarnMismatch"/>）。</summary>
+        private static string FitDotsStyle(LayoutNode node, string kind, int dotsW, int dotsH)
+        {
+            float w = dotsW * 4f;
+            float h = dotsH * 4f;
+            float left = (node.Width - w) / 2f;
+            float top = (node.Height - h) / 2f;
+            if (Math.Abs(node.Width - w) > 0.5f || Math.Abs(node.Height - h) > 0.5f)
+                WarnMismatch(node, kind, dotsW, dotsH, w, h);
+            return "left:" + Px(left) + ";top:" + Px(top) + ";width:" + Px(w) + ";height:" + Px(h);
+        }
+
+        /// <summary>⚠️ **黙って縮めない・黙ってはみ出させない。**どこがどう合っていないかを言う。
+        /// ⭐ 同じ「画面/部品 節点 種類」の組には1回しか出さない（連打しない）。</summary>
+        private static void WarnMismatch(LayoutNode node, string kind, int dotsW, int dotsH, float w, float h)
+        {
+            // ⭐ `use=` で差し込まれた側は `PartId` を持つ（`data-part` と同じ規約）。
+            //    それを冠のように前に付けて、どの部品ファイルの節点かが分かるようにする
+            //    （例: "home/slot art" ── home 画面の、slot 部品の、art 節点）。
+            string place = node.PartId != null ? node.PartId + " " + node.Name : node.Name;
+            string key = _layoutId + "/" + place + " " + kind;
+            if (!_mismatchWarned.Add(key)) return;
+            // 🔴 **`Console.Error` を使わない。**（2026-08-25・実測して判明）
+            //    ⚠️ `dotnet run`（Development）の WASM ホストは .NET の stderr 書き込みを
+            //    `dotNetCriticalError` として扱い、**「何かが壊れました」の赤い帯**を出す
+            //    （`web移行計画.md` の「踏んだ罠: Console.Error.WriteLine が Blazor の赤い帯を出す」）。
+            //    ⭐ ここは**移行の途中で必ず鳴る**知らせ（32画面ぶん・計45箇所）なので、
+            //    赤い帯を出すと**本物のクラッシュを覆い隠す**。だから普通の書き出しにする。
+            //    ⚠️ 「黙って縮めない・黙ってはみ出させない」の約束は守られている
+            //    （console に必ず出る。ただの色が違うだけ）。
+            Console.WriteLine(
+                "絵が枠に合わない: " + _layoutId + "/" + place + " " + kind + " "
+                + dotsW + "x" + dotsH + "ドット=" + Px(w) + "x" + Px(h)
+                + " なのに枠は" + Px(node.Width) + "x" + Px(node.Height));
+        }
+
+        /// <summary>絵の実ドット数が分からないとき、枠の大きさから逆算する。
+        /// ⚠️ 4の倍数の骨組みなら誤差は出ない（計画 §2・§8-1 の升目直しが前提）。</summary>
+        private static int DotsOf(float px) => Math.Max(1, (int)Math.Round(px / 4f));
 
         /// <summary>⭐ **設計 px を CSS へ。**⚠️ `--u` を掛けない ── 外枠を丸ごと
         /// 拡大縮小するので、中は設計の数のままでよい。</summary>

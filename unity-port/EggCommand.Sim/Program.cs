@@ -35,6 +35,8 @@ namespace EggCommand.Sim
     ///   dotnet run --project EggCommand.Sim -- delivered  算数の見積もりが実戦で入っているか（食い違いを掘る）
     ///   dotnet run --project EggCommand.Sim -- import-sprite 手描きの原稿（art/handmade/sprite/*.png）を
     ///                                          Species.cs に貼れる C# へ落とす（⚠️ 貼るのは人の仕事）
+    ///   dotnet run --project EggCommand.Sim -- paint-placeholder 骨組みが指す `paint` の絵で、
+    ///                                          まだ無いものを仮置きで作る（ドット絵化計画 段取り4）
     /// </summary>
     public static class Program
     {
@@ -93,6 +95,8 @@ namespace EggCommand.Sim
                 case "sprites": SpritePng.Run(".."); break;
                 // ⭐ 手描きの原稿（art/handmade/sprite/*.png）→ Species.cs に貼れる C#（再実行できる取り込み道具）
                 case "import-sprite": SpriteImport.Run(".."); break;
+                // ⭐ まだ無い paint の絵を仮置きで作る（ドット絵化計画 段取り4・第3部）
+                case "paint-placeholder": PaintPlaceholder.Run(".."); break;
                 case "determinism": Console.WriteLine(Determinism.Run()); break;   // ⚠️ 他の出力と同じく cwd 相対（unity-port から打つ）
                 case "strategy":
                     // ⭐ `sim strategy 4` で4対4。⚠️ 既定を変えない（3対3の記録が読めなくなる）

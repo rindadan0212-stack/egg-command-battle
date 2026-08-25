@@ -143,6 +143,10 @@ html, body {
 }
 .n.button.lead { background: var(--accent); }
 .n.button:disabled { background: #e8e9ee; color: var(--ink-faint); cursor: default; }
+/* ⭐ 2026-08-25 ドット絵化 段取り4: 下に paint を敷いた釦は、地を透明にして絵を見せる
+   （`ink=clear`）。⚠️ 押しどころ自体は button のまま（tap= は生きている）。 */
+.n.button.ink-clear,
+.n.button.ink-clear:disabled { background: transparent; }
 
 /* scroll ── ⭐ CSS に任せる。⚠️ Unity では ScrollRect を組んでいた所 */
 .n.scroll {
@@ -420,9 +424,11 @@ html, body {
   image-rendering: pixelated;
 }
 
-/* ⭐ **絵が無いときの印。**⚠️ 空の四角と混同しない ── `IconManifest` が
-   「実体が無い」と判じた `pic=` にだけ出る（`NOTICE.md` 参照）。 */
-.n.icon-missing {
+/* ⭐ **絵が無いときの印。**⚠️ 空の四角と混同しない ── `IconManifest`/`PaintManifest` が
+   「実体が無い」と判じた `pic=` にだけ出る（`NOTICE.md` 参照）。
+   ⚠️ `.n.paint-missing` は `paint` 用（段取り4・第2部「絵が無いとき」）── 見た目は同じで足りる。 */
+.n.icon-missing,
+.n.paint-missing {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -456,3 +462,10 @@ html, body {
    ⭐ Unity では pivot を中央へ寄せてから localScale.x を負にする2段構えが要ったが、
    CSS は transform-origin の既定が中央なので1行で足りる。 */
 .n.pixel.foe { transform: scaleX(-1); }
+
+/* paint ── ⭐ 絵をそのまま出す（色を掛け合わせない・ドット絵化計画 決定10・段取り4）。
+   ⚠️ icon と違い抱き合わせ（mask）の層を持たない。⭐ pixel と同じく必ず crisp に。 */
+.n.paint {
+  image-rendering: pixelated;
+  display: block;
+}

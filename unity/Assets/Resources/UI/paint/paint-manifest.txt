@@ -1,0 +1,7 @@
+frame-dock 270 58
+frame-tab 59 37
+home-keep 79 28
+home-mats 270 20
+home-party 79 28
+home-trial 79 28
+slot-frame 75 95

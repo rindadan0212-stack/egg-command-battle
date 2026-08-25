@@ -23,9 +23,11 @@ top       box     0    0     1080 132
   # ⚠️ 右肩の字（EXP）とは**同時に出ない** ── 同じ場所を使うので `when` で入れ替える。
   extra   button  780  12    260  112   size=40 tap=extra bind=extra when=extra
 
+# ⭐ 2026-08-25 ドット絵化 段取り4: 下の帯（`plate`）とタブ（`tab`）を絵（`paint`）にした。
+#    ⚠️ 選択中タブの色替え（`Shell.cs` の `Tint`）は kind に関わらず効く（inline style なので）。
 dock      box     0    1688  1080 232   when=dock dock=no
-  plate   card    0    0     1080 232
-  tab     card    48   44    236  148   repeat=tabs cols=4 gap=16 rows=148 max=4 tap=tab bind=tab
+  plate   paint   0    0     1080 232   pic=frame-dock
+  tab     paint   48   44    236  148   repeat=tabs cols=4 gap=16 rows=148 max=4 tap=tab bind=tab pic=frame-tab
     tname  label  0    28    236  44    size=40 anchor=upper-center bind=tname
     # ⚠️ 0 を出さない。⭐ 数が無いことは**書かない**ことで伝わる
     # ⚠️ 字が24→40pxになったので、高さを36→48に広げた（1行に収める余地を作る）。

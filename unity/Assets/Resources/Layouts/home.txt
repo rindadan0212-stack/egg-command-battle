@@ -8,8 +8,11 @@
 #
 # ⚠️ 数は `Resources/Prefabs/HomeScreen.prefab` の実測（枠は 3列×2段・倍率1）。
 #
+# ⭐ 2026-08-25 ドット絵化 段取り4: `mats`/`slot`/`trial`/`party`/`keep` は絵（`paint`）を敷いた。
+#    ⚠️ いまは仮置き（`sim paint-placeholder`）── 枠線＋薄い塗り＋隅の印で、本物と見間違えない。
+#
 #  名前   種類    左   上    幅    高    付け足し
-mats     card    0    0     1080  80
+mats     paint   0    0     1080  80    pic=home-mats
   icon   round   48   20    40    40    bind=icon
   # ⭐ **EXP と書く。**⚠️ 数だけ出していた頃は、丸い印の隣の数が
   #    何の数なのか画面のどこにも書いていなかった。
@@ -21,7 +24,7 @@ mats     card    0    0     1080  80
 
 idle     host    0    88    1080  472
 
-slot     card    72   616   300   380   repeat=slots cols=3 gap=20 rows=400 max=6 tap=slot use=slot
+slot     paint   72   616   300   380   repeat=slots cols=3 gap=20 rows=400 max=6 tap=slot use=slot pic=slot-frame
 
 # ⚠️ **置ける行は 1420 の1行しか無い。**⭐ 実測: 素材 0〜80 / 放置 88〜560 /
 #    孵化枠 616〜1396 / **1420〜1532** / 帯 1556〜1788。
@@ -31,6 +34,11 @@ slot     card    72   616   300   380   repeat=slots cols=3 gap=20 rows=400 max=
 #    （レビュー指摘 2026-08-19）。⭐ 3つに割って横に並べる。
 # ⭐ **輪の外にあるもの**を、ここ1行にまとめてある（試練・編成・控え）。
 #    ⚠️ 遊びの輪（探索→潜入→戦闘→帰還）は下の帯が持つ。混ぜない。
-trial    button  48   1420  316   112   size=40 tap=trials bind=trials
-party    button  384  1420  316   112   size=40 tap=party text=パーティ編成
-keep     button  716  1420  316   112   size=40 tap=keep text=保存の控え
+# ⚠️ **釦の地は `ink=clear` で透明にし、下に敷いた paint を見せる**
+#    （button 自体は `.n.button` の地色 #dfe3ee を持つので、透明にしないと絵が隠れる）。
+trialbg  paint   48   1420  316   112   pic=home-trial
+trial    button  48   1420  316   112   size=40 tap=trials bind=trials ink=clear
+partybg  paint   384  1420  316   112   pic=home-party
+party    button  384  1420  316   112   size=40 tap=party ink=clear text=パーティ編成
+keepbg   paint   716  1420  316   112   pic=home-keep
+keep     button  716  1420  316   112   size=40 tap=keep ink=clear text=保存の控え
