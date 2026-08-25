@@ -64,6 +64,20 @@ namespace EggCommand.Web
         /// （ドット絵化計画 段取り4・第1部「黙って縮めない・黙ってはみ出させない」）。</summary>
         private static readonly HashSet<string> _mismatchWarned = new HashSet<string>();
 
+        /// <summary>⭐ **直前に描いたときに見つかった「枠と絵が合わない」節点**（エディタ用）。
+        /// ⚠️ `FindPicMismatches`（骨組みだけを見る）では `pixel` を判定できない ──
+        /// どの種族の絵が入るかは `bind=` 越しに実行時に決まるため。⭐ 描く側は実物を持っているので、
+        /// **判定を二重に書かずここへ控える**。エディタは描く前に <see cref="ClearDrawnMismatches"/> を
+        /// 呼び、描いたあとに <see cref="DrawnMismatches"/> を読む。</summary>
+        private static readonly List<PicMismatch> _drawn = new List<PicMismatch>();
+        private static readonly HashSet<string> _drawnKeys = new HashSet<string>();
+
+        /// <summary>⚠️ エディタが盤を組み直す**直前**に呼ぶ（溜め込みっぱなしにしない）。</summary>
+        public static void ClearDrawnMismatches() { _drawn.Clear(); _drawnKeys.Clear(); }
+
+        /// <summary>直前の描画で見つかった不一致（`icon`/`paint`/`pixel` すべて）。</summary>
+        public static IReadOnlyList<PicMismatch> DrawnMismatches => _drawn;
+
         /// <param name="suffix">⭐ **同じ骨組みを何枚も出すときの番号**（`"#2"` など）。
         ///
         /// ⚠️ 繰り返し（`repeat=`）は自分で番号を付けるが、
@@ -446,6 +460,17 @@ namespace EggCommand.Web
             //    （例: "home/slot art" ── home 画面の、slot 部品の、art 節点）。
             string place = node.PartId != null ? node.PartId + " " + node.Name : node.Name;
             string key = _layoutId + "/" + place + " " + kind;
+
+            // ⭐ **描いたときに分かった不一致を、そのまま控える**（2026-08-25）。
+            //    🔴 これが無いと、エディタは `pixel`（種族の絵）の不一致を**一件も出せない**
+            //    ── `FindPicMismatches` は骨組みだけを見るので、`bind=` で実行時に決まる絵の
+            //    実寸を知りようがない（実測: `box` はコンソールに2件出るのにエディタは0件だった）。
+            //    ⭐ 描く側は実物の絵を持っている ── **判定を二重に書かず、ここの結果を配る**。
+            //    ⚠️ 溜め込みっぱなしにしない（エディタが描く前に `ClearDrawnMismatches`）。
+            if (_drawnKeys.Add(key))
+                _drawn.Add(new PicMismatch(node.LineNumber, node.PartId, node.PartLine,
+                    node.Name, kind, node.Option("pic") ?? "", w, h, node.Width, node.Height));
+
             if (!_mismatchWarned.Add(key)) return;
             // 🔴 **`Console.Error` を使わない。**（2026-08-25・実測して判明）
             //    ⚠️ `dotnet run`（Development）の WASM ホストは .NET の stderr 書き込みを
@@ -464,6 +489,85 @@ namespace EggCommand.Web
         /// <summary>絵の実ドット数が分からないとき、枠の大きさから逆算する。
         /// ⚠️ 4の倍数の骨組みなら誤差は出ない（計画 §2・§8-1 の升目直しが前提）。</summary>
         private static int DotsOf(float px) => Math.Max(1, (int)Math.Round(px / 4f));
+
+        // ── ⭐ E1: 骨組みエディタ向け「枠と絵の実寸」問い合わせ ──────────
+        //
+        // ⚠️ 遊ぶ画面の描画（`FitDotsStyle`/`Paint`/`Dots`）とは**あえて別の物差し**にする。
+        //    描く側は「分からなければ枠を信じる」（黙って壊さない）側へ倒すが、エディタは
+        //    「分からなければ何も言わない」側へ倒したい（分からないのに合っていると
+        //    誤って報告しない）── 目的が違うので、同じ関数を無理に共用しない。
+
+        /// <summary>その絵の「引き伸ばさない」実寸（設計px）── 分かるときだけ。
+        /// ⭐ 骨組みエディタ（E1-4 絵を選んだら枠を自動で合わせる／E1-5 不一致の検出）が
+        /// 使う唯一の出所。⚠️ icon はまだ実物の大きさを持っていない（計画 §8-3・未着手）
+        /// ので <see cref="IconDots"/>（実測32ドット・全アイコン共通）で代用する。paint は
+        /// <see cref="PaintManifest.SizeOf"/> を引く。⚠️ 名前が一覧に無ければ null
+        /// （「分からない」を「合っている」と偽らない）。</summary>
+        public static (float Width, float Height)? ExpectedPicSize(string kind, string? pic)
+        {
+            if (string.IsNullOrEmpty(pic)) return null;
+            if (kind == "icon")
+                return IconManifest.Exists(pic) ? (IconDots * 4f, IconDots * 4f) : ((float, float)?)null;
+            if (kind == "paint")
+            {
+                var size = PaintManifest.SizeOf(pic);
+                return size != null ? (size.Value.Width * 4f, size.Value.Height * 4f) : ((float, float)?)null;
+            }
+            return null;
+        }
+
+        /// <summary>⭐ E1-5: 「枠と絵が合わない」節点1件ぶん。⚠️ <see cref="LayoutNode.LineNumber"/>/
+        /// <see cref="LayoutNode.PartId"/>/<see cref="LayoutNode.PartLine"/> と同じ規約
+        /// （<see cref="Fault"/> に倣う ── 自前の行は <c>PartId==null &amp;&amp; LineNumber&gt;=0</c>、
+        /// 部品から来た側は <c>PartId!=null &amp;&amp; LineNumber==-1</c>）。</summary>
+        public readonly struct PicMismatch
+        {
+            public readonly int LineNumber;
+            public readonly string? PartId;
+            public readonly int PartLine;
+            public readonly string Name;
+            public readonly string Kind;
+            public readonly string Pic;
+            /// <summary>絵の実寸（設計px）。</summary>
+            public readonly float ExpectW, ExpectH;
+            /// <summary>いまの枠（設計px）。</summary>
+            public readonly float FrameW, FrameH;
+
+            public PicMismatch(int lineNumber, string? partId, int partLine, string name, string kind, string pic,
+                float expectW, float expectH, float frameW, float frameH)
+            {
+                LineNumber = lineNumber; PartId = partId; PartLine = partLine;
+                Name = name; Kind = kind; Pic = pic;
+                ExpectW = expectW; ExpectH = expectH; FrameW = frameW; FrameH = frameH;
+            }
+        }
+
+        /// <summary>⭐ E1-5: 骨組みエディタが「枠と絵が合わない」節点を洗い出す唯一の出所。
+        /// ⚠️ `bind=` で絵が決まる節点（実行時にしか分からない）は対象にしない ── 骨組みの
+        /// `pic=` が直に書いてある節点だけを見る（<see cref="ExpectedPicSize"/> と同じ理由）。</summary>
+        public static List<PicMismatch> FindPicMismatches(EggCommand.Core.Layout? layout)
+        {
+            var result = new List<PicMismatch>();
+            if (layout == null) return result;
+            foreach (var root in layout.Roots) WalkPicMismatch(root, result);
+            return result;
+        }
+
+        private static void WalkPicMismatch(LayoutNode node, List<PicMismatch> into)
+        {
+            if (node.Kind == "icon" || node.Kind == "paint")
+            {
+                string? pic = node.Option("pic");
+                var expect = ExpectedPicSize(node.Kind, pic);
+                if (expect is { } size
+                    && (Math.Abs(node.Width - size.Width) > 0.5f || Math.Abs(node.Height - size.Height) > 0.5f))
+                {
+                    into.Add(new PicMismatch(node.LineNumber, node.PartId, node.PartLine,
+                        node.Name, node.Kind, pic!, size.Width, size.Height, node.Width, node.Height));
+                }
+            }
+            foreach (var child in node.Children) WalkPicMismatch(child, into);
+        }
 
         /// <summary>⭐ **設計 px を CSS へ。**⚠️ `--u` を掛けない ── 外枠を丸ごと
         /// 拡大縮小するので、中は設計の数のままでよい。</summary>

@@ -38,23 +38,26 @@ window.eggEdit = {
     return this._partId ? (node.dataset.partLine || '') : (node.dataset.line || '')
   },
 
-  /** 盤を器（列）に合わせて縮める。⚠️ 器のサイズが変わるたび呼び直す。
-   * ⭐ Pass B: `fitK`（器に収まる倍率）に、ユーザー操作のズーム `_zoom`（既定1）を
-   * 掛けた**実効倍率** `k` を使う。`stage.dataset.scale` にはこの実効 k を入れ続ける
-   * （`Dragging`/`Resizing` 等の dx/k 計算はここを読むので、読み手を壊さない）。
+  /** 盤の表示を、いまの `_dotPx`（1ドット＝画面上で何 CSS px か）で合わせ直す。
+   *
+   * ⭐ E1-2（2026-08-25・ドット絵化計画 §11-5）: 以前は器のサイズから毎回 `fitK` を
+   * 割り出して半端倍率を掛けていた（`fitK * zoom`）── ドットが不揃いに見えて判断を
+   * 誤る（計画の指摘どおり）。⭐ いまは **`_dotPx` が唯一の出所**。設計側の1升は
+   * 常に4px（`EditPage._step` の既定と同じ）なので、実効倍率 `k = _dotPx / 4` は
+   * 常に「整数 ÷ 4」── 2進浮動小数点でも割り切れる（4 は2の冪）ので、器のサイズが
+   * どんな半端な値でも `k` 自体には丸め誤差が乗らない。
+   * ⚠️ **器のサイズはここでは見ない。**器が変わっても（脇のパネルを畳む等）
+   * `_dotPx` は変えない ── 既定を選び直したいときは `autoDotPx()` を別途呼ぶ
+   * （`EditPage.ZoomReset`）。
    * @param {string} wrapId 器の id @param {string} stageId 盤（1080x1920）の id */
   fit(wrapId, stageId) {
-    // ⭐ setZoom から引数無しで呼び直せるよう、最後に使った id を覚えておく。
+    // ⭐ setDotPx から引数無しで呼び直せるよう、最後に使った id を覚えておく。
     this._wrapId = wrapId
     this._stageId = stageId
     const wrap = document.getElementById(wrapId)
     const stage = document.getElementById(stageId)
     if (!wrap || !stage) return
-    const r = wrap.getBoundingClientRect()
-    // ⚠️ 0 除算・負値を避ける（器がまだ描かれていない拍で呼ばれることがある）
-    const fitK = Math.max(0.05, Math.min(r.width / 1080, r.height / 1920))
-    const zoom = this._zoom || 1
-    const k = fitK * zoom
+    const k = (this._dotPx || 4) / 4
     // ⭐ Pass B: 盤を包む固定サイズの箱（`.edstagewrap`）を、見た目の実サイズ
     //    （1080*k × 1920*k）にする。⚠️ `#edstage`/`#edfaults`/`#edgrid` は
     //    左上基準（`transform-origin:0 0`）へ変えてある（CSS 側）ので、
@@ -77,13 +80,31 @@ window.eggEdit = {
     if (grid) grid.style.transform = t
   },
 
-  /** ⭐ Pass B: ユーザー操作のズーム倍率を変える。⚠️ ここでは `fit()` を呼び直すだけ
+  /** ⭐ E1-2: 「1ドット＝画面上で何pxか」を変える。⚠️ ここでは `fit()` を呼び直すだけ
    * （盤の実効倍率だけが変わる ── `RefreshView` は要らない）。選択の輪の再フィットは
-   * `EditPage.SetZoom` が `RingRefresh()`（旗を立てるだけ）で描画拍へ回す。
-   * @param {number} z ズーム倍率（例 1.0＝等倍）。クランプは C# 側で済ませてから渡す。 */
-  setZoom(z) {
-    this._zoom = z
+   * `EditPage.ApplyDotPx` が `RingRefresh()`（旗を立てるだけ）で描画拍へ回す。
+   * @param {number} dotPx 整数のみ（1/2/3/4/6/8）。段の妥当性は C# 側（`DotPxSteps`）で
+   * 済ませてから渡す ── ここでは信じて使う。 */
+  setDotPx(dotPx) {
+    this._dotPx = dotPx
     if (this._wrapId && this._stageId) this.fit(this._wrapId, this._stageId)
+  },
+
+  /** ⭐ E1-2: 「器に収まる最大の整数 `dotPx`」を選ぶ（既定値・`EditPage.ZoomReset` の中身）。
+   * ⚠️ 計画 §3 の `P = floor(min(実幅/270, 実高/480))` と同じ考え方 ── ただし段は
+   * 1/2/3/4/6/8 の6つだけ（Aseprite 風の丸い刻み）。器が測れない・0以下なら 4
+   * （初期値と同じ・変な値で盤が消えるのを避ける）。
+   * @param {string} wrapId 器の id @returns {number} 選んだ dotPx。 */
+  autoDotPx(wrapId) {
+    const steps = [1, 2, 3, 4, 6, 8]
+    const wrap = document.getElementById(wrapId)
+    if (!wrap) return 4
+    const r = wrap.getBoundingClientRect()
+    if (r.width <= 0 || r.height <= 0) return 4
+    const limit = 4 * Math.min(r.width / 1080, r.height / 1920)
+    let best = steps[0]
+    for (const s of steps) if (s <= limit) best = s
+    return best
   },
 
   /** 器の大きさの変化を見張って、盤を追従させる。 */
@@ -107,7 +128,7 @@ window.eggEdit = {
       //    ⭐ rAF に頼ると「描画が無いと rAF が回らない」実行環境で追従が止まる。
       this._scrollBound = (e) => {
         if (!(e.target instanceof Element) || e.target.id !== 'edscroll') return
-        if (this._selCsv) this.reselect(this._selCsv, this._selPrimary)
+        if (this._selCsv) this.reselect(this._selCsv, this._selPrimary, this._selMismatch)
         if (this._hoverLine) this.hoverOn(this._hoverLine)
         // ⭐ D-3: その場の入力欄も、輪・ホバーと同じ理由でスクロール追従が要る。
         if (this._editFocusLine) this.editAt(this._editFocusLine)
@@ -610,14 +631,23 @@ window.eggEdit = {
    * ⭐ 2つ以上のときは `#edsel` へ、選択中それぞれの輪郭だけの枠を作り直す（数は多くて
    * 数十 ── 毎回作り直してよい）。
    * @param {string} linesCsv 選択中の行番号（部品なら part-line）の csv。空文字なら無選択。
-   * @param {string} primaryLine 主たる選択の行番号（空文字なら無し）。 */
-  reselect(linesCsv, primaryLine) {
+   * @param {string} primaryLine 主たる選択の行番号（空文字なら無し）。
+   * @param {boolean} [mismatch] ⭐ E1-5: 主の節点が「枠と絵が合わない」節点か。選択が
+   * ちょうど1つのときだけ効く（`#edring` の色を変える ── 新しい色は増やさず、
+   * 不備の輪郭と同じ警告色）。 */
+  reselect(linesCsv, primaryLine, mismatch) {
     // ⭐ Pass B: スクロール追従（`start` の scroll ハンドラ）が、指の座標なしで同じ選択を
     //    描き直せるよう、最後に描いた選択を覚えておく。
-    this._selCsv = linesCsv; this._selPrimary = primaryLine
+    // ⭐ E1-5: `_selMismatch` も一緒に覚える ── 覚えないと、スクロール追従が引数無しで
+    //    呼び直したときに `mismatch` が undefined に落ち、輪の警告色がスクロールのたびに
+    //    消えてしまう。
+    this._selCsv = linesCsv; this._selPrimary = primaryLine; this._selMismatch = !!mismatch
     const lines = linesCsv ? linesCsv.split(',').filter(s => s !== '') : []
     const sel = document.getElementById('edsel')
     if (sel) sel.innerHTML = ''
+
+    const ring = document.getElementById('edring')
+    if (ring) ring.classList.toggle('edring-warn', !!mismatch && lines.length === 1)
 
     if (lines.length <= 1) {
       // ⭐ 1つ（または0）── 今までどおり #edring に一本化。#edsel は空のまま。

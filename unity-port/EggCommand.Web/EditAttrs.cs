@@ -111,7 +111,12 @@ namespace EggCommand.Web
         /// 「字の大きさ・字の色」の並びに寄せた（字 → 見た目 → 切替 → 数、の順）。</summary>
         public static readonly IReadOnlyList<Attr> All = new[]
         {
-            new Attr("size", "字の大きさ", AttrKind.Number, LabelOrButton, min: 8f, max: 140f),
+            // ⭐ E1-3（2026-08-25・ドット絵化計画 §6）: 自由入力の数からやめて、段だけ選ばせる。
+            //    PixelMplus10 は10ドット角 ── 1ドット=4pxに揃えるには、フォントも「1文字
+            //    ドット=4px」で出す必要があり、40px が唯一「絵と同じドットの太さ」になる
+            //    大きさ。80/120 はドットが太くなる例外（演出・大きい数字だけで使う）。
+            new Attr("size", "字の大きさ", AttrKind.Choice, LabelOrButton,
+                choices: new[] { "40", "80", "120" }),
             new Attr("text", "字そのもの", AttrKind.Text, LabelOrButton),
             new Attr("anchor", "寄せ", AttrKind.Choice, LabelOnly,
                 // ⭐ 実物の骨組み（unity/Assets/Resources/Layouts/*.txt）を grep して導いた6値

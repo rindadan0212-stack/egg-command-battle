@@ -68,11 +68,11 @@
     @if (_raw is not null)
     {
       <div class="edzoom">
-        <button type="button" @onclick="ZoomOut" disabled="@(_zoom <= ZoomMin)" title="縮小">−</button>
-        <button type="button" class="edzoomval" @onclick="ZoomReset" title="等倍に戻す">
-          @(((int)Math.Round(_zoom * 100)).ToString(CultureInfo.InvariantCulture))%
+        <button type="button" @onclick="ZoomOut" disabled="@(_dotPx <= DotPxSteps[0])" title="縮小">−</button>
+        <button type="button" class="edzoomval" @onclick="ZoomReset" title="器に収まる大きさに戻す">
+          1ドット=@(_dotPx)px
         </button>
-        <button type="button" @onclick="ZoomIn" disabled="@(_zoom >= ZoomMax)" title="拡大">＋</button>
+        <button type="button" @onclick="ZoomIn" disabled="@(_dotPx >= DotPxSteps[DotPxSteps.Length - 1])" title="拡大">＋</button>
       </div>
       <label class="edtoggle edgridtoggle">
         <input type="checkbox" checked="@_grid" @onchange="e => _grid = e.Value is bool b && b" />
@@ -205,6 +205,10 @@
                      @onmouseout="TreeHoverOff">
                   <span class="edname">@row.Node.Name</span>
                   <span class="edkind">@row.Node.Kind</span>
+                  @if (IsPicMismatch(row.Node.LineNumber))
+                  {
+                    <span class="edmismark" title="絵の実寸と枠が合っていません">⚠</span>
+                  }
                 </div>
               }
             }
@@ -369,14 +373,23 @@
                 </div>
               }
 
-              @* ⭐ E-4: `icon` を選んでいるときだけ「絵を変える」＋今の絵の小さな
-                 サムネイルと名前。⚠️ `pic=` は `EditAttrs`（属性表）に載せていない
+              @* ⭐ E-4/E1-4: `icon`/`paint` を選んでいるときだけ「絵を変える」＋今の絵の
+                 小さなサムネイルと名前。⚠️ `pic=` は `EditAttrs`（属性表）に載せていない
                  （`EditAttrs.Excluded["pic"]` の理由コメント参照 ── `IconManifest` に
                  `EggCommand.Tests` から届かないため）ので、専用の1ブロックをここに
-                 直に書く。`icon` 以外を選んでいるときは出さない（空の道具を見せない）。 *@
-              @if (sel.Kind == "icon")
+                 直に書く。それ以外を選んでいるときは出さない（空の道具を見せない）。
+                 ⭐ E1-5: 枠と絵が合わない（<see cref="PicMismatchOf"/>）ときは、警告と
+                 「絵に合わせる」（1手で枠を絵の実寸へ）をここに足す。 *@
+              @* 🔴 `pixel`（種族の絵）も入れる ── 枠と絵が合っていないときだけ。
+                 ⚠️ `pixel` は `pic=` を持たない（`bind=` で実行時に決まる）ので、
+                 絵を選ぶ道具は出ない。⭐ **出すのは「絵に合わせる」の一手だけ**
+                 ── 不一致45件のうち31件が `pixel` で、ここを落とすと
+                 「一番多いものだけ直せない」道具になる。 *@
+              @if (sel.Kind == "icon" || sel.Kind == "paint"
+                   || (sel.Kind == "pixel" && PicMismatchOf(sel) is not null))
               {
                 var picName = sel.Option("pic");
+                var mismatch = PicMismatchOf(sel);
                 <div class="edattrrow edpicrow">
                   <span class="edlabel">絵</span>
                   <div class="edpicpreview">
@@ -384,9 +397,9 @@
                     {
                       <span class="edmuted">（未選択）</span>
                     }
-                    else if (IconExists(picName))
+                    else if (PicExists(sel.Kind, picName))
                     {
-                      <img class="edpicthumb" src="@IconThumbSrc(picName)" alt="" />
+                      <img class="edpicthumb" src="@PicThumbSrc(sel.Kind, picName)" alt="" />
                       <span class="edname">@picName</span>
                     }
                     else
@@ -394,7 +407,18 @@
                       <span class="edwarn">この名前の絵が見つかりません（@picName）</span>
                     }
                   </div>
-                  <button type="button" class="edalign-btn" @onclick="OpenIconPicker">絵を変える</button>
+                  <button type="button" class="edalign-btn" @onclick="() => OpenIconPicker(sel.Kind)">絵を変える</button>
+                  @if (mismatch != null)
+                  {
+                    var mm = mismatch.Value;
+                    <div class="edpicwarn">
+                      <span class="edwarn">
+                        ⚠ 枠がこの絵の実寸と合っていません（絵は@(Fmt(mm.ExpectW))×@(Fmt(mm.ExpectH))px
+                        なのに枠は@(Fmt(mm.FrameW))×@(Fmt(mm.FrameH))px）
+                      </span>
+                      <button type="button" class="edalign-btn" @onclick="FitPicToNode">絵に合わせる</button>
+                    </div>
+                  }
                 </div>
               }
 
@@ -418,34 +442,58 @@
 
   @* ── 不備 ───────────────────────────────────────── *@
   <div class="edbottom">
-    @if (_raw is null)
+    <div class="edbottomrow">
+      @if (_raw is null)
+      {
+        <span class="edmuted">● フォルダを選ぶと検査が動きます</span>
+      }
+      else if (_faults.Count == 0)
+      {
+        @* ⚠️ 0件のときは一覧の器（`edfaultlist`）ごと出さない
+           （作者の pixelizer の教訓「空の欄を先に見せない」）。 *@
+        <span class="edok">● 不備 0件</span>
+      }
+      else
+      {
+        <span class="edbad">● @(_faults.Count)件</span>
+        @* ⭐ 一覧にして押せるようにした。⚠️ 横並びのまま溢れたら**下へ畳む**
+           （`flex-wrap`）── この頁の作法「溢れたら畳み方を間違えている合図」を
+           守りつつ、この帯だけは中身の件数が読めないので、唯一
+           横スクロールでなく縦に伸びることを選んだ（`edmain` が押される）。 *@
+        <div class="edfaultlist">
+          @for (var i = 0; i < _faults.Count; i++)
+          {
+            // ⚠️ for のループ変数をそのまま @onclick へ渡すと、全部の釦が
+            //    最後の i を掴んでしまう ── 1回ごとにローカルへ写す。
+            var at = i;
+            <button type="button" class="edfaultitem" title="@_faults[at].Text"
+                    @onclick="() => SelectFault(at)">
+              @_faults[at].Text
+            </button>
+          }
+        </div>
+      }
+    </div>
+    @* ⭐ E1-5: 「枠と絵が合わない」節点。⚠️ 開いた直後（<see cref="RefreshView"/> が
+       文書を読むたびに数え直す）に、この行がそのまま「N個あります」を伝える ──
+       別のトーストは作らない（計画 §11-12「新しい仕組みを増やさない」）。
+       ⚠️ 0件のときは行ごと出さない（空の欄を先に見せない、と同じ作法）。
+       ⚠️ 勝手には直さない ── ここは選ぶだけ（押すと Inspector の「絵に合わせる」へ）。 *@
+    @if (_raw is not null && _picMismatches.Count > 0)
     {
-      <span class="edmuted">● フォルダを選ぶと検査が動きます</span>
-    }
-    else if (_faults.Count == 0)
-    {
-      @* ⚠️ 0件のときは一覧の器（`edfaultlist`）ごと出さない
-         （作者の pixelizer の教訓「空の欄を先に見せない」）。 *@
-      <span class="edok">● 不備 0件</span>
-    }
-    else
-    {
-      <span class="edbad">● @(_faults.Count)件</span>
-      @* ⭐ 一覧にして押せるようにした。⚠️ 横並びのまま溢れたら**下へ畳む**
-         （`flex-wrap`）── この頁の作法「溢れたら畳み方を間違えている合図」を
-         守りつつ、この帯だけは中身の件数が読めないので、唯一
-         横スクロールでなく縦に伸びることを選んだ（`edmain` が押される）。 *@
-      <div class="edfaultlist">
-        @for (var i = 0; i < _faults.Count; i++)
-        {
-          // ⚠️ for のループ変数をそのまま @onclick へ渡すと、全部の釦が
-          //    最後の i を掴んでしまう ── 1回ごとにローカルへ写す。
-          var at = i;
-          <button type="button" class="edfaultitem" title="@_faults[at].Text"
-                  @onclick="() => SelectFault(at)">
-            @_faults[at].Text
-          </button>
-        }
+      <div class="edbottomrow">
+        <span class="edbad">⚠ この画面に枠と絵が合わない部品が @(_picMismatches.Count)個あります</span>
+        <div class="edfaultlist">
+          @for (var i = 0; i < _picMismatches.Count; i++)
+          {
+            var at = i;
+            var pm = _picMismatches[at];
+            <button type="button" class="edfaultitem" title="@PicMismatchText(pm)"
+                    @onclick="() => SelectPicMismatch(at)">
+              @PicMismatchLabel(pm)
+            </button>
+          }
+        </div>
       </div>
     }
   </div>
@@ -473,8 +521,10 @@
           <input type="text" class="edfindinput" placeholder="さがす" value="@_iconPickerFind"
                  @oninput="e => _iconPickerFind = Convert.ToString(e.Value) ?? string.Empty" />
           @* ⭐ E-3: 絵のフォルダを選ぶ（`unity\Assets\Resources\UI\icon` を選ぶよう案内）。
-             ⚠️ File System Access API 非対応ブラウザでは出さない（`PickFolder` と同じ判定）。 *@
-          @if (_supported)
+             ⚠️ File System Access API 非対応ブラウザでは出さない（`PickFolder` と同じ判定）。
+             ⚠️ E1-4: `paint` は `IconOverrides`（ディスクから読んだ仮の絵）を持たない ──
+             `icon` を選んでいるときだけ出す（無い機能を匂わせない）。 *@
+          @if (_supported && _picKind == "icon")
           {
             <button type="button" class="edalign-btn" @onclick="PickArtFolder"
                     title="絵のフォルダを選ぶ（unity\Assets\Resources\UI\icon）">
@@ -483,7 +533,7 @@
           }
         </div>
         @* ⭐ E-3: 「絵を取り込む」── 絵のフォルダを選んでいるときだけ出す（空の道具を見せない）。 *@
-        @if (!string.IsNullOrEmpty(_artFolder))
+        @if (_picKind == "icon" && !string.IsNullOrEmpty(_artFolder))
         {
           <div class="edmodalimport">
             <label class="edalign-btn edimport-btn">
@@ -494,19 +544,19 @@
             <span class="edmuted">ゲーム本体にも入れるには、いちど建て直してください</span>
           </div>
         }
-        @{ var iconNames = FilteredIconNames(); }
-        @if (iconNames.Count == 0)
+        @{ var picNames = FilteredPicNames(); }
+        @if (picNames.Count == 0)
         {
           <div class="edhint">見つかりません</div>
         }
         else
         {
           <div class="edicongrid">
-            @foreach (var name in iconNames)
+            @foreach (var name in picNames)
             {
               var pickName = name;
               <button type="button" class="edicon-item" title="@pickName" @onclick="() => ChooseIcon(pickName)">
-                <img src="@IconThumbSrc(pickName)" alt="" />
+                <img src="@PicThumbSrc(_picKind, pickName)" alt="" />
                 <span>@pickName</span>
               </button>
             }
@@ -550,12 +600,19 @@
     //    盤に描く（`Boxes`/`Focus`）にも、押して選ぶ（`Lines`/`PartIds`/`PartLines`）にも、
     //    字だけの `List<string>` では足りない。
     private List<Core.Fault> _faults = new();
+    /// <summary>⭐ E1-5: 「枠と絵が合わない」節点の一覧。⚠️ Core の <see cref="Core.Fault"/>
+    /// とは別物（`IconManifest`/`PaintManifest` は `EggCommand.Web` にしか無い ── Core は
+    /// 触らない、の死守事項どおり）。<see cref="RefreshView"/> が `_faults` と同じ拍で
+    /// 数え直す（唯一の出所）。</summary>
+    private List<LayoutDom.PicMismatch> _picMismatches = new();
     /// <summary>⭐ 不備を盤の上に描く層（`#edfaults`）の中身。⚠️ `_html` と同じ理由で
     /// `MarkupString` として流し込む（Blazor の `@onclick` は個々の枠に付けられない）。</summary>
     private string _faultHtml = "";
     private string _status = "";
     private float _left, _top, _width, _height;
-    private float _step = 10f;
+    // ⭐ E1-1（2026-08-25・ドット絵化計画 §1）: きざみの既定 10→4（1ドット＝設計4px）。
+    //    ⚠️ 自由には今までどおり変えられる（8・16 で粗く動かしたいことがある）── 既定だけ変える。
+    private float _step = 4f;
 
     // ── ⭐ D-1: 盤を主役に ── 木・Inspector を畳む ─────────
     // ⚠️ 状態は覚えない（単純に保つ・作者の指示）── ページを開き直すたびに既定（開いた
@@ -587,6 +644,10 @@
     private bool _iconPickerOpen;
     /// <summary>小窓の中の「さがす」欄。⚠️ 開くたびに空へ戻す（<see cref="OpenIconPicker"/>）。</summary>
     private string _iconPickerFind = "";
+    /// <summary>⭐ E1-4: いま小窓が出しているのは `icon` か `paint` か。⚠️ <see cref="OpenIconPicker"/>
+    /// が呼ばれるたび、対象の節点の種類で決まる（利用者が選ぶトグルは作らない ──
+    /// 計画 §11-4-2「小窓の中で icon と paint を混ぜない。種類ごとに出す」）。</summary>
+    private string _picKind = "icon";
     /// <summary>⭐ E-3: いま選んでいる「絵のフォルダ」の名前。⚠️ 空 = まだ選んでいない
     /// （そのときは「絵を取り込む」の押しどころを出さない ── 空の道具を見せない）。
     /// ⚠️ `IconOverrides` を解くとき（<see cref="ClearOverrides"/>）は、ここも一緒に空へ戻す。</summary>
@@ -596,15 +657,36 @@
     /// JS 側へ素の DOM 要素を渡す ── `disk.js` の `showDirectoryPicker` と同じ作法）。</summary>
     private ElementReference _importInput;
 
-    // ── ⭐ Pass B: 盤の拡大（ズーム）＋格子 ─────────────
-    // ⭐ 実効倍率 k（`edit.js` の `fit()`）= 器に収まる倍率（fitK）× この `_zoom`。
-    //    ⚠️ 値・状態機械は増やさない ── 表示倍率だけの薄い状態。
+    // ── ⭐ E1-2: 盤の拡大（1ドット＝画面上で何 CSS px か）＋格子 ─────────
+    // ⚠️ 以前の `_zoom`（float・器に合わせる半端倍率×1.25刻み）はやめた
+    //    （計画 §11-5「今の『器に合わせる半端倍率』は編集中も使わない」）。
+    // ⭐ 実効倍率 `k`（`edit.js` の `fit()`）= `_dotPx / DesignDotPx`。⚠️ 分母
+    //    （設計側の1升＝4px・`_step` の既定と同じ）が2の冪なので、この割り算は
+    //    2進浮動小数点でも常に割り切れる ── 画面↔設計の往復に丸め誤差が乗らない
+    //    （Aseprite `src/render/zoom.h` と同じ考え方・整数の分子・分母で持つ有理数）。
 
-    private const float ZoomMin = 0.25f;
-    private const float ZoomMax = 4.0f;
-    private float _zoom = 1.0f;
-    /// <summary>⭐ 格子の表示・非表示（既定 off）。⚠️ `_step` の間隔で描く（`#edgrid`）。</summary>
-    private bool _grid;
+    /// <summary>設計側の「1升」の大きさ（px）。⚠️ `_step` の既定（4）と同じ ── ここが分母。</summary>
+    private const int DesignDotPx = 4;
+
+    /// <summary>⭐ 選べる拡大の段（整数のみ）。並び順がそのまま ZoomIn/ZoomOut の刻み
+    /// （計画 §11-5「整数のみ: 1, 2, 3, 4, 6, 8」）。</summary>
+    private static readonly int[] DotPxSteps = { 1, 2, 3, 4, 6, 8 };
+
+    /// <summary>⭐ いま選んでいる「1ドット＝画面上で何pxか」。⚠️ 実効倍率は
+    /// <c>_dotPx / DesignDotPx</c>（有理数のまま JS へ渡す ── <see cref="ApplyDotPx"/>）。
+    /// ⭐ 既定は「器に収まる最大の整数」── 器を測れる拍（<see cref="WireBoard"/>）まで
+    /// 測らずに済む仮値として <see cref="DesignDotPx"/>（1:1）を置く。</summary>
+    private int _dotPx = DesignDotPx;
+
+    /// <summary>⚠️ 「器に収まる最大」の自動選びは、盤が実際に現れた最初の1回だけ
+    /// （<see cref="WireBoard"/>）。⭐ 以後は画面を切り替えても・脇を畳んでも、
+    /// 選んだ値を保つ（今までの `_zoom` の持ち方と同じ ── 器が変わるたび勝手に
+    /// 変えると、ドットの太さが一定に見えなくなる）。</summary>
+    private bool _dotPxPicked;
+
+    /// <summary>⭐ E1-1: 格子の表示・非表示（既定 ON・計画 §1「格子は既定 ON」）。
+    /// ⚠️ `_step` の間隔で描く（`#edgrid`）。</summary>
+    private bool _grid = true;
 
     // ── ⭐ Pass B: 盤↔木の連動強調 ─────────────────────
 
@@ -745,7 +827,10 @@
             _ringDirty = false;
             string csv = string.Join(",", _selected);
             string primary = _selectedLine >= 0 ? _selectedLine.ToString(CultureInfo.InvariantCulture) : "";
-            await Js.InvokeVoidAsync("eggEdit.reselect", csv, primary);
+            // ⭐ E1-5: 主の節点が「枠と絵が合わない」節点なら、輪の色を変える（既存の
+            //    警告色 ── 新しい色は増やさない）。選択が複数のときは JS 側が無視する。
+            bool mismatch = IsPicMismatch(_selectedLine);
+            await Js.InvokeVoidAsync("eggEdit.reselect", csv, primary, mismatch);
         }
         // ⭐ D-3: 入力欄が開いていれば、対象節点の実位置へ合わせる（描画確定後に読む ──
         //    `_ringDirty` と同じ理由）。⚠️ 焦点を奪うのは JS 側で最初の1回だけに絞ってある
@@ -797,6 +882,16 @@
         // ⭐ D-2: 道具箱（種類パレット）から盤へ掴んで落とす配線。⚠️ パレットは Inspector
         //    （盤と同じ段階制の中）にしか無いので、盤と一緒に張り直す。
         await Js.InvokeVoidAsync("eggEdit.paletteListen", _me, "edaddpalette");
+        // ⭐ E1-2: 盤が実際に現れた最初の1回だけ、「器に収まる最大」を自動で選ぶ
+        //    （<see cref="_dotPxPicked"/> の註）。⚠️ 器が測れるのはここが最初
+        //    （`#edwrap` が DOM に在る拍）── FirstRenderSetup 単独の拍では `_raw` が
+        //    まだ null で `#edwrap` 自体が無いことがある（段階制）。
+        if (!_dotPxPicked && _raw is not null)
+        {
+            _dotPxPicked = true;
+            _dotPx = await Js.InvokeAsync<int>("eggEdit.autoDotPx", "edwrap");
+        }
+        await Js.InvokeVoidAsync("eggEdit.setDotPx", _dotPx);
         // ⭐ 盤が出た直後は倍率（`dataset.scale`）が入ったばかり ── 選んでいるものが
         //    あれば輪を描き直す（旗を立てるだけ・実際の描き直しは次の描画拍）。
         RingRefresh();
@@ -815,11 +910,14 @@
 
     // ── ⭐ 段E: 絵を選ぶ小窓／自作 PNG ─────────────────
 
-    /// <summary>⭐ E-1/E-4: 「絵を選ぶ」小窓を開く**唯一の入口**。⚠️ 開くたびに
-    /// 「さがす」を空へ戻す（前回の絞り込みを持ち越さない）。</summary>
-    private void OpenIconPicker()
+    /// <summary>⭐ E-1/E-4/E1-4: 「絵を選ぶ」小窓を開く**唯一の入口**。⚠️ 開くたびに
+    /// 「さがす」を空へ戻す（前回の絞り込みを持ち越さない）。
+    /// <param name="kind">⭐ E1-4: `icon` か `paint`（対象の節点の種類）── 小窓の一覧を
+    /// 切り替える（計画 §11-4-2「小窓の中で icon と paint を混ぜない」）。</param></summary>
+    private void OpenIconPicker(string kind)
     {
         _iconPickerFind = "";
+        _picKind = kind == "paint" ? "paint" : "icon";
         _iconPickerOpen = true;
     }
 
@@ -830,44 +928,106 @@
         _iconPickerOpen = false;
     }
 
-    /// <summary>⭐ E-2: 選んだ絵を骨組みへ差す。**これで1つの取り消し**
-    /// （<see cref="ApplyOption"/> が Begin〜Commit の対を通す ── 段階1からの往復の
-    /// 守りをそのまま借りる）。⚠️ 骨組みに書くのは `pic=&lt;名前&gt;` の文字列だけ
-    /// ── 画像そのものや data URL は絶対に書かない（往復のバイト忠実を保つ）。</summary>
+    /// <summary>⭐ E-2/E1-4: 選んだ絵を骨組みへ差す。<see cref="ApplyPicChoice"/> へ渡すだけ
+    /// （枠を実寸へ合わせる分まで含めて**1つの取り消し**）。</summary>
     private void ChooseIcon(string name)
     {
-        ApplyOption("pic", name);
+        ApplyPicChoice(name);
         CloseIconPicker();
     }
 
-    /// <summary>⭐ E-2: 絵を選ぶ小窓に出す一覧（ゲームに在る絵＋絵のフォルダから読んだ絵の
-    /// 合わせ技）。⚠️ `IconOverrides` は「まだビルドに入っていない絵」しか持たない
-    /// （<see cref="RefreshArtList"/> が登録時に絞る）ので、単純に足し合わせるだけで重複しない。</summary>
-    private static List<string> AllIconNames()
+    /// <summary>⭐ E1-4: `pic=` を差すのと、枠を「絵の実ドット数×4」へ自動で合わせるのを
+    /// **1つの取り消し**にまとめる（計画 §2「引き伸ばさない」規則をエディタでも守る唯一の
+    /// 経路 ── `Apply` と同じ Begin〜Commit の対を、ここでは2つの `ApplyRaw` に手動で
+    /// またがせる）。⚠️ 絵の実ドット数が分からない（一覧に無い・仮置きのみ）ときは、
+    /// 枠はそのまま（`pic=` を差すだけ）── 分からない大きさに勝手に合わせない。</summary>
+    private void ApplyPicChoice(string name)
     {
-        var names = new List<string>(IconManifest.Names);
-        names.AddRange(IconOverrides.Names);
+        if (_raw is null || _selectedLine < 0) return;
+        var current = Find(_raw.Roots, _selectedLine);
+        if (current is null) return;
+        var expect = LayoutDom.ExpectedPicSize(current.Kind, name);
+
+        BeginAction();
+        ApplyRaw(_selectedLine, n => SetOption(n, "pic", name));
+        if (expect is { } size)
+        {
+            ApplyRaw(_selectedLine, n => new LayoutNode(n.Name, n.Kind, n.Left, n.Top, size.Width, size.Height,
+                n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+                n.PartId, n.PartLine));
+        }
+        CommitAction();
+        Flash(_selectedLine);
+    }
+
+    /// <summary>⭐ E1-5: 押したら「絵に合わせる」の1手。⚠️ いま選んでいる節点の枠を、
+    /// その絵の実ドット数×4 へ合わせ直すだけ（位置は動かさない）。**これで1つの取り消し**
+    /// （<see cref="Apply"/> が Begin〜Commit の対を通す）。⚠️ 勝手には呼ばない ──
+    /// Inspector の釦（<see cref="PicMismatchOf"/> が非 null のときだけ出す）からのみ。</summary>
+    private void FitPicToNode()
+    {
+        if (_raw is null || _selectedLine < 0) return;
+        var sel = Find(_raw.Roots, _selectedLine);
+        if (sel is null) return;
+        // ⭐ まず骨組みだけで分かる実寸（`icon`/`paint` の `pic=`）。
+        var expect = LayoutDom.ExpectedPicSize(sel.Kind, sel.Option("pic"));
+        // 🔴 **`pixel`（種族の絵）はここで null になる**（どの絵が入るかは `bind=` 越しに
+        //    実行時に決まるため）。⚠️ 45件の不一致のうち **31件が `pixel`** ── ここを
+        //    落とすと「一番多いものだけ1手で直せない」道具になってしまう。
+        //    ⭐ 描いたときの控え（`_picMismatches`）は実物の絵の実寸を持っているので、そちらを使う。
+        float w, h;
+        if (expect is { } size) { w = size.Width; h = size.Height; }
+        else if (PicMismatchOf(sel) is { } m) { w = m.ExpectW; h = m.ExpectH; }
+        else return;
+        Apply(n => new LayoutNode(n.Name, n.Kind, n.Left, n.Top, w, h,
+            n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+    }
+
+    /// <summary>⭐ E-2/E1-4: 絵を選ぶ小窓に出す一覧。⚠️ `icon`（ゲームに在る絵＋絵のフォルダ
+    /// から読んだ絵の合わせ技）と `paint`（<see cref="PaintManifest"/>）を混ぜない ──
+    /// <see cref="_picKind"/> で切り替える（計画 §11-4-2）。`IconOverrides` は「まだビルドに
+    /// 入っていない絵」しか持たない（<see cref="RefreshArtList"/> が登録時に絞る）ので、
+    /// 単純に足し合わせるだけで重複しない。</summary>
+    private List<string> AllPicNames()
+    {
+        var names = new List<string>();
+        if (_picKind == "paint") names.AddRange(PaintManifest.Names);
+        else
+        {
+            names.AddRange(IconManifest.Names);
+            names.AddRange(IconOverrides.Names);
+        }
         names.Sort(StringComparer.Ordinal);
         return names;
     }
 
     /// <summary>「さがす」で絞った一覧。⚠️ 木の「さがす」（<see cref="OnFindInput"/> 系）とは
     /// 別の状態（<see cref="_iconPickerFind"/>） ── 混ぜない。</summary>
-    private List<string> FilteredIconNames()
+    private List<string> FilteredPicNames()
     {
-        var all = AllIconNames();
+        var all = AllPicNames();
         if (_iconPickerFind.Length == 0) return all;
         return all.FindAll(n => n.Contains(_iconPickerFind, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>その名前のサムネイルの `src`。⚠️ 出所は2つ ── `IconOverrides`（ディスクの
-    /// data URL）が優先、無ければ `IconManifest` の実物（`icon/&lt;名前&gt;.png`、`LayoutDom`
-    /// と同じ組み立て方）。⚠️ **どちらにも無い名前は呼び出し側で弾く**（<see cref="IconExists"/>）。</summary>
+    /// <summary>その名前のサムネイルの `src`。⚠️ `paint` は `PaintManifest` の実物
+    /// （`paint/&lt;名前&gt;.png`）── `IconOverrides` を持たない。`icon` は出所が2つ ──
+    /// `IconOverrides`（ディスクの data URL）が優先、無ければ `IconManifest` の実物
+    /// （`icon/&lt;名前&gt;.png`、`LayoutDom` と同じ組み立て方）。
+    /// ⚠️ **どちらにも無い名前は呼び出し側で弾く**（<see cref="PicExists"/>）。</summary>
+    private static string PicThumbSrc(string kind, string name) =>
+        kind == "paint" ? $"paint/{name}.png" : IconThumbSrc(name);
+
     private static string IconThumbSrc(string name) =>
         IconOverrides.TryGet(name, out var url) ? url! : $"icon/{name}.png";
 
-    /// <summary>⭐ E-4: Inspector の「見つからない」表示のため。`LayoutDom` の
-    /// `icon-missing` 分岐（`IconOverrides` 優先→`IconManifest.Exists`）と同じ判定。</summary>
+    /// <summary>⭐ E-4/E1-4: Inspector の「見つからない」表示のため。`paint` は
+    /// <see cref="PaintManifest.Exists"/>、`icon` は `LayoutDom` の `icon-missing` 分岐
+    /// （`IconOverrides` 優先→`IconManifest.Exists`）と同じ判定。</summary>
+    private static bool PicExists(string kind, string name) =>
+        kind == "paint" ? PaintManifest.Exists(name) : IconExists(name);
+
     private static bool IconExists(string name) => IconOverrides.TryGet(name, out _) || IconManifest.Exists(name);
 
     /// <summary>⭐ E-3: 「絵のフォルダを選ぶ」── `PickFolder`（骨組みのフォルダ）とは
@@ -1289,25 +1449,49 @@
         //    「専用メソッドを増やさない」という属性表そのものの狙いと同じ）。
     }
 
-    // ── ⭐ Pass B: 盤の拡大（ズーム） ─────────────────────
+    // ── ⭐ E1-2: 盤の拡大（1ドット＝画面上で何 CSS px か） ─────────────
 
-    private Task ZoomOut() => SetZoom(_zoom / 1.25f);
-    private Task ZoomIn() => SetZoom(_zoom * 1.25f);
-    private Task ZoomReset() => SetZoom(1.0f);
+    private Task ZoomOut() => ApplyDotPx(PrevDotPxStep(_dotPx));
+    private Task ZoomIn() => ApplyDotPx(NextDotPxStep(_dotPx));
 
-    /// <summary>⭐ ズーム倍率を変える唯一の出所。⚠️ クランプしてから JS へ渡す
-    /// （`eggEdit.setZoom` → 内部で `fit()` を呼び直すだけ ── `RefreshView` は要らない、
-    /// 表示倍率だけの変更）。
+    /// <summary>⭐ 「器に収まる大きさに戻す」── <see cref="_dotPxPicked"/> の最初の1回と
+    /// 同じ計算を、いまの器のサイズでもう一度やり直す。</summary>
+    private async Task ZoomReset()
+    {
+        if (!_ready) return;
+        int best = await Js.InvokeAsync<int>("eggEdit.autoDotPx", "edwrap");
+        await ApplyDotPx(best);
+    }
+
+    /// <summary>⭐ <see cref="DotPxSteps"/> の中で、いまより1段大きい値（無ければ最大）。</summary>
+    private static int NextDotPxStep(int current)
+    {
+        foreach (var step in DotPxSteps)
+            if (step > current) return step;
+        return DotPxSteps[DotPxSteps.Length - 1];
+    }
+
+    /// <summary>⭐ <see cref="DotPxSteps"/> の中で、いまより1段小さい値（無ければ最小）。</summary>
+    private static int PrevDotPxStep(int current)
+    {
+        for (int i = DotPxSteps.Length - 1; i >= 0; i--)
+            if (DotPxSteps[i] < current) return DotPxSteps[i];
+        return DotPxSteps[0];
+    }
+
+    /// <summary>⭐ 「1ドット＝画面上で何pxか」を変える唯一の出所。⚠️ 呼び出し元
+    /// （<see cref="ZoomIn"/>/<see cref="ZoomOut"/>/<see cref="ZoomReset"/>/
+    /// <see cref="WireBoard"/>）は必ず <see cref="DotPxSteps"/> の要素を渡す。
     ///
     /// 🔴 **拡大率が変わると節点の画面位置が変わるので、選択の輪も再フィットが要る。**
     /// ⚠️ ここで直接 `eggEdit.reselect` を呼ばない ── <see cref="RingRefresh"/> で旗を
     /// 立てるだけにし、実際の呼び出しは <see cref="OnAfterRenderAsync"/> の1箇所に
     /// 任せる（`_ringDirty` の註と同じ理由 ── `getBoundingClientRect` を Blazor の
     /// 描画確定前に読むと1手ぶんずれるバグの修正を、ここでも壊さない）。</summary>
-    private async Task SetZoom(float z)
+    private async Task ApplyDotPx(int dotPx)
     {
-        _zoom = Math.Clamp(z, ZoomMin, ZoomMax);
-        if (_ready) await Js.InvokeVoidAsync("eggEdit.setZoom", _zoom);
+        _dotPx = dotPx;
+        if (_ready) await Js.InvokeVoidAsync("eggEdit.setDotPx", _dotPx);
         RingRefresh();
         StateHasChanged();
     }
@@ -1319,7 +1503,7 @@
     //    それを拾って `fit()` を呼び直すのは、`start()` で張った既存の ResizeObserver の
     //    仕事（触らない・条件を弱めない）。⭐ こちらの仕事は、節点の画面位置が動く分だけ
     //    選択の輪を追従させること ── `RingRefresh()`（旗を立てるだけ）で次の描画拍に乗せる
-    //    （`SetZoom`/`_ringDirty` と同じ形）。
+    //    （`ApplyDotPx`/`_ringDirty` と同じ形）。
 
     private void ToggleTree()
     {
@@ -1631,25 +1815,27 @@
     //   は変更しない ── ここは既にある「消えた節点＝行が消える／LineNumber=-1 の節点＝
     //   末尾へ追記」の仕組み（`Layouts.Write`）に乗るだけ。
 
-    /// <summary>⭐ 追加パレットの7種（`wiki/開発/web移行計画.md` §11-3 の6種＋段E「絵」）。
-    /// ⚠️ **除外**: `pixel`（種族の絵 ── 名前でなく `Palette` の参照で引くので自作絵に使えない）・
-    /// `scroll`（`content=`）・`bar`（結線）・`veil`/`host`（特殊） ── rect だけでは不備0に
-    /// ならない・段階3の属性では埋められない（除外は UI に出さない）。
-    /// ⭐ `icon` は段E で解禁 ── 落とした直後に「絵を選ぶ」小窓（<see cref="OpenIconPicker"/>）が
+    /// <summary>⭐ 追加パレットの8種（`wiki/開発/web移行計画.md` §11-3 の6種＋段E「絵」＋
+    /// E1-4「背景」）。⚠️ **除外**: `pixel`（種族の絵 ── 名前でなく `Palette` の参照で引くので
+    /// 自作絵に使えない）・`scroll`（`content=`）・`bar`（結線）・`veil`/`host`（特殊） ──
+    /// rect だけでは不備0にならない・段階3の属性では埋められない（除外は UI に出さない）。
+    /// ⭐ `icon`/`paint` は落とした直後に「絵を選ぶ」小窓（<see cref="OpenIconPicker"/>）が
     /// 開くので、`pic=` を後から埋められる（段階3の時点ではその小窓が無く、除外していた）。</summary>
     private static readonly (string Kind, string Label)[] AddKindPalette =
     {
         ("box", "box"), ("card", "card"), ("label", "字"),
-        ("button", "釦"), ("line", "線"), ("round", "丸"), ("icon", "絵"),
+        ("button", "釦"), ("line", "線"), ("round", "丸"), ("icon", "絵"), ("paint", "背景"),
     };
 
-    /// <summary>⭐ 段E: 種類ごとの既定の大きさ。⚠️ `icon` だけ 64x64（実物の骨組みの実例
-    /// 「plain icon 92 64 64 64」に合わせる ── 決め打ちで書いていない）。他は今までどおり
-    /// （幅300、label/button は高さ90、それ以外120）── 既存の位置（<see cref="AddKind"/> の
-    /// 既定位置）を変えない。</summary>
+    /// <summary>⭐ 段E: 種類ごとの既定の大きさ。⚠️ `icon`/`paint` は 64x64（実物の骨組みの実例
+    /// 「plain icon 92 64 64 64」に合わせる ── 決め打ちで書いていない）。⚠️ どちらも絵を
+    /// 選んだ瞬間に <see cref="ApplyPicChoice"/> が実ドット数×4 へ自動で合わせ直すので、
+    /// ここの値は「絵を選ぶまでの仮の大きさ」でしかない。他は今までどおり（幅300、
+    /// label/button は高さ90、それ以外120）── 既存の位置（<see cref="AddKind"/> の既定位置）
+    /// を変えない。</summary>
     private static (float Width, float Height) DefaultSize(string kind)
     {
-        if (kind == "icon") return (64f, 64f);
+        if (kind == "icon" || kind == "paint") return (64f, 64f);
         bool small = kind == "label" || kind == "button";
         return (300f, small ? 90f : 120f);
     }
@@ -1829,10 +2015,10 @@
         CommitAction();
         StateHasChanged();
 
-        // ⭐ E-1: 絵は落とした直後 `pic=` が無い（盤には「？」）── その場で選ばせる。
+        // ⭐ E-1/E1-4: 絵は落とした直後 `pic=` が無い（盤には「？」）── その場で選ばせる。
         //    ⚠️ 何も選ばず閉じても壊れない（`OpenIconPicker`/`CloseIconPicker` は
         //    ApplyOption を1回も呼ばない ── 「？」のまま残り、あとから選び直せる）。
-        if (kind == "icon") OpenIconPicker();
+        if (kind == "icon" || kind == "paint") OpenIconPicker(kind);
     }
 
     /// <summary>⭐ D-2: 落とした位置を「きざみ」へ丸める（既存の吸い付きと同じ物差し・
@@ -2513,7 +2699,26 @@
         //    盤に描く形（`Boxes`/`Focus`）も、押して選ぶ出所（`Lines`/`PartIds`/`PartLines`）も、
         //    こちらにしか無い。
         _faults = Core.Layouts.Inspect(resolved);
+        // ⭐ E1-5: 「枠と絵が合わない」節点も、不備と同じ拍（同じ `resolved`＝土台の
+        //    解決済み木）で数え直す ── 部品から来た節点（`use=` で差し込まれた側）も
+        //    ここで拾える（`PartId`/`PartLine` 付き・`Fault` と同じ規約）。
+        _picMismatches = LayoutDom.FindPicMismatches(resolved);
+        // 🔴 **描いた結果も合わせて見る。**（2026-08-25・実物で穴が見つかったので追加）
+        //    ⚠️ 上の `FindPicMismatches` は骨組みだけを見るので、`pixel`（種族の絵）を
+        //    **一件も拾えない** ── どの絵が入るかは `bind=` 越しに実行時に決まるため。
+        //    実測: `box` はコンソールに2件出ているのにエディタは0件だった。
+        //    ⭐ 描く側（`LayoutDom`）は実物の絵を持っているので、その控えを足す
+        //    （判定を二重に書かない ── 出所は1つ）。
+        LayoutDom.ClearDrawnMismatches();
         _html = Scenes.Draw(scene.HostId);
+        foreach (var m in LayoutDom.DrawnMismatches)
+        {
+            // ⚠️ 骨組みだけで分かった分と重ならないように（同じ節点を二度出さない）
+            bool already = _picMismatches.Exists(x =>
+                x.LineNumber == m.LineNumber && x.PartId == m.PartId
+                && x.PartLine == m.PartLine && x.Name == m.Name);
+            if (!already) _picMismatches.Add(m);
+        }
         _faultHtml = DrawFaults(_faults);
         // ⭐③ 盤が組み直るたびに「出ているものだけ」の集合も数え直す（唯一の出所を
         //    ここ1か所にまとめる ── 呼び出し元6箇所それぞれに書かせない）。
@@ -2576,6 +2781,70 @@
     }
 
     private static string Px(float v) => v.ToString("0.##", CultureInfo.InvariantCulture) + "px";
+
+    // ── ⭐ E1-5: 「枠と絵が合わない」節点の見せ方 ────────────
+
+    /// <summary>⭐ 木の印（<c>⚠</c>）・選択の輪の色の判定。⚠️ **`IsVisible` と同じ「冠」の
+    /// 考え方**（<see cref="IsVisible"/> 参照）── `_picMismatches` は土台（`HostId`）の
+    /// 解決済み木から数えているので、`use=` で差し込まれた部品（`cell` 等・
+    /// `Scenes.Of(_of).ByPart`）の節点は `PartId==_of` で載っている（`LineNumber` は
+    /// -1）。**部品ファイル自身をいま開いているとき**は、その部品の木（`_raw`）の
+    /// 行番号 ＝ `PartLine` として照合しないと、その部品自身の行に印が付かない。
+    /// ⚠️ **既知の穴**: コードから描く4枚（`unit`/`square`/`walker`/`frame`）は
+    /// `use=` を一度も通らず、土台の木に一度も現れない ── 土台からは検査しようが無い
+    /// （`Core.Layouts.Inspect` による既存の「不備」バーも同じ穴を持つ・E1 の範囲外）。</summary>
+    private bool IsPicMismatch(int line)
+    {
+        if (line < 0 || _raw is null) return false;
+        bool byPart = Scenes.Of(_of).ByPart;
+        foreach (var m in _picMismatches)
+        {
+            bool match = byPart ? (m.PartId == _of && m.PartLine == line) : (m.PartId == null && m.LineNumber == line);
+            if (match) return true;
+        }
+        return false;
+    }
+
+    /// <summary>⭐ Inspector の「絵に合わせる」欄のため。いま選んでいる節点（`sel`）**そのもの**
+    /// が不一致一覧に載っているか ── 載っていればその1件を返す。⚠️ <see cref="IsPicMismatch"/>
+    /// と同じ「冠」の照合（部品を直しているときは `PartLine` で見る）。</summary>
+    private LayoutDom.PicMismatch? PicMismatchOf(LayoutNode sel)
+    {
+        bool byPart = Scenes.Of(_of).ByPart;
+        foreach (var m in _picMismatches)
+        {
+            bool match = byPart ? (m.PartId == _of && m.PartLine == sel.LineNumber)
+                                 : (m.PartId == null && m.LineNumber == sel.LineNumber);
+            if (match) return m;
+        }
+        return null;
+    }
+
+    /// <summary>⭐ 下の帯の一覧（<see cref="_picMismatches"/>）を押したときの入口。
+    /// ⚠️ 自前の行なら <see cref="Picked"/>、部品から来た側なら <see cref="PickedPart"/>
+    /// （<see cref="SelectFault"/> と同じ着地点 ── 経路を増やさない）。</summary>
+    private async Task SelectPicMismatch(int i)
+    {
+        if (i < 0 || i >= _picMismatches.Count) return;
+        var m = _picMismatches[i];
+        if (m.PartId != null)
+            await PickedPart(m.PartId, m.PartLine.ToString(CultureInfo.InvariantCulture), "");
+        else if (m.LineNumber >= 0)
+            await Picked(m.LineNumber.ToString(CultureInfo.InvariantCulture), "");
+    }
+
+    /// <summary>下の帯の一覧に出す1行。⚠️ 部品から来た側は、どの部品の節点かが分かる
+    /// よう冠を付ける（<see cref="OriginAttrs"/> と同じ「冠」の考え方）。</summary>
+    private static string PicMismatchLabel(LayoutDom.PicMismatch m) =>
+        m.PartId != null ? m.PartId + "/" + m.Name : m.Name;
+
+    private static string PicMismatchText(LayoutDom.PicMismatch m) =>
+        PicMismatchLabel(m) + "（" + m.Kind + " " + m.Pic + "）: 絵は" + Fmt(m.ExpectW) + "×" + Fmt(m.ExpectH)
+        + "px なのに枠は" + Fmt(m.FrameW) + "×" + Fmt(m.FrameH) + "px";
+
+    /// <summary>整数寄りの px 表示（「128×128px」のように出す ── 小数第2位までの
+    /// <see cref="Px"/> は Inspector の一言には細かすぎる）。</summary>
+    private static string Fmt(float v) => v.ToString("0", CultureInfo.InvariantCulture);
 
     private static string Esc(string s) =>
         s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
@@ -2689,13 +2958,15 @@
         _ => (builder) => { },
     };
 
-    /// <summary>⭐ `size` は種類で既定が違う（`LayoutDom.cs` の
-    /// <c>node.Number("size", node.Kind == "button" ? 34 : 26)</c> と同じ数）。
-    /// ⚠️ 骨組みに書いていないときに欄へ出す「今の値」がこれ ── 実際に効いている値と
-    /// 欄の表示を食い違わせないために要る。</summary>
+    /// <summary>⭐ E1-3（2026-08-25）: `size` の既定は種類を問わず 40 ── `LayoutDom.cs` の
+    /// <c>node.Number("size", 40)</c> と同じ数（ドット絵化計画 §6。以前は
+    /// `button=34`/`label=26` と種類で違ったが、`LayoutDom.cs` 側は段取り1で既に
+    /// 40 に統一済み ── ここが食い違っていると欄が嘘をつく）。⚠️ `size` は
+    /// <see cref="AttrKind.Choice"/> になったので `Field`（±釦つきの数欄）はもう通らないが、
+    /// <see cref="ChoiceField"/> の「（既定）」の表示に使う（下記）ため、この関数自体は残す。</summary>
     private static int DefaultNumber(string key, LayoutNode sel) => key switch
     {
-        "size" => sel.Kind == "button" ? 34 : 26,
+        "size" => 40,
         _ => 0,
     };
 
@@ -2718,6 +2989,13 @@
         builder.CloseElement();
     };
 
+    /// <summary>⭐ E1-3: 「（既定）」の表示。⚠️ `size` だけは実際に効く既定値
+    /// （<see cref="DefaultNumber"/>）を添える ── 数を Choice にしたぶん、欄が
+    /// 「（既定）としか言わず、実は40pxで出ている」と嘘をつかないようにする。
+    /// ⚠️ 他の Choice 属性（`anchor`/`ink`）は数値の既定を持たないので今までどおり。</summary>
+    private static string DefaultChoiceLabel(string key, LayoutNode sel) =>
+        key == "size" ? $"（既定・{DefaultNumber(key, sel)}）" : "（既定）";
+
     /// <summary>決まった値からしか選べない。⚠️ 先頭に「（既定）」を足す ──
     /// 選ぶと <see cref="ApplyOption"/> に null が渡り、付け足しごと消える
     /// （骨組みに書かない＝描く側の既定値に戻る、と同じ意味）。</summary>
@@ -2739,7 +3017,7 @@
 
         builder.OpenElement(9, "option");
         builder.AddAttribute(10, "value", "");
-        builder.AddContent(11, "（既定）");
+        builder.AddContent(11, DefaultChoiceLabel(attr.Key, sel));
         builder.CloseElement();
 
         int seq = 12;

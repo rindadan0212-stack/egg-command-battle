@@ -68,7 +68,8 @@
 .edzoom button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
 .edzoom button:hover:not(:disabled) { background: #2b3150; }
 .edzoom button:disabled { color: #565c72; cursor: default; }
-.edzoomval { min-width: 52px; font-variant-numeric: tabular-nums; }
+/* ⭐ E1-2: 「1ドット=4px」のような表示（％をやめた）── 「120%」より幅が要る。 */
+.edzoomval { min-width: 88px; font-variant-numeric: tabular-nums; }
 .edgridtoggle { margin-left: 2px; }
 
 /* ── 3本の柱 ─────────────────────────────────────── */
@@ -191,6 +192,9 @@
 .edrow.hover { background: rgba(255, 255, 255, .08); }
 .edname { color: #d7dae6; }
 .edkind { color: #6d7390; font-size: 11px; }
+/* ⭐ E1-5: 木の印（枠と絵が合わない節点）。⚠️ 新しい色は増やさない ── 既存の警告色
+   （#e04f5f・.edfault-focus/.edfaultitem と同じ）を使う。 */
+.edmismark { color: #e04f5f; margin-left: 2px; font-size: 11px; }
 
 .edboardwrap {
   flex: 1 1 auto;
@@ -309,6 +313,11 @@
   box-shadow: 0 0 0 4px #f59e0b, inset 0 0 0 4px #f59e0b;
   border-radius: 4px;
   z-index: 2;
+}
+/* ⭐ E1-5: 選んでいる節点が「枠と絵が合わない」ときの輪。⚠️ 新しい色は増やさない ──
+   既存の警告色（#e04f5f・.edfault-focus/.edfaultitem/.edmismark と同じ）に差し替えるだけ。 */
+.edring.edring-warn {
+  box-shadow: 0 0 0 4px #e04f5f, inset 0 0 0 4px #e04f5f;
 }
 /* ⭐②④ 選択の輪の多重化（`eggEdit.reselect` が中身を作り直す）。⚠️ `.edring` と同じく
    盤の外の層 ── 実寸（screen px）だけで置ける。塗らない（輪郭だけ）。
@@ -563,16 +572,24 @@
 }
 
 /* ── 下の帯（不備） ─────────────────────────────── */
+/* ⭐ E1-5: 「不備」と「枠と絵が合わない」を**別の行**にする（縦に積む）── 同じ行に
+   詰めると2つの一覧が幅を奪い合って読みにくい。⚠️ 各行の中身（`.edbottomrow`）は
+   今までの `.edbottom` と同じ横並び。 */
 .edbottom {
   flex: 0 0 auto;
   display: flex;
-  /* ⚠️ 一覧が複数行に畳まれても、件数の印は上端で揃える（center だと沈んで見える）。 */
-  align-items: flex-start;
-  gap: 10px;
+  flex-direction: column;
+  gap: 6px;
   padding: 7px 12px;
   background: #191d2b;
   border-top: 1px solid rgba(255, 255, 255, .08);
   font-size: 12px;
+}
+.edbottomrow {
+  display: flex;
+  /* ⚠️ 一覧が複数行に畳まれても、件数の印は上端で揃える（center だと沈んで見える）。 */
+  align-items: flex-start;
+  gap: 10px;
 }
 .edbad { padding-top: 4px; }   /* ⭐ 一覧の釦（padding込み）と字の頭を揃える */
 .edok { color: #2fa84a; padding-top: 4px; }
@@ -746,3 +763,6 @@
   border: 1px solid rgba(255, 255, 255, .14);
   border-radius: 4px;
 }
+/* ⭐ E1-5: Inspector 内「枠と絵に合わせる」。⚠️ 区切りは面でなく余白＋既存の警告色の文字
+   （新しい色は増やさない）。「絵に合わせる」釦の見た目は `.edalign-btn` を共有する。 */
+.edpicwarn { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }

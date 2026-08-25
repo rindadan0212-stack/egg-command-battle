@@ -40,6 +40,20 @@ namespace EggCommand.Web
             return _known.TryGetValue(name, out var size) ? (Size?)size : null;
         }
 
+        /// <summary>⭐ E1-4: 「絵を選ぶ」小窓の `paint` 一覧のための出所。⚠️ `IconManifest.Names`
+        /// と同じ形（読めなかったときは空を返す ── 一覧が壊れているだけで全部 missing 扱いに
+        /// しない、という <see cref="Exists"/> の「読めなかったら通す」とは違う既定に見える
+        /// が、実害は同じ「絵を選ぶ小窓に0件しか出ない」だけ ── `IconManifest.Names` の
+        /// コメントと同じ理由）。</summary>
+        public static IReadOnlyCollection<string> Names
+        {
+            get
+            {
+                if (_known == null) _known = Load();
+                return _known.Keys;
+            }
+        }
+
         private static Dictionary<string, Size> Load()
         {
             var map = new Dictionary<string, Size>(StringComparer.Ordinal);
