@@ -684,7 +684,14 @@ public static class Deeds
         var found = Hatchery.At(s.Game, at);
         if (found == null) { s.Aim = at; s.Open = Panel.Eggs; return; }
         if (!Hatchery.IsReady(found, s.Now)) return;
-        var born = Games.HatchEgg(s.Game, found.Egg.Id);
+        // 🔴 **`Games.HatchEgg` を呼ばない。**⚠️ それは棚（`game.Eggs`）の卵しか探さないので、
+        //    孵化器へ入れた時点で `Hatchery.Begin` が棚から取り除いた卵を渡すと必ず投げる
+        //    （2026-08-25 監査で発覚。Web は一度も孵化できていなかった）。
+        //    `Hatchery.Collect` は Unity 側（`HomeScreen.cs:69`）と同じ経路 ── 偏り4軸と色も引く。
+        Creature? born;
+        try { born = Hatchery.Collect(s.Game, found.Egg.Id, s.Now); }
+        catch (Exception e) { s.Say = e.Message; return; }
+        if (born == null) return;
         // ⭐ 生まれた瞬間の Fanfare（Unity `HomeScreen.cs:73` → `Fanfare.Born` と対応）。
         s.Cheer_ = Cheer.Born(born);
     }
