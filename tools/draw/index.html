@@ -171,6 +171,16 @@
   #draftReadout.on { display: block; }
   #draftReadout .v { color: var(--text); }
   #draftReadout .warn { color: var(--accent); }
+
+  /* 補助線の一覧。既にある位置を数字で確かめ、要らないものだけ消せるように。 */
+  .guide-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .guide-list:empty { display: none; }
+  .guide-chip {
+    font-size: 11px; padding: 3px 8px; border-radius: 12px;
+    background: var(--bg-deep); border: 1px solid var(--border-soft);
+    color: var(--text); cursor: pointer;
+  }
+  .guide-chip:hover { border-color: var(--accent-soft); }
   /* 絵の下に敷く市松/白/黒。位置と大きさは renderEditor が毎回合わせる。 */
   #spriteBg { position: absolute; left: 0; top: 0; z-index: 1; display: none; pointer-events: none; }
 
@@ -1199,6 +1209,18 @@
             <button id="pixelPerfectBtn"
                     title="曲がり角にできる余分な点を消して、線を 1px に保つ">かど消し</button>
           </div>
+          <div class="section-title" style="margin-top:10px;">太さ（鉛筆・消しゴム）</div>
+          <div class="btn-row" id="brushSizeRow">
+            <button class="brush-size-btn active" data-size="1" title="1 ドット（既定）">1</button>
+            <button class="brush-size-btn" data-size="2" title="2 ドット">2</button>
+            <button class="brush-size-btn" data-size="3" title="3 ドット">3</button>
+            <button class="brush-size-btn" data-size="4" title="4 ドット（設計 1px ぶん）">4</button>
+            <button class="brush-size-btn" data-size="6" title="6 ドット">6</button>
+            <button class="brush-size-btn" data-size="8" title="8 ドット">8</button>
+          </div>
+          <div id="brushSizeNote" style="font-size:11px; color:var(--muted); margin-top:4px; display:none;">
+            ⚠️ 2 ドット以上のときは「かど消し」を使えません（角の巻き戻しが太い線だと穴になる）
+          </div>
         </div>
         <div class="section" style="margin-top:12px;">
           <div class="section-title">製図</div>
@@ -1216,6 +1238,16 @@
               <option value="28">28 ドットごと（押しどころの下限）</option>
             </select>
           </label>
+          <div class="section-title" style="margin-top:10px;">補助線 ── 好きな所に引ける</div>
+          <div class="btn-row">
+            <button id="guideVBtn" title="押すと縦の補助線を置くモードになる（もう一度押すとやめる）">縦ガイド</button>
+            <button id="guideHBtn" title="押すと横の補助線を置くモードになる（もう一度押すとやめる）">横ガイド</button>
+          </div>
+          <div style="font-size:11px; color:var(--muted); margin-top:4px;" id="guideHint">
+            縦ガイド・横ガイドを押してから、キャンバスを押した場所に引く。
+          </div>
+          <div id="guideList" class="guide-list"></div>
+          <button id="guideClearBtn" style="width:100%; margin-top:6px;" title="補助線を全部消す">補助線を全部消す</button>
           <div style="font-size:11px; color:var(--muted); margin-top:6px; line-height:1.6;">
             ⭐ この作品は <b>1 ドット = 4px</b>。読み取りは両方の数を出す。<br>
             ⚠️ 押しどころは <b>28 ドット</b>（112px）を下回ると指で押しにくい。
@@ -1662,10 +1694,12 @@ const state = {
   dragEnd: null,       // {x, y} 形状ツール現在位置
   previewPixels: null, // Uint8ClampedArray 形状ドラッグ中の overlay。commit前
   shapeFilled: false,  // 矩形/楕円: 枠 / 塗りつぶし
+  // ⭐ 太さ（鉛筆・消しゴム）。⚠️ 1 が今までの挙動そのもの（正方形スタンプの中心1マス）。
+  brushSize: 1,
   // ⭐ 製図（CAD のような下ごしらえ）。⚠️ **絵ではないので `.pixelizer.json` に入れない**
   //    ── あれは `sim import-screen` が読む形なので、勝手に増やさない。
   //    見え方の好みなので localStorage に別で覚える。
-  draft: { center: false, readout: true, major: 0 },
+  draft: { center: false, readout: true, major: 0, guides: [], guideMode: null },
   mirrorH: false,
   pixelPerfect: false,   // 曲がり角の余分な点を消す
   lightDir: { dx: -1, dy: -1 },  // 選択的な輪郭で使う光の向き (既定は左上)
@@ -1917,6 +1951,12 @@ const el = {
   toolButtons: document.querySelectorAll('[data-tool]'),
   shapeOutlineBtn: document.getElementById('shapeOutlineBtn'),
   shapeFilledBtn: document.getElementById('shapeFilledBtn'),
+  brushSizeBtns: document.querySelectorAll('.brush-size-btn'),
+  brushSizeNote: document.getElementById('brushSizeNote'),
+  guideVBtn: document.getElementById('guideVBtn'),
+  guideHBtn: document.getElementById('guideHBtn'),
+  guideClearBtn: document.getElementById('guideClearBtn'),
+  guideList: document.getElementById('guideList'),
   draftCenterBtn: document.getElementById('draftCenterBtn'),
   draftReadoutBtn: document.getElementById('draftReadoutBtn'),
   draftMajor: document.getElementById('draftMajor'),
@@ -3135,6 +3175,27 @@ function drawDraftOverlay(ctx) {
     ctx.stroke();
     ctx.restore();
   }
+
+  // ── 補助線 ── 好きな所に引いたもの ──────────────────
+  // ⭐ 中心線（橙・一点鎖線）とも目盛り（青・実線）とも見分くよう、緑の破線にする。
+  if (state.draft.guides.length) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(110,225,150,0.85)';
+    ctx.lineWidth = Math.max(1, d);
+    ctx.setLineDash([6 * d, 4 * d]);
+    ctx.beginPath();
+    for (const g of state.draft.guides) {
+      if (g.axis === 'v') {
+        const x = devX(g.pos) + 0.5;
+        ctx.moveTo(x, top); ctx.lineTo(x, bottom);
+      } else {
+        const y = devY(g.pos) + 0.5;
+        ctx.moveTo(left, y); ctx.lineTo(right, y);
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 /** 選んだ範囲の外接（ドット）。⚠️ 選択は Set<index> なので、ここで四角に直す。 */
@@ -3220,8 +3281,61 @@ function syncDraftUI() {
   el.draftCenterBtn.classList.toggle('active', state.draft.center);
   el.draftReadoutBtn.classList.toggle('active', state.draft.readout);
   el.draftMajor.value = String(state.draft.major | 0);
+  if (!state.draft.guides) state.draft.guides = [];   // ⚠️ 古い覚え書き（補助線が無い頃）への備え
+  renderGuideList();
   updateDraftReadout();
 }
+
+// ── 補助線（好きな所に引ける・CAD のガイド）────────────
+//
+// ⭐ 縦/横ガイドの釦で「置くモード」に入り、キャンバスを押した所へ置く。
+// ⚠️ **モードに入っている間は鉛筆で描かない** ── 下の pointerdown 側で、
+//    通常の描画（`beginStroke`）より先にここで奪う。
+function addGuide(axis, pos) {
+  const max = (axis === 'v' ? state.width : state.height) - 1;
+  pos = Math.max(0, Math.min(max, Math.round(pos)));
+  // ⚠️ 同じ場所に重ねて置かない（一覧が同じ数字だらけになる）。
+  if (state.draft.guides.some(g => g.axis === axis && g.pos === pos)) return;
+  state.draft.guides.push({ axis, pos });
+  state.draft.guides.sort((a, b) => (a.axis === b.axis) ? a.pos - b.pos : (a.axis === 'v' ? -1 : 1));
+  saveDraftPrefs(); renderGuideList(); renderEditor();
+}
+function removeGuideAt(index) {
+  state.draft.guides.splice(index, 1);
+  saveDraftPrefs(); renderGuideList(); renderEditor();
+}
+function renderGuideList() {
+  const box = el.guideList;
+  if (!box) return;
+  box.innerHTML = '';
+  state.draft.guides.forEach((g, i) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'guide-chip';
+    chip.textContent = (g.axis === 'v' ? '縦 ' : '横 ') + g.pos + ' ×';
+    chip.title = '消す';
+    chip.addEventListener('click', () => removeGuideAt(i));
+    box.appendChild(chip);
+  });
+}
+function setGuideMode(mode) {
+  state.draft.guideMode = (state.draft.guideMode === mode) ? null : mode;
+  el.guideVBtn.classList.toggle('active', state.draft.guideMode === 'v');
+  el.guideHBtn.classList.toggle('active', state.draft.guideMode === 'h');
+  const hint = document.getElementById('guideHint');
+  if (hint) {
+    hint.textContent = state.draft.guideMode
+      ? `キャンバスを押した所に${state.draft.guideMode === 'v' ? '縦' : '横'}の補助線を引きます（もう一度押すとやめます）`
+      : '縦ガイド・横ガイドを押してから、キャンバスを押した場所に引く。';
+  }
+}
+el.guideVBtn.addEventListener('click', () => setGuideMode('v'));
+el.guideHBtn.addEventListener('click', () => setGuideMode('h'));
+el.guideClearBtn.addEventListener('click', () => {
+  if (!state.draft.guides.length) return;
+  state.draft.guides = [];
+  saveDraftPrefs(); renderGuideList(); renderEditor();
+});
 
 el.draftCenterBtn.addEventListener('click', () => {
   state.draft.center = !state.draft.center;
@@ -3300,12 +3414,33 @@ el.mirrorHBtn.addEventListener('click', () => {
 // かど消しは描き方の好みなので、次に開いたときも覚えておく。
 const PP_KEY = 'pixelizer.pixelPerfect';
 function applyPixelPerfect(on) {
-  state.pixelPerfect = on;
-  el.pixelPerfectBtn.classList.toggle('active', on);
+  // 🔴 太さ 2 以上では使えない。⚠️ 角の巻き戻し（ppRestore）は1マスしか戻さないので、
+  //    太いスタンプの途中を巻き戻すと**線の中に穴が空く**（スタンプ全体を覚えて
+  //    戻す作りにはしていない ── 太さは今回の変更で、かど消しは元からの機能のため、
+  //    ぶつかる組み合わせを禁じるほうを選んだ）。
+  state.pixelPerfect = on && state.brushSize <= 1;
+  el.pixelPerfectBtn.classList.toggle('active', state.pixelPerfect);
+  el.pixelPerfectBtn.disabled = state.brushSize > 1;
   try { localStorage.setItem(PP_KEY, on ? '1' : '0'); } catch (e) {}
 }
 el.pixelPerfectBtn.addEventListener('click', () => applyPixelPerfect(!state.pixelPerfect));
 try { applyPixelPerfect(localStorage.getItem(PP_KEY) === '1'); } catch (e) { applyPixelPerfect(false); }
+
+// 太さ（鉛筆・消しゴム）。⭐ かど消しと同じく覚えておく。
+const BRUSH_KEY = 'pixelizer.brushSize';
+function applyBrushSize(size) {
+  state.brushSize = Math.max(1, size | 0);
+  el.brushSizeBtns.forEach(b => b.classList.toggle('active', (b.dataset.size | 0) === state.brushSize));
+  if (el.brushSizeNote) el.brushSizeNote.style.display = state.brushSize > 1 ? 'block' : 'none';
+  // ⚠️ 太くしたら、そのままでは矛盾するかど消しを自動で切る（黙って効かないままにしない）。
+  if (state.brushSize > 1 && state.pixelPerfect) applyPixelPerfect(false);
+  else { el.pixelPerfectBtn.disabled = state.brushSize > 1; }
+  try { localStorage.setItem(BRUSH_KEY, String(state.brushSize)); } catch (e) {}
+}
+el.brushSizeBtns.forEach(b => {
+  b.addEventListener('click', () => applyBrushSize(parseInt(b.dataset.size, 10) || 1));
+});
+try { applyBrushSize(parseInt(localStorage.getItem(BRUSH_KEY), 10) || 1); } catch (e) { applyBrushSize(1); }
 
 // 明暗チェックは「今だけ確かめる」ものなので覚えない。
 el.valueCheckBtn.addEventListener('click', () => {
@@ -3693,6 +3828,15 @@ el.canvasStage.addEventListener('pointerdown', (e) => {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
   if (!state.pixels) return;
 
+  // 🔴 **補助線を置くモードなら、ここで奪う。**⚠️ 通常の描画（`beginStroke`）より
+  //    必ず先 ── 後ろだと「置いたはずが線も引いていた」になる。
+  if (state.draft.guideMode) {
+    const c = pixelCoordsFromEvent(e);
+    if (c) addGuide(state.draft.guideMode, state.draft.guideMode === 'v' ? c.x : c.y);
+    e.preventDefault();
+    return;
+  }
+
   e.preventDefault();
   try { el.canvasStage.setPointerCapture(e.pointerId); } catch (_) {}
 
@@ -3870,18 +4014,34 @@ function mirrorCoords(x, y) {
 }
 
 // ── 鉛筆/消しゴム ────────────────────────────────────────
+//
+// ⭐ **太さは正方形のスタンプ**（1 なら今までどおり1マスだけ）。
+// ⚠️ 偶数のときは中心が無いので、右・下へ寄せる（多くのドット絵道具と同じ約束）。
+function brushOffsets(size) {
+  const n = Math.max(1, size | 0);
+  const before = Math.floor((n - 1) / 2);
+  const after = n - 1 - before;
+  const out = [];
+  for (let dy = -before; dy <= after; dy++)
+    for (let dx = -before; dx <= after; dx++)
+      out.push({ dx, dy });
+  return out;
+}
+
 function paintPixel(x, y, tool) {
   const W = state.width, H = state.height;
-  for (const p of mirrorCoords(x, y)) {
-    if (p.x < 0 || p.y < 0 || p.x >= W || p.y >= H) continue;
-    const i = (p.y * W + p.x) * 4;
-    if (tool === 'eraser') {
-      state.pixels[i+3] = 0;
-    } else {
-      state.pixels[i]   = state.color.r;
-      state.pixels[i+1] = state.color.g;
-      state.pixels[i+2] = state.color.b;
-      state.pixels[i+3] = 255;
+  for (const off of brushOffsets(state.brushSize)) {
+    for (const p of mirrorCoords(x + off.dx, y + off.dy)) {
+      if (p.x < 0 || p.y < 0 || p.x >= W || p.y >= H) continue;
+      const i = (p.y * W + p.x) * 4;
+      if (tool === 'eraser') {
+        state.pixels[i+3] = 0;
+      } else {
+        state.pixels[i]   = state.color.r;
+        state.pixels[i+1] = state.color.g;
+        state.pixels[i+2] = state.color.b;
+        state.pixels[i+3] = 255;
+      }
     }
   }
 }
