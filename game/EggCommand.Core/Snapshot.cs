@@ -400,10 +400,24 @@ namespace EggCommand.Core
             s.Id, speciesId, s.Wild.To(),
             Creatures.TrainedFor(speciesId, s.Wild.To(), s.Earned), s.Earned,
             s.MutationCounter, ResolveSkill(s.Skill2, notes), ResolveSkill(s.Skill3, notes),
-            s.PaletteIndex,
+            ClampPalette(speciesId, s.PaletteIndex, s.Id, notes),
             s.ParentA, s.ParentB, s.Generation, Key(s.Strong), Key(s.Weak),
             Elem(s.Element), ResolveTrait(speciesId, s.Trait, notes),
             Key(s.Best), Key(s.Worst));
+
+        // 🔴 **色の添字を種族の実際の色数に収める。**⚠️ 種族を改名／削除したり色表を
+        //    縮めたりすると、古い保存の `PaletteIndex` が範囲外のまま残る。読み込み
+        //    （`Load`）自体は成功するのに、BOX を描いた瞬間に `ArgumentOutOfRangeException`
+        //    で落ち、そのセーブが二度と開けなくなっていた（2026-08-25 監査で発覚）。
+        //    ⭐ 通常色（0）へ倒し、note に残す（作り直さない ── ここで直すと個体の色が
+        //    黙って変わるので、次に開いたとき気づけるようにする）。
+        private static int ClampPalette(string speciesId, int index, string creatureId, List<string>? notes)
+        {
+            int count = SpeciesTable.ById(speciesId).Palettes.Count;
+            if (index >= 0 && index < count) return index;
+            notes?.Add($"{creatureId}: 色 {index} 番が無い（{speciesId} は {count} 色）── 通常色へ戻した");
+            return 0;
+        }
 
         // ⚠️ 育てた分は保存から読まず、**Lv から作り直す**（Creatures.TrainedFor）。
         //    育成の規則を 2026-08-19 に二度変えており（得意1本 → 平らに＋1 → 素質の割合）、

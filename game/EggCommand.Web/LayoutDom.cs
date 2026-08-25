@@ -420,6 +420,18 @@ namespace EggCommand.Web
             }
 
             var size = PaintManifest.SizeOf(pic);
+            if (size == null && !PaintManifest.Loaded)
+            {
+                // 🔴 **一覧そのものが読めていないだけ。**⚠️ `SizeOf` は「読めていない」と
+                //    「読めたが名前が無い」を区別しないので、一覧の埋め込みが無い状態では
+                //    絵が実在するのに全部「？」（`paint-missing`）と誤診していた
+                //    （2026-08-25 監査で発覚。実測: home 10件・frame 5件が誤診）。
+                //    ⭐ 枠なりの大きさで普通に描く（icon が実寸を持たないときと同じ扱い）。
+                string fallback = FitDotsStyle(node, "paint", DotsOf(node.Width), DotsOf(node.Height));
+                sb.Append("<img class=\"n paint\" src=\"paint/").Append(Esc(pic))
+                  .Append(".png\" alt=\"\" style=\"").Append(fallback).Append("\" />");
+                return;
+            }
             if (size == null)
             {
                 // ⚠️ 実ドット数が分からない（実体が無い）。⭐ 枠なりの大きさを仮に使い

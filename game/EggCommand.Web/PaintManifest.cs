@@ -33,6 +33,17 @@ namespace EggCommand.Web
             return !_loaded || _known.ContainsKey(name);
         }
 
+        /// <summary>一覧そのものが読めているか。⚠️ 埋め込みが無い新規クローンでは false
+        /// （`sim paint-placeholder` を一度も走らせていない・csproj の Condition が外している）。
+        /// 🔴 <see cref="SizeOf"/> はこれを見ないので、読めていないとき**全部の `paint` を
+        /// 「絵が無い」と誤診していた**（`Exists` は `!_loaded` で安全側に倒すのに、
+        /// `SizeOf` は倒さない ── 2026-08-25 監査で発覚）。呼び側（<see cref="LayoutDom"/>）
+        /// はこれを見て、読めていないときは「missing」でなく普通の `&lt;img&gt;` を出す。</summary>
+        public static bool Loaded
+        {
+            get { if (_known == null) _known = Load(); return _loaded; }
+        }
+
         /// <summary>その絵の大きさ（ドット数）。⚠️ 無ければ null（呼び側が missing 扱いにする）。</summary>
         public static Size? SizeOf(string name)
         {
@@ -64,7 +75,7 @@ namespace EggCommand.Web
             {
                 // ⚠️ 埋め込み手順（csproj の `PaintManifest` ターゲット）が動いていない、
                 //    または `paint-placeholder` を一度も走らせていない。
-                Console.Error.WriteLine("PaintManifest: 埋め込みが見つからない（csproj か sim paint-placeholder を見る）");
+                Console.WriteLine("PaintManifest: 埋め込みが見つからない（csproj か sim paint-placeholder を見る）");
                 return map;
             }
             _loaded = true;

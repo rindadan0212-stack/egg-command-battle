@@ -215,7 +215,14 @@ public sealed class Shell
     {
         foreach (var c in Game.Storage.Creatures) if (c.Id == Picked) return c;
         var list = Sorted();
-        return list.Count > 0 ? list[0] : null;
+        if (list.Count > 0) return list[0];
+        // 🔴 **絞り込みが0件でも、手持ちが在れば倒す。**⚠️ ここが null だと `Sheets.Box`
+        //    が丸ごと「手持ちが無い」扱いにして真っ白を返し、絞り込みを戻す帯
+        //    （`sortbar`）自体もその HTML の中にあるので**戻す手段が無くなる**
+        //    （実例: 新規セーブで編成が空のまま BOX→「出撃中」で行き止まる。
+        //    2026-08-25 監査で発覚）。⭐ 絞り込み後の空と「本当に手持ちが無い」を分ける。
+        var unfiltered = Storages.Sorted(Game.Storage, Sort, Basis);
+        return unfiltered.Count > 0 ? unfiltered[0] : null;
     }
 
     // ── 押された ────────────────────────────────────

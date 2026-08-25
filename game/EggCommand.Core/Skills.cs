@@ -1513,7 +1513,12 @@ namespace EggCommand.Core
                 case EffectKind.Buff: return effect.Sign > 0;
                 case EffectKind.Ct: return effect.Delta < 0;
                 case EffectKind.Gauge: return effect.Percent > 0;
-                case EffectKind.HealRatio:
+                // 🔴 **符号を見る。**⚠️ `IsHarmful`（上）は `HealRatio` の符号で弱化かどうかを
+                //    決めているのに、ここは符号を見ず一律 true にしていた ── 負（命を削る）
+                //    まで「強化」に分類され、Block が弾いてしまっていた（試練 段5・トゲルの
+                //    枠2=block／枠3=life-cut で自分のブロックが自分の命削りを消し、
+                //    与ダメが 8505→0 になった。2026-08-25 監査で発覚）。
+                case EffectKind.HealRatio: return effect.Percent > 0;
                 case EffectKind.Regen:
                 case EffectKind.Shield:
                 case EffectKind.Guts:

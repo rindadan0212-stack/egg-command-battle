@@ -71,7 +71,7 @@ namespace EggCommand.Web
             using var stream = asm.GetManifestResourceStream(path);
             if (stream == null)
             {
-                Console.Error.WriteLine("SpriteManifest: 埋め込みが見つからない（csproj を見る）");
+                Console.WriteLine("SpriteManifest: 埋め込みが見つからない（csproj を見る）");
                 return set;
             }
             _loaded = true;

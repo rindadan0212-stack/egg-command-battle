@@ -2,7 +2,7 @@ using EggCommand.Core;
 
 namespace EggCommand.Web;
 
-/// <summary>骨組み32枚ぶんの「場面」の対応表。
+/// <summary>骨組み33枚ぶんの「場面」の対応表。
 ///
 /// ⭐ **この頁（`/edit`）が触れる骨組みは、ここが唯一の出所。**⚠️ どの実データで・
 /// どの画面の中に描くかを、あちこちに書き散らさない ── `EditPage.razor` はここを
@@ -37,7 +37,7 @@ public static class Scenes
         /// 差し込まれた側の節点は `LineNumber` を失い、代わりに `PartId`/`PartLine` を持つ
         /// （`LayoutDom.cs` が `data-part`/`data-part-line` を出す）。
         ///
-        /// `false` は単独の19枚と、**コードから描かれる4枚**（`unit`/`square`/`walker`/`frame`）。
+        /// `false` は単独の20枚と、**コードから描かれる4枚**（`unit`/`square`/`walker`/`frame`）。
         /// ⚠️ この4つは `use=` を一度も通らない ── `Stands`/`Board`/`Idle`/`Shell` が
         /// `LayoutStore.Of("unit"|"square"|"walker"|"frame")` を**独立した骨組みとして**
         /// 直接 `LayoutDom.Render` するので、差し込まれた側でも自分の行番号（`data-line`）
@@ -57,15 +57,15 @@ public static class Scenes
     private static Scene S(string id, string hostId, string why, bool isPart = false, bool byPart = false) =>
         new(id, hostId, why, isPart, byPart);
 
-    /// <summary>⭐ 32枚ぶん。⚠️ 実物のファイル名と1対1（増減したら
+    /// <summary>⭐ 33枚ぶん。⚠️ 実物のファイル名と1対1（増減したら
     /// <c>ScenesTests</c> の検査が落ちる）。
     ///
-    /// ⭐ 前半19枚が「画面」（<c>HostId == Id</c>・`Sheets.*` を直に呼べる）、
+    /// ⭐ 前半20枚が「画面」（<c>HostId == Id</c>・`Sheets.*` を直に呼べる）、
     /// 後半13枚が「部品」（土台の中でしか描けない）── `EditPage` の一覧はこの並びのまま
     /// `optgroup` へ分ける。</summary>
     public static readonly IReadOnlyList<Scene> All = new[]
     {
-        // ── 画面（19枚） ──────────────────────────────
+        // ── 画面（20枚） ──────────────────────────────
         S("box", "box", "BOX"),
         S("home", "home", "ホーム"),
         S("nests", "nests", "探索"),
@@ -87,6 +87,11 @@ public static class Scenes
         S("trail", "trail", "すごろく（潜入）"),
         S("banner", "banner", "告知（WIN/LOSE）"),
         S("dice", "dice", "さいころ"),
+        // 🔴 **足し忘れていた。**⚠️ `banner` と同じ「単独で描ける画面」（`Sheets.Fanfare` が
+        //    `LayoutStore.Of("fanfare")` を直に呼ぶ）なのに、この表に無いせいで `/edit` から
+        //    開けず、`?of=fanfare` は黙って `box` にフォールバックしていた
+        //    （2026-08-25 監査で発覚。骨組みは33枚あるのに、ここは32件しか無かった）。
+        S("fanfare", "fanfare", "祝い（手に入れた・生まれた瞬間の全画面演出）"),
 
         // ── 部品（13枚） ──────────────────────────────
         // ⭐ 複数の土台を持つ部品は1つを選ぶ（他の土台でも使われている旨を Why に残す）。
@@ -130,7 +135,7 @@ public static class Scenes
             $"場面が無い: {id}（在るもの: {string.Join(", ", ById.Keys)}）");
     }
 
-    /// <summary>⚠️ 例外を投げずに聞く版（クエリの値が32枚に無いかもしれないときに使う）。</summary>
+    /// <summary>⚠️ 例外を投げずに聞く版（クエリの値が33枚に無いかもしれないときに使う）。</summary>
     public static bool Has(string id) => ById.ContainsKey(id);
 
     // ── 描く ────────────────────────────────────────
@@ -259,6 +264,14 @@ public static class Scenes
 
             case "banner":
                 return Sheets.Banner(new Shell(Demo.Game(), Demo.Now) { Banner = "WIN" });
+
+            case "fanfare":
+            {
+                var shell = new Shell(Demo.Game(), Demo.Now);
+                var sorted = shell.Sorted();
+                if (sorted.Count > 0) shell.Cheer_ = Cheer.Born(sorted[0]);
+                return Sheets.Fanfare(shell);
+            }
 
             case "dice":
                 return Sheets.Dice(new Shell(Demo.Game(), Demo.Now) { Dice = 3 });

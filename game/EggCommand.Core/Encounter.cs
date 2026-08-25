@@ -163,7 +163,11 @@ namespace EggCommand.Core
         {
             if (encounter.UntilUnix <= 0) return 0;
             long left = encounter.UntilUnix - nowUnix;
-            return left < 0 ? 0 : (int)left;
+            // 🔴 0以上を約束しているのに、`int.MaxValue`（約68年ぶん秒）を超える差は
+            //    そのまま `(int)` へ落とすと符号が反転し**負の値が漏れる**（2026-08-25
+            //    監査で発覚。実測: +3,000,000,000秒 → -1294967296）。⭐ 上限で止める。
+            if (left < 0) return 0;
+            return left > int.MaxValue ? int.MaxValue : (int)left;
         }
 
         public static bool IsGone(Encounter encounter, long nowUnix) =>

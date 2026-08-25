@@ -1503,8 +1503,14 @@ namespace EggCommand.Core
             //    （出ないものが弾かれたことにならない）。
             if (effect.When != null && !Holds(effect.When.Value, actor, target)) return 0;
 
-            // ⭐ 免疫は弱い側の効果だけを弾く
-            if (Skills.IsHarmful(effect) && target.Status.Immune > 0)
+            // ⭐ 免疫は弱い側の効果だけを弾く。
+            // 🔴 **ただし強化解除・強化強奪は例外。**⚠️ `Skills.cs`「免疫は強化なので
+            //    これで剥がせる」（`dispel`/`buff-steal` の技コメント）という設計なのに、
+            //    `Dispel`/`Steal` も `IsHarmful` の一部（弱化の一種）として一律に弾いていた
+            //    ため、免疫を剥がす手段そのものが免疫に弾かれ、**免疫を誰も剥がせなかった**
+            //    （2026-08-25 監査で発覚）。免疫の門だけこの2種を除く。
+            if (Skills.IsHarmful(effect) && effect.Kind != EffectKind.Dispel && effect.Kind != EffectKind.Steal
+                && target.Status.Immune > 0)
             {
                 state.Log.Add(new BattleEvent(BattleEventKind.Blocked, target.Key));
                 return 0;

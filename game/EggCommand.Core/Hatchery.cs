@@ -102,7 +102,10 @@ namespace EggCommand.Core
         public static int LeftOf(Incubation slot, long nowUnix)
         {
             long left = slot.ReadyUnix - nowUnix;
-            return left < 0 ? 0 : (int)left;
+            // 🔴 `Encounter.LeftOf` と同じ穴（2026-08-25 監査で発覚）。
+            //    `int.MaxValue` を超える差は `(int)` で符号が反転し、負の値が漏れる。
+            if (left < 0) return 0;
+            return left > int.MaxValue ? int.MaxValue : (int)left;
         }
 
         /// <summary>0（入れたて）〜1（孵る）。</summary>

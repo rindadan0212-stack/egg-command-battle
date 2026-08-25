@@ -1003,7 +1003,12 @@ namespace EggCommand.Core
 
             var ids = new HashSet<string>();
             foreach (var species in table) ids.Add(species.Id);
-            if (ids.Count != List.Length) problems.Add("種族 id が重複している");
+            // 🔴 **`List.Length`（実装の固定表）ではなく `table.Count`（渡された表）と比べる。**
+            //    ⚠️ `Faults(table, …)` は帳面から読んだ表を渡す口（`Sheet.cs` が使う）なので、
+            //    種族を1つ足す／減らすたびに「種族 id が重複している」と誤報して止まっていた
+            //    （2026-08-25 監査で発覚。逆に実際の重複は見逃す ── 表の件数がたまたま
+            //    `List.Length` と一致すれば通ってしまう）。
+            if (ids.Count != table.Count) problems.Add("種族 id が重複している");
 
             // ⚠️ 「属性が3すくみを覆えているか」はもう数えない。
             //    属性は種族ではなく個体が持つので、どの種族からも3属性すべてが生まれる。

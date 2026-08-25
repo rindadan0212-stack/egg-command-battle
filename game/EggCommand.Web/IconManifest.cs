@@ -54,7 +54,7 @@ namespace EggCommand.Web
             {
                 // ⚠️ 埋め込み手順（csproj の `IconManifest` ターゲット）が動いていない。
                 //    ⭐ ブラウザの console に残す ── 気づかずにいるほうが困る。
-                Console.Error.WriteLine("IconManifest: 埋め込みが見つからない（csproj を見る）");
+                Console.WriteLine("IconManifest: 埋め込みが見つからない（csproj を見る）");
                 return set;
             }
             _loaded = true;

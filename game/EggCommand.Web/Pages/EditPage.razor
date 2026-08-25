@@ -692,6 +692,10 @@
     private string _folder = "";
     private string? _originalText;
     private Core.Layout? _raw;
+    // 🔴 直近に**描けた**（Parse が例外を投げなかった）字と木。⚠️ 壊れた編集を戻す先
+    // （<see cref="Refresh"/> の catch）。編集の度に成功した後でだけ更新する。
+    private Core.Layout? _lastGoodRaw;
+    private string? _lastGoodText;
     private int _selectedLine = -1;
     /// <summary>⭐⑫ 段階2 Pass A: 選択の集合（順序保持・重複させない）。⚠️ **不変条件**:
     /// 空でない ⇔ <see cref="_selectedLine"/> がこの中に居る。空 ⇔ <see cref="_selectedLine"/>
@@ -2090,6 +2094,11 @@
         BeginAction();
         var roots = RemoveLines(_raw.Roots, new HashSet<int>(_selected));
         _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
+        // 🔴 **`Parse(Write(...))` で組み直す。**⚠️ 消した行の後ろは `Write` が詰めるので
+        //    盤（`LayoutStore.Of` が読み直した木）の行番号は繰り上がるが、ここで直さないと
+        //    `_raw` は古い行番号のまま残り、次に盤で押した節点と `_raw` 側の節点が1つずれる
+        //    （2026-08-25 監査で発覚。`SelectNewRoot` が追加/複製で既にやっている組み直しと同じ）。
+        _raw = Core.Layouts.Parse(_of, Core.Layouts.Write(_raw));
         ClearSelection();   // ⚠️ 消した節点はもう選べない（選択・輪・Inspector 欄をまとめて空にする）
         Refresh();
         CommitAction();
@@ -3017,10 +3026,34 @@
     {
         if (_raw is not null)
         {
-            LayoutStore.SetOverride(_of, Core.Layouts.Write(_raw));
+            string written = Core.Layouts.Write(_raw);
+            LayoutStore.SetOverride(_of, written);
             _touched.Add(_of);
+            try
+            {
+                RefreshView();
+            }
+            catch (Exception e)
+            {
+                // 🔴 **編集の結果、骨組みが読めない字になった。**⚠️ ここまでは
+                //    `Layouts.Parse` の例外に try/catch が1つも無く、Blazor の未処理例外
+                //    として落ち、赤帯（`blazor-error-ui`「何かが壊れました」）が出て
+                //    編集内容ごと失われていた（`text=` に空白のみ／タブ／CR／既知の
+                //    付け足し名を含む字を入れると再現。2026-08-25 監査で発覚）。
+                //    ⭐ 直前の（描けていた）字へ戻し、理由を出す。
+                LayoutStore.SetOverride(_of, _lastGoodText);
+                _raw = _lastGoodRaw;
+                _status = $"⚠️ この変更は適用できません（{e.Message}）";
+                if (_raw is not null) RefreshView();
+                return;
+            }
+            _lastGoodText = written;
+            _lastGoodRaw = _raw;
         }
-        RefreshView();
+        else
+        {
+            RefreshView();
+        }
     }
 
     private void RefreshView()

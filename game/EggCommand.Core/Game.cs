@@ -266,6 +266,15 @@ namespace EggCommand.Core
         public static void See(Game game, string speciesId)
         {
             if (string.IsNullOrEmpty(speciesId)) return;
+            // 🔴 **引っ越し表を通してから見る。**⚠️ 他の入口（`Snapshot.To` 等）は
+            //    `Migrations.SpeciesOf` で旧→新の改名を辿るのに、図鑑だけ生の id を
+            //    そのまま `SpeciesTable.Has` に掛けていた。改名を1行足した日、既にその
+            //    種族を分解済みのプレイヤーは古い保存の生 id を持たないので実害は薄いが、
+            //    **これから改名する種族を今まさに手に入れた個体**は新 id で `Keep` されるのに
+            //    図鑑だけ旧 id で呼ばれる経路（呼び出し側が生データを渡す場合）で漏れうる
+            //    （2026-08-25 監査で発覚。試練は落としたとき note を残すのに図鑑は残さない
+            //    ── ここは静かに直す）。
+            speciesId = Migrations.SpeciesOf(speciesId);
             // ⚠️ **表に無い id を書き込まない。**⭐ 書くと、種族を消したときに
             //    図鑑が「知らない何か」を1枠抱えたまま残る。
             if (!SpeciesTable.Has(speciesId)) return;
@@ -350,7 +359,17 @@ namespace EggCommand.Core
             IReadOnlyList<string> eggIds)
         {
             int total = 0;
-            foreach (string eggId in eggIds) total += FeedEggToSkill(game, creatureId, slot, eggId);
+            foreach (string eggId in eggIds)
+            {
+                // 🔴 **見つからないものは飛ばす**（<see cref="Dissolve"/> と同じ作法）。
+                //    ⚠️ `FeedEggToSkill` は棚に無い id を渡すと投げる ── まとめて注ぐ側で
+                //    それをそのまま伝播させると、途中で止まって「卵とポイントだけ減った
+                //    状態」を UI に晒す（この関数のドキュメントが約束する「0 なら卵も
+                //    減っていない」が半端に破れる）。呼び側3か所とも try/catch を持たず、
+                //    2026-08-25 監査で発覚。同じ id が二度来ても崩れない。
+                try { total += FeedEggToSkill(game, creatureId, slot, eggId); }
+                catch (ArgumentException) { }
+            }
             return total;
         }
 

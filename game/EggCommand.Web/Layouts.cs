@@ -68,7 +68,7 @@ namespace EggCommand.Web
 
             // ⚠️ **読んだ場で検査する。**⭐ アセットだけ直してテストを回し忘れたときに拾う
             foreach (var line in Core.Layouts.Faults(found))
-                Console.Error.WriteLine("骨組み: " + line);
+                Console.WriteLine("骨組み: " + line);
 
             Cache[id] = found;
             return found;

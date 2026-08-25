@@ -1981,7 +1981,10 @@ namespace EggCommand.Sim
             }
             sb.Append("};\n\n");
 
-            sb.Append($"new Species(\"{sp.Id}\", \"{Quote(sp.Name)}\", \"{sp.Skill1}\",\n");
+            // 🔴 `traitId`（9引数中5番目）を足す。⚠️ 抜けたまま `Species` の9引数コンストラクタに
+            //    渡すと CS7036（必須引数不足）でコンパイルできず、「帳面 → 貼れる C#」という
+            //    出口が丸ごと死んでいた（2026-08-25 監査で発覚。それまで検査ゼロだった）。
+            sb.Append($"new Species(\"{sp.Id}\", \"{Quote(sp.Name)}\", \"{sp.Skill1}\", \"{sp.TraitId}\",\n");
             sb.Append($"    new StatBlock({sp.Base.Hp}, {sp.Base.Atk}, {sp.Base.Def}, ")
               .Append($"{sp.Base.Spd}, {sp.Base.Acc}, {sp.Base.Res}), {big}Sprite, {big}Palettes,\n");
             sb.Append($"    {CodeOf(sp.Slot2)},\n    {CodeOf(sp.Slot3)}),");

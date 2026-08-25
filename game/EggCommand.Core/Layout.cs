@@ -765,6 +765,11 @@ namespace EggCommand.Core
 
             var roots = new List<LayoutNode>();
             var pending = new List<object[]>();   // [depth, name, kind, l, t, w, h, options, line, indent, fields, trailing, terminator]
+            // 🔴 直前の（非スキップ）行の深さ。⚠️ 親より2段以上深い行を許すと、木を組む段
+            //    （`at == depth+1` の子しか拾わない）にも根の抽出（`depth==0` しか拾わない）
+            //    にも入らず、その節点が**黙って消える**（次の `Write` がファイルから削除する）。
+            //    2026-08-25 監査で発覚 ── 手で1行足すときの字下げ間違いで再現する。
+            int prevDepth = -1;
 
             for (int i = 0; i < rawLines.Count; i++)
             {
@@ -778,11 +783,19 @@ namespace EggCommand.Core
                 if (spaces % 2 != 0)
                     throw new ArgumentException($"{id}: {i + 1}行目の字下げが奇数（空白2つで1段）");
                 int depth = spaces / 2;
+                if (depth > prevDepth + 1)
+                    throw new ArgumentException($"{id}: {i + 1}行目の字下げが飛んでいる（親より2段以上深い）");
+                prevDepth = depth;
 
-                // ⚠️ **`.Trim()` は行末の余りも削る。**⭐ ここで差を取り出しておかないと
-                //    `Write` が元の行末の空白を再現できない（普通は空だが、念のため）。
-                string trimmedBody = raw.Trim();
-                string trailing = raw.Substring(spaces + trimmedBody.Length);
+                // 🔴 **`.Trim()` を使わない。**⚠️ 全角空白・NBSP など Unicode の空白まで
+                //    削ってしまい、`spaces`（半角空白だけを数えた行頭の字下げ）と数が合わなく
+                //    なる ── その結果 trailing の計算がずれ、本体の最後の1文字を食っていた
+                //    （2026-08-25 監査で発覚。実測: 行頭が全角空白だと「860」→「8600」と
+                //    書き出された）。⭐ 行頭・行末とも「数えた分と同じだけ」＝半角空白だけを削る。
+                int end = raw.Length;
+                while (end > spaces && raw[end - 1] == ' ') end--;
+                string trimmedBody = raw.Substring(spaces, end - spaces);
+                string trailing = raw.Substring(end);
 
                 // ⭐ **`text=` は行の最後まで全部。**⚠️ 空白で切る前に外す
                 //    ── 切ってから繋ぎ直すと、二重空白や全角空白が失われる。

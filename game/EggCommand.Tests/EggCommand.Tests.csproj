@@ -53,6 +53,12 @@
   <ItemGroup>
     <None Include="..\EggCommand.Web\Shell.cs" Link="websrc\Shell.cs" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\EggCommand.Web\Pages\AppPage.razor" Link="websrc\AppPage.razor" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 🔴 `Scenes.All`（`/edit` が触れる骨組みの唯一の出所）が実物の `assets/layouts/*.txt`
+         と過不足なく1対1か見張る（`ScenesTests`）。⚠️ `Scenes.cs` は `Shell`/`Sheets`/`Demo`
+         等 Web 専用の依存が多くコンパイルには持ち込めないので、`Shell.cs` と同じ
+         「テキストとして読むだけ」の形にする（2026-08-25・`fanfare` が足されていなかった
+         監査を受けて追加）。 -->
+    <None Include="..\EggCommand.Web\Scenes.cs" Link="websrc\Scenes.cs" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- いまの実装の出力を凍らせた記録。⚠️ 移植の証拠ではない。
