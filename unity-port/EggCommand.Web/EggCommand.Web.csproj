@@ -60,6 +60,12 @@
   <Target Name="CopyArt" BeforeTargets="BeforeBuild">
     <ItemGroup>
       <Art Include="..\..\unity\Assets\Resources\Fonts\MochiyPopOne-Regular.ttf" Into="wwwroot\fonts" />
+      <!-- ⭐ 2026-08-25 ドット絵化: 画面の字は PixelMplus10（`Fonts/NOTICE.md` 参照）。
+           ⚠️ `wwwroot/fonts/` は .gitignore 対象＝**唯一の出所は Resources/Fonts**。
+           ここで写さないと、クローンし直したとき字が system-ui へ黙って落ちる。 -->
+      <Art Include="..\..\unity\Assets\Resources\Fonts\PixelMplus10-Regular.ttf" Into="wwwroot\fonts" />
+      <Art Include="..\..\unity\Assets\Resources\Fonts\PixelMplus10-Bold.ttf" Into="wwwroot\fonts" />
+      <Art Include="..\..\unity\Assets\Resources\Fonts\MPLUS-LICENSE-PixelMplus.txt" Into="wwwroot\fonts" />
       <Art Include="..\..\unity\Assets\Resources\UI\icon\*.png" Into="wwwroot\icon" />
       <Art Include="..\..\unity\Assets\Resources\UI\*.png" Into="wwwroot\ui" />
       <Art Include="..\..\art\sprites\display\*.png" Into="wwwroot\sprite" />

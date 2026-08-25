@@ -126,10 +126,13 @@ namespace EggCommand.Web
 
             // ⚠️ **釦も字を出す。**⭐ ここを札だけにしていたので、釦の字がすべて
             //    ブラウザの既定（16px）で出ていた（実測 2026-08-22）。
-            //    ⚠️ 既定は Unity の `Ui.Tappable` に合わせて 34。
+            //    🔴 既定は 40（ドット絵化計画 §6・2026-08-25）── PixelMplus10 が
+            //    「絵と同じドットの太さ」で出る唯一の大きさ。以前は Unity の
+            //    `Ui.Tappable` に合わせて button=34・label=26 だった（Mochiy Pop One 時代の値）。
+            //    ⚠️ 骨組み側の明示 `size=` はこの段では触らない（段取り2で丸める）。
             if (node.Kind == "label" || node.Kind == "button")
                 style.Append(";font-size:")
-                     .Append(Px(node.Number("size", node.Kind == "button" ? 34 : 26)));
+                     .Append(Px(node.Number("size", 40)));
 
             if (node.Kind == "label")
             {

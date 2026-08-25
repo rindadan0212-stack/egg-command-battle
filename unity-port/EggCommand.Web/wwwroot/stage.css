@@ -32,8 +32,11 @@ html, body {
   height: 100%;
   background: #0d1220;
   overflow: hidden;
-  /* ⭐ 同じ TTF を配るので、字送りは Unity と揃う */
-  font-family: "Mochiy Pop One", system-ui, sans-serif;
+  /* 🔴 採用フォント: PixelMplus10（ドット絵化計画 §6・2026-08-25・実測して決定）。
+     ⚠️ `font-smooth`/`-webkit-font-smoothing` に頼らない ── にじみが1画素も出ないかは
+     「font-size が10の倍数か」だけで決まる（8〜200px 総当たりで確認済み）。
+     ⭐ `Mochiy Pop One` は消さない（`index.html` の @font-face に残す。戻せるように）。 */
+  font-family: "PixelMplus10", system-ui, sans-serif;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -386,12 +389,19 @@ html, body {
    **さいころの目が消える**（実測 2026-08-22: 濃紺の四角になった）。
    ⭐ だから2枚重ねる ── 素の絵と、絵の形に切った色を「掛ける」で乗せる。 */
 .n.icon { color: var(--ink); }
+/* 🔴 **絵は全部 pixelated**（ドット絵化計画 §2・2026-08-25・土台の決定5）。
+   ⚠️ 以前は `crisp=yes` を付けた icon だけに絞っていたが、土台の決定で
+   「絵を出す要素すべて」に広げた ── 既存の Kenney 絵（さいころ・盤の印）も
+   これからはドットのまま拡大される。`crisp` 属性・クラス自体は残す
+   （骨組み側の `node.Option("crisp")` は触らない。付いていても付いていなくても
+   同じ見た目になっただけ）。 */
 .n.icon-art {
   position: absolute;
   background-image: var(--pic);
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
+  image-rendering: pixelated;
 }
 .n.icon-art::after {
   content: '';
@@ -407,13 +417,6 @@ html, body {
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
-}
-
-/* ⭐ **自作の仮ドット絵**（状態異常アイコンなど・`crisp=yes`）は補間しない。
-   ⚠️ 既存の Kenney 絵（さいころ・盤の印）は滑らかな見た目のまま ──
-   `.n.icon-art` 自体は変えず、`crisp` を付けた icon の中だけに効かせる。 */
-.n.icon.crisp .icon-art,
-.n.icon.crisp .icon-art::after {
   image-rendering: pixelated;
 }
 
