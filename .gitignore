@@ -10,19 +10,17 @@ dist/
 *.local
 Thumbs.db
 
+# 撮った画面（`npm run shot` が書く）
 shots/
+records/shots/
 
-unity-port/**/bin/
-unity-port/**/obj/
+game/**/bin/
+game/**/obj/
 
 # pixelizer/ はドット絵エディター。ここに置いてあるが、自前の git リポジトリを持つ
 # 別の作品（https://github.com/rindadan0212-stack/pixelizer）。
 # 外さないと、この repo が入れ子の repo として飲み込んでしまう。
 pixelizer/
-
-# ⚠️ unity/ を丸ごと外さない。ゲームの中身の唯一の出所が
-# unity/Packages/com.eggcommand.core/ にあるので、外すと C# が版管理から消える。
-# 何を外すかは unity/.gitignore（Library/ Temp/ Logs/ obj/ *.csproj など）が持つ。
 
 図鑑.html
 
@@ -30,11 +28,12 @@ pixelizer/
 # ⚠️ sheets/*.txt のほうは手で書いた書きかけとメモが入るので**入れる**。
 sheets/エディタ.html
 
-# 改装前の UI 画像の控え。⚠️ 現行と中身が違うので消していないが、版管理には入れない。
-*.png.bak
-*.png.bak.meta
-
-# ⚠️ 素材の写し（唯一の出所は unity/Assets/Resources）。⭐ 毎回のビルドが作り直す。
-unity-port/EggCommand.Web/wwwroot/fonts/
-unity-port/EggCommand.Web/wwwroot/icon/
-unity-port/EggCommand.Web/wwwroot/paint/
+# ⚠️ 素材の写し。⭐ 毎回のビルド（`CopyArt`）が作り直す。
+# 🔴 **唯一の出所は `assets/` と `art/sprites/display/`。**
+#    ここを版管理に入れると出所が2つに割れる（2026-08-25 に ui/ と sprite/ が
+#    実際に載っていたので外した）。
+game/EggCommand.Web/wwwroot/fonts/
+game/EggCommand.Web/wwwroot/icon/
+game/EggCommand.Web/wwwroot/paint/
+game/EggCommand.Web/wwwroot/ui/
+game/EggCommand.Web/wwwroot/sprite/

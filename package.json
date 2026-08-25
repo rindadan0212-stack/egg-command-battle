@@ -4,16 +4,18 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "stop": "node scripts/stop.mjs",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "same": "node scripts/same.mjs",
-    "sim": "node scripts/sim.mjs",
-    "check:determinism": "node scripts/check-determinism.mjs",
-    "goldens": "node scripts/goldens.mjs",
-    "goldens:check": "node scripts/goldens.mjs --check",
-    "shots": "node scripts/shots.mjs"
+    "check": "node tools/inspect.mjs",
+    "check:self": "node tools/inspect-selftest.mjs",
+    "play": "node tools/play.mjs",
+    "loop": "node tools/loop.mjs",
+    "measure": "node tools/measure.mjs",
+    "why": "node tools/why.mjs",
+    "shot": "node tools/shot.mjs",
+    "icons": "node tools/gen-status-icons.mjs",
+    "goldens": "node tools/goldens.mjs",
+    "goldens:check": "node tools/goldens.mjs --check",
+    "old:dev": "vite --root old/ts",
+    "old:stop": "node old/ts/stop.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

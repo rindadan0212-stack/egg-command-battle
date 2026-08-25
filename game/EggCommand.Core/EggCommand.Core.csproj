@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>EggCommand.Core</RootNamespace>
+    <!-- ⚠️ Unity 時代の名残（Unity 6 の C# は 9 だった）。
+         ⭐ 2026-08-25 に Unity を捨てたので**外してもよい**が、外しても得は無く、
+         下げるほうには戻せないので据え置く。上げるなら「なぜ上げたいか」を書いてから。 -->
+    <LangVersion>9.0</LangVersion>
+  </PropertyGroup>
+
+  <!-- ⭐ 遊びの規則の .cs は、2026-08-25 の整頓で**このフォルダの中**へ移した
+       （それまでは `unity/Packages/com.eggcommand.core/Runtime/` を glob していた）。
+       ⚠️ よその場所に写しを置かない ── 写した瞬間に2つに割れる。 -->
+
+</Project>

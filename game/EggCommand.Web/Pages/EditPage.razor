@@ -1,0 +1,3428 @@
+@page "/edit"
+@using System.Globalization
+@using EggCommand.Core
+@using EggCommand.Web
+@implements IDisposable
+@inject IJSRuntime Js
+@inject NavigationManager Nav
+
+@*
+  骨組み（`Assets/Resources/Layouts/*.txt`）を GUI で直して、ファイルへ書き戻す道具。
+
+  ⚠️ **この頁は `/app`（遊ぶ頁）とは完全に別物。**`Shell` / `Sheets.*` は呼ぶだけで、
+  中身には触らない。⭐ 掴んで動かす・大きさを変える・吸い付き・取り消しは
+  この頁の上に載っている（背骨は「開く→選ぶ→直す→保存→その行だけ変わる」）。
+
+  ⭐ **編集面は遊ぶ画面そのもの**（`wiki/開発/web移行計画.md` §11「別プレビューを作らない」）。
+  盤は `Sheets.*` を呼んで実データで描く ── `LayoutStore` にディスクの生の字を
+  一時的に差し込んで（`SetOverride`）、Sheets 側は今までどおり `LayoutStore.Of` を
+  呼ぶだけで済むようにしてある（Sheets.cs は1文字も変えていない）。
+
+  ⚠️ **時間で動くものは無い。**AppPage のような `System.Threading.Timer`
+  （戦いの拍・すごろくの拍）をそもそも作っていない ── 測る対象が拍ごとに動くと、
+  選択も検査も「いま何を見ているか」が揺れて嘘になる。
+*@
+
+<div class="edroot">
+  <div class="edtop">
+    <label class="edwho">
+      骨組み
+      @* ⭐ 32枚を1つの select に並べると読めないので、画面／部品で分ける
+         （`Scenes.All` が唯一の出所 ── 増えたらここも自動で増える）。 *@
+      <select value="@_of" @onchange="OnOfChange">
+        <optgroup label="画面">
+          @foreach (var s in Scenes.All)
+          {
+            if (s.IsPart) continue;
+            <option value="@s.Id">@s.Id（@s.Why）</option>
+          }
+        </optgroup>
+        <optgroup label="部品">
+          @foreach (var s in Scenes.All)
+          {
+            if (!s.IsPart) continue;
+            <option value="@s.Id">@s.Id（@s.Why）</option>
+          }
+        </optgroup>
+      </select>
+    </label>
+
+    <button type="button" @onclick="PickFolder" disabled="@(!_supported)">
+      📂 フォルダを選ぶ@(string.IsNullOrEmpty(_folder) ? "" : $"（{_folder}）")
+    </button>
+
+    @* ⭐ 見える押しどころ＋ Ctrl+Z / Ctrl+Shift+Z の両方（作者の指示）。
+       ⭐ 数は「あと何回戻せるか」── 0件のときは字を出さず、押せないことも示す。 *@
+    <button type="button" @onclick="Undo" disabled="@(_undo.Count == 0)" title="取り消し（Ctrl+Z）">
+      ⟲@(_undo.Count > 0 ? _undo.Count.ToString(CultureInfo.InvariantCulture) : "")
+    </button>
+    <button type="button" @onclick="Redo" disabled="@(_redo.Count == 0)" title="やり直し（Ctrl+Shift+Z）">
+      ⟳@(_redo.Count > 0 ? _redo.Count.ToString(CultureInfo.InvariantCulture) : "")
+    </button>
+
+    @* ⚠️ demo モードでは保存を封じる（ディスクに書く相手が無い ── フォルダを選んでいない）。 *@
+    <button type="button" @onclick="Save" disabled="@(_raw is null || _demo)">💾 保存</button>
+
+    @* ⭐ Pass B: 盤の拡大（ズーム）＋格子。⚠️ まだ何も読んでいない（<see cref="_raw"/> が
+       null）ときは盤そのものが無いので出さない。 *@
+    @if (_raw is not null)
+    {
+      <div class="edzoom">
+        <button type="button" @onclick="ZoomOut" disabled="@(_dotPx <= DotPxSteps[0])" title="縮小">−</button>
+        <button type="button" class="edzoomval" @onclick="ZoomReset" title="器に収まる大きさに戻す">
+          1ドット=@(_dotPx)px
+        </button>
+        <button type="button" @onclick="ZoomIn" disabled="@(_dotPx >= DotPxSteps[DotPxSteps.Length - 1])" title="拡大">＋</button>
+      </div>
+      <label class="edtoggle edgridtoggle">
+        <input type="checkbox" checked="@_grid" @onchange="e => _grid = e.Value is bool b && b" />
+        <span>格子</span>
+      </label>
+      @* ⭐ E2: 名札（節点の名前）── なし / 選んだものだけ / 全部 の3段階
+         （計画 §11-3・Tiled の `ObjectLabelVisibility`）。既定は「なし」。 *@
+      <label class="edwho edlabelmode">
+        名札
+        <select value="@_labelMode" @onchange="OnLabelModeChange">
+          <option value="none">なし</option>
+          <option value="selected">選んだものだけ</option>
+          <option value="all">全部</option>
+        </select>
+      </label>
+    }
+
+    @if (!_checkedSupport)
+    {
+      <span class="edmuted">対応を確かめています…</span>
+    }
+    else if (!_supported)
+    {
+      <span class="edwarn">
+        ⚠️ このブラウザは File System Access API に対応していません（Chrome / Edge で開いてください）。
+      </span>
+    }
+
+    @if (!string.IsNullOrEmpty(_status))
+    {
+      <span class="edstatus">@_status</span>
+    }
+  </div>
+
+  @* ⭐ **道具箱は上の帯に置く**（2026-08-24・実測で分かった作り直し）。
+     ⚠️ もともと Inspector の中に入れていたが、D-1 で Inspector を畳めるようにした結果
+     **畳むと道具箱ごと消えて、何も足せなくなった**（作者の望みは「盤を大きく・脇は細く」
+     と「道具箱から掴んで落とす」の両方 ── 畳んだら置けない、では噛み合わない）。
+     ⭐ 道具箱は盤とセットで使うものなので、脇のパネルではなく**常に見える上の帯**に置く。
+     ⚠️ 出所は1つ（ここだけ）── Inspector 側には複製を作らない。 *@
+  @if (_raw is not null)
+  {
+    <div class="edtools">
+      @* ⭐ E2: 層（レイヤ）の切替（計画 §11-2・§11-9「道具箱: 層の切替」）。
+         ⚠️ **層を選ぶ＝道具・カタログ・見え方が全部決まる**（LDtk の借用） ──
+         下の「足す」・木の並び・盤の薄くする／触れなくするが、全部ここ1つに従う。 *@
+      <div class="edstructrow edlayerrow">
+        <span class="edstructlabel">層</span>
+        @foreach (var layer in EditLayers.Switcher)
+        {
+          var lyr = layer;
+          <button type="button" class="edalign-btn @(_layer == lyr ? "on" : "")"
+                  title="@(EditLayers.Label(lyr))だけを編集する" @onclick="() => SetLayer(lyr)">
+            @EditLayers.Label(lyr)
+          </button>
+        }
+      </div>
+      <div class="edstructrow">
+        <button type="button" class="edalign-btn eddel-btn" disabled="@(_selected.Count == 0)"
+                title="消す（Delete キーでも）" @onclick="DeleteSelected">🗑 消す</button>
+        <button type="button" class="edalign-btn eddup-btn" disabled="@(_selected.Count != 1)"
+                title="複製" @onclick="DuplicateSelected">複製</button>
+      </div>
+      @* ⭐ D-2: この行の札は掴んで盤へドラッグできる（`eggEdit.paletteListen` が id で見つける）。
+         ⚠️ 押しただけ（動かさず離した）は今までどおりネイティブ click →`@onclick`（`AddKind`）。
+         ⭐ E2: 層を選んでいるときは、その層のものだけに絞る（`FilteredAddPalette`）。
+         ⚠️ 押しどころの層は道具箱に何も出さない（囲んで作るだけ ── 計画 §11-6）ので、
+         代わりに1行の案内を出す（空の道具を見せない、の作法どおり）。 *@
+      <div class="edstructrow" id="edaddpalette">
+        <span class="edstructlabel">足す</span>
+        @{ var pal = FilteredAddPalette(); }
+        @if (pal.Count == 0)
+        {
+          <span class="edaddhint">
+            @(_layer == EditLayer.Tap ? "盤をドラッグして囲むと、押しどころができます" : "この層に足せるものはありません")
+          </span>
+        }
+        else
+        {
+          @foreach (var k in pal)
+          {
+            var kind = k.Kind;
+            <button type="button" class="edalign-btn edadd-btn" data-kind="@kind"
+                    title="@(k.Label)を足す（掴んで盤へ落とすと、その場所に出る）" @onclick="() => AddKind(kind)">@k.Label</button>
+          }
+        }
+      </div>
+    </div>
+  }
+
+  @* ⭐ Pass B 段階制: まだ何も読んでいない（<see cref="_raw"/> が null。demo は
+     `FirstRenderSetup`/`ApplyOf` の中で即 `_raw` が入るので、ここには来ない）ときは、
+     空の3列（木・盤・Inspector）を見せず、中央に1つの入口だけ見せる
+     （作者の pixelizer の教訓「空の道具を先に見せない」）。⚠️ `.edtop`（上の帯）と
+     `.edbottom`（不備の帯・既に `_raw is null` を扱える）はこの分岐の外＝今までどおり。
+     実装は `.edmain` を条件分岐でくくるだけ（値・状態機械は増やさない）。 *@
+  @if (_raw is null)
+  {
+    <div class="edstart">
+      <div class="edstartbox">
+        <button type="button" class="edstartbtn" @onclick="PickFolder" disabled="@(!_supported)">
+          📂 フォルダを選ぶ
+        </button>
+        @if (!_checkedSupport)
+        {
+          <span class="edmuted">対応を確かめています…</span>
+        }
+        else if (!_supported)
+        {
+          <span class="edwarn">
+            ⚠️ このブラウザは File System Access API に対応していません（Chrome / Edge で開いてください）。
+          </span>
+        }
+        else
+        {
+          <span class="edstarthint">骨組み（.txt）が入っているフォルダを選ぶと、木・盤・Inspector が開きます。</span>
+        }
+      </div>
+    </div>
+  }
+  else
+  {
+  <div class="edmain">
+    @* ── 木 ─────────────────────────────────────── *@
+    @* ⭐ D-1: 盤を主役にする ── 木は細く、畳めるように。畳んでも `.edpaneltoggle` は
+       常に見える（つまみ自身は本文の外）。本文（`.edtreebody`）は畳んだとき render しない
+       （空の道具を描き続けない・タブ移動でも触れなくする）。 *@
+    <div class="edtree @(_treeCollapsed ? "edtree-collapsed" : "")">
+      @if (!_treeCollapsed)
+      {
+        <div class="edtreebody">
+          @if (_raw is null)
+          {
+            <div class="edhint">フォルダを選ぶと、原文の行の順で並びます。</div>
+          }
+          else
+          {
+            @* ⭐③ 作者の Unity 版 `PartList()` に倣う ── さがす（× で消せる）と
+               出ているものだけ（既定 ON）。 *@
+            <div class="edtreetools">
+              <div class="edfind">
+                <input type="text" class="edfindinput" placeholder="さがす"
+                       value="@_find" @oninput="OnFindInput" />
+                @if (_find.Length > 0)
+                {
+                  <button type="button" class="edfindclear" title="さがすを消す" @onclick="ClearFind">×</button>
+                }
+              </div>
+              <label class="edtoggle edonlyvisible">
+                <input type="checkbox" checked="@_onlyVisible" @onchange="OnToggleOnlyVisible" />
+                <span>出ているものだけ</span>
+              </label>
+            </div>
+            var rows = FilteredRows();
+            @if (rows.Count == 0)
+            {
+              <div class="edhint">見つかりません</div>
+            }
+            else
+            {
+              @foreach (var row in rows)
+              {
+                <div class="edrow @(row.Node.LineNumber == _selectedLine ? "on" : _selected.Contains(row.Node.LineNumber) ? "sel" : "") @(row.Node.LineNumber == _hoverLine ? "hover" : "")"
+                     style="padding-left:@(8 + row.Depth * 14)px"
+                     @onclick="e => SelectLine(e, row.Node.LineNumber)"
+                     @onmouseover="() => TreeHoverOn(row.Node.LineNumber)"
+                     @onmouseout="TreeHoverOff">
+                  <span class="edname">@row.Node.Name</span>
+                  <span class="edkind">@row.Node.Kind</span>
+                  @if (IsPicMismatch(row.Node.LineNumber))
+                  {
+                    <span class="edmismark" title="絵の実寸と枠が合っていません">⚠</span>
+                  }
+                </div>
+              }
+            }
+          }
+        </div>
+      }
+      <button type="button" class="edpaneltoggle" @onclick="ToggleTree"
+              title="@(_treeCollapsed ? "木を開く" : "木を畳む")">@(_treeCollapsed ? "▶" : "◀")</button>
+    </div>
+
+    @* ── 盤 ─────────────────────────────────────── *@
+    <div class="edboardwrap" id="edwrap">
+      @* ⭐ Pass B 拡大＋パン。⚠️ **スクロールするのはこの層（`#edscroll`）だけ**
+         ── `#edwrap` 自身は今までどおりスクロールしない。輪／ホバー／バンド／道しるべ
+         （`#edring`/`#edsel`/`#edhover`/`#edband`/guides）は必ずこの層の**外**
+         （`#edwrap` 直下）に置く ── 中に入れると、それらもスクロールする内容物の
+         一部になってしまい、`getBoundingClientRect` の差分（viewport 基準）で置いた
+         screen-px の位置がスクロール量ぶんだけ二重にずれる（`#edwrap` 自身が
+         動かない基準点であり続けるからこそ、差分計算がスクロール状態によらず
+         常に正しい）。 *@
+      <div class="edscroll" id="edscroll">
+        <div class="edstagewrap" id="edstagewrap">
+          @* ⭐ E2: 「薄くする」は Razor がここで直接持つ（`data-layerfilter`・CSS だけで
+             完結する ── JS の状態と2重に持たない）。名札の3段階は class（`LabelModeClass`）。 *@
+          <div class="edstage @LabelModeClass()" id="edstage" data-layerfilter="@EditLayers.Token(_layer)">
+            @((MarkupString)_html)
+            @* ⭐ **透明な覆い。**盤のいちばん上（DOM の最後）に置いて、遊びの押しどころ
+               （`data-tap`）より先に指を受け止める。中身は空 ── 押しどころも「掴んで動かす」も
+               覆いの「下に何が描かれているか」を JS 側が `elementFromPoint` で探して拾う
+               （`edit.js` の `listen`）。 *@
+            <div id="edcap" class="edcap"></div>
+          </div>
+          @* ⭐ Pass B 格子。⚠️ #edstage と同じ基準・同じ倍率（`edit.js` の `fit()` が
+             3層まとめて scale する）── 間隔はそのまま `_step` px でよい。既定 off。
+             塗り面ではなく極薄の線のみ（塗り潰さない約束）。DOM 順で #edstage の
+             **上**（グリッド線が見える）・#edfaults の**下**（不備の絵の方が目立つ）。 *@
+          @if (_grid)
+          {
+            <div id="edgrid" class="edgrid" style="--edstep:@(Math.Max(1f, _step).ToString(CultureInfo.InvariantCulture))px"></div>
+          }
+          @* ⭐ **不備の形。**盤（#edstage）と**同じ倍率**を掛けて重ねる別の層
+             （`edit.js` の `fit()` が edstage と一緒にこの層も scale する）。
+             ⚠️ **`#edcap` の中には置かない**（覆いは指を受け止める最優先の層 ──
+             そこに描くと、不備の絵が指の受け止めより手前に出て、盤全体の掴み・
+             押しどころを覆ってしまう）。⭐ 座標は `Fault.Boxes`/`Focus`（絶対 px）を
+             そのまま置くだけ ── edstage と同じ倍率なので、実寸換算の JS 計算が要らない。
+             ⚠️ 面で塗り潰さない（輪郭線と、Focus だけ薄い斜線）。既定は
+             `pointer-events:none`（Box は下の本体へ素通し ── 本体は既に data-line/
+             data-part を持つので、覆いの外でも今までどおり選べる）。
+             **Focus だけ**自分で押しどころを持つ（`eggEdit.faultsListen`）
+             ── 実体の外（画面の外・親の外・足りない高さの帯）にはみ出すことがあり、
+             下に何も無いことがあるため。 *@
+          <div id="edfaults" class="edfaults">
+            @((MarkupString)_faultHtml)
+          </div>
+        </div>
+      </div>
+      @* ⭐ **輪と掴みどころは、盤の外の層に置く。**
+         ⚠️ 盤（#edstage）には `scale(k)` が掛かっている。輪をその中に置くと、
+         掴みどころ（8個の四角）も一緒に縮んで、盤を小さく表示しているときに
+         指で押せなくなる。⭐ ここでは「輪を盤の外に出す」ほうを選んだ ──
+         `1/k` を掛け続けるより、`#edwrap` を基準に実寸（screen px）だけで
+         置き直すほうが単純（`edit.js` の `_ringTo`）。
+         ⚠️ 塗り潰さない約束は変わらない（囲むのは輪の線と、押せる掴みどころだけ）。 *@
+      @* ⭐②④ 選択の輪の多重化。⚠️ 選択が2つ以上のときだけ中身を持つ（`eggEdit.reselect`
+         が作り直す ── DOM を Razor で毎回作らない・JS 側の一時 chrome）。ちょうど1つの
+         ときは空のまま（主は下の #edring が担う）。塗らない（輪郭だけ）。 *@
+      <div id="edsel" class="edsel"></div>
+      <div id="edring" class="edring">
+        @foreach (var h in Handles)
+        {
+          <div class="edhandle" data-handle="@h"></div>
+        }
+      </div>
+      @* ⭐ Pass B 木↔盤ホバー連動。⚠️ **選択の輪（#edring/#edsel）とは別レイヤ**
+         （`eggEdit.hoverOn`/`hoverOff` だけが触る）。輪と同じ理由で盤の外・実寸 screen px。 *@
+      <div id="edhover" class="edhover"></div>
+      @* ⭐ 吸い付いた瞬間だけ見せる細い線。⚠️ 面で塗らない・囲みを増やさない
+         （`画面の作法.md`「区切りは余白で／線は一辺だけ」と同じ約束）。 *@
+      <div id="edguidex" class="edguide edguide-x"></div>
+      <div id="edguidey" class="edguide edguide-y"></div>
+      @* ⭐④ ドラッグ枠（ラバーバンド）。⚠️ 塗り潰さない約束の唯一の例外
+         （一時的な道具の chrome ── guide と同じ位置づけ）。 *@
+      <div id="edband" class="edband"></div>
+      @* ⭐ D-3: 盤の上でその場の文字入力。⚠️ #edring と同じ作法（#edscroll の外・
+         #edwrap 基準の実寸）── `eggEdit.editAt` が対象節点の実位置へ合わせる。
+         label/button をダブルクリックしたときだけ現れる。 *@
+      @if (_editingLine >= 0)
+      {
+        <div id="edtextedit" class="edtextedit">
+          <input type="text" id="edtexteditinput" value="@_editingText"
+                 @onkeydown="OnTextEditKeyDown" @onblur="CommitTextEdit" />
+        </div>
+      }
+    </div>
+
+    @* ── その1つ ───────────────────────────────── *@
+    @* ⭐ D-1: Inspector も細く・畳めるように。つまみ（盤との境目＝左端）は
+       `.edinspectorbody` の外に置くので、畳んでも常に見える。 *@
+    <div class="edinspector @(_inspectorCollapsed ? "edinspector-collapsed" : "")">
+      <button type="button" class="edpaneltoggle" @onclick="ToggleInspector"
+              title="@(_inspectorCollapsed ? "Inspector を開く" : "Inspector を畳む")">@(_inspectorCollapsed ? "◀" : "▶")</button>
+      @if (!_inspectorCollapsed)
+      {
+        <div class="edinspectorbody">
+          @* ⚠️ 構造の帯（消す・複製・足す）は**上の帯（`.edtools`）へ移した** ──
+             Inspector を畳むと道具箱ごと消える問題のため。ここには複製を置かない（出所は1つ）。 *@
+          @if (_raw is not null && _selected.Count >= 2)
+          {
+            @* ⭐⑥ 揃える・等間隔。⚠️ 2個以上のときだけ出す（作者の pixelizer の教訓
+               「空の道具を先に見せない」）。主1つに対する編集（下の通常欄）とは同じ画面で
+               混ぜない ── どちらかしか出さない。 *@
+            <div class="edmulti">
+              <div class="edmultihead">@(_selected.Count)個 選択中</div>
+              <div class="edmultirow">
+                <button type="button" class="edalign-btn" title="左揃え" @onclick="() => ApplyAlign(EditAlign.AlignLeft)">左</button>
+                <button type="button" class="edalign-btn" title="右揃え" @onclick="() => ApplyAlign(EditAlign.AlignRight)">右</button>
+                <button type="button" class="edalign-btn" title="上揃え" @onclick="() => ApplyAlign(EditAlign.AlignTop)">上</button>
+                <button type="button" class="edalign-btn" title="下揃え" @onclick="() => ApplyAlign(EditAlign.AlignBottom)">下</button>
+                <button type="button" class="edalign-btn" title="左右中央" @onclick="() => ApplyAlign(EditAlign.AlignCenterX)">左右中央</button>
+                <button type="button" class="edalign-btn" title="上下中央" @onclick="() => ApplyAlign(EditAlign.AlignCenterY)">上下中央</button>
+              </div>
+              <div class="edmultirow">
+                @* ⚠️ 等間隔は3個未満だと「間」が定義できない（EditAlign.DistributeH/V が空を返す
+                   のと同じ理由）── 押せないことも示す。 *@
+                <button type="button" class="edalign-btn" disabled="@(_selected.Count < 3)"
+                        title="横に等間隔" @onclick="() => ApplyAlign(EditAlign.DistributeH)">横に等間隔</button>
+                <button type="button" class="edalign-btn" disabled="@(_selected.Count < 3)"
+                        title="縦に等間隔" @onclick="() => ApplyAlign(EditAlign.DistributeV)">縦に等間隔</button>
+              </div>
+            </div>
+          }
+          else
+          {
+            // ⚠️ ここは既に @if/else の中（C# コード文脈）── @{ } は要らない（RZ1010）。
+            var sel = _raw is null || _selectedLine < 0 ? null : Find(_raw.Roots, _selectedLine);
+            @if (sel is null)
+            {
+              <div class="edhint">盤の部品を押すか、木から選んでください。</div>
+            }
+            else
+            {
+              <div class="edhead">@sel.Name <span class="edkind">@sel.Kind</span></div>
+
+              @* ⭐ D-4: 左/上/幅/高＋きざみ は既定で畳む（微調整のときだけ開く）。
+                 ⚠️ 中身（Field）は変えない ── 見せ方だけ。 *@
+              <button type="button" class="edcollapsebtn" @onclick="ToggleNumbers">
+                @(_numbersOpen ? "▾" : "▸") 数字で細かく
+              </button>
+              @if (_numbersOpen)
+              {
+                <div class="edfieldrow">
+                  @Field("左", _left, v => ApplyLeft(v))
+                  @Field("上", _top, v => ApplyTop(v))
+                </div>
+                <div class="edfieldrow">
+                  @Field("幅", _width, v => ApplyWidth(v))
+                  @Field("高", _height, v => ApplyHeight(v))
+                </div>
+                <div class="edstepwrap">
+                  <span>きざみ</span>
+                  <input class="edstepnum" type="number" value="@_step"
+                         @onchange="e => _step = ParseF(e.Value, _step)" />
+                </div>
+              }
+
+              @* ⭐ E-4/E1-4: `icon`/`paint` を選んでいるときだけ「絵を変える」＋今の絵の
+                 小さなサムネイルと名前。⚠️ `pic=` は `EditAttrs`（属性表）に載せていない
+                 （`EditAttrs.Excluded["pic"]` の理由コメント参照 ── `IconManifest` に
+                 `EggCommand.Tests` から届かないため）ので、専用の1ブロックをここに
+                 直に書く。それ以外を選んでいるときは出さない（空の道具を見せない）。
+                 ⭐ E1-5: 枠と絵が合わない（<see cref="PicMismatchOf"/>）ときは、警告と
+                 「絵に合わせる」（1手で枠を絵の実寸へ）をここに足す。 *@
+              @* 🔴 `pixel`（種族の絵）も入れる ── 枠と絵が合っていないときだけ。
+                 ⚠️ `pixel` は `pic=` を持たない（`bind=` で実行時に決まる）ので、
+                 絵を選ぶ道具は出ない。⭐ **出すのは「絵に合わせる」の一手だけ**
+                 ── 不一致45件のうち31件が `pixel` で、ここを落とすと
+                 「一番多いものだけ直せない」道具になる。 *@
+              @if (sel.Kind == "icon" || sel.Kind == "paint"
+                   || (sel.Kind == "pixel" && PicMismatchOf(sel) is not null))
+              {
+                var picName = sel.Option("pic");
+                var mismatch = PicMismatchOf(sel);
+                <div class="edattrrow edpicrow">
+                  <span class="edlabel">絵</span>
+                  <div class="edpicpreview">
+                    @if (picName is null)
+                    {
+                      <span class="edmuted">（未選択）</span>
+                    }
+                    else if (PicExists(sel.Kind, picName))
+                    {
+                      <img class="edpicthumb" src="@PicThumbSrc(sel.Kind, picName)" alt="" />
+                      <span class="edname">@picName</span>
+                    }
+                    else
+                    {
+                      <span class="edwarn">この名前の絵が見つかりません（@picName）</span>
+                    }
+                  </div>
+                  <button type="button" class="edalign-btn" @onclick="() => OpenIconPicker(sel.Kind)">絵を変える</button>
+                  @if (mismatch != null)
+                  {
+                    var mm = mismatch.Value;
+                    <div class="edpicwarn">
+                      <span class="edwarn">
+                        ⚠ 枠がこの絵の実寸と合っていません（絵は@(Fmt(mm.ExpectW))×@(Fmt(mm.ExpectH))px
+                        なのに枠は@(Fmt(mm.FrameW))×@(Fmt(mm.FrameH))px）
+                      </span>
+                      <button type="button" class="edalign-btn" @onclick="FitPicToNode">絵に合わせる</button>
+                    </div>
+                  }
+                </div>
+              }
+
+              @* ⭐ E2: 機能（`tap=`）の付け替え（計画 §11-8・作者の決定6）。⚠️ `button` か、
+                 既に `tap=` を持つ節点だけに出す（空の道具を見せない）。押すと小窓が開き、
+                 一覧から選ぶ・外す・さがす（<see cref="OpenTapPicker"/> が唯一の入口 ──
+                 「囲んで作る」直後もここを通る）。 *@
+              @if (sel.Kind == "button" || sel.Option("tap") != null)
+              {
+                <div class="edattrrow edtaprow">
+                  <span class="edlabel">機能（tap=）</span>
+                  <div class="edpicpreview">
+                    @if (sel.Option("tap") is { } curTap)
+                    {
+                      <span class="edname">@curTap</span>
+                    }
+                    else
+                    {
+                      <span class="edmuted">（未設定）</span>
+                    }
+                    <button type="button" class="edalign-btn" @onclick="OpenTapPicker">機能を選ぶ</button>
+                  </div>
+                </div>
+              }
+
+              @* ⭐①属性表（EditAttrs.All）から自動で欄を生む ── 効かない種類・条件
+                 （例: gap は repeat= を持つ節点だけ）では出さない
+                 （作者の pixelizer の教訓「空の欄を先に見せない」）。 *@
+              @foreach (var attr in EggCommand.Web.EditAttrs.All)
+              {
+                if (!attr.AppliesTo(sel)) continue;
+                <div class="edattrrow">
+                  @AttrField(attr, sel)
+                </div>
+              }
+            }
+          }
+        </div>
+      }
+    </div>
+  </div>
+  }
+
+  @* ── 不備 ───────────────────────────────────────── *@
+  <div class="edbottom">
+    <div class="edbottomrow">
+      @if (_raw is null)
+      {
+        <span class="edmuted">● フォルダを選ぶと検査が動きます</span>
+      }
+      else if (_faults.Count == 0)
+      {
+        @* ⚠️ 0件のときは一覧の器（`edfaultlist`）ごと出さない
+           （作者の pixelizer の教訓「空の欄を先に見せない」）。 *@
+        <span class="edok">● 不備 0件</span>
+      }
+      else
+      {
+        <span class="edbad">● @(_faults.Count)件</span>
+        @* ⭐ 一覧にして押せるようにした。⚠️ 横並びのまま溢れたら**下へ畳む**
+           （`flex-wrap`）── この頁の作法「溢れたら畳み方を間違えている合図」を
+           守りつつ、この帯だけは中身の件数が読めないので、唯一
+           横スクロールでなく縦に伸びることを選んだ（`edmain` が押される）。 *@
+        <div class="edfaultlist">
+          @for (var i = 0; i < _faults.Count; i++)
+          {
+            // ⚠️ for のループ変数をそのまま @onclick へ渡すと、全部の釦が
+            //    最後の i を掴んでしまう ── 1回ごとにローカルへ写す。
+            var at = i;
+            <button type="button" class="edfaultitem" title="@_faults[at].Text"
+                    @onclick="() => SelectFault(at)">
+              @_faults[at].Text
+            </button>
+          }
+        </div>
+      }
+    </div>
+    @* ⭐ E1-5: 「枠と絵が合わない」節点。⚠️ 開いた直後（<see cref="RefreshView"/> が
+       文書を読むたびに数え直す）に、この行がそのまま「N個あります」を伝える ──
+       別のトーストは作らない（計画 §11-12「新しい仕組みを増やさない」）。
+       ⚠️ 0件のときは行ごと出さない（空の欄を先に見せない、と同じ作法）。
+       ⚠️ 勝手には直さない ── ここは選ぶだけ（押すと Inspector の「絵に合わせる」へ）。 *@
+    @if (_raw is not null && _picMismatches.Count > 0)
+    {
+      <div class="edbottomrow">
+        <span class="edbad">⚠ この画面に枠と絵が合わない部品が @(_picMismatches.Count)個あります</span>
+        <div class="edfaultlist">
+          @for (var i = 0; i < _picMismatches.Count; i++)
+          {
+            var at = i;
+            var pm = _picMismatches[at];
+            <button type="button" class="edfaultitem" title="@PicMismatchText(pm)"
+                    @onclick="() => SelectPicMismatch(at)">
+              @PicMismatchLabel(pm)
+            </button>
+          }
+        </div>
+      </div>
+    }
+  </div>
+
+  @* ⭐ D-2: 道具箱から掴んだ「作ろうとしている四角」の輪郭（ゴースト）。
+     ⚠️ 盤の倍率・スクロールの影響を受けない位置に置く（`position:fixed`・
+     viewport 座標そのまま）── ドラッグの起点はパレット（Inspector 側）で、
+     盤に入る前から出したいので、`#edwrap` の中（`overflow:hidden`）には置けない。
+     塗らない（輪郭＋ごく薄い面だけ ── `.edband` と同じ「一時的な道具」の扱い）。 *@
+  <div id="edghost" class="edghost"></div>
+
+  @* ── ⭐ 段E: 絵を選ぶ小窓（E-2）── サムネイルを目で見て選ぶ・名前は打たせない ──
+     ⚠️ 盤の覆い（`#edcap`）や道具箱とは別の一時的な chrome（`.edband`/`.edghost` と
+     同じ「押した瞬間だけ現れる道具」の扱い）。開き方は2つ（E-1: 絵を新しく置いた直後
+     ／E-4: Inspector の「絵を変える」）── どちらも `OpenIconPicker` の1つの入口。 *@
+  @if (_iconPickerOpen)
+  {
+    <div class="edmodal" @onclick="CloseIconPicker">
+      <div class="edmodalbox" @onclick:stopPropagation="true">
+        <div class="edmodalhead">
+          <span>絵を選ぶ</span>
+          <button type="button" class="edmodalclose" title="閉じる" @onclick="CloseIconPicker">×</button>
+        </div>
+        <div class="edmodaltools">
+          <input type="text" class="edfindinput" placeholder="さがす" value="@_iconPickerFind"
+                 @oninput="e => _iconPickerFind = Convert.ToString(e.Value) ?? string.Empty" />
+          @* ⭐ E-3: 絵のフォルダを選ぶ（`unity\Assets\Resources\UI\icon` を選ぶよう案内）。
+             ⚠️ File System Access API 非対応ブラウザでは出さない（`PickFolder` と同じ判定）。
+             ⚠️ E1-4: `paint` は `IconOverrides`（ディスクから読んだ仮の絵）を持たない ──
+             `icon` を選んでいるときだけ出す（無い機能を匂わせない）。 *@
+          @if (_supported && _picKind == "icon")
+          {
+            <button type="button" class="edalign-btn" @onclick="PickArtFolder"
+                    title="絵のフォルダを選ぶ（unity\Assets\Resources\UI\icon）">
+              📂 絵のフォルダ@(string.IsNullOrEmpty(_artFolder) ? "" : $"（{_artFolder}）")
+            </button>
+          }
+        </div>
+        @* ⭐ E-3: 「絵を取り込む」── 絵のフォルダを選んでいるときだけ出す（空の道具を見せない）。 *@
+        @if (_picKind == "icon" && !string.IsNullOrEmpty(_artFolder))
+        {
+          <div class="edmodalimport">
+            <label class="edalign-btn edimport-btn">
+              絵を取り込む
+              <input type="file" accept="image/png" multiple hidden
+                     @ref="_importInput" @onchange="OnImportFiles" />
+            </label>
+            <span class="edmuted">ゲーム本体にも入れるには、いちど建て直してください</span>
+          </div>
+        }
+        @{ var picNames = FilteredPicNames(); }
+        @if (picNames.Count == 0)
+        {
+          <div class="edhint">見つかりません</div>
+        }
+        else
+        {
+          <div class="edicongrid">
+            @foreach (var name in picNames)
+            {
+              var pickName = name;
+              <button type="button" class="edicon-item" title="@pickName" @onclick="() => ChooseIcon(pickName)">
+                <img src="@PicThumbSrc(_picKind, pickName)" alt="" />
+                <span>@pickName</span>
+              </button>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  @* ── ⭐ E2: 機能（`tap=`）を選ぶ小窓 ── §4「機能の付け替え」の唯一の入口 ──
+     ⚠️ 開き方は2つ（1: 囲んで作った直後 ／ 2: Inspector の「機能を選ぶ」）── どちらも
+     <see cref="OpenTapPicker"/> の1つの入口。⭐ 「絵を選ぶ」小窓（`.edmodal`/`.edmodalbox`/
+     `.edmodalhead`/`.edmodaltools`/`.edfindinput`）を骨格ごと共有する（新しい chrome を
+     増やさない）。 *@
+  @if (_tapPickerOpen)
+  {
+    <div class="edmodal" @onclick="CloseTapPicker">
+      <div class="edmodalbox" @onclick:stopPropagation="true">
+        <div class="edmodalhead">
+          <span>機能を選ぶ</span>
+          <button type="button" class="edmodalclose" title="閉じる" @onclick="CloseTapPicker">×</button>
+        </div>
+        <div class="edmodaltools">
+          <input type="text" class="edfindinput" placeholder="さがす" value="@_tapPickerFind"
+                 @oninput="e => _tapPickerFind = Convert.ToString(e.Value) ?? string.Empty" />
+          @* ⭐ 外せる（`tap=` を消す）。⚠️ いま付いていなければ押せない。 *@
+          <button type="button" class="edalign-btn" disabled="@(TapPickerCurrent is null)"
+                  @onclick="RemoveTap">外す</button>
+        </div>
+        @if (TapPickerByPart)
+        {
+          @* 🔴 冠の逆算の結果を、押す前に必ず見せる（黙って足りない候補を出さない）。 *@
+          <div class="edtapinfo">@TapPickerInfo()</div>
+        }
+        @{ var tapNames = FilteredTapNames(); }
+        @if (tapNames.Count == 0)
+        {
+          <div class="edhint">@TapPickerEmptyReason()</div>
+        }
+        else
+        {
+          <div class="edtaplist">
+            @foreach (var name in tapNames)
+            {
+              var pick = name;
+              <button type="button" class="edtap-item @(pick == TapPickerCurrent ? "on" : "")"
+                      @onclick="() => ChooseTap(pick)">@pick</button>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>
+
+@code {
+    // ⭐ 骨組み32枚ぶんの対応表は `Scenes.cs` へ集めた（`Scenes.All`/`Scenes.Of`/`Scenes.Draw`）。
+    //    ⚠️ ここに一覧を持たせない ── 「どの実データで・どの画面の中に描くか」の出所は1つ。
+
+    [SupplyParameterFromQuery(Name = "of")] public string? OfQuery { get; set; }
+
+    /// <summary>⭐ **開発時だけの入口**（`?edit=box&amp;demo=true` 相当・実際は `/edit?demo=true`）。
+    /// File System Access API の許可ダイアログは Playwright から自動で通せないので、
+    /// フォルダを選ばなくても掴める状態を作るための道。⚠️ **遊ぶ頁（`/app`）には出てこない**
+    /// ── このクラスの中だけで読み、`Save` も封じる（下の <see cref="_demo"/> 参照）。</summary>
+    [SupplyParameterFromQuery(Name = "demo")] public string? DemoQuery { get; set; }
+    private bool _demo;
+
+    private string _of = "box";
+    private bool _checkedSupport;
+    private bool _supported;
+    private string _folder = "";
+    private string? _originalText;
+    private Core.Layout? _raw;
+    private int _selectedLine = -1;
+    /// <summary>⭐⑫ 段階2 Pass A: 選択の集合（順序保持・重複させない）。⚠️ **不変条件**:
+    /// 空でない ⇔ <see cref="_selectedLine"/> がこの中に居る。空 ⇔ <see cref="_selectedLine"/>
+    /// == -1。⭐ 「主たる選択」= <see cref="_selectedLine"/>（Inspector / resize / nudge の
+    /// 対象は今までどおりこちら1つだけ）。読み書きは <see cref="SelectOnly"/>/
+    /// <see cref="ToggleSelect"/>/<see cref="SetSelection"/>/<see cref="AddSelection"/>/
+    /// <see cref="ClearSelection"/> の5つ（唯一の出所）に集約する ── 各所でバラバラに
+    /// 書き換えない。</summary>
+    private readonly List<int> _selected = new();
+    private string _html = "";
+    // ⭐ 2026-08-24: 字（`Layouts.Faults`）でなく形（`Layouts.Inspect`）を持つ ──
+    //    盤に描く（`Boxes`/`Focus`）にも、押して選ぶ（`Lines`/`PartIds`/`PartLines`）にも、
+    //    字だけの `List<string>` では足りない。
+    private List<Core.Fault> _faults = new();
+    /// <summary>⭐ E1-5: 「枠と絵が合わない」節点の一覧。⚠️ Core の <see cref="Core.Fault"/>
+    /// とは別物（`IconManifest`/`PaintManifest` は `EggCommand.Web` にしか無い ── Core は
+    /// 触らない、の死守事項どおり）。<see cref="RefreshView"/> が `_faults` と同じ拍で
+    /// 数え直す（唯一の出所）。</summary>
+    private List<LayoutDom.PicMismatch> _picMismatches = new();
+    /// <summary>⭐ 不備を盤の上に描く層（`#edfaults`）の中身。⚠️ `_html` と同じ理由で
+    /// `MarkupString` として流し込む（Blazor の `@onclick` は個々の枠に付けられない）。</summary>
+    private string _faultHtml = "";
+    private string _status = "";
+    private float _left, _top, _width, _height;
+    // ⭐ E1-1（2026-08-25・ドット絵化計画 §1）: きざみの既定 10→4（1ドット＝設計4px）。
+    //    ⚠️ 自由には今までどおり変えられる（8・16 で粗く動かしたいことがある）── 既定だけ変える。
+    private float _step = 4f;
+
+    // ── ⭐ D-1: 盤を主役に ── 木・Inspector を畳む ─────────
+    // ⚠️ 状態は覚えない（単純に保つ・作者の指示）── ページを開き直すたびに既定（開いた
+    //    状態）へ戻ってよい。
+
+    private bool _treeCollapsed;
+    private bool _inspectorCollapsed;
+
+    // ── ⭐ D-4: 左/上/幅/高＋きざみ の畳み（既定で畳む・微調整のときだけ開く） ──
+
+    private bool _numbersOpen;
+
+    // ── ⭐ D-3: 盤の上でその場の文字入力 ─────────────────
+
+    /// <summary>いま入力欄を開いている行。-1 なら閉じている。</summary>
+    private int _editingLine = -1;
+    /// <summary>入力欄の初期値（`value="@_editingText"` は最初の1回だけ効く ──
+    /// 以降は打っている最中の実体を JS 側（`eggEdit.editValue`）から確定時に読む。</summary>
+    private string _editingText = "";
+
+    // ── ⭐ 段E: 絵を選ぶ小窓／自作 PNG ─────────────────
+    // ⚠️ 単純に保つ（作者の指示） ── 「開いているか」「さがす」「選んでいる絵のフォルダ名」の
+    //    3つの薄い状態だけ。中身（一覧そのもの）は状態に持たせず、描くたびに
+    //    `IconManifest.Names`／`IconOverrides.Names` から組み直す（唯一の出所を保つ）。
+
+    /// <summary>「絵を選ぶ」小窓が開いているか。⚠️ 開き方は2つ（E-1: 絵を新しく置いた
+    /// 直後 ／ E-4: Inspector の「絵を変える」）── どちらも <see cref="OpenIconPicker"/> の
+    /// 1つの入口を通る。</summary>
+    private bool _iconPickerOpen;
+    /// <summary>小窓の中の「さがす」欄。⚠️ 開くたびに空へ戻す（<see cref="OpenIconPicker"/>）。</summary>
+    private string _iconPickerFind = "";
+    /// <summary>⭐ E1-4: いま小窓が出しているのは `icon` か `paint` か。⚠️ <see cref="OpenIconPicker"/>
+    /// が呼ばれるたび、対象の節点の種類で決まる（利用者が選ぶトグルは作らない ──
+    /// 計画 §11-4-2「小窓の中で icon と paint を混ぜない。種類ごとに出す」）。</summary>
+    private string _picKind = "icon";
+    /// <summary>⭐ E-3: いま選んでいる「絵のフォルダ」の名前。⚠️ 空 = まだ選んでいない
+    /// （そのときは「絵を取り込む」の押しどころを出さない ── 空の道具を見せない）。
+    /// ⚠️ `IconOverrides` を解くとき（<see cref="ClearOverrides"/>）は、ここも一緒に空へ戻す。</summary>
+    private string _artFolder = "";
+    /// <summary>⭐ E-3: 「絵を取り込む」の生の `&lt;input type="file"&gt;`。⚠️ Blazor の
+    /// `InputFile` は使わない（File System Access API 側で直接読み書きしたいので、
+    /// JS 側へ素の DOM 要素を渡す ── `disk.js` の `showDirectoryPicker` と同じ作法）。</summary>
+    private ElementReference _importInput;
+
+    // ── ⭐ E1-2: 盤の拡大（1ドット＝画面上で何 CSS px か）＋格子 ─────────
+    // ⚠️ 以前の `_zoom`（float・器に合わせる半端倍率×1.25刻み）はやめた
+    //    （計画 §11-5「今の『器に合わせる半端倍率』は編集中も使わない」）。
+    // ⭐ 実効倍率 `k`（`edit.js` の `fit()`）= `_dotPx / DesignDotPx`。⚠️ 分母
+    //    （設計側の1升＝4px・`_step` の既定と同じ）が2の冪なので、この割り算は
+    //    2進浮動小数点でも常に割り切れる ── 画面↔設計の往復に丸め誤差が乗らない
+    //    （Aseprite `src/render/zoom.h` と同じ考え方・整数の分子・分母で持つ有理数）。
+
+    /// <summary>設計側の「1升」の大きさ（px）。⚠️ `_step` の既定（4）と同じ ── ここが分母。</summary>
+    private const int DesignDotPx = 4;
+
+    /// <summary>⭐ 選べる拡大の段（整数のみ）。並び順がそのまま ZoomIn/ZoomOut の刻み
+    /// （計画 §11-5「整数のみ: 1, 2, 3, 4, 6, 8」）。</summary>
+    private static readonly int[] DotPxSteps = { 1, 2, 3, 4, 6, 8 };
+
+    /// <summary>⭐ いま選んでいる「1ドット＝画面上で何pxか」。⚠️ 実効倍率は
+    /// <c>_dotPx / DesignDotPx</c>（有理数のまま JS へ渡す ── <see cref="ApplyDotPx"/>）。
+    /// ⭐ 既定は「器に収まる最大の整数」── 器を測れる拍（<see cref="WireBoard"/>）まで
+    /// 測らずに済む仮値として <see cref="DesignDotPx"/>（1:1）を置く。</summary>
+    private int _dotPx = DesignDotPx;
+
+    /// <summary>⚠️ 「器に収まる最大」の自動選びは、盤が実際に現れた最初の1回だけ
+    /// （<see cref="WireBoard"/>）。⭐ 以後は画面を切り替えても・脇を畳んでも、
+    /// 選んだ値を保つ（今までの `_zoom` の持ち方と同じ ── 器が変わるたび勝手に
+    /// 変えると、ドットの太さが一定に見えなくなる）。</summary>
+    private bool _dotPxPicked;
+
+    /// <summary>⭐ E1-1: 格子の表示・非表示（既定 ON・計画 §1「格子は既定 ON」）。
+    /// ⚠️ `_step` の間隔で描く（`#edgrid`）。</summary>
+    private bool _grid = true;
+
+    // ── ⭐ E2: 層（レイヤ）── この道具の背骨（計画 §11-2） ────────
+    // ⚠️ 骨組みの字には書かない（保存されない・編集中の見なしだけ）── 状態はこの頁の
+    //    中だけ。画面を切り替えても保つ（`_dotPx` と同じ考え方 ── 器が変わるたび
+    //    リセットすると、続けて作業しているうちに「毎回選び直す」不満が出る）。
+
+    /// <summary>いま選んでいる層。null なら「すべて」。</summary>
+    private EditLayer? _layer;
+
+    /// <summary>⭐ E2: 名札（節点の名前）── なし/選んだものだけ/全部 の3段階（計画 §11-3）。
+    /// ⚠️ CSS のクラス名と直結（<see cref="LabelModeClass"/>）── 増やすならそちらも直す。</summary>
+    private string _labelMode = "none";
+
+    // ── ⭐ E2: 機能（`tap=`）を選ぶ小窓 ─────────────────────
+    // ⚠️ 単純に保つ（他の小窓と同じ作法）── 「開いているか」「さがす」「冠の逆算の結果
+    //    （開いた瞬間に1回だけ計算・キー入力のたびに数え直さない）」の3つの薄い状態だけ。
+
+    private bool _tapPickerOpen;
+    private string _tapPickerFind = "";
+    /// <summary>🔴 冠の逆算の結果（<see cref="OpenTapPicker"/> が開くたびに1回だけ計算 ──
+    /// 「さがす」を打つたびに32枚を読み直さない）。⚠️ 部品を編集していない
+    /// （<see cref="TapPickerByPart"/> が false）ときは常に空（使わない）。</summary>
+    private List<string> _tapPickerCrowns = new();
+
+    // ── ⭐ Pass B: 盤↔木の連動強調 ─────────────────────
+
+    /// <summary>⭐ いまホバー中の行（木→盤／盤→木のどちらから来ても同じ場所へ書く）。
+    /// -1 なら無し。⚠️ **選択（<see cref="_selectedLine"/>/<see cref="_selected"/>）とは
+    /// 別の状態** ── 混ぜない（塗り潰さない約束と同じ理由で、輪とホバーの層を分けたのに
+    /// 合わせて、状態も分けておく）。</summary>
+    private int _hoverLine = -1;
+
+    // ── ③ 木パネル「さがす」「出ているものだけ」 ─────
+    // ⭐ 作者の Unity 版 `EggCommandWindow.PartList()` に倣う（既定値も同じ ── 出ているものだけ = true）。
+
+    private string _find = "";
+    private bool _onlyVisible = true;
+    /// <summary>⭐ 盤（#edstage）に実際に描かれている `data-line`／`data-part` の集合。
+    /// ⚠️ null は「まだ数えていない／トグル OFF」の印 ── その場合 <see cref="IsVisible"/> は
+    /// 素通しで true を返す（フィルタを掛けない）。JS から1回もらう
+    /// （`when=` をここで評価し直さない ── 実際に盤に出ているかで判定する設計どおり）。</summary>
+    private HashSet<string>? _visibleKeys;
+
+    /// <summary>⭐ 吸い付きは**設計 px**で8以内だけ（唯一の出所）。
+    /// ⚠️ 兄弟・親の辺も、きざみ（<see cref="_step"/>）も、同じ物差しで比べる。</summary>
+    private const float SnapRange = 8f;
+
+    /// <summary>⚠️ 大きさは0以下にしない（`Faults` の指摘は正しいが、エディタが自分で
+    /// 作ってはいけない）。⭐ さらに「潰れて二度と掴めない」を避ける実用上の下限。</summary>
+    private const float MinSize = 4f;
+
+    /// <summary>⭐ 8つの掴みどころ。並び順がそのまま Razor の描画順。</summary>
+    private static readonly string[] Handles = { "nw", "n", "ne", "e", "se", "s", "sw", "w" };
+
+    /// <summary>⭐ 選択の輪（`#edring`/`#edsel`）の再描画は、盤の DOM が実際に組み変わった
+    /// あと（<see cref="OnAfterRenderAsync"/>）へ回す。⚠️ `getBoundingClientRect` は Blazor が
+    /// 描画を確定する前に読むと**1手ぶん古い位置**を返す ── nudge／揃える／取り消しの直後に
+    /// 輪が節点からずれる実測バグ（2026-08-24・Playwright で確認）。だから
+    /// <see cref="RingRefresh"/> はこの旗を立てるだけにし、描画確定後に本物の `reselect` を
+    /// 1回だけ流す（唯一の呼び出し口を1つに保つ ── ドラッグ中の毎フレームも描画拍ごとに
+    /// 追従するので、むしろ正確になる）。</summary>
+    private bool _ringDirty;
+
+    /// <summary>盤に指の配線（<see cref="WireBoard"/>）が張れているか。⚠️ 盤は段階制で
+    /// 出たり消えたりする（`_raw` が無いうちは出さない）── 出た拍で張り直し、消えたら降ろす
+    /// ための旗。🔴 これが無いと「フォルダを選んで盤が出ても掴めない」状態になる
+    /// （2026-08-24 に実測した不具合そのもの）。</summary>
+    private bool _boardWired;
+
+    // ⭐ 取り消し／やり直し。**木ごと積む**（`Layouts.Write` の文字列）── 差分ではない
+    // （作者の指示「実装は木ごと差し替えるのが安全」をそのまま踏襲）。
+    private readonly List<string> _undo = new();
+    private readonly List<string> _redo = new();
+    /// <summary>進行中の一動作の「前」の姿。⚠️ <see cref="BeginAction"/>〜
+    /// <see cref="CommitAction"/> の間だけ値を持つ。</summary>
+    private string? _pendingBefore;
+
+    /// <summary>掴んだ瞬間の節点（不変オブジェクトのスナップショット）。⚠️ 指の移動量は
+    /// **この元の位置からの累計**で計算する ── 毎フレーム「今の位置」から足すと、
+    /// 吸い付きで丸めた誤差が積み重なって暴れる。</summary>
+    private LayoutNode? _dragOrigin;
+
+    /// <summary>⭐⑤ まとめ移動（複数選択のドラッグ）用。掴んだ瞬間の、選択中**全部**の
+    /// スナップショット。⚠️ `_dragOrigin`（主だけ）と両方使う ── 吸い付きは主
+    /// （`_dragOrigin`）だけで計算し、ここから出した共有デルタを全員へ足す。
+    /// 2個未満（＝まとめ移動でない）のときは空 ── <see cref="Dragging"/> はこの Count で
+    /// 単独／まとめを見分ける（別の bool を持たない・唯一の出所）。</summary>
+    private readonly Dictionary<int, LayoutNode> _dragOrigins = new();
+
+    // ── ③ repeat= の複製を掴んだときの状態 ──────────
+    // ⭐ 規則（2026-08-24・作者の指摘で確定）: **左端の列（列0）が錨。それ以外の列が
+    //    間隔（gap）を決める。** 0列目を横へ動かすと今までどおり「左」（並び全体が動く）、
+    //    1列目以降を横へ動かすと「gap」。縦はどの列を掴んでも常に「上」（並び全体）
+    //    ── 縦の段の高さは `rows=` の領分（`Layouts.StepOf`）で、`gap` は一度も効かない
+    //    （実物41箇所を洗った：`cols>=2` で複数段になる骨組みは必ず `rows=` を明示している。
+    //    `rows=` を書いていない6箇所は全部 `max==cols`＝1段だけなので、縦方向の
+    //    「`gap` が縦にも効く」場面はそもそも実在しない）。
+
+    /// <summary>掴んだ複製の番号（0始まり）。⚠️ -1 なら「複製でない普通の掴み」
+    /// （今までどおり 左/上）。DOM の id 末尾 `#N`（`LayoutDom.One` が付ける）から読む。</summary>
+    private int _repeatIndex = -1;
+    /// <summary>掴んだ節点自身の `cols=`（無ければ1）。列 = <see cref="_repeatIndex"/> % これ。</summary>
+    private int _repeatCols = 1;
+    /// <summary>掴んだ瞬間の `gap=`（無ければ0）。<see cref="_dragOrigin"/> と同じく
+    /// 「元の値からの累計」で動かすための起点。</summary>
+    private float _repeatBaseGap;
+
+    private string? _resizeHandle;
+    private LayoutNode? _resizeOrigin;
+
+    /// <summary>このページが差し替えた骨組みの id。⚠️ 離れるとき必ず解く
+    /// （`LayoutStore` は静的＝プロセス全体で共有なので、解かずに `/app` へ移ると
+    /// 遊ぶ頁が編集中の未保存の姿を見てしまう）。</summary>
+    private readonly HashSet<string> _touched = new();
+
+    private DotNetObjectReference<EditPage>? _me;
+
+    /// <summary>⭐ その骨組みが「部品」なら自分の id、そうでなければ null
+    /// （`eggEdit.setPart` へ渡す ── JS 側の選び方（`data-part` か `data-line` か）を切り替える）。</summary>
+    private static string? PartIdOf(string of) => Scenes.Of(of).ByPart ? of : null;
+
+    /// <summary>⚠️ JS（`eggEdit`）と繋がる前（初回描画より前）に `InvokeVoidAsync` を
+    /// 呼ばせないための旗。<see cref="OnAfterRenderAsync"/> の firstRender で立つ。</summary>
+    private bool _ready;
+
+    protected override void OnParametersSet()
+    {
+        var want = !string.IsNullOrEmpty(OfQuery) && Scenes.Has(OfQuery!) ? OfQuery! : "box";
+        if (want == _of && _html.Length > 0) return;
+        _of = want;
+        RefreshView();
+        // ⚠️ 初回描画より前は呼ばない（`_ready` が立つのは OnAfterRenderAsync の firstRender）
+        //    ── そちらが `_of` の最終値を読んでまとめて呼ぶので、ここでは二重に呼ばない。
+        if (_ready) _ = Js.InvokeVoidAsync("eggEdit.setPart", PartIdOf(_of));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await FirstRenderSetup();
+        // 🔴 **盤が現れた拍で、指の配線をやり直す。**（2026-08-24 の実測バグ修正）
+        //    ⚠️ 段階制（`_raw` が無いうちは盤を出さない）を入れた日から、実際に使う道
+        //    ── `/edit` を開く → まだ盤が無い状態で初回描画 → そこで1度だけ配線を試みて
+        //    **`#edcap`/`#edwrap`/`#edring` がまだ無いので JS 側が全部空振り**（`if (!cap) return`）
+        //    → その後フォルダを選んで盤が出ても、誰も張り直さない ── になっていた。
+        //    実測（Playwright）: `/edit` では `_bound`/`_ro`/`_rbound`/`_fBound` が全部 false、
+        //    `?demo=true`（盤が最初から在る道）だけ true。だから**掴んでも何も起きない**。
+        //    ⭐ 盤の在り／無しが変わった拍で張り直す（JS 側の3つは呼び直しても安全 ──
+        //    `listen`/`resize`/`faultsListen` は張る前に前回の分を外す・`start` は
+        //    前の ResizeObserver を disconnect する）。
+        bool boardShown = _raw is not null;
+        if (_ready && boardShown != _boardWired)
+        {
+            _boardWired = boardShown;
+            if (boardShown) await WireBoard();
+        }
+        // ⭐ 盤の DOM が確定したこの拍で、溜まっていれば選択の輪を1回だけ流す
+        //    （<see cref="_ringDirty"/> の註 ── ここが唯一の `reselect` 呼び出し口。
+        //    `getBoundingClientRect` が古い位置を返さないよう、描画確定後に読む）。
+        if (_ringDirty && _ready)
+        {
+            _ringDirty = false;
+            string csv = string.Join(",", _selected);
+            string primary = _selectedLine >= 0 ? _selectedLine.ToString(CultureInfo.InvariantCulture) : "";
+            // ⭐ E1-5: 主の節点が「枠と絵が合わない」節点なら、輪の色を変える（既存の
+            //    警告色 ── 新しい色は増やさない）。選択が複数のときは JS 側が無視する。
+            bool mismatch = IsPicMismatch(_selectedLine);
+            await Js.InvokeVoidAsync("eggEdit.reselect", csv, primary, mismatch);
+        }
+        // ⭐ D-3: 入力欄が開いていれば、対象節点の実位置へ合わせる（描画確定後に読む ──
+        //    `_ringDirty` と同じ理由）。⚠️ 焦点を奪うのは JS 側で最初の1回だけに絞ってある
+        //    （`eggEdit.editAt` の `_editFocusLine`）ので、ここは毎描画で呼んでも安全。
+        if (_editingLine >= 0 && _ready)
+        {
+            await Js.InvokeVoidAsync("eggEdit.editAt", _editingLine.ToString(CultureInfo.InvariantCulture));
+        }
+    }
+
+    /// <summary>⚠️ 初回描画のあと1回だけの配線（listen/resize/keys 等）。
+    /// ⭐ <see cref="OnAfterRenderAsync"/> から切り出した ── 本体側に「毎描画のあとの
+    /// 輪フラッシュ」を足すため、firstRender 専用の手順を1つのメソッドに畳んだ
+    /// （字は動かしていない）。</summary>
+    private async Task FirstRenderSetup()
+    {
+        _me = DotNetObjectReference.Create(this);
+        _supported = await Js.InvokeAsync<bool>("eggDisk.supported");
+        _checkedSupport = true;
+        _demo = DemoQuery == "true";
+        if (_demo) LoadDemo();
+        await WireBoard();
+        _boardWired = _raw is not null;   // ⭐ 盤が在る状態で張れたときだけ「配線済み」
+        // ⚠️ キー（Ctrl+Z・矢印・Delete）は document 直付けなので盤の在り無しと無関係 ──
+        //    ここで1回だけ張る（`stop` で外す）。
+        await Js.InvokeVoidAsync("eggEdit.keys", _me);
+        _ready = true;
+        // ⭐③ `_ready` が立つ前の `RefreshView`（`LoadDemo`/`OnParametersSet` 経由）は
+        //    「出ているものだけ」の JS 呼び出しを見送っている ── ここで一度だけ数え直す。
+        _ = RefreshVisibleSet();
+        // ⭐ E2: `window.eggEdit` は頁をまたいで生き続ける JS の単体（SPA なので `/app` へ
+        //    移ってまた `/edit` へ戻っても JS 側の状態は自然には消えない）── この頁の
+        //    C# 側は毎回 `_layer = null`（既定）で始まるので、ここで一度だけ揃える
+        //    （前の訪問で「押しどころ」を選んだまま忘れていた、という食い違いを防ぐ）。
+        _ = ApplyLayerToJs();
+        StateHasChanged();
+    }
+
+    /// <summary>🔴 **盤（`#edwrap`/`#edstage`/`#edcap`/`#edring`/`#edfaults`）に指を通す配線。**
+    /// ⚠️ 盤が DOM に**在るときにしか効かない**（JS 側は要素が無ければ黙って空振りする）ので、
+    /// 初回描画だけでなく<see cref="OnAfterRenderAsync"/>の「盤が現れた拍」からも呼ぶ
+    /// ── 段階制でフォルダを選ぶまで盤が無い道があるため（そこが 2026-08-24 の実測バグの正体）。
+    /// ⭐ 呼び直しても安全: `listen`/`resize`/`faultsListen` は張る前に前回の分を外し、
+    /// `start` は前の ResizeObserver を disconnect する。</summary>
+    private async Task WireBoard()
+    {
+        if (_me is null) return;
+        await Js.InvokeVoidAsync("eggEdit.start", "edwrap", "edstage");
+        await Js.InvokeVoidAsync("eggEdit.listen", _me, "edcap");
+        // ⭐ 不備の Focus（実体の外に出ることがある形）だけ、自分の押しどころを持つ。
+        await Js.InvokeVoidAsync("eggEdit.faultsListen", _me);
+        await Js.InvokeVoidAsync("eggEdit.setPart", PartIdOf(_of));
+        await Js.InvokeVoidAsync("eggEdit.resize", _me);
+        // ⭐ D-2: 道具箱（種類パレット）から盤へ掴んで落とす配線。⚠️ パレットは Inspector
+        //    （盤と同じ段階制の中）にしか無いので、盤と一緒に張り直す。
+        await Js.InvokeVoidAsync("eggEdit.paletteListen", _me, "edaddpalette");
+        // ⭐ E1-2: 盤が実際に現れた最初の1回だけ、「器に収まる最大」を自動で選ぶ
+        //    （<see cref="_dotPxPicked"/> の註）。⚠️ 器が測れるのはここが最初
+        //    （`#edwrap` が DOM に在る拍）── FirstRenderSetup 単独の拍では `_raw` が
+        //    まだ null で `#edwrap` 自体が無いことがある（段階制）。
+        if (!_dotPxPicked && _raw is not null)
+        {
+            _dotPxPicked = true;
+            _dotPx = await Js.InvokeAsync<int>("eggEdit.autoDotPx", "edwrap");
+        }
+        await Js.InvokeVoidAsync("eggEdit.setDotPx", _dotPx);
+        // ⭐ 盤が出た直後は倍率（`dataset.scale`）が入ったばかり ── 選んでいるものが
+        //    あれば輪を描き直す（旗を立てるだけ・実際の描き直しは次の描画拍）。
+        RingRefresh();
+    }
+
+    // ── フォルダ ────────────────────────────────────
+
+    private async Task PickFolder()
+    {
+        bool ok = await Js.InvokeAsync<bool>("eggDisk.pick");
+        if (!ok) { _status = "フォルダを選べませんでした"; return; }
+        _folder = await Js.InvokeAsync<string>("eggDisk.folderName");
+        _demo = false;   // ⭐ 本物のフォルダを選んだので、開発用の入口は退く
+        await LoadFile();
+    }
+
+    // ── ⭐ 段E: 絵を選ぶ小窓／自作 PNG ─────────────────
+
+    /// <summary>⭐ E-1/E-4/E1-4: 「絵を選ぶ」小窓を開く**唯一の入口**。⚠️ 開くたびに
+    /// 「さがす」を空へ戻す（前回の絞り込みを持ち越さない）。
+    /// <param name="kind">⭐ E1-4: `icon` か `paint`（対象の節点の種類）── 小窓の一覧を
+    /// 切り替える（計画 §11-4-2「小窓の中で icon と paint を混ぜない」）。</param></summary>
+    private void OpenIconPicker(string kind)
+    {
+        _iconPickerFind = "";
+        _picKind = kind == "paint" ? "paint" : "icon";
+        _iconPickerOpen = true;
+    }
+
+    /// <summary>⚠️ 何も選ばずに閉じても壊れない ── `ApplyOption` を一度も呼ばない
+    /// （新しく置いた絵は `pic=` の無いまま＝盤に「？」が残り、あとで選び直せる）。</summary>
+    private void CloseIconPicker()
+    {
+        _iconPickerOpen = false;
+    }
+
+    /// <summary>⭐ E-2/E1-4: 選んだ絵を骨組みへ差す。<see cref="ApplyPicChoice"/> へ渡すだけ
+    /// （枠を実寸へ合わせる分まで含めて**1つの取り消し**）。</summary>
+    private void ChooseIcon(string name)
+    {
+        ApplyPicChoice(name);
+        CloseIconPicker();
+    }
+
+    /// <summary>⭐ E1-4: `pic=` を差すのと、枠を「絵の実ドット数×4」へ自動で合わせるのを
+    /// **1つの取り消し**にまとめる（計画 §2「引き伸ばさない」規則をエディタでも守る唯一の
+    /// 経路 ── `Apply` と同じ Begin〜Commit の対を、ここでは2つの `ApplyRaw` に手動で
+    /// またがせる）。⚠️ 絵の実ドット数が分からない（一覧に無い・仮置きのみ）ときは、
+    /// 枠はそのまま（`pic=` を差すだけ）── 分からない大きさに勝手に合わせない。</summary>
+    private void ApplyPicChoice(string name)
+    {
+        if (_raw is null || _selectedLine < 0) return;
+        var current = Find(_raw.Roots, _selectedLine);
+        if (current is null) return;
+        var expect = LayoutDom.ExpectedPicSize(current.Kind, name);
+
+        BeginAction();
+        ApplyRaw(_selectedLine, n => SetOption(n, "pic", name));
+        if (expect is { } size)
+        {
+            ApplyRaw(_selectedLine, n => new LayoutNode(n.Name, n.Kind, n.Left, n.Top, size.Width, size.Height,
+                n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+                n.PartId, n.PartLine));
+        }
+        CommitAction();
+        Flash(_selectedLine);
+    }
+
+    /// <summary>⭐ E1-5: 押したら「絵に合わせる」の1手。⚠️ いま選んでいる節点の枠を、
+    /// その絵の実ドット数×4 へ合わせ直すだけ（位置は動かさない）。**これで1つの取り消し**
+    /// （<see cref="Apply"/> が Begin〜Commit の対を通す）。⚠️ 勝手には呼ばない ──
+    /// Inspector の釦（<see cref="PicMismatchOf"/> が非 null のときだけ出す）からのみ。</summary>
+    private void FitPicToNode()
+    {
+        if (_raw is null || _selectedLine < 0) return;
+        var sel = Find(_raw.Roots, _selectedLine);
+        if (sel is null) return;
+        // ⭐ まず骨組みだけで分かる実寸（`icon`/`paint` の `pic=`）。
+        var expect = LayoutDom.ExpectedPicSize(sel.Kind, sel.Option("pic"));
+        // 🔴 **`pixel`（種族の絵）はここで null になる**（どの絵が入るかは `bind=` 越しに
+        //    実行時に決まるため）。⚠️ 45件の不一致のうち **31件が `pixel`** ── ここを
+        //    落とすと「一番多いものだけ1手で直せない」道具になってしまう。
+        //    ⭐ 描いたときの控え（`_picMismatches`）は実物の絵の実寸を持っているので、そちらを使う。
+        float w, h;
+        if (expect is { } size) { w = size.Width; h = size.Height; }
+        else if (PicMismatchOf(sel) is { } m) { w = m.ExpectW; h = m.ExpectH; }
+        else return;
+        Apply(n => new LayoutNode(n.Name, n.Kind, n.Left, n.Top, w, h,
+            n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+    }
+
+    /// <summary>⭐ E-2/E1-4: 絵を選ぶ小窓に出す一覧。⚠️ `icon`（ゲームに在る絵＋絵のフォルダ
+    /// から読んだ絵の合わせ技）と `paint`（<see cref="PaintManifest"/>）を混ぜない ──
+    /// <see cref="_picKind"/> で切り替える（計画 §11-4-2）。`IconOverrides` は「まだビルドに
+    /// 入っていない絵」しか持たない（<see cref="RefreshArtList"/> が登録時に絞る）ので、
+    /// 単純に足し合わせるだけで重複しない。</summary>
+    private List<string> AllPicNames()
+    {
+        var names = new List<string>();
+        if (_picKind == "paint") names.AddRange(PaintManifest.Names);
+        else
+        {
+            names.AddRange(IconManifest.Names);
+            names.AddRange(IconOverrides.Names);
+        }
+        names.Sort(StringComparer.Ordinal);
+        return names;
+    }
+
+    /// <summary>「さがす」で絞った一覧。⚠️ 木の「さがす」（<see cref="OnFindInput"/> 系）とは
+    /// 別の状態（<see cref="_iconPickerFind"/>） ── 混ぜない。</summary>
+    private List<string> FilteredPicNames()
+    {
+        var all = AllPicNames();
+        if (_iconPickerFind.Length == 0) return all;
+        return all.FindAll(n => n.Contains(_iconPickerFind, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>その名前のサムネイルの `src`。⚠️ `paint` は `PaintManifest` の実物
+    /// （`paint/&lt;名前&gt;.png`）── `IconOverrides` を持たない。`icon` は出所が2つ ──
+    /// `IconOverrides`（ディスクの data URL）が優先、無ければ `IconManifest` の実物
+    /// （`icon/&lt;名前&gt;.png`、`LayoutDom` と同じ組み立て方）。
+    /// ⚠️ **どちらにも無い名前は呼び出し側で弾く**（<see cref="PicExists"/>）。</summary>
+    private static string PicThumbSrc(string kind, string name) =>
+        kind == "paint" ? $"paint/{name}.png" : IconThumbSrc(name);
+
+    private static string IconThumbSrc(string name) =>
+        IconOverrides.TryGet(name, out var url) ? url! : $"icon/{name}.png";
+
+    /// <summary>⭐ E-4/E1-4: Inspector の「見つからない」表示のため。`paint` は
+    /// <see cref="PaintManifest.Exists"/>、`icon` は `LayoutDom` の `icon-missing` 分岐
+    /// （`IconOverrides` 優先→`IconManifest.Exists`）と同じ判定。</summary>
+    private static bool PicExists(string kind, string name) =>
+        kind == "paint" ? PaintManifest.Exists(name) : IconExists(name);
+
+    private static bool IconExists(string name) => IconOverrides.TryGet(name, out _) || IconManifest.Exists(name);
+
+    /// <summary>⭐ E-3: 「絵のフォルダを選ぶ」── `PickFolder`（骨組みのフォルダ）とは
+    /// 別のフォルダ（`unity\Assets\Resources\UI\icon` を選ぶよう案内する ── そこが
+    /// `pic=` の出所だから）。選べたら中身を読み直す（<see cref="RefreshArtList"/>）。</summary>
+    private async Task PickArtFolder()
+    {
+        bool ok = await Js.InvokeAsync<bool>("eggDisk.pickArt");
+        if (!ok) return;
+        _artFolder = await Js.InvokeAsync<string>("eggDisk.artFolderName");
+        await RefreshArtList();
+    }
+
+    /// <summary>絵のフォルダの中の `*.png` を読み直し、`IconManifest` に無い名前だけ
+    /// `IconOverrides` へ登録する。⚠️ **建て直さなくてもその場で使える**（E-3 の本命）
+    /// ── ディスクが出所なので、フォルダを選び直す・「絵を取り込む」の直後に呼べば
+    /// 新顔がすぐ一覧・盤へ出る。⭐ 既に wwwroot にある28枚は `icon/&lt;名前&gt;.png` で
+    /// 足りるので、base64 を二重に抱えない（`IconManifest.Exists` で絞る）。</summary>
+    private async Task RefreshArtList()
+    {
+        var entries = await Js.InvokeAsync<ArtEntry[]>("eggDisk.listArt");
+        foreach (var e in entries)
+            if (!IconManifest.Exists(e.Name)) IconOverrides.Set(e.Name, e.DataUrl);
+        StateHasChanged();
+    }
+
+    /// <summary>⭐ E-3: 「絵を取り込む」── ふつうの `&lt;input type="file"&gt;` で選ばれた
+    /// PNG を、いま選んでいる絵のフォルダへ複製する（`eggDisk.importFiles` が書き込みまで
+    /// やる ── 同名は上書きせず名前をずらす）。書けたら一覧を読み直すだけ（唯一の出所は
+    /// <see cref="RefreshArtList"/>）。⚠️ この釦自体は絵のフォルダを選んでいるときだけ
+    /// 出す（呼び出し側の Razor ── 空の道具を見せない）。</summary>
+    private async Task OnImportFiles(ChangeEventArgs e)
+    {
+        var written = await Js.InvokeAsync<string[]>("eggDisk.importFiles", _importInput);
+        if (written.Length > 0) await RefreshArtList();
+    }
+
+    /// <summary>⭐ E-3: `eggDisk.listArt` の1件（JS の `{name, dataUrl}` と対応・
+    /// `Microsoft.JSInterop` の既定 JSON 設定は大小文字を区別しないので、そのまま合う）。</summary>
+    private sealed class ArtEntry
+    {
+        public string Name { get; set; } = "";
+        public string DataUrl { get; set; } = "";
+    }
+
+    /// <summary>⭐ 埋め込みの骨組みを、ディスクを介さず直接読む（`?demo=true` 専用）。
+    /// ⚠️ 読んだあとは <see cref="LoadFile"/> とまったく同じ経路（`Refresh` →
+    /// `LayoutStore.SetOverride` → 離れるとき `ClearOverrides`）を通す ── 漏れを防ぐ
+    /// 仕組みを新しく作らず、既にある「頁を離れたら必ず解く」の1本に乗せる。</summary>
+    private void LoadDemo()
+    {
+        string? text = ReadEmbedded(_of);
+        if (text is null) { _status = $"⚠️ demo: {_of}.txt が埋め込みに見つからない"; return; }
+        _originalText = text;
+        _raw = Core.Layouts.Parse(_of, text);
+        _status = "⚠️ demo モード（開発確認用 ── 保存は封じてあります）";
+        _undo.Clear();
+        _redo.Clear();
+        ClearSelection();   // ⚠️ RingRefresh は _ready 立つ前は no-op（この呼び出しは _ready より前）
+        Refresh();
+    }
+
+    /// <summary>⚠️ `LayoutStore` に読ませず、この頁だけで完結させる（`LoadDemo` 専用）。
+    /// ⭐ `LayoutStore.Of` と同じ埋め込みリソースを読むが、キャッシュにも Overrides にも
+    /// 触らない ── ここで読んだ生の字を <see cref="Refresh"/> が改めて `SetOverride`
+    /// する（`LoadFile` と全く同じ形）ので、二重に持たせない。</summary>
+    private static string? ReadEmbedded(string id)
+    {
+        var asm = typeof(EditPage).Assembly;
+        string path = asm.GetName().Name + ".Layouts." + id + ".txt";
+        using var stream = asm.GetManifestResourceStream(path);
+        if (stream == null) return null;
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
+    private async Task OnOfChange(ChangeEventArgs e)
+    {
+        var next = Convert.ToString(e.Value) ?? "box";
+        if (!Scenes.Has(next)) next = "box";
+        // ⚠️ ここは今までどおり確かめずに切り替える（動いているものを
+        //    「ついでに」作り替えない）。盤の上のタップ切り替えだけ
+        //    <see cref="ConfirmSwitchIfDirty"/> を先に通す（下記 <see cref="SwitchDocument"/>）。
+        await ApplyOf(next);
+    }
+
+    /// <summary>⭐ 骨組みを切り替える中身。⚠️ **確かめるかどうかは呼び出し側の仕事**
+    /// （ここでは確かめない）── `OnOfChange`（ドロップダウン）と
+    /// <see cref="SwitchDocument"/>（盤の上のタップ）が、ここを共通の出所として通す
+    /// ── 経路が2つに割れると、片方だけ選び方（`setPart`）を切り替え忘れる事故が起きる
+    /// （もともと `OnOfChange` にあった手順を、そのまま切り出しただけ ── 字は変えていない）。</summary>
+    private async Task ApplyOf(string next)
+    {
+        ClearOverrides();
+        _of = next;
+        _raw = null;
+        _originalText = null;
+        ClearSelection();
+        _status = "";
+        // ⭐ 別の文書になるので、取り消しの積みは引き継がない（前の骨組みの姿を
+        //    別の骨組みへ Undo で持ち込むと事故る）。
+        _undo.Clear();
+        _redo.Clear();
+        RefreshView();
+        // 🔴 **選び方（data-part か data-line か）を切り替える。**⚠️ ここを忘れると、
+        //    部品⇄画面を行き来したとき、前の骨組みの探し方のまま拾ってしまう。
+        await Js.InvokeVoidAsync("eggEdit.setPart", PartIdOf(_of));
+        if (_demo) LoadDemo();
+        else if (!string.IsNullOrEmpty(_folder)) await LoadFile();
+    }
+
+    /// <summary>⚠️ `LayoutStore` は静的（プロセス全体で共有）。未保存の姿を
+    /// 埋め込みへ戻す ── 他の頁（`/app`）に絶対に漏らさない。
+    /// ⭐ 段E: `IconOverrides`（絵のフォルダから読んだ data URL）も同じ理由・同じ静的な
+    /// 共有なので、ここで一緒に解く（`Dispose`／`OnInitialized` の `RegisterLocationChangingHandler`
+    /// ／骨組みの切替（<see cref="ApplyOf"/>）のどれから呼ばれても正しい）。⚠️ 選んでいた
+    /// 絵のフォルダの表示（<see cref="_artFolder"/>）も一緒に戻す ── 中身（overrides）が
+    /// 消えたのに「選んでいる」表示だけ残ると、空の道具を見せることになる。</summary>
+    private void ClearOverrides()
+    {
+        foreach (var id in _touched) LayoutStore.SetOverride(id, null);
+        _touched.Clear();
+    }
+
+    /// <summary>⭐ E-3: 絵の上書き（<see cref="IconOverrides"/>）と、選んでいる絵のフォルダを解く。
+    /// ⚠️ **骨組みの差し替え（<see cref="ClearOverrides"/>）とは別に持つ。**
+    /// 骨組みの差し替えは「別の画面へ移る」たびに必ず解かないと遊ぶ頁へ漏れるが、
+    /// 絵の上書きは**画面をまたいでも同じ絵を指せる**（名前で引くだけ・`/app` は
+    /// この表に一度も書き込まない）── 32枚を行き来しながら絵を置く作者の使い方で、
+    /// 画面を切り替えるたびに絵のフォルダを選び直させないため。
+    /// 🔴 頁を離れるとき（<see cref="Dispose"/>・離脱の掛け金）だけ解く。</summary>
+    private void ClearArt()
+    {
+        IconOverrides.Clear();
+        _artFolder = "";
+    }
+
+    private async Task LoadFile()
+    {
+        string? text = await Js.InvokeAsync<string?>("eggDisk.read", _of);
+        if (text is null)
+        {
+            _status = $"⚠️ {_of}.txt が見つかりません（選んだフォルダの中に無いか、読めません）";
+            _raw = null;
+            _originalText = null;
+            RefreshView();
+            return;
+        }
+        _originalText = text;
+        _raw = Core.Layouts.Parse(_of, text);
+        _status = "";
+        // ⭐ ディスクから読み直した＝新しい文書として扱う（前の取り消しは意味を失う）。
+        _undo.Clear();
+        _redo.Clear();
+        ClearSelection();
+        Refresh();
+    }
+
+    // ── 選ぶ ────────────────────────────────────────
+
+    // ⭐②④ 段階2 Pass A: 選択の集合・主たる選択の**唯一の出所**（作り替えの指示
+    //    「唯一の出所」を選択にも適用 ── `_selected`/`_selectedLine` の読み書きは
+    //    ここの5つだけを通す。呼び出し側で直接いじらない）。
+    //
+    // ⚠️ **無効な行を混ぜない。**`Find(_raw.Roots, line) == null`（`use=` の差し込みの中など、
+    //    行の無い場所）の行は集合へ入れない ── そうしないと、あとで `Find` の結果を
+    //    信じて Left/Top を読む側（`ApplyAlign`/まとめ移動）が null を踏む。
+    //
+    // ⭐ どのヘルパも最後に SyncFields（Inspector の欄）＋RingRefresh（輪の再描画）＋
+    //    StateHasChanged（再描画）を通す。呼び出し元でこの3つを個別に呼ばせない。
+
+    /// <summary>集合を「その1つだけ」に置き換える。⚠️ `line` が無効（`_raw` が無い／
+    /// その行が実在しない）なら、集合ごと空にする（＝選択解除。今までの
+    /// `_selectedLine = -1` 相当）。</summary>
+    private void SelectOnly(int line)
+    {
+        _selected.Clear();
+        if (_raw is not null && line >= 0 && Find(_raw.Roots, line) is not null)
+        {
+            _selected.Add(line);
+            _selectedLine = line;
+        }
+        else
+        {
+            _selectedLine = -1;
+        }
+        SyncFields();
+        RingRefresh();
+        StateHasChanged();
+    }
+
+    /// <summary>Shift/Ctrl＋クリック用。集合に居れば外す／居なければ足す。
+    /// ⭐ 主は「足したなら line、外したなら集合の最後の要素（空なら -1）」。
+    /// ⚠️ 無効な行（<see cref="_raw"/> に実在しない）は無視する（集合を変えない）。</summary>
+    private void ToggleSelect(int line)
+    {
+        if (_raw is null || line < 0 || Find(_raw.Roots, line) is null) return;
+        if (_selected.Contains(line))
+        {
+            _selected.Remove(line);
+            _selectedLine = _selected.Count > 0 ? _selected[_selected.Count - 1] : -1;
+        }
+        else
+        {
+            _selected.Add(line);
+            _selectedLine = line;
+        }
+        SyncFields();
+        RingRefresh();
+        StateHasChanged();
+    }
+
+    /// <summary>ドラッグ枠（置換）用。集合を丸ごと `lines` に差し替える。⚠️ 無効な行は
+    /// 混ぜない。⭐ 主は `primary` を優先するが、`primary` が今回の集合に居なければ
+    /// 集合の最後の要素へ倒す（それも空なら -1）。</summary>
+    private void SetSelection(IEnumerable<int> lines, int primary)
+    {
+        _selected.Clear();
+        if (_raw is not null)
+        {
+            foreach (var line in lines)
+            {
+                if (line < 0 || _selected.Contains(line)) continue;
+                if (Find(_raw.Roots, line) is null) continue;
+                _selected.Add(line);
+            }
+        }
+        _selectedLine = _selected.Contains(primary) ? primary
+            : (_selected.Count > 0 ? _selected[_selected.Count - 1] : -1);
+        SyncFields();
+        RingRefresh();
+        StateHasChanged();
+    }
+
+    /// <summary>ドラッグ枠（additive）用。`lines` のうち、まだ集合に無い有効な行だけ足す。
+    /// ⭐ 主は「実際に新しく足した最後の行」── 1件も足さなかった（全部既に選択済み・
+    /// または全部無効）ときは主を変えない。</summary>
+    private void AddSelection(IEnumerable<int> lines)
+    {
+        if (_raw is null) return;
+        int added = -1;
+        foreach (var line in lines)
+        {
+            if (line < 0 || _selected.Contains(line)) continue;
+            if (Find(_raw.Roots, line) is null) continue;
+            _selected.Add(line);
+            added = line;
+        }
+        if (added >= 0) _selectedLine = added;
+        SyncFields();
+        RingRefresh();
+        StateHasChanged();
+    }
+
+    /// <summary>選択を空にする。</summary>
+    private void ClearSelection()
+    {
+        _selected.Clear();
+        _selectedLine = -1;
+        SyncFields();
+        RingRefresh();
+        StateHasChanged();
+    }
+
+    /// <summary>⭐② 選択の輪（<see cref="_selected"/>）を JS 側（`eggEdit.reselect`）へ
+    /// 反映する。⚠️ 既存の全 `eggEdit.rering(...)` 直接呼び出しはここへ置き換える
+    /// （選択の描き方の出所を1つに保つ）。⭐ **ここでは旗を立てるだけ**
+    /// （<see cref="_ringDirty"/> の註 ── 実際の `reselect` は描画確定後の
+    /// <see cref="OnAfterRenderAsync"/> が1回だけ流す）。`_ready` が立つ前
+    /// （JS とまだ繋がっていない）に呼ばれても、旗はフラッシュ側で `_ready` を見るので安全。</summary>
+    private void RingRefresh() => _ringDirty = true;
+
+    /// <summary>⭐④ ドラッグ枠（ラバーバンド）を離したときの入口（`edit.js` の `up` が
+    /// バンドと交差した節点の行番号を csv で渡す）。⚠️ JS から来た値をそのまま信用しない
+    /// ── 数に直せない欄は無視する（<see cref="SetSelection"/>/<see cref="AddSelection"/>
+    /// 自身も `Find` で実在しない行を弾くので、二重に確かめる必要はない）。
+    ///
+    /// <param name="additive">Shift/Ctrl/Meta を押しながらバンドを引いたら `"add"`。</param></summary>
+    [JSInvokable]
+    public void BandSelect(string csv, string additive)
+    {
+        var lines = ParseCsvInts(csv);
+        bool add = additive == "add";
+        if (lines.Count == 0)
+        {
+            if (!add) ClearSelection();   // ⚠️ 何にも交差しなかった＋additive でない＝選択解除
+            return;
+        }
+        if (add) AddSelection(lines);
+        else SetSelection(lines, lines[lines.Count - 1]);
+    }
+
+    private static List<int> ParseCsvInts(string csv)
+    {
+        var result = new List<int>();
+        if (string.IsNullOrEmpty(csv)) return result;
+        foreach (var part in csv.Split(','))
+            if (int.TryParse(part, out var v)) result.Add(v);
+        return result;
+    }
+
+    /// <summary>盤の透明な覆い（`edcap`）が拾った押しどころ、または不備の Focus から呼ばれる。
+    /// ⚠️ 空文字なら選択解除（`use=` で差した部品の中など、行が無い場所を押した）。
+    ///
+    /// 🔴 **部品を直しているときに、土台の節点（`data-line`）を押んだら土台へ戻る**（②の逆向き）。
+    /// ⭐ `Scenes.Of(_of).ByPart` は `use=` で差し込まれる9部品だけ true ── その9部品自身の
+    /// 節点は `Rename` を通るので必ず `data-part` を持ち、**`data-line` では拾えない**
+    /// （`LayoutDom.cs` の出し分け）。だから「`ByPart` な文書を開いているのに `data-line` で
+    /// 拾えた」時点で、それは土台側の行だと確定できる ── 探し方を2つに割らずに済む。
+    ///
+    /// <param name="additive">⭐③ Shift/Ctrl/Meta を押しながらのタップなら `"add"`。
+    /// ⚠️ additive のときは部品⇄土台の切り替え（下の分岐）へ**入らない**（同一文書内の
+    /// トグルに限定 ── 部品への切替と複数選択を混ぜない）。</param></summary>
+    [JSInvokable]
+    public async Task Picked(string line, string additive)
+    {
+        int n = int.TryParse(line, out var v) ? v : -1;
+        bool add = additive == "add";
+        if (!add && n >= 0 && Scenes.Of(_of).ByPart)
+        {
+            if (!await ConfirmSwitchIfDirty()) return;
+            await SwitchDocument(Scenes.Of(_of).HostId, n);
+            return;
+        }
+        if (add) ToggleSelect(n); else SelectOnly(n);
+    }
+
+    /// <summary>⭐ **押した先が部品（`data-part`）のときの入口**（②の順向き）。
+    /// ⚠️ いま開いている部品**自身**を押した（`partId == _of`）ときは、ただの選択
+    /// （別の節点を選び直しただけ）── 切り替えない。<see cref="SelectFault"/> からも呼ぶ
+    /// （不備一覧を押したときと、盤を直接押したときで、選ぶ経路を2つに割らないため）。
+    ///
+    /// <param name="additive">⭐③ <see cref="Picked"/> と同じ。⚠️ 別の部品へ切り替える
+    /// 分岐は additive のときそもそも通らない（同一文書内のトグルに限定）。</param></summary>
+    [JSInvokable]
+    public async Task PickedPart(string partId, string partLine, string additive)
+    {
+        int n = int.TryParse(partLine, out var v) ? v : -1;
+        bool add = additive == "add";
+        if (partId == _of)
+        {
+            if (add) ToggleSelect(n); else SelectOnly(n);
+            return;
+        }
+        if (add) return;   // ⚠️③ additive のときは部品切替に入らない（同一文書内に限定）
+        // ⚠️ JS から来た値をそのまま信用しない（32枚に無い id が来たら何もしない）。
+        if (!Scenes.Has(partId)) return;
+        if (!await ConfirmSwitchIfDirty()) return;
+        await SwitchDocument(partId, n);
+    }
+
+    /// <summary>下の一覧（不備）を押したときの入口。⭐ その不備の**1本目**の出所
+    /// （`Lines[0]`／`PartIds[0]`）を選ぶ ── 盤の上の Focus を押すのと同じ着地点にする
+    /// （<see cref="Picked"/>/<see cref="PickedPart"/> をそのまま再利用）。
+    /// ⚠️ 不備一覧からの選択は常に単独選択（additive でない）。</summary>
+    private async Task SelectFault(int i)
+    {
+        if (i < 0 || i >= _faults.Count) return;
+        var f = _faults[i];
+        if (f.Lines.Count == 0) return;   // ⚠️ NoLayout 相当（実際には起こらない ── 0件なら一覧を出さない）
+        string? partId = f.PartIds.Count > 0 ? f.PartIds[0] : null;
+        if (partId != null)
+            await PickedPart(partId, (f.PartLines.Count > 0 ? f.PartLines[0] : -1).ToString(CultureInfo.InvariantCulture), "");
+        else if (f.Lines[0] >= 0)
+            await Picked(f.Lines[0].ToString(CultureInfo.InvariantCulture), "");
+        // ⚠️ 両方とも無い（自前の行でも部品でもない）は「形で示せない」不備が
+        //    出所も持たない場合 ── 今の32枚では起きないが、黙って無視する。
+    }
+
+    /// <summary>⚠️ **未保存の直しを黙って捨てない。**⭐ 盤の上での部品⇄土台の切り替え
+    /// （<see cref="Picked"/>/<see cref="PickedPart"/>）だけ確かめる。
+    ///
+    /// ⚠️ ドロップダウン（<see cref="OnOfChange"/>）は確かめない ── 今までどおりの
+    /// 振る舞いを保つ（「動いているものをついでに作り替えない」の指示）。⭐ 新しい一手
+    /// （タップでの切り替え）だけに、確かめを足す。⭐ 別の確認 UI を新しく作らず、
+    /// ブラウザ標準の `confirm()` を使う（過剰な抽象化を避ける指示どおり）。
+    /// ⭐ 保存済み（Undo 積みは残っていても字が変わっていない）なら確かめずに進む。</summary>
+    private async Task<bool> ConfirmSwitchIfDirty()
+    {
+        if (!IsDirty) return true;
+        return await Js.InvokeAsync<bool>("eggEdit.confirmDiscard");
+    }
+
+    /// <summary>⚠️ `_undo.Count > 0` では判定しない ── 保存しても積みは捨てない作りなので
+    /// （`Save` 参照）、積みが残っていても字は最新の保存と一致していることがある。
+    /// ⭐ 本当に「いまの字」と「最後に読んだ／保存した字」が違うかで見る。</summary>
+    private bool IsDirty =>
+        _raw is not null && _originalText is not null && Core.Layouts.Write(_raw) != _originalText;
+
+    /// <summary>⭐ 盤の上のタップから、別の骨組みへ切り替える。⚠️ 呼ぶ前に必ず
+    /// <see cref="ConfirmSwitchIfDirty"/> を通すこと（ここでは確かめない）。
+    ///
+    /// ⚠️ **切り替え先がディスクから読めない**（フォルダ未選択・ファイルが無い）ときは、
+    /// 今までの「フォルダを選んでいない」と同じ姿にする（<see cref="_raw"/> が null のまま
+    /// ── 埋め込みの既定値は盤に出るが、直せない）。新しい状態を作らず、
+    /// 既にある「raw が null」の扱いにそのまま乗せる。</summary>
+    private async Task SwitchDocument(string next, int selectLine)
+    {
+        await ApplyOf(next);
+        if (selectLine >= 0) SelectOnly(selectLine);
+        StateHasChanged();
+    }
+
+    /// <summary>木の行を押したときの入口。⭐③ Shift/Ctrl/Meta を押しながらなら
+    /// トグル（複数選択）、そうでなければ今までどおり単独選択。</summary>
+    private void SelectLine(MouseEventArgs e, int line)
+    {
+        if (e.ShiftKey || e.CtrlKey || e.MetaKey) ToggleSelect(line);
+        else SelectOnly(line);
+    }
+
+    private void SyncFields()
+    {
+        var n = _raw is null || _selectedLine < 0 ? null : Find(_raw.Roots, _selectedLine);
+        if (n is null) return;
+        _left = n.Left; _top = n.Top; _width = n.Width; _height = n.Height;
+        // ⚠️ 属性表（EditAttrs）の欄は AttrField が sel から毎回読み直すので、
+        //    ここで個別にキャッシュしない（増えるたびフィールドを足す形を避ける ──
+        //    「専用メソッドを増やさない」という属性表そのものの狙いと同じ）。
+    }
+
+    // ── ⭐ E1-2: 盤の拡大（1ドット＝画面上で何 CSS px か） ─────────────
+
+    private Task ZoomOut() => ApplyDotPx(PrevDotPxStep(_dotPx));
+    private Task ZoomIn() => ApplyDotPx(NextDotPxStep(_dotPx));
+
+    /// <summary>⭐ 「器に収まる大きさに戻す」── <see cref="_dotPxPicked"/> の最初の1回と
+    /// 同じ計算を、いまの器のサイズでもう一度やり直す。</summary>
+    private async Task ZoomReset()
+    {
+        if (!_ready) return;
+        int best = await Js.InvokeAsync<int>("eggEdit.autoDotPx", "edwrap");
+        await ApplyDotPx(best);
+    }
+
+    /// <summary>⭐ <see cref="DotPxSteps"/> の中で、いまより1段大きい値（無ければ最大）。</summary>
+    private static int NextDotPxStep(int current)
+    {
+        foreach (var step in DotPxSteps)
+            if (step > current) return step;
+        return DotPxSteps[DotPxSteps.Length - 1];
+    }
+
+    /// <summary>⭐ <see cref="DotPxSteps"/> の中で、いまより1段小さい値（無ければ最小）。</summary>
+    private static int PrevDotPxStep(int current)
+    {
+        for (int i = DotPxSteps.Length - 1; i >= 0; i--)
+            if (DotPxSteps[i] < current) return DotPxSteps[i];
+        return DotPxSteps[0];
+    }
+
+    /// <summary>⭐ 「1ドット＝画面上で何pxか」を変える唯一の出所。⚠️ 呼び出し元
+    /// （<see cref="ZoomIn"/>/<see cref="ZoomOut"/>/<see cref="ZoomReset"/>/
+    /// <see cref="WireBoard"/>）は必ず <see cref="DotPxSteps"/> の要素を渡す。
+    ///
+    /// 🔴 **拡大率が変わると節点の画面位置が変わるので、選択の輪も再フィットが要る。**
+    /// ⚠️ ここで直接 `eggEdit.reselect` を呼ばない ── <see cref="RingRefresh"/> で旗を
+    /// 立てるだけにし、実際の呼び出しは <see cref="OnAfterRenderAsync"/> の1箇所に
+    /// 任せる（`_ringDirty` の註と同じ理由 ── `getBoundingClientRect` を Blazor の
+    /// 描画確定前に読むと1手ぶんずれるバグの修正を、ここでも壊さない）。</summary>
+    private async Task ApplyDotPx(int dotPx)
+    {
+        _dotPx = dotPx;
+        if (_ready) await Js.InvokeVoidAsync("eggEdit.setDotPx", _dotPx);
+        RingRefresh();
+        StateHasChanged();
+    }
+
+    // ── ⭐ D-1: 盤を主役に ── 木・Inspector を畳む ─────────
+    //
+    // ⚠️ ここでは JS を直接呼ばない ── 畳む／広げるは CSS の幅（`.edtree-collapsed`/
+    //    `.edinspector-collapsed`）を切り替えるだけで、`#edwrap` の実サイズが変わる。
+    //    それを拾って `fit()` を呼び直すのは、`start()` で張った既存の ResizeObserver の
+    //    仕事（触らない・条件を弱めない）。⭐ こちらの仕事は、節点の画面位置が動く分だけ
+    //    選択の輪を追従させること ── `RingRefresh()`（旗を立てるだけ）で次の描画拍に乗せる
+    //    （`ApplyDotPx`/`_ringDirty` と同じ形）。
+
+    private void ToggleTree()
+    {
+        _treeCollapsed = !_treeCollapsed;
+        RingRefresh();
+        StateHasChanged();
+    }
+
+    private void ToggleInspector()
+    {
+        _inspectorCollapsed = !_inspectorCollapsed;
+        RingRefresh();
+        StateHasChanged();
+    }
+
+    // ── ⭐ D-4: 左/上/幅/高＋きざみ の畳み ─────────────────
+
+    /// <summary>⚠️ 見せ方だけの状態 ── <see cref="Field"/>/<see cref="AttrField"/> の
+    /// 中身は変えない（呼び出しを `@if` でくくるだけ）。</summary>
+    private void ToggleNumbers()
+    {
+        _numbersOpen = !_numbersOpen;
+        StateHasChanged();
+    }
+
+    // ── ⭐ D-3: 盤の上でその場の文字入力 ─────────────────
+    //
+    // ⚠️ 確定は既存の `ApplyOption("text", 値)` を通す ── `Apply` が Begin/CommitAction の
+    //    対を1回だけ通すので、これで1つの取り消し（往復の守りもそのまま）。
+
+    /// <summary>`eggEdit.listen` の `dblclick`（`#edcap` 側で拾う）から呼ばれる。
+    /// ⚠️ 対象外の種類（`text=` を持てない）は何もしない。⭐ 選択も同時に済ませる
+    /// （<see cref="SelectOnly"/> と同じ ── 開いた入力欄がどの節点のものか、輪でも分かる）。
+    /// <param name="line">いま開いている文書の中の行（部品ならその部品自身のファイルの行・
+    /// JS 側の `_lineOf` が既に文書の別を吸収済み）。</param></summary>
+    [JSInvokable]
+    public void BeginTextEdit(string line)
+    {
+        int n = int.TryParse(line, out var v) ? v : -1;
+        if (_raw is null || n < 0) return;
+        var node = Find(_raw.Roots, n);
+        if (node is null) return;
+        if (node.Kind != "label" && node.Kind != "button") return;   // ⚠️ 対象外の種類
+
+        SelectOnly(n);   // ⭐ 輪・Inspector も追従させる
+        _editingLine = n;
+        _editingText = node.Option("text") ?? "";
+        StateHasChanged();
+    }
+
+    /// <summary>入力欄の中でだけ効く（`@onkeydown`）。⚠️ 盤の document キー
+    /// （矢印ナッジ・Delete・Ctrl+Z）とは別経路 ── そちらは `edit.js` の `keys` が
+    /// `document.activeElement` を見て素通しにしている（この入力欄もその対象）。</summary>
+    private async Task OnTextEditKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CommitTextEdit();
+        else if (e.Key == "Escape") CancelTextEdit();
+    }
+
+    /// <summary>⚠️ 取り消し ── 値は捨てる（`ApplyOption` を通さない＝undo を積まない）。</summary>
+    private void CancelTextEdit()
+    {
+        _editingLine = -1;
+        _editingText = "";
+        _ = Js.InvokeVoidAsync("eggEdit.editEnd");
+        StateHasChanged();
+    }
+
+    /// <summary>確定 ── Enter か、欄から離れる（blur）。⚠️ Escape の直後にも blur が
+    /// 飛んでくることがあるが、<see cref="_editingLine"/> が既に -1 なのでここで無害に
+    /// 弾かれる（二重確定・二重取り消しにならない）。
+    ///
+    /// ⭐ 値は JS（`eggEdit.editValue`）から読む ── 打っている最中は Blazor の
+    /// 双方向バインディングを使わない（キー入力のたびに再描画が走ると、ドラッグ中の
+    /// 毎フレーム更新と同じ理由でカーソル位置が暴れうる。<c>value="@_editingText"</c> は
+    /// 最初の1回だけ効けばよい）。</summary>
+    private async Task CommitTextEdit()
+    {
+        if (_editingLine < 0) return;
+        int line = _editingLine;
+        string value = await Js.InvokeAsync<string>("eggEdit.editValue");
+        _editingLine = -1;
+        _editingText = "";
+        _ = Js.InvokeVoidAsync("eggEdit.editEnd");
+        if (_raw is not null && _selectedLine == line && Find(_raw.Roots, line) is not null)
+        {
+            // ⚠️ 空にしたら text= ごと消す（TextField・段階1の必須要件と同じ扱い）。
+            ApplyOption("text", string.IsNullOrEmpty(value) ? null : value);
+        }
+        StateHasChanged();
+    }
+
+    // ── ⭐ Pass B: 盤↔木の連動強調（ホバー） ─────────────
+
+    /// <summary>木の行にマウスを乗せた（木→盤）。⚠️ 盤側の描画（`#edhover`）は
+    /// 選択の輪（`eggEdit.reselect`/`#edring`/`#edsel`）とは別の JS 関数
+    /// （`eggEdit.hoverOn`）── 混ぜない。</summary>
+    private async Task TreeHoverOn(int line)
+    {
+        if (_hoverLine == line) return;
+        _hoverLine = line;
+        if (_ready) await Js.InvokeVoidAsync("eggEdit.hoverOn", line);
+        StateHasChanged();
+    }
+
+    private async Task TreeHoverOff()
+    {
+        if (_hoverLine < 0) return;
+        _hoverLine = -1;
+        if (_ready) await Js.InvokeVoidAsync("eggEdit.hoverOff");
+        StateHasChanged();
+    }
+
+    /// <summary>⭐ 盤→木。`edit.js` の `#edcap` が、押してもバンドもしていない
+    /// ただの通りすがりの移動で拾った下の節点の行を知らせてくる（間引き済み ──
+    /// 同じ行が続く間は呼ばれない）。⚠️ ここでは <see cref="_hoverLine"/> を更新して
+    /// 木のハイライトを動かすだけ ── 盤側（`#edhover`）は書き換えない（マウスは
+    /// 既にその節点の上にあるので、そこへ改めて輪郭を描く必要が無い）。
+    /// <param name="line">空文字なら盤の外／押しどころの無い場所＝ホバー解除。</param></summary>
+    [JSInvokable]
+    public void HoverLine(string line)
+    {
+        int n = int.TryParse(line, out var v) ? v : -1;
+        if (_hoverLine == n) return;
+        _hoverLine = n;
+        StateHasChanged();
+    }
+
+    // ── ⭐ Pass B: 変更点の明滅 ────────────────────────
+    //
+    // ⭐ 「確定した1動作」の直後だけ呼ぶ（`Apply`/`Nudge`〔`Apply` 経由〕/
+    //    `ApplyHistory`〔Undo/Redo〕/`ApplyAlign`〔揃える・等間隔〕/`DragEnd`/
+    //    `ResizeEnd`）。⚠️ ドラッグ中・大きさ変更中の毎フレーム（`ApplyRaw` を
+    //    直接呼ぶ経路）からは呼ばない ── チカチカする。
+
+    private void Flash(int line)
+    {
+        if (line < 0) return;
+        _ = Js.InvokeVoidAsync("eggEdit.flash", line.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private void FlashLines(IEnumerable<int> lines)
+    {
+        // ⭐ `string.Join` は既に他所（`OnAfterRenderAsync` の reselect 呼び出し）でも
+        //    `List<int>` を csv 化するのに使っている ── 出所を増やさず同じ書き方に揃える。
+        string csv = string.Join(",", lines);
+        if (csv.Length == 0) return;
+        _ = Js.InvokeVoidAsync("eggEdit.flashLines", csv);
+    }
+
+    // ── 直す ────────────────────────────────────────
+
+    // ⚠️ **作り直すとき `PartId`/`PartLine` も必ず運ぶ。**
+    //    ⭐ これは省略可能引数なので、書き忘れると**黙って null / -1 に落ちる**
+    //    ── 今はまだ選べるのが自前の節点（`PartId == null`）だけなので実害が無く、
+    //    ⚠️ **部品ファイルへ切り替える一手を足した日に、初めて壊れる**形になる。
+
+    private void ApplyLeft(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, v, n.Top, n.Width, n.Height,
+        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+    private void ApplyTop(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, n.Left, v, n.Width, n.Height,
+        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+    private void ApplyWidth(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, n.Left, n.Top, v, n.Height,
+        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+    private void ApplyHeight(float v) => Apply(n => new LayoutNode(n.Name, n.Kind, n.Left, n.Top, n.Width, v,
+        n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+
+    // ── ①② 属性表（EditAttrs）の唯一の書き換え経路 ─────────
+    //
+    // ⭐ 段階1の設計（wiki `web移行計画.md` §11-3）:
+    //   「座標4つ（Left/Top/Width/Height）は LayoutNode の専用フィールドなので別のままで
+    //    よいが、付け足しは必ず1経路にする」── `ApplyLeft` 等はそのまま、付け足しは
+    //    ここ（`SetOption`）の1本にまとめる。`WithGap`（③・2026-08-24 実装済み）が雛形。
+
+    /// <summary>属性表（<see cref="EggCommand.Web.EditAttrs"/>）の欄1つを直す。
+    /// ⭐ **これで1つの取り消し**（<see cref="Apply"/> が Begin〜Commit の対を通す）。
+    /// ⚠️ `value` が null なら付け足しごと消す ── 切替の OFF・選択肢を「（既定）」に戻す・
+    /// 字を空にする、の3つすべてがここを通る（`ink=` のように空文字だけ残して
+    /// 「効かないのに行に残る」を作らない）。</summary>
+    private void ApplyOption(string key, string? value) => Apply(n => SetOption(n, key, value));
+
+    /// <summary>`n` の `key=` だけを書き換えた（または消した）新しい節点。⚠️ 元の欄
+    /// （桁・並び順）は <see cref="LayoutNode.RenderLine"/> が <see cref="LayoutNode.Options"/>
+    /// を読み直して詰め直す（既に在れば値だけ差し替え、無ければ末尾に新顔として足す、
+    /// `Options` から消せば欄ごと消える ── すべて <c>LayoutWriteTests</c> §7 が守っている）。</summary>
+    private static LayoutNode SetOption(LayoutNode n, string key, string? value)
+    {
+        var options = new Dictionary<string, string>(n.Options);
+        if (value == null) options.Remove(key);
+        else options[key] = value;
+        return new LayoutNode(n.Name, n.Kind, n.Left, n.Top, n.Width, n.Height,
+            options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine);
+    }
+
+    /// <summary>⭐③ `gap=` 専用の薄い包み（2026-08-24 実装・掴んで動かす側の
+    /// <see cref="DraggingGap"/> が直接呼ぶ ── ドラッグ中は毎フレーム呼ぶので
+    /// <see cref="Apply"/>（Begin/Commit つき）を通さない）。⚠️ いまは <see cref="SetOption"/>
+    /// の薄い包みに畳んである（属性表への統合で二重管理をやめた・挙動は変えていない）。</summary>
+    private static LayoutNode WithGap(LayoutNode n, float gap) =>
+        SetOption(n, "gap", gap.ToString("0.##", CultureInfo.InvariantCulture));
+
+    /// <summary>数を打った1回（＋ − や欄の入力）。⭐ **これで1つの取り消し**（Begin〜Commit
+    /// を1回で閉じる）。⚠️ ドラッグ中の毎フレーム呼び出し（<see cref="Dragging"/>）は
+    /// これを通らない ── 通ると1動作が何十件も積まれてしまう。</summary>
+    private void Apply(Func<LayoutNode, LayoutNode> edit)
+    {
+        if (_raw is null || _selectedLine < 0) return;
+        BeginAction();
+        ApplyRaw(_selectedLine, edit);
+        CommitAction();
+        Flash(_selectedLine);   // ⭐ Pass B: 確定した1動作（欄入力／±／ナッジも Apply 経由）
+    }
+
+    /// <summary>不変の木を「その1本の行だけ」差し替えて組み直す。⚠️ 取り消しの積みには
+    /// 触らない（積むのは <see cref="BeginAction"/>/<see cref="CommitAction"/> の対で
+    /// 1回だけ ── ここは <see cref="Apply"/> と、ドラッグ中の毎フレーム更新の両方が通る）。</summary>
+    private void ApplyRaw(int line, Func<LayoutNode, LayoutNode> edit)
+    {
+        if (_raw is null) return;
+        var roots = ReplaceLine(_raw.Roots, line, edit);
+        _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
+        SyncFields();
+        Refresh();
+        RingRefresh();
+        StateHasChanged();
+    }
+
+    // ── 取り消し／やり直し ──────────────────────────
+
+    private void BeginAction()
+    {
+        _pendingBefore = _raw is null ? null : Core.Layouts.Write(_raw);
+    }
+
+    /// <summary>⭐ **変わっていなければ積まない**（動かしただけで元の位置に吸い付いて
+    /// 戻った、掴んで離しただけ、等）。⚠️ ここが唯一の「積む」場所 ── 積む場所を
+    /// 増やすと「1動作＝1積み」が崩れる。</summary>
+    private void CommitAction()
+    {
+        if (_pendingBefore is null || _raw is null) { _pendingBefore = null; return; }
+        string after = Core.Layouts.Write(_raw);
+        if (after != _pendingBefore)
+        {
+            _undo.Add(_pendingBefore);
+            _redo.Clear();   // ⭐ 新しい動作をしたら、やり直しの筋は消える（一般的な作法）
+        }
+        _pendingBefore = null;
+    }
+
+    [JSInvokable]
+    public void Undo() => ApplyHistory(_undo, _redo);
+
+    [JSInvokable]
+    public void Redo() => ApplyHistory(_redo, _undo);
+
+    // ── ② 矢印キーで動かす（ナッジ） ────────────────
+    //
+    // ⭐ 作者の Unity 版 `EggCommandWindow.Nudge` と同じ ── 選んでいる節点を
+    //    ←→↑↓ で「きざみ」ぶん動かす。⚠️ `edit.js` の `keys()` が
+    //    Ctrl+Z/Ctrl+Shift+Z と**同じ場所**（document の keydown）で受け、字を打っている
+    //    最中（input/textarea/select に焦点）は素通しにする（JS 側で判定）。
+
+    /// <param name="dx">-1/0/1（左右の向き）。</param>
+    /// <param name="dy">-1/0/1（上下の向き）。⚠️ この骨組みの座標系は**下が＋**
+    /// （CSS の `top` と同じ・Unity の RectTransform とは逆）なので、Unity 版のような
+    /// 符号反転は要らない ── ↑（ArrowUp）は素直に `dy=-1` を渡すだけでよい。</param>
+    [JSInvokable]
+    public void Nudge(int dx, int dy)
+    {
+        if (_raw is null || _selectedLine < 0) return;
+        var node = Find(_raw.Roots, _selectedLine);
+        if (node is null) return;
+        // ⭐ 1回＝1つの取り消し（Apply が Begin/CommitAction の対を通す）。
+        //    ⚠️ 掴んで動かす（Dragging）と違い、吸い付き（SnapMove）は掛けない ──
+        //    きざみで既に丸い数のはずで、1回の移動量が小さいぶん兄弟の辺への
+        //    偶然の一致がノイズになりやすいため（作者の Unity 版にも吸い付きは無い）。
+        float left = node.Left + dx * _step;
+        float top = node.Top + dy * _step;
+        Apply(n => new LayoutNode(n.Name, n.Kind, left, top, n.Width, n.Height,
+            n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+    }
+
+    private void ApplyHistory(List<string> from, List<string> to)
+    {
+        if (_raw is null || from.Count == 0) return;
+        string current = Core.Layouts.Write(_raw);
+        string prior = from[from.Count - 1];
+        from.RemoveAt(from.Count - 1);
+        to.Add(current);
+        _raw = Core.Layouts.Parse(_of, prior);
+        // ⭐ 選んでいる行は動かさない（値が変わるだけで、同じ行を指し続ける）。
+        SyncFields();
+        Refresh();
+        RingRefresh();
+        StateHasChanged();
+        Flash(_selectedLine);   // ⭐ Pass B: Undo/Redo も「確定した1動作」
+    }
+
+    // ── ⭐ 段階3: 削除・追加・複製（構造編集） ────────────────
+    //
+    // ⭐ 唯一の往復の出口は今までと同じ（`Layouts.Write`/`Layouts.Parse`）。新しい直列化は
+    //   作らない。新規節点は必ず `NewNode`（フル引数コンストラクタ・terminator は
+    //   `DocTerminator()` でファイルに合わせる）の1経路だけを通る。⚠️ Core（`Layout.cs` 等）
+    //   は変更しない ── ここは既にある「消えた節点＝行が消える／LineNumber=-1 の節点＝
+    //   末尾へ追記」の仕組み（`Layouts.Write`）に乗るだけ。
+
+    /// <summary>⭐ 追加パレットの8種（`wiki/開発/web移行計画.md` §11-3 の6種＋段E「絵」＋
+    /// E1-4「背景」）。⚠️ **除外**: `pixel`（種族の絵 ── 名前でなく `Palette` の参照で引くので
+    /// 自作絵に使えない）・`scroll`（`content=`）・`bar`（結線）・`veil`/`host`（特殊） ──
+    /// rect だけでは不備0にならない・段階3の属性では埋められない（除外は UI に出さない）。
+    /// ⭐ `icon`/`paint` は落とした直後に「絵を選ぶ」小窓（<see cref="OpenIconPicker"/>）が
+    /// 開くので、`pic=` を後から埋められる（段階3の時点ではその小窓が無く、除外していた）。</summary>
+    private static readonly (string Kind, string Label)[] AddKindPalette =
+    {
+        ("box", "box"), ("card", "card"), ("label", "字"),
+        ("button", "釦"), ("line", "線"), ("round", "丸"), ("icon", "絵"), ("paint", "背景"),
+    };
+
+    /// <summary>⭐ 段E: 種類ごとの既定の大きさ。⚠️ `icon`/`paint` は 64x64（実物の骨組みの実例
+    /// 「plain icon 92 64 64 64」に合わせる ── 決め打ちで書いていない）。⚠️ どちらも絵を
+    /// 選んだ瞬間に <see cref="ApplyPicChoice"/> が実ドット数×4 へ自動で合わせ直すので、
+    /// ここの値は「絵を選ぶまでの仮の大きさ」でしかない。他は今までどおり（幅300、
+    /// label/button は高さ90、それ以外120）── 既存の位置（<see cref="AddKind"/> の既定位置）
+    /// を変えない。</summary>
+    private static (float Width, float Height) DefaultSize(string kind)
+    {
+        if (kind == "icon" || kind == "paint") return (64f, 64f);
+        bool small = kind == "label" || kind == "button";
+        return (300f, small ? 90f : 120f);
+    }
+
+    /// <summary>⭐ 新規節点を作る**唯一の出所**。⚠️ 短い13引数コンストラクタ
+    /// （Terminator="\n" 固定）は使わない ── CRLF ファイルで混在するため、
+    /// 必ずフル引数で <see cref="DocTerminator"/> を渡す。</summary>
+    private LayoutNode NewNode(string name, string kind, float left, float top, float width, float height,
+        IReadOnlyDictionary<string, string> options, IReadOnlyList<LayoutNode> children, int indent) =>
+        new LayoutNode(name, kind, left, top, width, height,
+            options, children,
+            // ⚠️ `fields`/`partId` は Core 側で非 null 引数（Web の nullable enable では
+            //    素の null が CS8625 になる）── 値としては「行を知らない」「自前の行」を
+            //    意味する null のまま渡す（挙動は変えない・警告だけ避ける）。
+            lineNumber: -1, indent: indent, fields: Array.Empty<LayoutField>(), trailing: "",
+            terminator: DocTerminator(), partId: null!, partLine: -1);
+
+    /// <summary>⭐ この文書の終端文字（CRLF/LF）── <see cref="_raw"/>.Lines を後ろから見て、
+    /// 最初の非空の Terminator を返す（無ければ "\n"）。CRLF/LF をファイルに合わせる唯一の出所。</summary>
+    private string DocTerminator()
+    {
+        if (_raw is not null)
+            for (int i = _raw.Lines.Count - 1; i >= 0; i--)
+                if (_raw.Lines[i].Terminator.Length > 0) return _raw.Lines[i].Terminator;
+        return "\n";
+    }
+
+    /// <summary>🔴 追加/複製で -1 節点を足す**直前に必ず**呼ぶ。⚠️ 最終行の Terminator が
+    /// 空だと、末尾追記が前の行と同じ行に融合する（`Write(Parse(candidate))==candidate` が
+    /// 融合後も成り立ってしまう、保存ガードをすり抜けるサイレント破損 ── 仕様書「罠」参照）。
+    ///
+    /// ⭐ `Layouts.SplitLines`（Core）は原文の末尾に必ず「最終改行の後ろ」の空プレースホルダ
+    /// （Text=="" かつ Terminator==""）を1行足す ── だから `_raw.Lines` の最後の要素の
+    /// Text が空なら、そのファイルは既に改行で終わっている（何もしない）。Text が空でない
+    /// のに Terminator が空なら、それが「改行の無い最終行」の実体 ── その行（節点行 or
+    /// skippable）へ終端を補う。⚠️ 現行33枚は全て末尾改行ありなので通常は no-op（防御の壁）。</summary>
+    private void EnsureTrailingTerminator()
+    {
+        if (_raw is null || _raw.Lines.Count == 0) return;
+        int last = _raw.Lines.Count - 1;
+        var line = _raw.Lines[last];
+        if (line.Terminator.Length > 0 || line.Text.Length == 0) return;   // 既に改行で終わっている
+
+        var node = Find(_raw.Roots, last);
+        if (node is not null)
+        {
+            // ⭐ 節点行 ── その行を claim している節点を、Terminator だけ差し替えて作り直す。
+            var roots = ReplaceLine(_raw.Roots, last, n => new LayoutNode(
+                n.Name, n.Kind, n.Left, n.Top, n.Width, n.Height,
+                n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, DocTerminator(),
+                n.PartId, n.PartLine));
+            _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
+        }
+        else
+        {
+            // ⭐ skippable 行（コメント・空行） ── `_raw.Lines` の該当 RawLine を差し替える。
+            var lines = new List<Core.RawLine>(_raw.Lines);
+            lines[last] = new Core.RawLine(line.Text, DocTerminator());
+            _raw = new Core.Layout(_raw.Id, _raw.Roots, lines);
+        }
+    }
+
+    /// <summary>⭐ 兄弟（＝ルート）と重ならない一意名。空きなら `baseName` そのまま、
+    /// 埋まっていれば `baseName2`,`baseName3`… （`Faults.DuplicateName` を必ず避けるため）。</summary>
+    private string UniqueRootName(string baseName)
+    {
+        if (_raw is null) return baseName;
+        var used = new HashSet<string>();
+        foreach (var r in _raw.Roots) used.Add(r.Name);
+        if (!used.Contains(baseName)) return baseName;
+        int i = 2;
+        while (used.Contains(baseName + i.ToString(CultureInfo.InvariantCulture))) i++;
+        return baseName + i.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>追加/複製の直後、-1 節点を含む木を `Parse(Write(...))` で組み直してから
+    /// （＝盤が見るのと同じ、行番号が確定した木にしてから）名前で引いて選ぶ。⚠️ 新節点は
+    /// LineNumber=-1 だが、`Refresh()`（Write→Parse→Draw）を経ると新しい行番号が付くので、
+    /// これが唯一の安全な選び方 ── `_raw` もこの組み直し後の木に置き換える（以後の編集・
+    /// undo が「盤と同じ木」を触るように。この Parse し直しは undo スナップショット
+    /// ── `CommitAction` が積む Write 文字列 ── には影響しない ── 文字列は同じ）。</summary>
+    private void SelectNewRoot(string name)
+    {
+        if (_raw is null) return;
+        _raw = Core.Layouts.Parse(_of, Core.Layouts.Write(_raw));
+        foreach (var r in _raw.Roots)
+        {
+            if (r.Name == name) { SelectOnly(r.LineNumber); return; }
+        }
+    }
+
+    // ── 1) 削除 ──────────────────────────────────────
+
+    /// <summary>`list` を再帰で辿り、`lines` に含まれる節点（**と、その子孫まるごと**）を
+    /// 落とした新しい木を返す。⚠️ `_raw.Lines`（原文の生行）は触らない ── `Write` は
+    /// claim されなくなった行を自分で「消えた節点」として省く。</summary>
+    private static List<LayoutNode> RemoveLines(IReadOnlyList<LayoutNode> list, HashSet<int> lines)
+    {
+        var result = new List<LayoutNode>(list.Count);
+        foreach (var n in list)
+        {
+            if (lines.Contains(n.LineNumber)) continue;   // ⭐ 子孫には再帰しない＝丸ごと落ちる
+            var kids = RemoveLines(n.Children, lines);
+            result.Add(new LayoutNode(n.Name, n.Kind, n.Left, n.Top, n.Width, n.Height,
+                n.Options, kids, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+                n.PartId, n.PartLine));
+        }
+        return result;
+    }
+
+    /// <summary>⭐ 選択中の節点（と子孫）をまとめて消す。⚠️ 確認ダイアログは出さない
+    /// （undo が安全網）。**これで1つの取り消し**。⭐ Delete キー（`edit.js` の `keys`）
+    /// からも、Inspector の釦（<see cref="AddKindPalette"/> の隣）からも、ここが唯一の入口。</summary>
+    [JSInvokable]
+    public void DeleteSelected()
+    {
+        if (_raw is null || _selected.Count == 0) return;
+        BeginAction();
+        var roots = RemoveLines(_raw.Roots, new HashSet<int>(_selected));
+        _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
+        ClearSelection();   // ⚠️ 消した節点はもう選べない（選択・輪・Inspector 欄をまとめて空にする）
+        Refresh();
+        CommitAction();
+        StateHasChanged();   // ⭐ JSInvokable（Delete キー）経由でも再描画されるように
+    }
+
+    // ── 2) 追加（種類パレット・押しただけ／掴んで落とす） ──────
+
+    /// <summary>⭐ 種類パレットを**押しただけ**（動かさず離した）ときの入口。
+    /// ⚠️ 今までどおり既定位置（盤の (390,900) を左上に）へ足す ── 後戻りさせない
+    /// （作者の指示）。⭐ 実装は <see cref="AddKindAt"/> の薄い包み（今までと寸分違わぬ
+    /// 最終位置になるよう、その左上から「中心」を逆算して渡す。大きさは
+    /// <see cref="DefaultSize"/> が唯一の出所）。</summary>
+    [JSInvokable]
+    public void AddKind(string kind)
+    {
+        var (width, height) = DefaultSize(kind);
+        AddKindAt(kind, 390f + width / 2f, 900f + height / 2f);
+    }
+
+    /// <summary>⭐ D-2: 道具箱から**掴んで盤へ落とした**ときの入口 ── 種類パレットから
+    /// 新しいルート節点を末尾へ足す、唯一の出所（<see cref="AddKind"/> もここを通る）。
+    /// ⚠️ JS から来た値をそのまま信用しない（パレット外の種類は無視）。
+    /// **これで1つの取り消し**。⚠️ 往復の守り（<see cref="EnsureTrailingTerminator"/>→
+    /// <see cref="NewNode"/>→<see cref="SelectNewRoot"/>）は今までの <see cref="AddKind"/> と
+    /// 寸分同じ経路 ── 座標だけ差し替える。⚠️ 入れ物の中には入らない（新しいルートとして
+    /// 末尾へ足す ── 「盤の外なら作らない」を満たすのは呼び出し側（JS の `paletteListen`）で、
+    /// ここは渡された座標をそのまま使う）。
+    /// <param name="left">落とした点の設計 px。**四角の中心**として扱う（「落とした所に出る」
+    /// 体感にするため、ここで幅・高さの半分を引いて左上へ変換する）。</param>
+    /// <param name="top">同上（縦）。</param></summary>
+    [JSInvokable]
+    public void AddKindAt(string kind, double left, double top)
+    {
+        if (_raw is null) return;
+        if (Array.FindIndex(AddKindPalette, k => k.Kind == kind) < 0) return;   // ⚠️ 知らない種類は無視
+        BeginAction();
+        EnsureTrailingTerminator();
+
+        var (width, height) = DefaultSize(kind);
+        var options = new Dictionary<string, string>();
+        if (kind == "label") options["text"] = "字";
+        else if (kind == "button") options["text"] = "押す";
+
+        // ⭐ 中心 → 左上へ変換したあと、「きざみ」へ丸める（既存の吸い付きと同じ気持ち）。
+        float nodeLeft = SnapStep((float)left - width / 2f);
+        float nodeTop = SnapStep((float)top - height / 2f);
+
+        string name = UniqueRootName(kind);
+        var node = NewNode(name, kind, nodeLeft, nodeTop, width, height,
+            options, new List<LayoutNode>(), 0);
+        var roots = new List<LayoutNode>(_raw.Roots) { node };
+        _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
+
+        Refresh();
+        SelectNewRoot(name);
+        CommitAction();
+        StateHasChanged();
+
+        // ⭐ E-1/E1-4: 絵は落とした直後 `pic=` が無い（盤には「？」）── その場で選ばせる。
+        //    ⚠️ 何も選ばず閉じても壊れない（`OpenIconPicker`/`CloseIconPicker` は
+        //    ApplyOption を1回も呼ばない ── 「？」のまま残り、あとから選び直せる）。
+        if (kind == "icon" || kind == "paint") OpenIconPicker(kind);
+    }
+
+    /// <summary>⭐ D-2: 落とした位置を「きざみ」へ丸める（既存の吸い付きと同じ物差し・
+    /// <see cref="_step"/> が唯一の出所）。</summary>
+    private float SnapStep(float v) => _step > 0 ? MathF.Round(v / _step) * _step : v;
+
+    // ── ⭐ E2: 層（レイヤ）── 切替・道具箱の絞り込み ────────────
+
+    /// <summary>層の帯の釦を押した。⚠️ ここでは値を書き換えない（見なしだけ）
+    /// ── `Apply`/`ApplyOption` を一度も通らない・undo は積まない。</summary>
+    private void SetLayer(EditLayer? layer)
+    {
+        _layer = layer;
+        _ = ApplyLayerToJs();
+        StateHasChanged();
+    }
+
+    /// <summary>⭐ E2: 「触れなくする」の判定は JS 側（`edit.js` の `_layerOk`）が持つ ──
+    /// ここはその状態を渡すだけ。⚠️ 「薄くする」は渡さない（Razor が `#edstage` の
+    /// `data-layerfilter` 属性を直接持つ ── CSS だけで完結する別の軸）。</summary>
+    private async Task ApplyLayerToJs()
+    {
+        if (_ready) await Js.InvokeVoidAsync("eggEdit.setLayer", EditLayers.Token(_layer));
+    }
+
+    /// <summary>⭐ E2: 道具箱「足す」を、いま選んでいる層のものだけに絞る。⚠️ 種類そのもの
+    /// から決まる層（<see cref="EditLayers.PaletteLayerOf"/>）── まだ作っていない節点には
+    /// `bind=`/`tap=` が無いので、既存節点の判定（<see cref="EditLayers.Of"/>）は使えない。</summary>
+    private List<(string Kind, string Label)> FilteredAddPalette()
+    {
+        var result = new List<(string, string)>();
+        foreach (var k in AddKindPalette)
+        {
+            if (_layer is not null && EditLayers.PaletteLayerOf(k.Kind) != _layer) continue;
+            result.Add(k);
+        }
+        return result;
+    }
+
+    /// <summary>名札の3段階トグルの CSS クラス（<see cref="_labelMode"/> と1対1）。
+    /// ⚠️ 「なし」はクラス無し（`EditPage.razor.css` は両方のクラスが無ければ何も出さない）。</summary>
+    private string LabelModeClass() => _labelMode switch
+    {
+        "selected" => "edlabels-selected",
+        "all" => "edlabels-all",
+        _ => "",
+    };
+
+    private void OnLabelModeChange(ChangeEventArgs e)
+    {
+        var v = Convert.ToString(e.Value);
+        _labelMode = v is "selected" or "all" ? v : "none";
+    }
+
+    // ── ⭐ E2: 押しどころを「囲んで作る」（計画 §11-6） ─────────
+
+    /// <summary>盤をドラッグして囲んで離した先（`edit.js` の `up` が押しどころの層のときだけ
+    /// 呼ぶ）。⚠️ 既存のラバーバンド（複数選択）とは JS 側で既に切り分けてある
+    /// （層が `tap` のときだけこちらへ来る）── ここでも念のため層を確かめる
+    /// （JS から来た値をそのまま信用しない、の作法どおり）。
+    ///
+    /// ⭐ 作るのは `button`（`tap=` を持てる種類）。**大きさは4の倍数に丸める**
+    /// （<see cref="RoundTo4"/>）。🔴 **作った直後に「機能を選ぶ」小窓を開く**
+    /// （<see cref="OpenTapPicker"/>）── 「絵に機能を付ける」が1続きの動作になる。
+    ///
+    /// <param name="left">設計px（`edit.js` が画面座標→設計座標へ変換済み）。以下同じ。</param></summary>
+    [JSInvokable]
+    public void CreateTapAt(double left, double top, double width, double height)
+    {
+        if (_raw is null || _layer != EditLayer.Tap) return;
+        BeginAction();
+        EnsureTrailingTerminator();
+
+        float w = Math.Max(MinSize, RoundTo4((float)width));
+        float h = Math.Max(MinSize, RoundTo4((float)height));
+        float l = RoundTo4((float)left);
+        float t = RoundTo4((float)top);
+
+        string name = UniqueRootName("button");
+        var node = NewNode(name, "button", l, t, w, h,
+            new Dictionary<string, string>(), new List<LayoutNode>(), 0);
+        var roots = new List<LayoutNode>(_raw.Roots) { node };
+        _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
+
+        Refresh();
+        SelectNewRoot(name);
+        CommitAction();
+        StateHasChanged();
+
+        OpenTapPicker();
+    }
+
+    /// <summary>⭐ 「4の倍数に丸める」の唯一の出所（計画 §11-6）。⚠️ `_step`（既定4だが
+    /// 自由に変えられる）とは別 ── 押しどころの大きさだけは常に4の倍数（升目の基本単位）
+    /// に固定する、という作者の決定そのもの。</summary>
+    private static float RoundTo4(float v) => MathF.Round(v / 4f) * 4f;
+
+    // ── ⭐ E2: 機能（`tap=`）の付け替え（計画 §11-8・作者の決定6） ─────
+
+    /// <summary>「機能を選ぶ」小窓を開く**唯一の入口**（囲んで作った直後／Inspector の
+    /// 釦、どちらもここを通る）。⚠️ 開くたびに「さがす」を空へ戻し、冠の逆算を
+    /// **1回だけ**やり直す（<see cref="_tapPickerCrowns"/> の註）。</summary>
+    private void OpenTapPicker()
+    {
+        _tapPickerFind = "";
+        _tapPickerCrowns = TapPickerByPart ? PartCrowns() : new List<string>();
+        _tapPickerOpen = true;
+    }
+
+    private void CloseTapPicker() => _tapPickerOpen = false;
+
+    /// <summary>選んだら**1 undo**（<see cref="ApplyOption"/> の既存経路そのまま）。</summary>
+    private void ChooseTap(string name)
+    {
+        ApplyOption("tap", name);
+        CloseTapPicker();
+    }
+
+    /// <summary>外す（`tap=` を消す）。⚠️ ボタン自体は残る（種類は変えない）。</summary>
+    private void RemoveTap()
+    {
+        ApplyOption("tap", null);
+        CloseTapPicker();
+    }
+
+    /// <summary>**部品を編集中か**（`Scenes.Of(_of).ByPart`）── 冠の逆算が要るかどうかの
+    /// 唯一の分かれ目（計画 §11-8「土台の画面を編集中→そのまま出す／部品を編集中→逆算する」）。</summary>
+    private bool TapPickerByPart => Scenes.Of(_of).ByPart;
+
+    /// <summary>いま選んでいる節点の、生の（冠の付いていない）`tap=`。⚠️ 部品ファイルの
+    /// 中身は元々冠が付いていない状態で書かれている（`Layouts.Rename` は差し込む側が
+    /// 掛けるだけ）ので、これがそのまま候補（<see cref="TapCandidates"/>）と同じ物差し。</summary>
+    private string? TapPickerCurrent =>
+        _raw is not null && _selectedLine >= 0 ? Find(_raw.Roots, _selectedLine)?.Option("tap") : null;
+
+    /// <summary>🔴 冠の逆算 ── いま編集している部品ファイル（<see cref="_of"/>）が、
+    /// 32枚の中で実際にどんな名前（冠）で `use=` されているか。⚠️ **Web 専用の配線
+    /// （`Scenes`/`LayoutStore`）はここだけに閉じ込める**（純関数の本体は
+    /// <see cref="TapCrowns.Crowns"/> ── `EggCommand.Core` にしか依存しない形で
+    /// `EggCommand.Tests` が直接検査できるように）。⚠️ 読めない骨組みが1枚あっても
+    /// 残りは見る（黙って壊さない側へ倒す）。</summary>
+    private List<string> PartCrowns()
+    {
+        var layouts = new List<Core.Layout>();
+        foreach (var scene in Scenes.All)
+        {
+            try { layouts.Add(LayoutStore.Of(scene.Id)); }
+            catch { /* 読めない骨組みは無視 */ }
+        }
+        return TapCrowns.Crowns(layouts, _of);
+    }
+
+    /// <summary>候補（生の・冠の付いていない名前）の一覧。⚠️ 土台の画面を編集中なら
+    /// `Shell.Tap` の名前をそのまま（<see cref="TapCatalog.Names"/>）。部品を編集中なら、
+    /// **`Shell.Tap` の名前のうち、冠を外すと一致するもの**だけ（計画 §11-8）
+    /// ── 逆算できた冠（<see cref="_tapPickerCrowns"/>）のどれか1つにでも一致すれば候補。</summary>
+    private List<string> TapCandidates()
+    {
+        if (!TapPickerByPart) return new List<string>(TapCatalog.Names);
+        if (_tapPickerCrowns.Count == 0) return new List<string>();
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<string>();
+        foreach (var crown in _tapPickerCrowns)
+        {
+            string prefix = crown + "-";
+            foreach (var full in TapCatalog.Names)
+            {
+                if (!full.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                string local = full.Substring(prefix.Length);
+                if (local.Length > 0 && seen.Add(local)) result.Add(local);
+            }
+        }
+        result.Sort(StringComparer.Ordinal);
+        return result;
+    }
+
+    /// <summary>「さがす」で絞った候補。⚠️ 木・絵を選ぶ小窓の「さがす」とは別の状態
+    /// （<see cref="_tapPickerFind"/>）── 混ぜない。</summary>
+    private List<string> FilteredTapNames()
+    {
+        var all = TapCandidates();
+        if (_tapPickerFind.Length == 0) return all;
+        return all.FindAll(n => n.Contains(_tapPickerFind, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>⭐ 冠の逆算の結果を、押す前に必ず見せる一言（部品を編集中のときだけ出す）。</summary>
+    private string TapPickerInfo() => _tapPickerCrowns.Count == 0
+        ? "この部品はまだどこにも差されていません"
+        : "この部品は " + string.Join(" ", _tapPickerCrowns.Select(c => c + "-")) + " として差されています";
+
+    /// <summary>🔴 候補0件のとき、空の一覧を黙って出さず理由を言う（計画 §11-8「逆算できない・
+    /// 候補が無いときは空の一覧を出さない」）。⚠️ 「まだどこにも差されていない」（冠が
+    /// 逆算できない）と「差されてはいるが、対応する機能が見つからない」（冠は分かるが
+    /// 候補が無い）を**別の文で**言う ── 前者は差し込み自体をまず作ってほしい、後者は
+    /// この部品ファイルには `tap=` を書いても機能させられないかもしれない、で対処が違う。</summary>
+    private string TapPickerEmptyReason()
+    {
+        if (!TapPickerByPart) return "見つかりません";
+        return _tapPickerCrowns.Count == 0
+            ? "この部品はまだどこにも差されていません"
+            : "この部品は " + string.Join(" ", _tapPickerCrowns.Select(c => c + "-"))
+                + " として差されていますが、対応する機能が見つかりません";
+    }
+
+    // ── 3) 複製 ──────────────────────────────────────
+
+    /// <summary>選んでいる部分木を -1 の新しいルートとして複製する。⚠️ 親（複製の根）の
+    /// left/top は選択節点の**絶対座標**＋オフセット(16,16) ── その場に重なって出る体感に
+    /// する（ルート化しても位置が飛ばない）。子孫は left/top をそのまま（親からの相対は
+    /// 不変で正しい）、indent だけ (子孫.Indent − 選択節点.Indent) で相対の深さを保つ ──
+    /// `Write` の `Collect` が DFS 前順（親→子）で積むので、末尾ブロックは
+    /// 「親(indent0)→子(indent≥1)」の整った字下げになり、`Parse` で正しく入れ子になる。</summary>
+    private LayoutNode CloneAsNewRoot(LayoutNode origin)
+    {
+        var (absLeft, absTop) = AbsolutePosition(origin.LineNumber);
+        var options = new Dictionary<string, string>(origin.Options);   // ⭐ deep copy
+        var children = new List<LayoutNode>();
+        foreach (var child in origin.Children) children.Add(CloneDescendant(child, origin.Indent));
+        string name = UniqueRootName(origin.Name);
+        return NewNode(name, origin.Kind, absLeft + 16f, absTop + 16f, origin.Width, origin.Height,
+            options, children, 0);
+    }
+
+    /// <summary>複製する子孫1つぶん。⚠️ name・left/top はそのまま（部分木内で既に一意・
+    /// 親からの相対座標は不変）。indent は `rootIndent`（元の選択節点の Indent）からの
+    /// 相対で計算し直す ── 新しい親が indent0 になるぶんだけ、一律に引き下げる。</summary>
+    private LayoutNode CloneDescendant(LayoutNode node, int rootIndent)
+    {
+        var options = new Dictionary<string, string>(node.Options);
+        var children = new List<LayoutNode>();
+        foreach (var child in node.Children) children.Add(CloneDescendant(child, rootIndent));
+        return NewNode(node.Name, node.Kind, node.Left, node.Top, node.Width, node.Height,
+            options, children, node.Indent - rootIndent);
+    }
+
+    /// <summary>その行の節点の、画面基準の絶対座標（祖先の Left/Top を足し込んだもの）。
+    /// ⚠️ `_raw`（原文の生の木）だけを見る（<see cref="Locate"/> と同じ理由）。</summary>
+    private (float Left, float Top) AbsolutePosition(int line)
+    {
+        if (_raw is not null && TryAbsolute(_raw.Roots, line, 0f, 0f, out var x, out var y)) return (x, y);
+        return (0f, 0f);
+    }
+
+    private static bool TryAbsolute(IReadOnlyList<LayoutNode> list, int line, float accX, float accY,
+        out float x, out float y)
+    {
+        foreach (var n in list)
+        {
+            float nx = accX + n.Left, ny = accY + n.Top;
+            if (n.LineNumber == line) { x = nx; y = ny; return true; }
+            if (TryAbsolute(n.Children, line, nx, ny, out x, out y)) return true;
+        }
+        x = 0f; y = 0f;
+        return false;
+    }
+
+    /// <summary>⭐ 選択が1つのときだけ有効（複数対応は任意 ── 素直な形に留める）。
+    /// **これで1つの取り消し**。</summary>
+    [JSInvokable]
+    public void DuplicateSelected()
+    {
+        if (_raw is null || _selected.Count != 1) return;
+        var origin = Find(_raw.Roots, _selected[0]);
+        if (origin is null) return;
+
+        BeginAction();
+        EnsureTrailingTerminator();
+        var clone = CloneAsNewRoot(origin);
+        var roots = new List<LayoutNode>(_raw.Roots) { clone };
+        _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
+
+        Refresh();
+        SelectNewRoot(clone.Name);
+        CommitAction();
+        StateHasChanged();
+    }
+
+    // ── 掴んで動かす ────────────────────────────────
+
+    /// <summary>盤の透明な覆い（`edcap`）が、遊びのしきい値（12px）を超えて動いたと
+    /// 判断した瞬間に呼ばれる。⭐ ここで選択も同時に済ませる（掴む＝選ぶ）。
+    ///
+    /// ⭐⑤ **まとめ移動の分岐点。**掴んだ節点（`n`）が既に <see cref="_selected"/> に
+    /// 居て、かつ集合が2個以上なら「まとめ移動」（主を `n` にし、選択中全部の
+    /// スナップショットを <see cref="_dragOrigins"/> に取る ── repeat/gap の特別扱いは
+    /// しない）。そうでなければ今までどおりの単独移動（掴んだら選ぶ＝<see cref="SelectOnly"/>）。
+    ///
+    /// <param name="repeatIndex">⭐③ 掴んだ複製の番号（`edit.js` が DOM の id 末尾
+    /// `#N` から読む）。⚠️ 空文字／数でない／節点自身が `repeat=` を持たない、のどれかなら
+    /// 「複製の掴みではない」（今までどおり 左/上）と判じる ── JS から来た値をそのまま
+    /// 信用しない。⚠️ まとめ移動のときはこの引数を読まない（`_repeatIndex=-1` 固定）。</param></summary>
+    [JSInvokable]
+    public void DragStart(string line, string repeatIndex)
+    {
+        if (_raw is null) return;
+        int n = int.TryParse(line, out var v) ? v : -1;
+        var node = n < 0 ? null : Find(_raw.Roots, n);
+        if (node is null) return;
+
+        _dragOrigins.Clear();
+        if (_selected.Contains(n) && _selected.Count >= 2)
+        {
+            // ⭐⑤ まとめ移動。主だけ変える（集合そのものはそのまま）。
+            _selectedLine = n;
+            foreach (var sel in _selected)
+            {
+                var origin = Find(_raw.Roots, sel);
+                if (origin is not null) _dragOrigins[sel] = origin;
+            }
+            _dragOrigin = node;
+            _repeatIndex = -1;
+        }
+        else
+        {
+            SelectOnly(n);
+            _dragOrigin = node;
+            _repeatIndex = -1;
+            if (int.TryParse(repeatIndex, out var idx) && idx >= 0 && _dragOrigin.Option("repeat") != null)
+            {
+                _repeatIndex = idx;
+                _repeatCols = Math.Max(1, _dragOrigin.Number("cols", 1));
+                _repeatBaseGap = _dragOrigin.Number("gap", 0);
+            }
+        }
+
+        BeginAction();
+        SyncFields();
+        StateHasChanged();
+    }
+
+    /// <param name="dx">⚠️ 掴んだ瞬間からの**累計**（設計px・盤の倍率 k で割ったあと。
+    /// `edit.js` 側で割っている）。毎フレーム「今の位置」から積むと、吸い付きの丸めが
+    /// 重なって暴れるので、必ず <see cref="_dragOrigin"/> からの累計で計算する。</param>
+    [JSInvokable]
+    public void Dragging(double dx, double dy)
+    {
+        if (_raw is null || _dragOrigin is null || _selectedLine < 0) return;
+
+        // ⭐⑤ まとめ移動（2個以上を掴んだとき）。
+        if (_dragOrigins.Count >= 2)
+        {
+            DraggingMulti(dx, dy);
+            return;
+        }
+
+        // ⭐③ 列0（並びの左端）は今までどおり「左」（並び全体が動く ── 錨）。
+        //    列1以降は「gap」。⚠️ 縦はどちらでも常に「上」（`rows=` の領分、`gap` は触らない）。
+        int col = _repeatIndex >= 0 ? _repeatIndex % _repeatCols : -1;
+        if (col >= 1)
+        {
+            DraggingGap(col, dx, dy);
+            return;
+        }
+
+        float left = _dragOrigin.Left + (float)dx;
+        float top = _dragOrigin.Top + (float)dy;
+        var (snapLeft, snapTop, guideX, guideY) = SnapMove(_dragOrigin, left, top);
+        ApplyRaw(_selectedLine, n => new LayoutNode(n.Name, n.Kind, snapLeft, snapTop, n.Width, n.Height,
+            n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+        _ = Js.InvokeVoidAsync("eggEdit.guide", guideX, guideY);
+    }
+
+    /// <summary>⭐⑤ まとめ移動（選択中2個以上を一緒に掴んだとき）の中身。
+    /// ⚠️ **吸い付きは主（<see cref="_dragOrigin"/>）だけ**で計算する ── 節点ごとに
+    /// それぞれ別の辺へ吸い付かせると隊列が歪む。主で決めた「丸めによるずれ（共有デルタ）」
+    /// を、掴んだ瞬間の全員のスナップショット（<see cref="_dragOrigins"/>）へ一律に足す。</summary>
+    private void DraggingMulti(double dx, double dy)
+    {
+        var primaryOrigin = _dragOrigin!;
+        float left = primaryOrigin.Left + (float)dx;
+        float top = primaryOrigin.Top + (float)dy;
+        var (snapLeft, snapTop, guideX, guideY) = SnapMove(primaryOrigin, left, top);
+        float ddx = snapLeft - primaryOrigin.Left;
+        float ddy = snapTop - primaryOrigin.Top;
+
+        var pos = new Dictionary<int, (float Left, float Top)>();
+        foreach (var kv in _dragOrigins)
+            pos[kv.Key] = (kv.Value.Left + ddx, kv.Value.Top + ddy);
+        ReplaceLines(pos);
+        _ = Js.InvokeVoidAsync("eggEdit.guide", guideX, guideY);
+    }
+
+    /// <summary>⭐③ 列1以降の複製を動かしたときの中身。⚠️ `_dragOrigin` は必ず non-null
+    /// （呼び出し元 <see cref="Dragging"/> で確かめ済み）。
+    ///
+    /// 横は `gap`＝`_repeatBaseGap + dx/col`（`LayoutDom.One` の
+    /// `left = node.Left + (i%cols)*(node.Width+gap)` の逆算 ── 列 `col` の複製を
+    /// `dx` 動かしたいなら `gap` を `dx/col` だけ変える）。
+    /// ⚠️ 兄弟・親の辺への吸い付き（`TargetsX`/`SnapAxis`）は掛けない ──
+    /// `gap` は「間隔」であって「位置」ではないので、比べる辺そのものが無い
+    /// （比べたら「たまたま」の一致でしかない）。⭐ **きざみだけは掛ける**
+    /// （`Left`/`Top` と同じく、丸い数で書きたい欲求は `gap` にもある）。
+    ///
+    /// 縦は既存の `SnapMove` と同じ物差し（Y軸だけ）で「上」を動かす。</summary>
+    private void DraggingGap(int col, double dx, double dy)
+    {
+        var dragOrigin = _dragOrigin!;
+        float rawGap = _repeatBaseGap + (float)dx / col;
+        float snappedGap = _step > 0 ? MathF.Round(rawGap / _step) * _step : rawGap;
+        float newGap = Math.Max(0f, snappedGap);
+
+        var (parent, siblings) = Locate(dragOrigin.LineNumber);
+        var yt = TargetsY(dragOrigin, parent, siblings);
+        var (snapTop, guideY) = SnapAxis(dragOrigin.Top + (float)dy, dragOrigin.Height, yt);
+
+        ApplyRaw(_selectedLine, n => WithGap(
+            new LayoutNode(n.Name, n.Kind, n.Left, snapTop, n.Width, n.Height,
+                n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+                n.PartId, n.PartLine),
+            newGap));
+        // ⚠️ 横の道しるべ（edguidex）は出さない ── gap は兄弟の辺に吸い付かないので、
+        //    描いても嘘の線になる（比べる辺が無い）。縦だけ、今までどおりの道しるべ。
+        _ = Js.InvokeVoidAsync("eggEdit.guide", null, guideY);
+    }
+
+    [JSInvokable]
+    public void DragEnd()
+    {
+        CommitAction();   // ⭐⑤ まとめ移動でも1回だけ積む（節点ごとに積まない）
+        // ⭐ Pass B: 光らせる対象は「掴んでいた全員」── クリアする前に控えておく。
+        var flashLines = new List<int>();
+        if (_dragOrigins.Count >= 2) foreach (var line in _dragOrigins.Keys) flashLines.Add(line);
+        else if (_selectedLine >= 0) flashLines.Add(_selectedLine);
+        _dragOrigin = null;
+        _dragOrigins.Clear();
+        _repeatIndex = -1;   // ⚠️③ 次の掴みへ持ち越さない
+        _ = Js.InvokeVoidAsync("eggEdit.guide", null, null);
+        FlashLines(flashLines);
+        StateHasChanged();   // ⭐ 取り消し釦の件数を更新するため
+    }
+
+    // ── 大きさを変える ──────────────────────────────
+
+    [JSInvokable]
+    public void ResizeStart(string handle)
+    {
+        if (_raw is null || _selectedLine < 0) return;
+        _resizeHandle = handle;
+        _resizeOrigin = Find(_raw.Roots, _selectedLine);
+        if (_resizeOrigin is null) return;
+        BeginAction();
+    }
+
+    [JSInvokable]
+    public void Resizing(double dx, double dy)
+    {
+        if (_raw is null || _resizeOrigin is null || _resizeHandle is null || _selectedLine < 0) return;
+        var (left, top, width, height) = ResizedRect(_resizeOrigin, _resizeHandle, (float)dx, (float)dy);
+        var (snapLeft, snapTop, snapW, snapH, guideX, guideY) =
+            SnapResize(_resizeOrigin, _resizeHandle, left, top, width, height);
+        // 🔴 幅・高さは0以下にしない。`Faults` が言うのは正しいが、エディタが自分で作ってはいけない。
+        snapW = Math.Max(MinSize, snapW);
+        snapH = Math.Max(MinSize, snapH);
+        ApplyRaw(_selectedLine, n => new LayoutNode(n.Name, n.Kind, snapLeft, snapTop, snapW, snapH,
+            n.Options, n.Children, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+            n.PartId, n.PartLine));
+        _ = Js.InvokeVoidAsync("eggEdit.guide", guideX, guideY);
+    }
+
+    [JSInvokable]
+    public void ResizeEnd()
+    {
+        CommitAction();
+        int line = _selectedLine;   // ⭐ Pass B: 下で選択を崩す前に控えておく
+        _resizeHandle = null;
+        _resizeOrigin = null;
+        _ = Js.InvokeVoidAsync("eggEdit.guide", null, null);
+        Flash(line);
+        StateHasChanged();   // ⭐ 取り消し釦の件数を更新するため
+    }
+
+    /// <summary>掴みどころと指の移動から、次の矩形を作る（まだ吸い付かせない ──
+    /// 吸い付きは <see cref="SnapResize"/> が別に持つ）。
+    /// ⚠️ 縮める向き（n/w）は、反対の辺（動かない辺）を超えて反転しないよう、
+    /// その場で `MinSize` に止める。</summary>
+    private static (float Left, float Top, float Width, float Height) ResizedRect(
+        LayoutNode n, string handle, float dx, float dy)
+    {
+        float left = n.Left, top = n.Top, width = n.Width, height = n.Height;
+        bool west = handle.IndexOf('w') >= 0, east = handle.IndexOf('e') >= 0;
+        bool north = handle.IndexOf('n') >= 0, south = handle.IndexOf('s') >= 0;
+
+        if (east) width = Math.Max(MinSize, n.Width + dx);
+        if (west)
+        {
+            float right = n.Left + n.Width;
+            left = Math.Min(n.Left + dx, right - MinSize);
+            width = right - left;
+        }
+        if (south) height = Math.Max(MinSize, n.Height + dy);
+        if (north)
+        {
+            float bottom = n.Top + n.Height;
+            top = Math.Min(n.Top + dy, bottom - MinSize);
+            height = bottom - top;
+        }
+        return (left, top, width, height);
+    }
+
+    // ── 吸い付き ────────────────────────────────────
+
+    /// <summary>この節点の親と兄弟。⚠️ `_raw`（原文の生の木）だけを見る ──
+    /// `use=` を展開した解決済みの木では行番号が失われ、道しるべにできない。</summary>
+    private (LayoutNode? Parent, IReadOnlyList<LayoutNode> Siblings) Locate(int line)
+    {
+        if (_raw != null && LocateIn(_raw.Roots, line, null, out var parent, out var siblings))
+            return (parent, siblings);
+        return (null, Array.Empty<LayoutNode>());
+    }
+
+    private static bool LocateIn(IReadOnlyList<LayoutNode> list, int line, LayoutNode? parent,
+        out LayoutNode? foundParent, out IReadOnlyList<LayoutNode> foundSiblings)
+    {
+        foreach (var n in list)
+        {
+            if (n.LineNumber == line) { foundParent = parent; foundSiblings = list; return true; }
+            if (LocateIn(n.Children, line, n, out foundParent, out foundSiblings)) return true;
+        }
+        foundParent = null;
+        foundSiblings = Array.Empty<LayoutNode>();
+        return false;
+    }
+
+    /// <summary>横方向の吸い付き先（設計px）。⭐ 兄弟の左・右・中心と、親の枠の左・右・
+    /// 中心（根っこなら画面そのもの）。⚠️ 道しるべの字（`"line:42:right"` 等）は
+    /// `edit.js` が実 DOM から絶対位置を読み直すための索引 ── ここでは値は要らない。</summary>
+    private List<(float Value, string Token)> TargetsX(
+        LayoutNode node, LayoutNode? parent, IReadOnlyList<LayoutNode> siblings)
+    {
+        var list = new List<(float, string)>();
+        float parentW = parent?.Width ?? Core.Layouts.ScreenWidth;
+        string ptag = parent != null ? "line:" + parent.LineNumber.ToString(CultureInfo.InvariantCulture) : "stage";
+        list.Add((0f, ptag + ":left"));
+        list.Add((parentW, ptag + ":right"));
+        list.Add((parentW / 2f, ptag + ":centerx"));
+        foreach (var sib in siblings)
+        {
+            if (sib.LineNumber == node.LineNumber || sib.LineNumber < 0) continue;
+            string tag = "line:" + sib.LineNumber.ToString(CultureInfo.InvariantCulture);
+            list.Add((sib.Left, tag + ":left"));
+            list.Add((sib.Left + sib.Width, tag + ":right"));
+            list.Add((sib.Left + sib.Width / 2f, tag + ":centerx"));
+        }
+        return list;
+    }
+
+    private List<(float Value, string Token)> TargetsY(
+        LayoutNode node, LayoutNode? parent, IReadOnlyList<LayoutNode> siblings)
+    {
+        var list = new List<(float, string)>();
+        float parentH = parent?.Height ?? Core.Layouts.ScreenHeight;
+        string ptag = parent != null ? "line:" + parent.LineNumber.ToString(CultureInfo.InvariantCulture) : "stage";
+        list.Add((0f, ptag + ":top"));
+        list.Add((parentH, ptag + ":bottom"));
+        list.Add((parentH / 2f, ptag + ":centery"));
+        foreach (var sib in siblings)
+        {
+            if (sib.LineNumber == node.LineNumber || sib.LineNumber < 0) continue;
+            string tag = "line:" + sib.LineNumber.ToString(CultureInfo.InvariantCulture);
+            list.Add((sib.Top, tag + ":top"));
+            list.Add((sib.Top + sib.Height, tag + ":bottom"));
+            list.Add((sib.Top + sib.Height / 2f, tag + ":centery"));
+        }
+        return list;
+    }
+
+    /// <summary>1点を、いちばん近い吸い付き先へ丸める。⭐ 兄弟・親の辺と「きざみ」を
+    /// **同列の候補**として扱う ── どちらが勝つかは距離だけで決める。
+    /// ⚠️ 8設計px を超えたら何も返さない（<see cref="SnapRange"/> が唯一の出所）。</summary>
+    private (float Value, string? Token) SnapPoint(float value, List<(float Value, string Token)> targets)
+    {
+        float stepTarget = _step > 0 ? MathF.Round(value / _step) * _step : value;
+        float bestDist = SnapRange;
+        float snapped = value;
+        string? token = null;
+        void Try(float t, string tok)
+        {
+            float d = Math.Abs(t - value);
+            if (d <= bestDist) { bestDist = d; snapped = t; token = tok; }
+        }
+        Try(stepTarget, "step");
+        foreach (var (v, tok) in targets) Try(v, tok);
+        return (snapped, token);
+    }
+
+    /// <summary>移動（並行移動）の吸い付き。⭐ 節点の**3つの辺**（起点・終点・中心）
+    /// それぞれについて最寄りの吸い付き先を試し、いちばん近い1つだけを採用する
+    /// （3つとも動かすと矛盾する ── 並行移動は1つのずれ量しか持てない）。</summary>
+    private (float Start, string? Token) SnapAxis(
+        float start, float length, List<(float Value, string Token)> targets)
+    {
+        float end = start + length;
+        float center = start + length / 2f;
+        (float Edge, float Offset)[] trials = { (start, 0f), (end, -length), (center, -length / 2f) };
+        float bestDist = SnapRange;
+        float snappedStart = start;
+        string? token = null;
+        foreach (var (edge, offset) in trials)
+        {
+            var (snapped, tok) = SnapPoint(edge, targets);
+            if (tok is null) continue;
+            float dist = Math.Abs(snapped - edge);
+            if (dist <= bestDist) { bestDist = dist; snappedStart = snapped + offset; token = tok; }
+        }
+        return token != null ? (snappedStart, token) : (start, null);
+    }
+
+    private (float Left, float Top, string? GuideX, string? GuideY) SnapMove(LayoutNode node, float left, float top)
+    {
+        var (parent, siblings) = Locate(node.LineNumber);
+        var xt = TargetsX(node, parent, siblings);
+        var yt = TargetsY(node, parent, siblings);
+        var (snapLeft, gx) = SnapAxis(left, node.Width, xt);
+        var (snapTop, gy) = SnapAxis(top, node.Height, yt);
+        return (snapLeft, snapTop, gx, gy);
+    }
+
+    /// <summary>大きさ変更の吸い付き。⭐ 動いている辺**だけ**を吸い付かせる
+    /// （動いていない辺は掴みどころの意味どおり固定のまま）。</summary>
+    private (float Left, float Top, float Width, float Height, string? GuideX, string? GuideY) SnapResize(
+        LayoutNode node, string handle, float left, float top, float width, float height)
+    {
+        var (parent, siblings) = Locate(node.LineNumber);
+        bool west = handle.IndexOf('w') >= 0, east = handle.IndexOf('e') >= 0;
+        bool north = handle.IndexOf('n') >= 0, south = handle.IndexOf('s') >= 0;
+        string? gx = null, gy = null;
+
+        if (east || west)
+        {
+            var xt = TargetsX(node, parent, siblings);
+            if (east)
+            {
+                var (snapped, tok) = SnapPoint(left + width, xt);
+                if (tok != null) { width = Math.Max(MinSize, snapped - left); gx = tok; }
+            }
+            else
+            {
+                float right = node.Left + node.Width;
+                var (snapped, tok) = SnapPoint(left, xt);
+                if (tok != null) { left = Math.Min(snapped, right - MinSize); width = right - left; gx = tok; }
+            }
+        }
+        if (north || south)
+        {
+            var yt = TargetsY(node, parent, siblings);
+            if (south)
+            {
+                var (snapped, tok) = SnapPoint(top + height, yt);
+                if (tok != null) { height = Math.Max(MinSize, snapped - top); gy = tok; }
+            }
+            else
+            {
+                float bottom = node.Top + node.Height;
+                var (snapped, tok) = SnapPoint(top, yt);
+                if (tok != null) { top = Math.Min(snapped, bottom - MinSize); height = bottom - top; gy = tok; }
+            }
+        }
+        return (left, top, width, height, gx, gy);
+    }
+
+    /// <summary>不変の木を「その1本の行だけ」差し替えて組み直す。
+    /// ⚠️ 名前・種類・付け足し・出所（行番号・字下げ・原文の欄・終端）はすべて元のまま
+    /// ── <see cref="edit"/> が渡された節点だけを新しい座標で作り直す。</summary>
+    private static List<LayoutNode> ReplaceLine(
+        IReadOnlyList<LayoutNode> list, int line, Func<LayoutNode, LayoutNode> edit)
+    {
+        var result = new List<LayoutNode>(list.Count);
+        foreach (var n in list)
+        {
+            if (n.LineNumber == line) { result.Add(edit(n)); continue; }
+            var kids = ReplaceLine(n.Children, line, edit);
+            result.Add(new LayoutNode(n.Name, n.Kind, n.Left, n.Top, n.Width, n.Height,
+                n.Options, kids, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+                n.PartId, n.PartLine));
+        }
+        return result;
+    }
+
+    private static LayoutNode? Find(IReadOnlyList<LayoutNode> list, int line)
+    {
+        foreach (var n in list)
+        {
+            if (n.LineNumber == line) return n;
+            var found = Find(n.Children, line);
+            if (found is not null) return found;
+        }
+        return null;
+    }
+
+    // ── ⑤⑥ まとめ移動・揃える等間隔の一括適用（唯一の出所） ────
+
+    /// <summary>⭐⑤⑥ 複数行の一括適用。⚠️ `_raw` 差し替え→`SyncFields`→`Refresh`→
+    /// `RingRefresh`→`StateHasChanged`（`ApplyRaw` と同じ並び）。ドラッグ中
+    /// （<see cref="DraggingMulti"/>）は毎フレーム呼ぶので Begin/Commit は通さない ──
+    /// 呼び出し側（<see cref="ApplyAlign"/>）が Begin〜Commit で挟む。
+    ///
+    /// まとめ移動・揃える等間隔の両方が、位置を書き換える経路をここ1本に通す
+    /// （唯一の出所）── どちらも新しい直列化を作らず、既存の「LayoutNode を作り直して
+    /// Left/Top だけ差し替える」（<see cref="ReplaceLine"/> と同じ形）に乗せる。</summary>
+    private void ReplaceLines(IReadOnlyDictionary<int, (float Left, float Top)> pos)
+    {
+        if (_raw is null) return;
+        var roots = ReplaceLinesTree(_raw.Roots, pos);
+        _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
+        SyncFields();
+        Refresh();
+        RingRefresh();
+        StateHasChanged();
+    }
+
+    /// <summary>不変の木を「pos に載っている行だけ」差し替えて組み直す。
+    /// ⚠️ <see cref="ReplaceLine"/> の複数行版 ── 名前・種類・付け足し・出所
+    /// （行番号・字下げ・原文の欄・終端・`PartId`/`PartLine`）はすべて元のまま、
+    /// `Left`/`Top` だけ差し替える。</summary>
+    private static List<LayoutNode> ReplaceLinesTree(
+        IReadOnlyList<LayoutNode> list, IReadOnlyDictionary<int, (float Left, float Top)> pos)
+    {
+        var result = new List<LayoutNode>(list.Count);
+        foreach (var n in list)
+        {
+            var kids = ReplaceLinesTree(n.Children, pos);
+            if (pos.TryGetValue(n.LineNumber, out var p))
+            {
+                result.Add(new LayoutNode(n.Name, n.Kind, p.Left, p.Top, n.Width, n.Height,
+                    n.Options, kids, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+                    n.PartId, n.PartLine));
+            }
+            else
+            {
+                result.Add(new LayoutNode(n.Name, n.Kind, n.Left, n.Top, n.Width, n.Height,
+                    n.Options, kids, n.LineNumber, n.Indent, n.Fields, n.Trailing, n.Terminator,
+                    n.PartId, n.PartLine));
+            }
+        }
+        return result;
+    }
+
+    /// <summary>⭐⑥ 揃える・等間隔の1ボタン分。⚠️ **これで1つの取り消し**
+    /// （<see cref="BeginAction"/>〜<see cref="CommitAction"/> を1回で閉じる ──
+    /// 節点ごとに積まない）。⭐ `EditAlign` の純関数は行番号と矩形（Left/Top/Width/Height）
+    /// しか知らないので、ここで選択中の節点から矩形を集めて渡し、返ってきた新座標を
+    /// <see cref="ReplaceLines"/> の1本の経路へそのまま渡す。</summary>
+    private void ApplyAlign(
+        Func<IReadOnlyList<(int Line, float Left, float Top, float Width, float Height)>,
+            Dictionary<int, (float Left, float Top)>> fn)
+    {
+        if (_raw is null || _selected.Count < 2) return;
+        var nodes = new List<(int Line, float Left, float Top, float Width, float Height)>();
+        foreach (var line in _selected)
+        {
+            var n = Find(_raw.Roots, line);
+            if (n is not null) nodes.Add((line, n.Left, n.Top, n.Width, n.Height));
+        }
+        if (nodes.Count < 2) return;
+        var pos = fn(nodes);
+        if (pos.Count == 0) return;   // ⭐ 変わらない（既に揃っている・2個未満の等間隔）なら積まない
+        BeginAction();
+        ReplaceLines(pos);   // ⭐ ここで RingRefresh まで済む（重ねて呼ばない）
+        CommitAction();
+        FlashLines(pos.Keys);   // ⭐ Pass B: 実際に動いた節点だけ光らせる
+    }
+
+    private List<(int Depth, LayoutNode Node)> Flatten()
+    {
+        var flat = new List<(int, LayoutNode)>();
+        if (_raw is not null) foreach (var root in _raw.Roots) Walk(root, 0, flat);
+        return flat;
+    }
+
+    private static void Walk(LayoutNode node, int depth, List<(int, LayoutNode)> into)
+    {
+        into.Add((depth, node));
+        foreach (var child in node.Children) Walk(child, depth + 1, into);
+    }
+
+    // ── ③ 木パネル「さがす」「出ているものだけ」 ─────
+    // ⭐ 作者の Unity 版 `EggCommandWindow.PartList()` に倣う ──
+    //    さがすは名前・種類の部分一致、出ているものだけは実際に盤へ描かれているかで絞る。
+
+    /// <summary><see cref="Flatten"/> を「さがす」「出ているものだけ」で絞った並び。
+    /// ⚠️ 木そのもの（親子・深さ）は変えない ── 絞るのは行の**表示・非表示**だけ
+    /// （途中の親だけ隠すと、子の字下げが宙に浮いて読めなくなる事故を避けるため、
+    /// 親子関係を保ったまま行単位で判定する。今の骨組みは深さが浅いのでこれで十分）。</summary>
+    private List<(int Depth, LayoutNode Node)> FilteredRows()
+    {
+        var all = Flatten();
+        if (_find.Length == 0 && !_onlyVisible && _layer is null) return all;
+        var result = new List<(int, LayoutNode)>(all.Count);
+        foreach (var row in all)
+        {
+            if (_find.Length > 0
+                && row.Node.Name.IndexOf(_find, StringComparison.OrdinalIgnoreCase) < 0
+                && row.Node.Kind.IndexOf(_find, StringComparison.OrdinalIgnoreCase) < 0)
+                continue;
+            if (_onlyVisible && !IsVisible(row.Node)) continue;
+            // ⭐ E2: 層を選んでいるときは、木もその層の行だけにする（計画 §11-2
+            //    「木（左のパネル）も、その層の行だけになる」）。
+            if (_layer is not null && EditLayers.Of(row.Node) != _layer) continue;
+            result.Add(row);
+        }
+        return result;
+    }
+
+    /// <summary>その節点が、いま盤（#edstage）に実際に描かれているか。
+    /// ⚠️ <see cref="_visibleKeys"/> が null（まだ数えていない・トグル OFF）なら
+    /// 素通しで true ── フィルタを掛けない側へ倒す（誤って全部隠すより安全）。
+    ///
+    /// ⭐ 部品ファイルを開いているとき（<c>Scenes.Of(_of).ByPart</c>）は、盤の DOM 側は
+    /// `data-part="_of"` + `data-part-line=N` を持つ（`LayoutDom.cs`）── 木の行 `N`
+    /// （この部品ファイル自身の `LineNumber`）と同じ数なので、キーの作り方を
+    /// `eggEdit._selector` と揃える。</summary>
+    private bool IsVisible(LayoutNode node)
+    {
+        if (_visibleKeys is null) return true;
+        string key = Scenes.Of(_of).ByPart
+            ? "part:" + _of + ":" + node.LineNumber.ToString(CultureInfo.InvariantCulture)
+            : "line:" + node.LineNumber.ToString(CultureInfo.InvariantCulture);
+        return _visibleKeys.Contains(key);
+    }
+
+    private void OnFindInput(ChangeEventArgs e) => _find = Convert.ToString(e.Value) ?? "";
+
+    private void ClearFind() => _find = "";
+
+    private void OnToggleOnlyVisible(ChangeEventArgs e)
+    {
+        _onlyVisible = e.Value is bool b && b;
+        _ = RefreshVisibleSet();
+    }
+
+    /// <summary>⭐ 盤に実際に描かれている `data-line`／`data-part` の集合を JS から1回もらう。
+    /// ⚠️ トグル OFF なら呼ばない（無駄な JS 往復をしない）。<see cref="_ready"/> より前
+    /// （JS 側とまだ繋がっていない）も呼ばない ── <see cref="RefreshView"/> は
+    /// <see cref="OnParametersSet"/> からも呼ばれるため。</summary>
+    private async Task RefreshVisibleSet()
+    {
+        if (!_onlyVisible)
+        {
+            if (_visibleKeys is not null) { _visibleKeys = null; StateHasChanged(); }
+            return;
+        }
+        if (!_ready) return;
+        var keys = await Js.InvokeAsync<string[]>("eggEdit.visibleLines");
+        _visibleKeys = new HashSet<string>(keys);
+        StateHasChanged();
+    }
+
+    private static float ParseF(object? value, float fallback)
+    {
+        var s = Convert.ToString(value);
+        return float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : fallback;
+    }
+
+    // ── 描く ────────────────────────────────────────
+
+    /// <summary>編集中の字を <see cref="LayoutStore"/> へ差し込んでから描き直す。
+    /// ⭐ **`Sheets.*` はいつもどおり `LayoutStore.Of` を呼ぶだけ**（Sheets.cs は無傷）
+    /// ── 差し込み先を変えているのはこのページだけ。</summary>
+    private void Refresh()
+    {
+        if (_raw is not null)
+        {
+            LayoutStore.SetOverride(_of, Core.Layouts.Write(_raw));
+            _touched.Add(_of);
+        }
+        RefreshView();
+    }
+
+    private void RefreshView()
+    {
+        var scene = Scenes.Of(_of);
+        // 🔴 **検査は土台（HostId）を見る。**⚠️ 部品だけを単独で検査すると嘘になる
+        //    ── 部品は親の中の座標で生きているのに、画面 1080x1920 に対して測ることに
+        //    なってしまう。⭐ 土台こそが「実際に起きている状況」（`_of` が画面そのもの
+        //    のときは HostId == Id なので、今までと同じ）。
+        var resolved = LayoutStore.Of(scene.HostId);
+        // ⭐ 字だけの薄い包み（`Layouts.Faults`）でなく本体（`Inspect`）を見る ──
+        //    盤に描く形（`Boxes`/`Focus`）も、押して選ぶ出所（`Lines`/`PartIds`/`PartLines`）も、
+        //    こちらにしか無い。
+        _faults = Core.Layouts.Inspect(resolved);
+        // ⭐ E1-5: 「枠と絵が合わない」節点も、不備と同じ拍（同じ `resolved`＝土台の
+        //    解決済み木）で数え直す ── 部品から来た節点（`use=` で差し込まれた側）も
+        //    ここで拾える（`PartId`/`PartLine` 付き・`Fault` と同じ規約）。
+        _picMismatches = LayoutDom.FindPicMismatches(resolved);
+        // 🔴 **描いた結果も合わせて見る。**（2026-08-25・実物で穴が見つかったので追加）
+        //    ⚠️ 上の `FindPicMismatches` は骨組みだけを見るので、`pixel`（種族の絵）を
+        //    **一件も拾えない** ── どの絵が入るかは `bind=` 越しに実行時に決まるため。
+        //    実測: `box` はコンソールに2件出ているのにエディタは0件だった。
+        //    ⭐ 描く側（`LayoutDom`）は実物の絵を持っているので、その控えを足す
+        //    （判定を二重に書かない ── 出所は1つ）。
+        LayoutDom.ClearDrawnMismatches();
+        _html = Scenes.Draw(scene.HostId);
+        foreach (var m in LayoutDom.DrawnMismatches)
+        {
+            // ⚠️ 骨組みだけで分かった分と重ならないように（同じ節点を二度出さない）
+            bool already = _picMismatches.Exists(x =>
+                x.LineNumber == m.LineNumber && x.PartId == m.PartId
+                && x.PartLine == m.PartLine && x.Name == m.Name);
+            if (!already) _picMismatches.Add(m);
+        }
+        _faultHtml = DrawFaults(_faults);
+        // ⭐③ 盤が組み直るたびに「出ているものだけ」の集合も数え直す（唯一の出所を
+        //    ここ1か所にまとめる ── 呼び出し元6箇所それぞれに書かせない）。
+        //    ⚠️ fire-and-forget（`rering` 等、既存の他の JS 呼び出しと同じ作法）。
+        _ = RefreshVisibleSet();
+    }
+
+    // ── 不備を盤に描く ──────────────────────────────
+
+    /// <summary>不備ごとに、`Boxes`（弱く・輪郭だけ）と `Focus`（強く・薄い斜線）を描く。
+    /// ⚠️ 面で塗り潰さない（この作品の約束・`stage.css` と同じ考え方）。
+    ///
+    /// ⭐ 座標は <see cref="Fault.Boxes"/>/<see cref="Fault.Focus"/>（絶対 px）をそのまま置く
+    /// ── `#edfaults` は `#edstage` と同じ倍率が掛かる層なので、`LayoutDom.Px` と同じ
+    /// 「設計 px をそのまま `left`/`top`/`width`/`height` に」でよい（JS 側の換算が要らない）。</summary>
+    private static string DrawFaults(List<Core.Fault> faults)
+    {
+        if (faults.Count == 0) return "";   // ⚠️ 空の器を見せない（呼び出し側で div 自体は残るが、中身は空にする）
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < faults.Count; i++)
+        {
+            var f = faults[i];
+            for (int j = 0; j < f.Boxes.Count; j++)
+            {
+                var b = f.Boxes[j];
+                sb.Append("<div class=\"edfault-box\" style=\"left:").Append(Px(b.X))
+                  .Append(";top:").Append(Px(b.Y)).Append(";width:").Append(Px(b.W))
+                  .Append(";height:").Append(Px(b.H)).Append("\"></div>");
+            }
+            if (f.Focus is { } fb)
+            {
+                // ⭐ 押しどころは「1本目の出所」に紐づける（Focus は複数の Box をまとめた
+                //    1つの形なので、複数の出所から1つを選ぶしかない ── Lines[0] が唯一の出所）。
+                string attrs = OriginAttrs(f, 0);
+                sb.Append("<div class=\"edfault-focus\" style=\"left:").Append(Px(fb.X))
+                  .Append(";top:").Append(Px(fb.Y)).Append(";width:").Append(Px(fb.W))
+                  .Append(";height:").Append(Px(fb.H)).Append('"').Append(attrs).Append("></div>");
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>その不備の i 本目が、盤の上で押せるなら `data-line` か
+    /// `data-part`＋`data-part-line` を返す。⚠️ どちらも無ければ空
+    /// （出所が無い＝形でしか示せない ── 今の32枚では起きない）。</summary>
+    private static string OriginAttrs(Core.Fault f, int i)
+    {
+        if (i >= f.Lines.Count) return "";
+        string? partId = i < f.PartIds.Count ? f.PartIds[i] : null;
+        if (partId != null)
+        {
+            int partLine = i < f.PartLines.Count ? f.PartLines[i] : -1;
+            return " data-part=\"" + Esc(partId) + "\" data-part-line=\""
+                + partLine.ToString(CultureInfo.InvariantCulture) + "\"";
+        }
+        int line = f.Lines[i];
+        return line >= 0
+            ? " data-line=\"" + line.ToString(CultureInfo.InvariantCulture) + "\""
+            : "";
+    }
+
+    private static string Px(float v) => v.ToString("0.##", CultureInfo.InvariantCulture) + "px";
+
+    // ── ⭐ E1-5: 「枠と絵が合わない」節点の見せ方 ────────────
+
+    /// <summary>⭐ 木の印（<c>⚠</c>）・選択の輪の色の判定。⚠️ **`IsVisible` と同じ「冠」の
+    /// 考え方**（<see cref="IsVisible"/> 参照）── `_picMismatches` は土台（`HostId`）の
+    /// 解決済み木から数えているので、`use=` で差し込まれた部品（`cell` 等・
+    /// `Scenes.Of(_of).ByPart`）の節点は `PartId==_of` で載っている（`LineNumber` は
+    /// -1）。**部品ファイル自身をいま開いているとき**は、その部品の木（`_raw`）の
+    /// 行番号 ＝ `PartLine` として照合しないと、その部品自身の行に印が付かない。
+    /// ⚠️ **既知の穴**: コードから描く4枚（`unit`/`square`/`walker`/`frame`）は
+    /// `use=` を一度も通らず、土台の木に一度も現れない ── 土台からは検査しようが無い
+    /// （`Core.Layouts.Inspect` による既存の「不備」バーも同じ穴を持つ・E1 の範囲外）。</summary>
+    private bool IsPicMismatch(int line)
+    {
+        if (line < 0 || _raw is null) return false;
+        bool byPart = Scenes.Of(_of).ByPart;
+        foreach (var m in _picMismatches)
+        {
+            bool match = byPart ? (m.PartId == _of && m.PartLine == line) : (m.PartId == null && m.LineNumber == line);
+            if (match) return true;
+        }
+        return false;
+    }
+
+    /// <summary>⭐ Inspector の「絵に合わせる」欄のため。いま選んでいる節点（`sel`）**そのもの**
+    /// が不一致一覧に載っているか ── 載っていればその1件を返す。⚠️ <see cref="IsPicMismatch"/>
+    /// と同じ「冠」の照合（部品を直しているときは `PartLine` で見る）。</summary>
+    private LayoutDom.PicMismatch? PicMismatchOf(LayoutNode sel)
+    {
+        bool byPart = Scenes.Of(_of).ByPart;
+        foreach (var m in _picMismatches)
+        {
+            bool match = byPart ? (m.PartId == _of && m.PartLine == sel.LineNumber)
+                                 : (m.PartId == null && m.LineNumber == sel.LineNumber);
+            if (match) return m;
+        }
+        return null;
+    }
+
+    /// <summary>⭐ 下の帯の一覧（<see cref="_picMismatches"/>）を押したときの入口。
+    /// ⚠️ 自前の行なら <see cref="Picked"/>、部品から来た側なら <see cref="PickedPart"/>
+    /// （<see cref="SelectFault"/> と同じ着地点 ── 経路を増やさない）。</summary>
+    private async Task SelectPicMismatch(int i)
+    {
+        if (i < 0 || i >= _picMismatches.Count) return;
+        var m = _picMismatches[i];
+        if (m.PartId != null)
+            await PickedPart(m.PartId, m.PartLine.ToString(CultureInfo.InvariantCulture), "");
+        else if (m.LineNumber >= 0)
+            await Picked(m.LineNumber.ToString(CultureInfo.InvariantCulture), "");
+    }
+
+    /// <summary>下の帯の一覧に出す1行。⚠️ 部品から来た側は、どの部品の節点かが分かる
+    /// よう冠を付ける（<see cref="OriginAttrs"/> と同じ「冠」の考え方）。</summary>
+    private static string PicMismatchLabel(LayoutDom.PicMismatch m) =>
+        m.PartId != null ? m.PartId + "/" + m.Name : m.Name;
+
+    private static string PicMismatchText(LayoutDom.PicMismatch m) =>
+        PicMismatchLabel(m) + "（" + m.Kind + " " + m.Pic + "）: 絵は" + Fmt(m.ExpectW) + "×" + Fmt(m.ExpectH)
+        + "px なのに枠は" + Fmt(m.FrameW) + "×" + Fmt(m.FrameH) + "px";
+
+    /// <summary>整数寄りの px 表示（「128×128px」のように出す ── 小数第2位までの
+    /// <see cref="Px"/> は Inspector の一言には細かすぎる）。</summary>
+    private static string Fmt(float v) => v.ToString("0", CultureInfo.InvariantCulture);
+
+    private static string Esc(string s) =>
+        s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
+
+    // ── 保存 ────────────────────────────────────────
+
+    private async Task Save()
+    {
+        if (_raw is null || _originalText is null) return;
+
+        string candidate = Core.Layouts.Write(_raw);
+
+        // 🔴 **書く前に、書こうとしている字が読み直しても同じに戻るかを確かめる。**
+        //    ⚠️ 戻らなければ書かない（ConfigUpdater の `validate_format` と同じ守り）。
+        string roundTrip;
+        try { roundTrip = Core.Layouts.Write(Core.Layouts.Parse(_of, candidate)); }
+        catch (Exception e)
+        {
+            _status = "⚠️ 保存を止めました（書いた字が読み直せません）: " + e.Message;
+            StateHasChanged();
+            return;
+        }
+        if (roundTrip != candidate)
+        {
+            _status = "⚠️ 保存を止めました（往復が閉じません ── 書き出しの器を疑ってください）";
+            StateHasChanged();
+            return;
+        }
+
+        string how = await Js.InvokeAsync<string>("eggDisk.write", _of, _originalText, candidate);
+        switch (how)
+        {
+            case "wrote":
+                _originalText = candidate;
+                // ⭐ 書いた字そのものから読み直す ── 出所を1つに保つ
+                _raw = Core.Layouts.Parse(_of, candidate);
+                _status = "保存しました";
+                // ⚠️ **取り消しの積みは捨てない。**保存は「ここより前には戻れない関所」
+                //    ではなく、ディスクへの書き出しでしかない ── 保存の直後に誤って
+                //    直したときも Ctrl+Z で保存前の姿へ戻れたほうが安全。積みは
+                //    `Layouts.Write` の**文字列**を持っているだけなので、`_raw` を
+                //    読み直しても Undo は問題なく効く（オブジェクト参照に依存しない）。
+                break;
+            case "changed":
+                _status = "⚠️ このファイルは開いた後に外部で変わっています。保存を中止しました。"
+                    + "フォルダを選び直してから、もう一度開いてください。";
+                break;
+            default:
+                _status = "⚠️ 保存に失敗しました";
+                break;
+        }
+        StateHasChanged();
+    }
+
+    // ── 欄（Inspector の細い欄が押しにくい、への答え。old/unity/Editor/EggCommandWindow.cs
+    //    「Selected()」と同じ形 ── 大きな数値欄＋矢印で少しずつ動かせる）────
+
+    private RenderFragment Field(string label, float value, Action<float> apply) => builder =>
+    {
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "edfield");
+        builder.OpenElement(2, "span");
+        builder.AddAttribute(3, "class", "edlabel");
+        builder.AddContent(4, label);
+        builder.CloseElement();
+
+        builder.OpenElement(5, "div");
+        builder.AddAttribute(6, "class", "ednum");
+
+        builder.OpenElement(7, "button");
+        builder.AddAttribute(8, "type", "button");
+        builder.AddAttribute(9, "class", "edstep-btn");
+        builder.AddAttribute(10, "onclick", EventCallback.Factory.Create(this, () => apply(value - _step)));
+        builder.AddContent(11, "−");
+        builder.CloseElement();
+
+        builder.OpenElement(12, "input");
+        builder.AddAttribute(13, "type", "number");
+        builder.AddAttribute(14, "class", "ednuminput");
+        builder.AddAttribute(15, "value", value.ToString(CultureInfo.InvariantCulture));
+        builder.AddAttribute(16, "onchange", EventCallback.Factory.CreateBinder<string?>(
+            this, s => apply(ParseF(s, value)), value.ToString(CultureInfo.InvariantCulture)));
+        builder.CloseElement();
+
+        builder.OpenElement(17, "button");
+        builder.AddAttribute(18, "type", "button");
+        builder.AddAttribute(19, "class", "edstep-btn");
+        builder.AddAttribute(20, "onclick", EventCallback.Factory.Create(this, () => apply(value + _step)));
+        builder.AddContent(21, "＋");
+        builder.CloseElement();
+
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    // ── ①属性表（EditAttrs）から欄を自動で生む ─────────
+    //
+    // ⭐ `AttrField` が型（Number/Toggle/Choice/Text）で振り分け、実体は下の4つの
+    //    RenderFragment ビルダー。⚠️ 増えるたびここに if を足さない ── 型そのものが
+    //    4つで閉じている（`EggCommand.Web.AttrKind`）ので、switch 式で足りる。
+
+    private RenderFragment AttrField(EggCommand.Web.Attr attr, LayoutNode sel) => attr.Kind switch
+    {
+        EggCommand.Web.AttrKind.Number => Field(attr.Label,
+            sel.Number(attr.Key, DefaultNumber(attr.Key, sel)),
+            v => ApplyOption(attr.Key, Math.Clamp(v, attr.Min, attr.Max)
+                .ToString("0.##", CultureInfo.InvariantCulture))),
+        EggCommand.Web.AttrKind.Toggle => ToggleField(attr, sel),
+        EggCommand.Web.AttrKind.Choice => ChoiceField(attr, sel),
+        EggCommand.Web.AttrKind.Text => TextField(attr, sel),
+        _ => (builder) => { },
+    };
+
+    /// <summary>⭐ E1-3（2026-08-25）: `size` の既定は種類を問わず 40 ── `LayoutDom.cs` の
+    /// <c>node.Number("size", 40)</c> と同じ数（ドット絵化計画 §6。以前は
+    /// `button=34`/`label=26` と種類で違ったが、`LayoutDom.cs` 側は段取り1で既に
+    /// 40 に統一済み ── ここが食い違っていると欄が嘘をつく）。⚠️ `size` は
+    /// <see cref="AttrKind.Choice"/> になったので `Field`（±釦つきの数欄）はもう通らないが、
+    /// <see cref="ChoiceField"/> の「（既定）」の表示に使う（下記）ため、この関数自体は残す。</summary>
+    private static int DefaultNumber(string key, LayoutNode sel) => key switch
+    {
+        "size" => 40,
+        _ => 0,
+    };
+
+    /// <summary>切替。⚠️ OFF は付け足しごと消す（<see cref="ApplyOption"/> に null を渡す）
+    /// ── `foe=` を書き残さない、という段階1の必須要件そのもの。</summary>
+    private RenderFragment ToggleField(EggCommand.Web.Attr attr, LayoutNode sel) => builder =>
+    {
+        bool on = sel.Option(attr.Key) != null;
+        builder.OpenElement(0, "label");
+        builder.AddAttribute(1, "class", "edtoggle");
+        builder.OpenElement(2, "input");
+        builder.AddAttribute(3, "type", "checkbox");
+        builder.AddAttribute(4, "checked", on);
+        builder.AddAttribute(5, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(
+            this, e => ApplyOption(attr.Key, (e.Value is bool b && b) ? "yes" : null)));
+        builder.CloseElement();
+        builder.OpenElement(6, "span");
+        builder.AddContent(7, attr.Label);
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    /// <summary>⭐ E1-3: 「（既定）」の表示。⚠️ `size` だけは実際に効く既定値
+    /// （<see cref="DefaultNumber"/>）を添える ── 数を Choice にしたぶん、欄が
+    /// 「（既定）としか言わず、実は40pxで出ている」と嘘をつかないようにする。
+    /// ⚠️ 他の Choice 属性（`anchor`/`ink`）は数値の既定を持たないので今までどおり。</summary>
+    private static string DefaultChoiceLabel(string key, LayoutNode sel) =>
+        key == "size" ? $"（既定・{DefaultNumber(key, sel)}）" : "（既定）";
+
+    /// <summary>決まった値からしか選べない。⚠️ 先頭に「（既定）」を足す ──
+    /// 選ぶと <see cref="ApplyOption"/> に null が渡り、付け足しごと消える
+    /// （骨組みに書かない＝描く側の既定値に戻る、と同じ意味）。</summary>
+    private RenderFragment ChoiceField(EggCommand.Web.Attr attr, LayoutNode sel) => builder =>
+    {
+        string current = sel.Option(attr.Key) ?? "";
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "edfield");
+        builder.OpenElement(2, "span");
+        builder.AddAttribute(3, "class", "edlabel");
+        builder.AddContent(4, attr.Label);
+        builder.CloseElement();
+
+        builder.OpenElement(5, "select");
+        builder.AddAttribute(6, "class", "edselect");
+        builder.AddAttribute(7, "value", current);
+        builder.AddAttribute(8, "onchange", EventCallback.Factory.CreateBinder<string?>(
+            this, v => ApplyOption(attr.Key, string.IsNullOrEmpty(v) ? null : v), current));
+
+        builder.OpenElement(9, "option");
+        builder.AddAttribute(10, "value", "");
+        builder.AddContent(11, DefaultChoiceLabel(attr.Key, sel));
+        builder.CloseElement();
+
+        int seq = 12;
+        foreach (var choice in attr.Choices ?? Array.Empty<string>())
+        {
+            builder.OpenElement(seq++, "option");
+            builder.AddAttribute(seq++, "value", choice);
+            builder.AddContent(seq++, choice);
+            builder.CloseElement();
+        }
+        builder.CloseElement();   // select
+        builder.CloseElement();   // div
+    };
+
+    /// <summary>動かない字そのもの。⚠️ 空にしたら付け足しごと消す（`Layouts.Parse` は
+    /// `text= が空` を拒む ── 空文字を書いて往復検査に落ちるより、ここで消す）。
+    /// ⭐ `\n` は改行として打てる（`<textarea>` の複数行がそのまま `Option("text")` の値）。</summary>
+    private RenderFragment TextField(EggCommand.Web.Attr attr, LayoutNode sel) => builder =>
+    {
+        string current = sel.Option(attr.Key) ?? "";
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "edfield edfield-text");
+        builder.OpenElement(2, "span");
+        builder.AddAttribute(3, "class", "edlabel");
+        builder.AddContent(4, attr.Label);
+        builder.CloseElement();
+
+        builder.OpenElement(5, "textarea");
+        builder.AddAttribute(6, "class", "edtextarea");
+        builder.AddAttribute(7, "rows", 2);
+        builder.AddAttribute(8, "value", current);
+        builder.AddAttribute(9, "onchange", EventCallback.Factory.CreateBinder<string?>(
+            this, v => ApplyOption(attr.Key, string.IsNullOrEmpty(v) ? null : v), current));
+        builder.CloseElement();
+
+        builder.CloseElement();
+    };
+
+    /// <summary>🔴 **離れる「前」に差し替えを解く。**
+    ///
+    /// ⚠️ <see cref="Dispose"/> だけでは**遅い**。次の頁（`/box` など）が先に描かれ、
+    /// **未保存の姿がそのまま遊ぶ画面に出たまま残る** ── しかも誰も組み直さないので
+    /// 「1拍だけ」では済まず、次に何かが再描画するまで居座る。
+    /// ⭐ 2026-08-23 に実測: 骨組みの `左` を 26 → 56 にして `/box` へ移ると、
+    /// 遊ぶ画面が **56 のまま**（素の値は 26）。
+    ///
+    /// ⚠️ `LayoutStore` が静的（プロセス全体で共有）である以上、
+    /// 「解くのが遅い」は必ずこの形で漏れる。</summary>
+    private IDisposable? _leaving;
+
+    protected override void OnInitialized()
+    {
+        _leaving = Nav.RegisterLocationChangingHandler(_ =>
+        {
+            ClearOverrides();
+            ClearArt();   // ⭐ E-3: 絵の上書きは「頁を離れるとき」だけ解く（画面の切替では保つ）
+            return ValueTask.CompletedTask;
+        });
+    }
+
+    public void Dispose()
+    {
+        _leaving?.Dispose();   // ⚠️ 頁が消えたあとも掛け金が残ると、次の遷移で死んだ頁を呼ぶ
+        ClearOverrides();     // ⭐ 念のため（上の掛け金が走らない道 ── 直接の破棄 ── のため）
+        ClearArt();           // ⭐ E-3: 絵の上書きも、頁が消えるここで確実に解く
+        // ⚠️ `eggEdit.keys` は document に直接 keydown を付けている。DOM がこの頁の
+        //    ものでなくなっても listener 自体は自然には外れない ── 外さないと
+        //    `/app`（遊ぶ頁）へ移っても Ctrl+Z を奪い続ける。
+        _ = Js.InvokeVoidAsync("eggEdit.stop");
+        _me?.Dispose();
+    }
+}

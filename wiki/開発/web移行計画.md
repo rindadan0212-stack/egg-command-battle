@@ -11,7 +11,7 @@
 | 絵の正典 | **PNG に戻す** | 読み込み経路と変換が新規に要る |
 
 ⭐ **「測れない期間」への打ち手**: web で**最初に作るのは画面ではなく検査**。
-`scripts/shots.mjs` に `audit()`（はみ出し・横切れ・文字切れ・タップ域）が
+`old/ts/shots.mjs` に `audit()`（はみ出し・横切れ・文字切れ・タップ域）が
 **既に書かれて動いた実績**があるので、1日程度で空白を消せます。
 
 ⚠️ **23画面の骨組み移行は Unity の中では行いません**（「早く出る」の帰結）。
@@ -79,7 +79,7 @@ TS へ再移植した場合、**正しさを機械で言えるのは 11% だけ*
 
 **やること**
 
-1. `SeriesRecord.Build()` をブラウザ内で呼び、`unity-port/records/series.json` と**バイト比較**
+1. `SeriesRecord.Build()` をブラウザ内で呼び、`game/records/series.json` と**バイト比較**
    （⭐ これ1本で Rng / Species / Nests / Encounter / Breeding / Creatures / Stats / Traits / Ai / Battle を踏む。`battles` 行には `"digest"` ＝戦闘まるごとの指紋が入っている）
 2. ⚠️ `series.json` は **Steal / Fusion / Trail を1行も踏まない**ので、probe を追加:
    - Steal: tier 1〜5 × 左右 × −80°〜80°（1°刻み）→ Outcome / `Traveled.ToString("R")` / Path.Count
@@ -1288,7 +1288,7 @@ box」のまま**（`Resolve`/`Splice` は差した瞬間の中身を**インラ
 - 掴んで動かす（`PointerEvent` を合成）・取り消し（Undo）・輪の再配置も `cell` で実測 ──
   部品でも今までどおり効く
 
-⚠️ `node scripts/inspect.mjs`（`/edit` は対象外・確かめ用の頁と `/app`/`/fight`/`/raid` を見る）
+⚠️ `node tools/inspect.mjs`（`/edit` は対象外・確かめ用の頁と `/app`/`/fight`/`/raid` を見る）
 は **69画面×3サイズ・不備18件のまま**（このコミットで `Sheets.cs`/`LayoutDom.cs`/骨組み本体
 のどれも変えていないので当然だが、実測で確認済み）。`dotnet test` も **691 pass / 1 skip / 0 fail**
 のまま。
@@ -1379,7 +1379,7 @@ tracker／選択モデル）と、**作者自身の Unity 版エディタ**（`A
 
 ## 11-3 続き ── ✅ 段階1、実装した（2026-08-24）
 
-⭐ **属性表（`unity-port/EggCommand.Web/EditAttrs.cs`・新規）を背骨として通し、
+⭐ **属性表（`game/EggCommand.Web/EditAttrs.cs`・新規）を背骨として通し、
 飾りの属性を直せるようにした**＋**矢印ナッジ**＋**木の「さがす」「出ているものだけ」**。
 3つとも入った。
 
@@ -1421,7 +1421,7 @@ Core 語彙（`Layouts.Options`）だけで組む単純さを優先して段階1
 Unity 側 `Ui.cs` の `InkDim` `InkFaint` `AccentInk` `DangerInk` `GoodInk` `OnLead`
 を突き合わせ、**6つとも1対1で対応**（食い違いなし）。`anchor` の6値
 （`left` `center` `right` `upper-left` `upper-center` `upper-right`）も、
-実物の骨組み（`unity/Assets/Resources/Layouts/*.txt`）を grep して導いた
+実物の骨組み（`assets/layouts/*.txt`）を grep して導いた
 （決め打ちで書いていない）。
 
 ### ③ ずれない検査（`EditAttrsTests.cs`・34件）
@@ -1534,7 +1534,7 @@ OFF にすると**11行**に戻る（落ちた数＝2件、を数で確認）。
 |---|---|
 | `dotnet test` | ⭐ **780 pass / 1 skip / 0 fail**（746 → 780・+34 は `EditAttrsTests`） |
 | `dotnet build EggCommand.Web` | 0 エラー（警告77件・段階1着手前と同数・無関係な既存警告） |
-| `node scripts/inspect.mjs` | ⭐ **71画面×3サイズ・不備18件のまま**（変わっていない） |
+| `node tools/inspect.mjs` | ⭐ **71画面×3サイズ・不備18件のまま**（変わっていない） |
 | `node scripts/inspect-selftest.mjs` | ⭐ 20件すべて正しく捕まえた（空回りしていない） |
 | `node scripts/play.mjs` | 0（触っても壊れない） |
 | `node scripts/loop.mjs` | 0（遊びの輪が閉じている） |
