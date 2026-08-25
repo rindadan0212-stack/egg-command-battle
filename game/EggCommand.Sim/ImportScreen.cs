@@ -130,6 +130,18 @@ namespace EggCommand.Sim
                     continue;
                 }
 
+                // 🔴 **製図モードの下敷き（`kind:"shapes"`）は取り込まない。**
+                //    ⚠️ `frames` を持たないので、無改修でも「コマが1つも無い」警告として
+                //    素通りはする（壊れない）が、それだと理由が伝わらない。
+                //    ⭐ ここで先に検出し、警告ではなく**案内**として静かに飛ばす
+                //    （焼かない・なぞる下敷き専用という設計どおりの動作なので、
+                //    正すべき不備ではない ── `wiki/開発/製図モード.md` §3）。
+                if (layer.TryGetProperty("kind", out var kindProp) && kindProp.GetString() == "shapes")
+                {
+                    log.WriteLine($"（「{name}」は製図モードの下敷きなので取り込みません）");
+                    continue;
+                }
+
                 if (!layer.TryGetProperty("frames", out var frames)
                     || frames.ValueKind != JsonValueKind.Array || frames.GetArrayLength() == 0)
                 {

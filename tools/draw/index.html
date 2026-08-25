@@ -1261,6 +1261,49 @@
             ⭐ この作品は <b>1 ドット = 4px</b>。読み取りは両方の数を出す。<br>
             ⚠️ 押しどころは <b>28 ドット</b>（112px）を下回ると指で押しにくい。
           </div>
+
+          <div class="section-title" style="margin-top:10px;">製図モード ── CADのドットバージョン</div>
+          <div id="shapesHint" style="font-size:11px; color:var(--muted); margin-bottom:6px;">
+            四角・直線・円を押すと、専用のレイヤーを作って置きはじめる。焼かない・なぞる下敷き専用。
+          </div>
+          <div class="btn-row">
+            <button id="shapeToolRectBtn" title="四角を置く">▭ 四角</button>
+            <button id="shapeToolLineBtn" title="直線を置く">╱ 直線</button>
+            <button id="shapeToolEllipseBtn" title="円・楕円を置く">○ 円</button>
+            <button id="shapeToolSelectBtn" title="選ぶ・動かす・変形する" class="active">選ぶ</button>
+          </div>
+
+          <div id="shapesPanel" style="display:none;">
+            <div class="section-title" style="margin-top:10px;">スナップ ── 有効な種類の中から一番近い1点</div>
+            <div class="btn-row" style="flex-wrap:wrap;">
+              <button class="snap-kind-btn active" data-kind="grid" title="格子">格子</button>
+              <button class="snap-kind-btn active" data-kind="guide" title="補助線">ガイド</button>
+              <button class="snap-kind-btn active" data-kind="endpoint" title="□ 端点">端点</button>
+              <button class="snap-kind-btn active" data-kind="midpoint" title="△ 中点">中点</button>
+              <button class="snap-kind-btn active" data-kind="center" title="○ 中心">中心</button>
+              <button class="snap-kind-btn active" data-kind="tangent" title="◇ 接点（円が外接する矩形と接する4点）">接点</button>
+            </div>
+
+            <div id="shapeInspector" style="display:none; margin-top:10px;">
+              <div class="section-title">選んでいる図形</div>
+              <div id="shapeInspectorFields"></div>
+              <button id="shapeDeleteBtn" style="width:100%; margin-top:6px;" title="Delete キーでも消せる">選んでいる図形を消す</button>
+
+              <div class="section-title" style="margin-top:10px;">オフセット ── 新しい図形として複製</div>
+              <div class="btn-row">
+                <input type="number" id="shapeOffsetAmount" value="4" step="1" style="width:80px;">
+                <button id="shapeOffsetBtn" title="正で外側、負で内側にずらした図形を新しく作る">オフセット</button>
+              </div>
+
+              <div class="section-title" style="margin-top:10px;">複製して並べる（ARRAY）</div>
+              <div class="btn-row">
+                <label style="font-size:11px; color:var(--muted);">列<input type="number" id="shapeArrayCols" value="1" min="1" style="width:48px;"></label>
+                <label style="font-size:11px; color:var(--muted);">行<input type="number" id="shapeArrayRows" value="1" min="1" style="width:48px;"></label>
+                <label style="font-size:11px; color:var(--muted);">間隔<input type="number" id="shapeArrayGap" value="4" style="width:48px;"></label>
+              </div>
+              <button id="shapeArrayBtn" style="width:100%; margin-top:6px;">この並びで複製</button>
+            </div>
+          </div>
         </div>
         <details class="fold">
           <summary>パレット・かたち<span id="customPaletteCount" style="margin-left:auto; font-weight:normal; color:var(--muted);"></span></summary>
@@ -1712,7 +1755,15 @@ const state = {
   // ⭐ 製図（CAD のような下ごしらえ）。⚠️ **絵ではないので `.pixelizer.json` に入れない**
   //    ── あれは `sim import-screen` が読む形なので、勝手に増やさない。
   //    見え方の好みなので localStorage に別で覚える。
-  draft: { center: false, readout: true, major: 0, guides: [], guideMode: null },
+  draft: {
+    center: false, readout: true, major: 0, guides: [], guideMode: null,
+    // ⭐ 製図モード（図形レイヤー）。⚠️ 図形そのもの（`shapes`）はここではなく
+    // 図形レイヤー自身が持つ（§3・保存に乗せるため）。ここに置くのは「今どう触っているか」
+    // という一時的な見え方の状態だけ（保存しない・ガイドと同じ扱い）。
+    shapeTool: null,          // null(選ぶ) | 'rect' | 'line' | 'ellipse'（配置する図形）
+    selectedShapeId: null,
+    snapKinds: { grid: true, guide: true, endpoint: true, midpoint: true, center: true, tangent: true },
+  },
   mirrorH: false,
   pixelPerfect: false,   // 曲がり角の余分な点を消す
   lightDir: { dx: -1, dy: -1 },  // 選択的な輪郭で使う光の向き (既定は左上)
@@ -1966,6 +2017,22 @@ const el = {
   shapeFilledBtn: document.getElementById('shapeFilledBtn'),
   brushSizeBtns: document.querySelectorAll('.brush-size-btn'),
   brushSizeNote: document.getElementById('brushSizeNote'),
+  shapeToolRectBtn: document.getElementById('shapeToolRectBtn'),
+  shapeToolLineBtn: document.getElementById('shapeToolLineBtn'),
+  shapeToolEllipseBtn: document.getElementById('shapeToolEllipseBtn'),
+  shapeToolSelectBtn: document.getElementById('shapeToolSelectBtn'),
+  shapesPanel: document.getElementById('shapesPanel'),
+  shapesHint: document.getElementById('shapesHint'),
+  snapKindBtns: document.querySelectorAll('.snap-kind-btn'),
+  shapeInspector: document.getElementById('shapeInspector'),
+  shapeInspectorFields: document.getElementById('shapeInspectorFields'),
+  shapeDeleteBtn: document.getElementById('shapeDeleteBtn'),
+  shapeOffsetAmount: document.getElementById('shapeOffsetAmount'),
+  shapeOffsetBtn: document.getElementById('shapeOffsetBtn'),
+  shapeArrayCols: document.getElementById('shapeArrayCols'),
+  shapeArrayRows: document.getElementById('shapeArrayRows'),
+  shapeArrayGap: document.getElementById('shapeArrayGap'),
+  shapeArrayBtn: document.getElementById('shapeArrayBtn'),
   guideVBtn: document.getElementById('guideVBtn'),
   guideHBtn: document.getElementById('guideHBtn'),
   guideClearBtn: document.getElementById('guideClearBtn'),
@@ -3217,6 +3284,89 @@ function drawDraftOverlay(ctx) {
     ctx.stroke();
     ctx.restore();
   }
+
+  drawShapesLayer(ctx);
+}
+
+// ── 図形（製図モード・§3/§6-3）── 焼かない・なぞる下敷き ────────
+//
+// ⭐ 滑らかに描く（`ctx.ellipse` 等）。ジャギーなドット近似にしない ──
+//    焼かないと決めたので、ラスタ化の精度を気にする必要が無い。
+function drawShapesLayer(ctx) {
+  const layer = shapesLayer();
+  if (!layer || !layer.visible) return;
+  const v = state.view, d = v.dpr;
+  const active = isShapesLayer(state.layers[state.currentLayer]);
+  const selId = state.draft.selectedShapeId;
+
+  ctx.save();
+  for (const s of layer.shapes) {
+    const selected = active && s.id === selId;
+    ctx.beginPath();
+    if (s.kind === 'rect') {
+      ctx.rect(devX(s.x), devY(s.y), devX(s.x + s.w) - devX(s.x), devY(s.y + s.h) - devY(s.y));
+    } else if (s.kind === 'line') {
+      ctx.moveTo(devX(s.x1), devY(s.y1));
+      ctx.lineTo(devX(s.x2), devY(s.y2));
+    } else if (s.kind === 'ellipse') {
+      const cx = devX(s.x + s.w / 2), cy = devY(s.y + s.h / 2);
+      const rx = (devX(s.x + s.w) - devX(s.x)) / 2, ry = (devY(s.y + s.h) - devY(s.y)) / 2;
+      ctx.ellipse(cx, cy, Math.max(0.01, rx), Math.max(0.01, ry), 0, 0, Math.PI * 2);
+    }
+    ctx.lineWidth = (selected ? 2 : 1.25) * d;
+    ctx.setLineDash(selected ? [] : [6 * d, 4 * d]);
+    ctx.strokeStyle = selected ? 'rgba(255,190,90,0.95)' : 'rgba(110,225,150,0.85)';
+    ctx.stroke();
+
+    // ⭐ 選んでいる図形だけハンドルを出す（製図モードの間だけ ── なぞる下敷きの
+    //    ときにハンドルが出ていると紛らわしい）。
+    if (selected) {
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,190,90,0.95)';
+      const HS = 4 * d;
+      for (const h of shapeHandles(s)) {
+        ctx.fillRect(devX(h.x) - HS / 2, devY(h.y) - HS / 2, HS, HS);
+      }
+    }
+  }
+
+  // ── ドラッグ中に吸い付いた点の印（種類ごとに違う形・設計 §6-3） ──
+  if (shapeDrag && _lastSnapKind) {
+    const s = layer.shapes.find(x => x.id === shapeDrag.id);
+    if (s) {
+      const h = shapeDrag.mode === 'move'
+        ? { x: (s.kind === 'line' ? s.x1 : s.x), y: (s.kind === 'line' ? s.y1 : s.y) }
+        : shapeHandles(s).find(hh => hh.id === shapeDrag.handle) || shapeHandles(s)[0];
+      drawSnapMarker(ctx, devX(h.x), devY(h.y), _lastSnapKind, d);
+    }
+  }
+  ctx.restore();
+}
+
+/** 種類ごとに違う印（□端点 △中点 ○中心 ◇接点 +格子 ┆ガイド・設計 §6-3）。 */
+function drawSnapMarker(ctx, x, y, kind, d) {
+  const R = 7 * d;
+  ctx.save();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1.5 * d;
+  ctx.beginPath();
+  if (kind === 'endpoint') {
+    ctx.rect(x - R / 2, y - R / 2, R, R);
+  } else if (kind === 'midpoint') {
+    ctx.moveTo(x, y - R / 2); ctx.lineTo(x + R / 2, y + R / 2); ctx.lineTo(x - R / 2, y + R / 2); ctx.closePath();
+  } else if (kind === 'center') {
+    ctx.arc(x, y, R / 2, 0, Math.PI * 2);
+  } else if (kind === 'tangent') {
+    ctx.moveTo(x, y - R / 2); ctx.lineTo(x + R / 2, y); ctx.lineTo(x, y + R / 2); ctx.lineTo(x - R / 2, y); ctx.closePath();
+  } else if (kind === 'guide') {
+    ctx.moveTo(x, y - R); ctx.lineTo(x, y + R);
+  } else {
+    // grid（または種類なし）: 十字
+    ctx.moveTo(x - R / 2, y); ctx.lineTo(x + R / 2, y);
+    ctx.moveTo(x, y - R / 2); ctx.lineTo(x, y + R / 2);
+  }
+  ctx.stroke();
+  ctx.restore();
 }
 
 /** 選んだ範囲の外接（ドット）。⚠️ 選択は Set<index> なので、ここで四角に直す。 */
@@ -3289,14 +3439,27 @@ function renderPreview() {
 //    あれは `sim import-screen` が読む形なので、勝手に増やすと読む側が驚く）。
 const DRAFT_KEY = 'ecb-draft';
 
+// 🔴 覚えるのは「見え方の好み」だけ。**「今どう触っているか」という一時的な状態
+// （`guideMode`・`shapeTool`・`selectedShapeId`）は入れない**。
+// ⚠️ 実際に踏んだ罠（2026-08-25）: 全部まとめて保存していたら、「縦ガイドを置く」
+// モードのまま閉じた次の回、開いた瞬間から最初のクリックがガイド配置に化けた
+// （鉛筆のつもりが引っかかる・気づきにくい）。
+const DRAFT_PERSIST_KEYS = ['center', 'readout', 'major', 'guides', 'snapKinds'];
+
 function loadDraftPrefs() {
   try {
     const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
-    if (saved && typeof saved === 'object') Object.assign(state.draft, saved);
+    if (saved && typeof saved === 'object') {
+      for (const k of DRAFT_PERSIST_KEYS) if (k in saved) state.draft[k] = saved[k];
+    }
   } catch (e) { /* 壊れていたら既定のまま。⚠️ ここで止めない */ }
 }
 function saveDraftPrefs() {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(state.draft)); } catch (e) {}
+  try {
+    const out = {};
+    for (const k of DRAFT_PERSIST_KEYS) out[k] = state.draft[k];
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(out));
+  } catch (e) {}
 }
 function syncDraftUI() {
   el.draftCenterBtn.classList.toggle('active', state.draft.center);
@@ -3356,6 +3519,421 @@ el.guideClearBtn.addEventListener('click', () => {
   if (!state.draft.guides.length) return;
   state.draft.guides = [];
   saveDraftPrefs(); renderGuideList(); renderEditor();
+});
+
+// ════════════════════════════════════════════════════════════════
+// 製図モード（図形レイヤー） ── wiki/開発/製図モード.md の実装
+// ════════════════════════════════════════════════════════════════
+//
+// ⭐ 図形は「焼かない・なぞる下敷き専用」（設計 §2）。ラスタには一切触れない。
+// ⭐ モード切替は無い ── 図形レイヤーがアクティブ＝製図モード（A3・§4）。
+
+let _nextShapeId = 1;
+function newShapeId() { return _nextShapeId++; }
+// ⭐ 読み込み・undo 直後に呼ぶ ── 保存されていた最大 id より必ず先に出す
+// （id の重複は、選択やハンドルの当たり判定を狂わせる）。
+function resyncShapeIdCounter() {
+  const layer = shapesLayer();
+  if (!layer) return;
+  let max = 0;
+  for (const s of layer.shapes) if (s.id > max) max = s.id;
+  _nextShapeId = max + 1;
+}
+
+// ── 図形1つぶんの外接矩形（ドット）。選択の当たり判定・オフセット等で使う。 ──
+function shapeBBox(s) {
+  if (s.kind === 'line') {
+    return { x: Math.min(s.x1, s.x2), y: Math.min(s.y1, s.y2),
+      w: Math.abs(s.x2 - s.x1), h: Math.abs(s.y2 - s.y1) };
+  }
+  return { x: s.x, y: s.y, w: s.w, h: s.h };
+}
+
+// ── 図形が種類ごとに持つ「特別な点」（設計 §6-3 の表そのもの）。 ──
+function shapeSnapPoints(s) {
+  const pts = [];
+  if (s.kind === 'rect') {
+    const { x, y, w, h } = s;
+    pts.push({ x, y, kind: 'endpoint' }, { x: x + w, y, kind: 'endpoint' },
+      { x, y: y + h, kind: 'endpoint' }, { x: x + w, y: y + h, kind: 'endpoint' });
+    pts.push({ x: x + w / 2, y, kind: 'midpoint' }, { x: x + w / 2, y: y + h, kind: 'midpoint' },
+      { x, y: y + h / 2, kind: 'midpoint' }, { x: x + w, y: y + h / 2, kind: 'midpoint' });
+    pts.push({ x: x + w / 2, y: y + h / 2, kind: 'center' });
+  } else if (s.kind === 'line') {
+    pts.push({ x: s.x1, y: s.y1, kind: 'endpoint' }, { x: s.x2, y: s.y2, kind: 'endpoint' });
+    pts.push({ x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2, kind: 'midpoint' });
+  } else if (s.kind === 'ellipse') {
+    const { x, y, w, h } = s;
+    pts.push({ x: x + w / 2, y: y + h / 2, kind: 'center' });
+    // ⭐ 外接する矩形と接する4点（設計 §6-3 ── 円周上の連続スナップは採らない）。
+    pts.push({ x: x + w / 2, y, kind: 'tangent' }, { x: x + w / 2, y: y + h, kind: 'tangent' },
+      { x, y: y + h / 2, kind: 'tangent' }, { x: x + w, y: y + h / 2, kind: 'tangent' });
+  }
+  return pts;
+}
+
+// ── スナップ ── 有効な種類の中から一番近い1点。無ければ整数ドットに丸めるだけ。 ──
+// @param excludeId 動かしている・作っている図形自身は候補から外す（自分に吸い付かない）。
+// @returns { x, y, kind }  kind は見分けの印の描画に使う（'grid' は「候補ゼロ」でも返る既定）。
+function snapPoint(dotX, dotY, excludeId) {
+  const k = state.draft.snapKinds;
+  let bestDist = Infinity, best = null, bestKind = null;
+  const consider = (px, py, kind) => {
+    const d = Math.hypot(px - dotX, py - dotY);
+    if (d < bestDist) { bestDist = d; best = { x: px, y: py }; bestKind = kind; }
+  };
+  const layer = shapesLayer();
+  if (layer) {
+    for (const s of layer.shapes) {
+      if (s.id === excludeId) continue;
+      for (const pt of shapeSnapPoints(s)) {
+        if (!k[pt.kind]) continue;
+        consider(pt.x, pt.y, pt.kind);
+      }
+    }
+  }
+  if (k.guide) {
+    for (const g of state.draft.guides) {
+      if (g.axis === 'v') consider(g.pos, dotY, 'guide');
+      else consider(dotX, g.pos, 'guide');
+    }
+  }
+  if (k.grid) consider(Math.round(dotX), Math.round(dotY), 'grid');
+
+  const SNAP_RADIUS = 6;   // ⚠️ ドット単位（ズームに関わらず一定）
+  if (best && bestDist <= SNAP_RADIUS) return { x: best.x, y: best.y, kind: bestKind };
+  return { x: Math.round(dotX), y: Math.round(dotY), kind: null };   // 候補が遠い＝ただ丸めるだけ
+}
+let _lastSnapKind = null;   // 直前に吸い付いた種類（見分けの印の描画に使う）
+
+// ── 当たり判定 ── 図形の本体（掴んで動かす）／ハンドル（掴んで変形する）。 ──
+// ⚠️ 許容は**デバイス px**で持つ（ズームしても指の余裕が変わらないように）。
+const HIT_TOL_PX = 10;
+
+function hitShape(dotX, dotY) {
+  const layer = shapesLayer();
+  if (!layer) return null;
+  // ⭐ 後から置いたものが手前（設計 §6-2）── 末尾から探す。
+  for (let i = layer.shapes.length - 1; i >= 0; i--) {
+    const s = layer.shapes[i];
+    if (s.kind === 'line') {
+      const d = distToSegment(dotX, dotY, s.x1, s.y1, s.x2, s.y2);
+      if (d * state.view.cell <= HIT_TOL_PX) return s;
+    } else {
+      const b = shapeBBox(s);
+      const tolDots = HIT_TOL_PX / state.view.cell;
+      if (dotX >= b.x - tolDots && dotX <= b.x + b.w + tolDots
+        && dotY >= b.y - tolDots && dotY <= b.y + b.h + tolDots) return s;
+    }
+  }
+  return null;
+}
+
+function distToSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
+// ハンドルの一覧（ドット座標つき）。矩形/楕円は4隅、直線は両端。
+function shapeHandles(s) {
+  if (s.kind === 'line') {
+    return [{ id: 'p1', x: s.x1, y: s.y1 }, { id: 'p2', x: s.x2, y: s.y2 }];
+  }
+  const { x, y, w, h } = s;
+  return [
+    { id: 'nw', x, y }, { id: 'ne', x: x + w, y },
+    { id: 'sw', x, y: y + h }, { id: 'se', x: x + w, y: y + h },
+  ];
+}
+
+function hitHandle(s, dotX, dotY) {
+  const tolDots = HIT_TOL_PX / state.view.cell;
+  for (const h of shapeHandles(s)) {
+    if (Math.hypot(h.x - dotX, h.y - dotY) <= tolDots) return h.id;
+  }
+  return null;
+}
+
+// ── ポインタ操作（作る・動かす・変形する） ─────────────────
+// ⚠️ ラスタの `beginStroke`/`moveStroke` とは別の状態機械。`pushUndo()` は
+// ジェスチャの最初に1回だけ（ドラッグ中の毎フレームは積まない ──「1操作＝1取り消し」）。
+let shapeDrag = null;   // { mode:'create'|'move'|'resize', id, handle, from:{x,y}, orig }
+
+function shapesPointerDown(e) {
+  const c = pixelCoordsFromEvent(e);
+  if (!c) return;
+  const layer = shapesLayer();
+  if (!layer) return;
+  const dotX = c.x, dotY = c.y;
+
+  // 1) 選んでいる図形のハンドルを掴んだか（ハンドルは選択中の図形にしか出さない）。
+  if (state.draft.selectedShapeId != null) {
+    const sel = layer.shapes.find(s => s.id === state.draft.selectedShapeId);
+    if (sel) {
+      const handle = hitHandle(sel, dotX, dotY);
+      if (handle) {
+        pushUndo();
+        shapeDrag = { mode: 'resize', id: sel.id, handle, orig: { ...sel } };
+        try { el.canvasStage.setPointerCapture(e.pointerId); } catch (_) {}
+        return;
+      }
+    }
+  }
+
+  // 2) 配置ツールが選ばれていれば、新しい図形を作り始める。
+  if (state.draft.shapeTool) {
+    const p = snapPoint(dotX, dotY, null);
+    _lastSnapKind = p.kind;
+    const id = newShapeId();
+    let shape;
+    if (state.draft.shapeTool === 'line') shape = { id, kind: 'line', x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+    else shape = { id, kind: state.draft.shapeTool, x: p.x, y: p.y, w: 0, h: 0 };
+    pushUndo();
+    layer.shapes.push(shape);
+    selectShape(id);
+    shapeDrag = { mode: 'create', id, handle: state.draft.shapeTool === 'line' ? 'p2' : 'se', orig: { ...shape } };
+    try { el.canvasStage.setPointerCapture(e.pointerId); } catch (_) {}
+    renderEditor();
+    return;
+  }
+
+  // 3) それ以外は「選ぶ」道具 ── 図形を押したら選び、そのまま動かせるようにする。
+  const hit = hitShape(dotX, dotY);
+  if (hit) {
+    selectShape(hit.id);
+    pushUndo();
+    shapeDrag = { mode: 'move', id: hit.id, from: { x: dotX, y: dotY }, orig: { ...hit } };
+    try { el.canvasStage.setPointerCapture(e.pointerId); } catch (_) {}
+  } else {
+    selectShape(null);
+  }
+  renderEditor();
+}
+
+function shapesPointerMove(e) {
+  if (!shapeDrag) return;
+  const c = pixelCoordsFromEvent(e);
+  if (!c) return;
+  const layer = shapesLayer();
+  const s = layer && layer.shapes.find(x => x.id === shapeDrag.id);
+  if (!s) return;
+
+  if (shapeDrag.mode === 'move') {
+    // ⭐ 「掴んだ点からの差分」を、図形の基準点（左上／始点）に足してから
+    //    その基準点をスナップする ── 図形全体を格子へ丸め込むと辺の長さが
+    //    変わってしまうので、**動かす量**をスナップで決める。
+    const orig = shapeDrag.orig;
+    const rawDx = c.x - shapeDrag.from.x, rawDy = c.y - shapeDrag.from.y;
+    const baseX = orig.kind === 'line' ? orig.x1 : orig.x;
+    const baseY = orig.kind === 'line' ? orig.y1 : orig.y;
+    const snapped = snapPoint(baseX + rawDx, baseY + rawDy, shapeDrag.id);
+    _lastSnapKind = snapped.kind;
+    applyMove(s, orig, snapped.x - baseX, snapped.y - baseY);
+  } else if (shapeDrag.mode === 'resize' || shapeDrag.mode === 'create') {
+    const p = snapPoint(c.x, c.y, shapeDrag.id);
+    _lastSnapKind = p.kind;
+    applyHandle(s, shapeDrag.handle, p.x, p.y);
+  }
+  renderEditor();
+}
+
+function shapesPointerUp() {
+  if (!shapeDrag) return;
+  const layer = shapesLayer();
+  const s = layer && layer.shapes.find(x => x.id === shapeDrag.id);
+  // ⚠️ ドラッグせずクリックだけで作ろうとした図形（大きさ0）は消す ──
+  //    見えない図形が一覧に残ると「押しても何も選べない」ことになる。
+  if (s && shapeDrag.mode === 'create') {
+    const b = shapeBBox(s);
+    if (b.w === 0 && b.h === 0) {
+      layer.shapes = layer.shapes.filter(x => x.id !== s.id);
+      selectShape(null);
+      // 作られなかったので、直前に積んだ undo も無かったことにする
+      // （空の1操作が Undo に残ると「戻しても何も起きない」１回が挟まる）。
+      state.undoStack.pop();
+    }
+  }
+  shapeDrag = null;
+  _lastSnapKind = null;
+  renderInspector();
+  renderEditor();
+}
+
+// ── 掴んだハンドルに応じて座標を書き換える（作る/変形するで共用）。 ──
+function applyHandle(s, handle, px, py) {
+  if (s.kind === 'line') {
+    if (handle === 'p1') { s.x1 = px; s.y1 = py; } else { s.x2 = px; s.y2 = py; }
+    return;
+  }
+  const b = shapeBBox(s);
+  let x0 = b.x, y0 = b.y, x1 = b.x + b.w, y1 = b.y + b.h;
+  if (handle.includes('w')) x0 = px; if (handle.includes('e')) x1 = px;
+  if (handle.includes('n')) y0 = py; if (handle.includes('s')) y1 = py;
+  s.x = Math.min(x0, x1); s.y = Math.min(y0, y1);
+  s.w = Math.abs(x1 - x0); s.h = Math.abs(y1 - y0);
+}
+
+function applyMove(s, orig, dx, dy) {
+  if (orig.kind === 'line') {
+    s.x1 = orig.x1 + dx; s.y1 = orig.y1 + dy;
+    s.x2 = orig.x2 + dx; s.y2 = orig.y2 + dy;
+  } else {
+    s.x = orig.x + dx; s.y = orig.y + dy;
+  }
+}
+
+function selectShape(id) {
+  state.draft.selectedShapeId = id;
+  renderInspector();
+}
+
+function deleteSelectedShape() {
+  const layer = shapesLayer();
+  if (!layer || state.draft.selectedShapeId == null) return;
+  pushUndo();
+  layer.shapes = layer.shapes.filter(s => s.id !== state.draft.selectedShapeId);
+  state.draft.selectedShapeId = null;
+  renderInspector();
+  renderEditor();
+}
+
+// ── 図形の道具（四角／直線／円／選ぶ） ─────────────────────
+//
+// ⭐ 四角・直線・円を押すと、図形レイヤーが無ければ**その場で作って**アクティブにする
+// （設計 §4 ── レイヤーを先に用意しに行く手間を無くす）。
+function setShapeTool(tool) {
+  if (tool !== null && !shapesLayer()) addShapesLayer();
+  if (tool !== null && !isShapesLayer(state.layers[state.currentLayer])) {
+    const idx = state.layers.indexOf(shapesLayer());
+    if (idx >= 0) switchLayer(idx);
+  }
+  state.draft.shapeTool = tool;
+  [el.shapeToolRectBtn, el.shapeToolLineBtn, el.shapeToolEllipseBtn, el.shapeToolSelectBtn]
+    .forEach(b => b.classList.remove('active'));
+  ({ rect: el.shapeToolRectBtn, line: el.shapeToolLineBtn, ellipse: el.shapeToolEllipseBtn,
+     null: el.shapeToolSelectBtn }[tool === null ? 'null' : tool]).classList.add('active');
+  syncShapesPanelVisibility();
+}
+el.shapeToolRectBtn.addEventListener('click', () => setShapeTool('rect'));
+el.shapeToolLineBtn.addEventListener('click', () => setShapeTool('line'));
+el.shapeToolEllipseBtn.addEventListener('click', () => setShapeTool('ellipse'));
+el.shapeToolSelectBtn.addEventListener('click', () => setShapeTool(null));
+
+// ⭐ 図形レイヤーが選ばれている間だけ、道具の詳細（スナップ・インスペクタ等）を出す
+// （空の道具を先に見せない・作者の pixelizer の教訓と同じ考え方）。
+function syncShapesPanelVisibility() {
+  const active = isShapesLayer(state.layers[state.currentLayer]);
+  el.shapesPanel.style.display = active ? '' : 'none';
+  if (el.shapesHint) el.shapesHint.style.display = active ? 'none' : '';
+}
+
+// ── スナップの種類（設計 §6-3・既定は全部 ON） ─────────────
+el.snapKindBtns.forEach(b => {
+  b.addEventListener('click', () => {
+    const k = b.dataset.kind;
+    state.draft.snapKinds[k] = !state.draft.snapKinds[k];
+    b.classList.toggle('active', state.draft.snapKinds[k]);
+  });
+});
+
+// ── インスペクタ ── 選んでいる図形の数値を直で打てる欄 ──────────
+function shapeFieldSpec(s) {
+  if (s.kind === 'line') return [['x1', s.x1], ['y1', s.y1], ['x2', s.x2], ['y2', s.y2]];
+  return [['x', s.x], ['y', s.y], ['w', s.w], ['h', s.h]];
+}
+function renderInspector() {
+  const layer = shapesLayer();
+  const s = layer && layer.shapes.find(x => x.id === state.draft.selectedShapeId);
+  if (!el.shapeInspector) return;
+  if (!s) { el.shapeInspector.style.display = 'none'; return; }
+  el.shapeInspector.style.display = '';
+  el.shapeInspectorFields.innerHTML = '';
+  for (const [key, val] of shapeFieldSpec(s)) {
+    const label = document.createElement('label');
+    label.style.cssText = 'display:inline-block; width:48%; font-size:11px; color:var(--muted); margin-top:4px;';
+    label.textContent = key + ' ';
+    const input = document.createElement('input');
+    input.type = 'number'; input.step = '1'; input.value = val;
+    input.style.width = '64px';
+    input.addEventListener('change', () => {
+      const n = Math.round(parseFloat(input.value));
+      if (Number.isNaN(n)) { input.value = val; return; }
+      pushUndo();
+      s[key] = n;
+      // ⚠️ 矩形/楕円で w・h が負にならないよう、打ち込みでも形を保つ。
+      if ((s.kind === 'rect' || s.kind === 'ellipse') && (key === 'w' || key === 'h') && n < 0) s[key] = 0;
+      renderEditor();
+    });
+    label.appendChild(input);
+    el.shapeInspectorFields.appendChild(label);
+  }
+}
+el.shapeDeleteBtn.addEventListener('click', deleteSelectedShape);
+
+// ── オフセット（設計 §5・§1 ── 軸に揃った図形なら足し算で済む） ─────
+// ⭐ **新しい図形として複製する**（本物のCADのOFFSETと同じ約束・元は残す）。
+el.shapeOffsetBtn.addEventListener('click', () => {
+  const layer = shapesLayer();
+  const s = layer && layer.shapes.find(x => x.id === state.draft.selectedShapeId);
+  if (!s) return;
+  const n = Math.round(parseFloat(el.shapeOffsetAmount.value));
+  if (Number.isNaN(n) || n === 0) return;
+  pushUndo();
+  const id = newShapeId();
+  let made;
+  if (s.kind === 'line') {
+    // 直交線は垂直方向にずらすだけ。斜めは法線方向（丸め込みは許容 ── 設計 §1）。
+    const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = Math.round((-dy / len) * n), ny = Math.round((dx / len) * n);
+    made = { id, kind: 'line', x1: s.x1 + nx, y1: s.y1 + ny, x2: s.x2 + nx, y2: s.y2 + ny };
+  } else {
+    made = { id, kind: s.kind, x: s.x - n, y: s.y - n, w: Math.max(0, s.w + n * 2), h: Math.max(0, s.h + n * 2) };
+  }
+  layer.shapes.push(made);
+  selectShape(id);
+  renderInspector();
+  renderEditor();
+});
+
+// ── 複製して並べる（ARRAY・矩形のみ・設計 §5） ───────────────
+el.shapeArrayBtn.addEventListener('click', () => {
+  const layer = shapesLayer();
+  const s = layer && layer.shapes.find(x => x.id === state.draft.selectedShapeId);
+  if (!s) return;
+  const cols = Math.max(1, Math.round(parseFloat(el.shapeArrayCols.value)) || 1);
+  const rows = Math.max(1, Math.round(parseFloat(el.shapeArrayRows.value)) || 1);
+  const gap = Math.round(parseFloat(el.shapeArrayGap.value)) || 0;
+  if (cols === 1 && rows === 1) return;   // 並べる先が無い
+  pushUndo();
+  const b = shapeBBox(s);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      if (row === 0 && col === 0) continue;   // 元の1つは複製しない
+      const dx = col * (b.w + gap), dy = row * (b.h + gap);
+      const id = newShapeId();
+      let made;
+      if (s.kind === 'line') made = { id, kind: 'line', x1: s.x1 + dx, y1: s.y1 + dy, x2: s.x2 + dx, y2: s.y2 + dy };
+      else made = { id, kind: s.kind, x: s.x + dx, y: s.y + dy, w: s.w, h: s.h };
+      layer.shapes.push(made);
+    }
+  }
+  renderEditor();
+});
+
+// Delete キー ── 図形レイヤーがアクティブで、図形を選んでいるときだけ効く
+// （手書きモードの「選択→Delete」＝ドットを消す、とはモードで自然に分かれる・設計 §5）。
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+  if (document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+  if (!isShapesLayer(state.layers[state.currentLayer])) return;
+  if (state.draft.selectedShapeId == null) return;
+  e.preventDefault();
+  deleteSelectedShape();
 });
 
 el.draftCenterBtn.addEventListener('click', () => {
@@ -3847,7 +4425,9 @@ el.canvasStage.addEventListener('pointerdown', (e) => {
     return;
   }
   if (e.pointerType === 'mouse' && e.button !== 0) return;
-  if (!state.pixels) return;
+  // 🔴 `state.pixels` では判定しない ── 図形レイヤーがアクティブだと null になる
+  //    （A3）ので、ここを直さないと製図モードでは何も押せなくなる。
+  if (!hasArtwork()) return;
 
   // 🔴 **補助線を置くモードなら、ここで奪う。**⚠️ 通常の描画（`beginStroke`）より
   //    必ず先 ── 後ろだと「置いたはずが線も引いていた」になる。
@@ -3855,6 +4435,14 @@ el.canvasStage.addEventListener('pointerdown', (e) => {
     const c = pixelCoordsFromEvent(e);
     if (c) addGuide(state.draft.guideMode, state.draft.guideMode === 'v' ? c.x : c.y);
     e.preventDefault();
+    return;
+  }
+
+  // 🔴 **図形レイヤーがアクティブ＝製図モード。**通常の描画（`beginStroke`）より
+  //    必ず先で奪う（ガイドと同じ位置・同じ理由）。
+  if (isShapesLayer(state.layers[state.currentLayer])) {
+    e.preventDefault();
+    shapesPointerDown(e);
     return;
   }
 
@@ -3892,6 +4480,7 @@ el.canvasStage.addEventListener('pointermove', (e) => {
     clampPan(); renderEditor();
     return;
   }
+  if (shapeDrag) { shapesPointerMove(e); return; }
   if (pressOrigin && e.pointerId === pressOrigin.id &&
       Math.hypot(e.clientX - pressOrigin.x, e.clientY - pressOrigin.y) > MOVE_SLOP) {
     cancelLongPress();
@@ -3907,6 +4496,7 @@ function releasePointer(e) {
   cancelLongPress();
   try { el.canvasStage.releasePointerCapture(e.pointerId); } catch (_) {}
 
+  if (shapeDrag) { shapesPointerUp(); return; }
   if (panDrag) { panDrag = null; el.canvasStage.style.cursor = ''; updateCursor(e); return; }
   if (pinch) {
     if (ptrs.size >= 2) beginPinch();   // 3 本目が離れたら基準を取り直す
@@ -4766,6 +5356,8 @@ function switchLayer(idx) {
   if (!state.floating) cancelSelection();
   state.currentLayer = idx;
   refreshActiveCel();
+  syncShapesPanelVisibility();
+  renderInspector();
   renderLayerPanel();
   renderEditor();
 }
@@ -4813,6 +5405,11 @@ function deleteCurrentLayer() {
   if (state.currentLayer >= state.layers.length) state.currentLayer = state.layers.length - 1;
   refreshActiveCel();
   if (!state.floating) cancelSelection();
+  // ⚠️ 図形レイヤーそのものを消した（非アクティブのときに消せる並び替え経路もある）
+  // ── 選択が幽霊を指したままにならないように。
+  if (!shapesLayer()) state.draft.selectedShapeId = null;
+  syncShapesPanelVisibility();
+  renderInspector();
   renderLayerPanel();
   renderTimeline();
   renderEditor();
@@ -4855,6 +5452,7 @@ function addShapesLayer() {
   state.currentLayer = state.layers.length - 1;
   refreshActiveCel();
   if (!state.floating) cancelSelection();
+  syncShapesPanelVisibility();
   renderLayerPanel();
   renderTimeline();
   renderEditor();
@@ -5038,6 +5636,12 @@ function applySnapshot(snap) {
   const raster = firstRasterLayer();
   state.currentFrame = raster ? Math.min(snap.currentFrame, raster.frames.length - 1) : 0;
   refreshActiveCel();
+  resyncShapeIdCounter();   // ⚠️ undo/redo で id の重複が起きないように
+  if (!(shapesLayer() && shapesLayer().shapes.some(s => s.id === state.draft.selectedShapeId))) {
+    state.draft.selectedShapeId = null;   // 取り消しで消えた図形を選んだままにしない
+  }
+  syncShapesPanelVisibility();
+  renderInspector();
 }
 function pushUndo() {
   state.undoStack.push(snapshotState());
@@ -6000,6 +6604,9 @@ async function applyWorkPayload(data) {
     const raster0 = firstRasterLayer();
     state.currentFrame = raster0 ? Math.min(data.currentFrame || 0, raster0.frames.length - 1) : 0;
     refreshActiveCel();
+    resyncShapeIdCounter();
+    state.draft.selectedShapeId = null;
+    syncShapesPanelVisibility();
     if (data.color) { state.color = data.color; updateColorUI(); }
     // 作った色見本も一緒に戻す。絵だけ戻って色が消えると作業を続けられない。
     if (Array.isArray(data.palette)) { state.palette = data.palette; renderPalette(); }

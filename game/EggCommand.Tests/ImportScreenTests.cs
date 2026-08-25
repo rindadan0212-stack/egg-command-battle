@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 using EggCommand.Core;
 using EggCommand.Sim;
@@ -189,6 +190,28 @@ public class ImportScreenTests
         Assert.Equal(0, code);
         Assert.False(File.Exists(Path.Combine(root, "assets", "ui", "paint", "Layer 2.png")));
         Assert.Contains("名前を部品名に変えてください", output);
+        Directory.Delete(root, true);
+    }
+
+    [Fact]
+    public void 製図モードの図形レイヤーは静かに読み飛ばす()
+    {
+        // 🔴 `tools/draw` の図形レイヤー（wiki/開発/製図モード.md §3）は `frames` を
+        //    持たず `kind:"shapes"` を名乗る。取り込まない・警告にはしない・
+        //    他のレイヤーの取り込みは止めない、の3つを確かめる。
+        string raster = MakeJson(("home-mats", 0, 0, 270, 20));
+        // MakeJson が組んだ JSON の "layers":[...] の末尾に、図形レイヤーを1つ足す。
+        string json = raster.Substring(0, raster.Length - 2)
+            + ",{\"name\":\"製図\",\"opacity\":1,\"visible\":true,\"kind\":\"shapes\","
+            + "\"shapes\":[{\"id\":1,\"kind\":\"rect\",\"x\":1,\"y\":1,\"w\":5,\"h\":5}]}]}";
+
+        var (code, output, root) = RunIn(json, "sample");
+        Assert.Equal(0, code);
+        Assert.False(File.Exists(Path.Combine(root, "assets", "ui", "paint", "製図.png")));
+        Assert.DoesNotContain("⚠️", output.Split('\n').FirstOrDefault(l => l.Contains("製図")) ?? "");
+        Assert.Contains("製図モードの下敷きなので取り込みません", output);
+        // 他のレイヤー（home-mats）は普通に取り込まれる。
+        Assert.True(File.Exists(Path.Combine(root, "assets", "ui", "paint", "home-mats.png")));
         Directory.Delete(root, true);
     }
 }
