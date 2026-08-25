@@ -1,5 +1,14 @@
 # tools ── 検査と道具
 
+## 絵を描く（`draw/`）
+
+⭐ **`絵を描く.bat`**（`http://localhost:5818`）── この作品専用のドット絵エディター。
+⚠️ [pixelizer](https://github.com/rindadan0212-stack/pixelizer) から**分けたもの**で、
+もう別物として育てる（[draw/README.md](draw/README.md)）。
+⭐ 270×480 のキャンバスで画面を起こし、`sim import-screen` で骨組みにする。
+
+## 検査（動いているゲームを外から叩く）
+
 ⭐ **どれも、動いているゲーム（`http://localhost:5817`）を外から叩きます。**
 先に `ゲームを開く.bat` か `dotnet run --project game/EggCommand.Web` でサーバを立ててください。
 

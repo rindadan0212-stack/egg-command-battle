@@ -1,0 +1,39 @@
+Copyright (c) 2026 Pixel Familiar Studio. All rights reserved.
+
+このリポジトリのソースコードは、動作の確認と学習のために公開しています。
+オープンソースではありません。
+
+許可されること
+  - ソースを読むこと
+  - 公開されたページ (GitHub Pages 等) で、このソフトを道具として使うこと
+  - このソフトで作った作品を、用途を問わず自由に使うこと（商用を含む）
+
+作者の書面による許可なく行えないこと
+  - ソースコードの複製・改変・再配布・再公開
+  - 派生物の作成と配布
+  - このソフト自体、またはその一部を含む製品の販売・提供
+
+第三者のソフトウェアについては THIRD-PARTY.md を参照してください。
+そこに挙げたものは、それぞれの元のライセンスに従います。
+
+問い合わせ先: https://github.com/rindadan0212-stack/pixelizer/issues
+
+---
+
+Copyright (c) 2026 Pixel Familiar Studio. All rights reserved.
+
+The source in this repository is published so that it can be read and
+inspected. It is not open source.
+
+You may:
+  - read the source
+  - use the software as a tool through a page published by the author
+  - use anything you create with it for any purpose, including commercially
+
+You may not, without the author's written permission:
+  - copy, modify, redistribute, or republish the source code
+  - create and distribute derivative works
+  - sell or otherwise supply this software, or any part of it, as a product
+
+Third-party software is listed in THIRD-PARTY.md and remains under its own
+license.
