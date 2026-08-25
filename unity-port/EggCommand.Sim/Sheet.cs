@@ -1948,7 +1948,13 @@ namespace EggCommand.Sim
                 for (int x = 0; x < sp.Sprite.Width; x++)
                 {
                     byte v = sp.Sprite.At(x, y);
-                    sb.Append(v == 0 ? '.' : (char)('0' + v));
+                    // 🔴 **`PixelSprite.CharOf` を必ず通す。**（2026-08-25 修正）
+                    //    ⚠️ ここは `(char)('0' + v)` と自前で組み立てていた ── 添字が10以上に
+                    //    なると ':' ';' … と**出鱈目な字**を吐く。9色までしか使っていなかったので
+                    //    表に出ていなかっただけで、色の上限を35へ上げた日（同日）に確実に踏む形だった。
+                    //    ⭐ 同じファイルの `CodeOf` 以外（1748行）は最初から `CharOf` を通している ──
+                    //    `PixelSprite.cs` が「読む側も書く側もここを通す」と書いている、その唯一の出所。
+                    sb.Append(v == 0 ? '.' : PixelSprite.CharOf(v));
                 }
                 sb.Append("\",\n");
             }

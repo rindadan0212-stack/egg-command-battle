@@ -299,13 +299,7 @@ namespace EggCommand.Sim
             }
             if (width <= 0 || plte == null) throw new ArgumentException("IHDR か PLTE が無い");
 
-            var packed = idat.ToArray();
-            // ⚠️ zlib の頭2バイトと末尾の adler32 を外して、生の deflate を渡す
-            using var body2 = new MemoryStream(packed, 2, packed.Length - 6);
-            using var inflate = new DeflateStream(body2, CompressionMode.Decompress);
-            using var flat = new MemoryStream();
-            inflate.CopyTo(flat);
-            var rows = flat.ToArray();
+            var rows = InflateZlib(idat.ToArray());
 
             var rowText = new string[height];
             for (int y = 0; y < height; y++)
@@ -322,6 +316,134 @@ namespace EggCommand.Sim
             for (int i = 1; i < plte.Length / 3; i++)
                 colors[i - 1] = $"#{plte[i * 3]:x2}{plte[i * 3 + 1]:x2}{plte[i * 3 + 2]:x2}";
             palette = new Palette(colors);
+        }
+
+        /// <summary>zlib の頭2バイトと末尾の adler32 を外して、生の deflate を展開する。
+        /// ⚠️ <see cref="Decode"/> と <see cref="DecodeRgba"/> の共通部分（重複を避けるため切り出した）。</summary>
+        private static byte[] InflateZlib(byte[] packed)
+        {
+            using var body = new MemoryStream(packed, 2, packed.Length - 6);
+            using var inflate = new DeflateStream(body, CompressionMode.Decompress);
+            using var flat = new MemoryStream();
+            inflate.CopyTo(flat);
+            return flat.ToArray();
+        }
+
+        // ── 手描きの原稿を読む（⚠️ 上の Decode とは別口）─────────────────
+
+        /// <summary>手描きの PNG（Aseprite 等で書き出した、8bit の RGB か RGBA）を
+        /// **生の画素**（RGBA・1画素4バイト）へ読む。
+        ///
+        /// ⚠️ <see cref="Decode"/> は「このコードが書いた PNG」（インデックスカラー・
+        /// フィルタ0固定）しか読めない。⭐ こちらは**外から来る絵**を読むための別口 ──
+        /// フィルタは行ごとに変わってよい（PNG の 0〜4 すべてに対応）。
+        /// ⚠️ インターレースには対応しない（対応外は例外で止める。黙って崩さない）。</summary>
+        public static void DecodeRgba(byte[] png, out int width, out int height, out byte[] rgba)
+        {
+            if (png == null || png.Length < 8) throw new ArgumentException("PNG が短すぎる");
+            for (int i = 0; i < Signature.Length; i++)
+                if (png[i] != Signature[i]) throw new ArgumentException("PNG の署名が違う");
+
+            int at = 8;
+            int w = 0, h = 0, bitDepth = 0, colorType = -1, interlace = 0;
+            using var idat = new MemoryStream();
+
+            while (at + 8 <= png.Length)
+            {
+                int len = (png[at] << 24) | (png[at + 1] << 16) | (png[at + 2] << 8) | png[at + 3];
+                string kind = Encoding.ASCII.GetString(png, at + 4, 4);
+                int body = at + 8;
+                switch (kind)
+                {
+                    case "IHDR":
+                        w = (png[body] << 24) | (png[body + 1] << 16) | (png[body + 2] << 8) | png[body + 3];
+                        h = (png[body + 4] << 24) | (png[body + 5] << 16) | (png[body + 6] << 8) | png[body + 7];
+                        bitDepth = png[body + 8];
+                        colorType = png[body + 9];
+                        interlace = png[body + 12];
+                        break;
+                    case "IDAT":
+                        idat.Write(png, body, len);
+                        break;
+                }
+                at = body + len + 4;
+                if (kind == "IEND") break;
+            }
+
+            if (w <= 0 || h <= 0) throw new ArgumentException("IHDR が無い");
+            if (bitDepth != 8)
+                throw new ArgumentException($"8bit 以外は読めない（ビット深度 {bitDepth}）");
+            if (colorType != 2 && colorType != 6)
+                throw new ArgumentException($"RGB(2) か RGBA(6) 以外は読めない（色の型 {colorType}）");
+            if (interlace != 0)
+                throw new ArgumentException("インターレース付き PNG は読めない");
+
+            int channels = colorType == 6 ? 4 : 3;
+            var flat = InflateZlib(idat.ToArray());
+            var pixels = Unfilter(flat, w, h, channels);
+
+            width = w;
+            height = h;
+            if (channels == 4)
+            {
+                rgba = pixels;
+                return;
+            }
+
+            // RGB → RGBA（不透明として扱う）
+            var withAlpha = new byte[w * h * 4];
+            for (int i = 0; i < w * h; i++)
+            {
+                withAlpha[i * 4] = pixels[i * 3];
+                withAlpha[i * 4 + 1] = pixels[i * 3 + 1];
+                withAlpha[i * 4 + 2] = pixels[i * 3 + 2];
+                withAlpha[i * 4 + 3] = 255;
+            }
+            rgba = withAlpha;
+        }
+
+        /// <summary>PNG のスキャンライン・フィルタ（0〜4）を外し、生の画素バイト列に戻す。
+        /// ⚠️ 参照実装は PNG 仕様書どおり（バイト演算は 256 で自然に折り返す＝byte のまま足すだけでよい）。</summary>
+        private static byte[] Unfilter(byte[] flat, int width, int height, int bpp)
+        {
+            int stride = width * bpp;
+            var outp = new byte[height * stride];
+            int at = 0;
+            for (int y = 0; y < height; y++)
+            {
+                if (at >= flat.Length) throw new ArgumentException($"{y} 行目の手前でデータが尽きた");
+                byte filter = flat[at++];
+                int rowOut = y * stride;
+                int prevOut = (y - 1) * stride;
+                for (int x = 0; x < stride; x++)
+                {
+                    byte raw = flat[at + x];
+                    byte a = x >= bpp ? outp[rowOut + x - bpp] : (byte)0;
+                    byte b = y > 0 ? outp[prevOut + x] : (byte)0;
+                    byte c = (y > 0 && x >= bpp) ? outp[prevOut + x - bpp] : (byte)0;
+                    byte value;
+                    switch (filter)
+                    {
+                        case 0: value = raw; break;
+                        case 1: value = (byte)(raw + a); break;
+                        case 2: value = (byte)(raw + b); break;
+                        case 3: value = (byte)(raw + (byte)((a + b) / 2)); break;
+                        case 4: value = (byte)(raw + PaethPredictor(a, b, c)); break;
+                        default: throw new ArgumentException($"{y} 行目のフィルタ種別 {filter} は読めない");
+                    }
+                    outp[rowOut + x] = value;
+                }
+                at += stride;
+            }
+            return outp;
+        }
+
+        private static byte PaethPredictor(byte a, byte b, byte c)
+        {
+            int p = a + b - c;
+            int pa = Math.Abs(p - a), pb = Math.Abs(p - b), pc = Math.Abs(p - c);
+            if (pa <= pb && pa <= pc) return a;
+            return pb <= pc ? b : c;
         }
     }
 }

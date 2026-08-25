@@ -33,6 +33,8 @@ namespace EggCommand.Sim
     ///   dotnet run --project EggCommand.Sim -- skillvalue 技1つが勝率を何 pt 動かすか（特性と同じ物差し）
     ///   dotnet run --project EggCommand.Sim -- turnvalue  1手で何手ぶんを生むか（算数。AI を通さない）
     ///   dotnet run --project EggCommand.Sim -- delivered  算数の見積もりが実戦で入っているか（食い違いを掘る）
+    ///   dotnet run --project EggCommand.Sim -- import-sprite 手描きの原稿（art/handmade/sprite/*.png）を
+    ///                                          Species.cs に貼れる C# へ落とす（⚠️ 貼るのは人の仕事）
     /// </summary>
     public static class Program
     {
@@ -89,6 +91,8 @@ namespace EggCommand.Sim
                 case "trail": TrailProbe(seed); break;
                 case "dice": DiceProbe.Run(seed); break;
                 case "sprites": SpritePng.Run(".."); break;
+                // ⭐ 手描きの原稿（art/handmade/sprite/*.png）→ Species.cs に貼れる C#（再実行できる取り込み道具）
+                case "import-sprite": SpriteImport.Run(".."); break;
                 case "determinism": Console.WriteLine(Determinism.Run()); break;   // ⚠️ 他の出力と同じく cwd 相対（unity-port から打つ）
                 case "strategy":
                     // ⭐ `sim strategy 4` で4対4。⚠️ 既定を変えない（3対3の記録が読めなくなる）

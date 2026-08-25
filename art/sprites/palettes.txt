@@ -3,27 +3,24 @@
 # ⭐ 添字は PNG のパレットの並びと同じ。
 
 tamaru
-  0 ふつう #00fe01 #fefc01 #00c862 #8c8504 #c3bc01 #ff7e00 #7f807f #553e00 #b31a00 #000000 #fefeff
-  1 変異1 #b300fe #014ffe #c800a2 #04348c #0142c3 #00cdff #7f807f #003155 #00b397 #000000 #fffffe
-  2 変異2 #fe5200 #fe01af #c8a200 #8c0467 #c3018c #d000ff #7f807f #550051 #5300b3 #000000 #fefffe
-  3 変異3 #00fec7 #3bfe01 #0092c8 #298c04 #33c301 #b9ff00 #7f807f #2a5500 #b3a600 #000000 #fffeff
+  0 ふつう #474671 #040406 #f7f5ea #1a1d49 #30345a #afb5e2 #55507d #3e3f54 #d6d1db #ea9d1e #2d2e3e #1d1f2f #08132e #2a3155 #9999aa #fbd34a #ca7416 #675c8d #78768e #8570a4 #5d5e7e #15203e
+  1 変異1 #715546 #060504 #eaf5f7 #49271a #5a3a30 #e2baaf #7d6450 #54443e #dbd9d1 #1eeae1 #3e322d #2f211d #2e0a08 #55312a #aa9f99 #4ae8fb #16cab0 #8d775c #8e8076 #a49670 #7e675d #3e1815
+  2 変異2 #467155 #040605 #f7eaf5 #1a4927 #305a3a #afe2ba #507d64 #3e5444 #d1dbd9 #e11eea #2d3e32 #1d2f21 #082e0a #2a5531 #99aa9f #fb4ae8 #b016ca #5c8d77 #768e80 #70a496 #5d7e67 #153e18
 
 tsunoga
-  0 ふつう #2a1a14 #c97a52 #eab48c #160e0a
-  1 変異1 #141a2a #5273c9 #8c9eea #0a0e16
-  2 変異2 #2a1420 #c95293 #ea8cc4 #160a12
-  3 変異3 #1a2a18 #63c952 #98ea8c #0e160a
+  0 ふつう #fbf6e5 #141414 #21d2c5 #2fb5ba #23e1d9 #f9e1d9 #ffccf1 #22efd4 #efc2d1 #46ffe6 #dac4c0 #fff0e3 #00b1b4 #a784b0 #fdf4e2 #dad9ca #06082d #48f3d2
+  1 変異1 #e5f9fb #141414 #d221a4 #ba2f87 #e123aa #d9f9ec #e0ffcc #ef22c6 #c2efc2 #ff46da #c0dacd #e3fff9 #b40075 #aab084 #e2fdfd #cad6da #2d1106 #f348db
+  2 変異2 #fbe5f9 #141414 #a4d221 #87ba2f #aae123 #ecd9f9 #cce0ff #c6ef22 #c2c2ef #daff46 #cdc0da #f9e3ff #75b400 #84aab0 #fde2fd #dacad6 #062d11 #dbf348
 
 haneru
-  0 ふつう #241c2e #a98fc9 #ded0ea #141018
-  1 変異1 #1c2e2a #8fc9bd #d0eae4 #101816
-  2 変異2 #2e2418 #c9b48f #eae0d0 #181410
-  3 変異3 #2e1c1c #c98f8f #ead0d0 #181010
+  0 ふつう #87ac5d #050506 #faf1c9 #43644d #619255 #1a2122 #cbb08a #b1c664 #607e5f #bc906e #294b3b #cf4949 #a23536 #f8736f #ff8d6d #ffffff #4b6d4b #3b1816 #d05c6c #c0c0c0 #a83348 #f56342 #87a26a #e5e49b #c1d185 #111211
+  1 変異1 #5d6dac #060505 #c9f3fa #584364 #5d5592 #221a1e #8acbc6 #6490c6 #685f7e #6ebcaa #46294b #49cf76 #35a258 #6ff8a1 #6dffbe #ffffff #564b6d #163b24 #5cd073 #c0c0c0 #33a845 #42f59f #6a74a2 #9bcde5 #85a8d1 #111211
+  2 変異2 #ac5d6d #050605 #fac9f3 #645843 #925d55 #1e221a #c68acb #c66490 #7e685f #aa6ebc #4b4629 #7649cf #5835a2 #a16ff8 #be6dff #ffffff #6d564b #24163b #735cd0 #c0c0c0 #4533a8 #9f42f5 #a26a74 #e59bcd #d185a8 #111211
 
 nobiru
-  0 ふつう #1c2e24 #6ec99a #a8eac8 #101a14
-  1 変異1 #2e1c24 #c96e9a #eaa8c8 #1a1014
-  2 変異2 #2a2e18 #b4c96e #dceaa8 #181a10
+  0 ふつう #fe3b40 #fcbd8a #000000 #d29673 #312c2a #fd4b50 #fd5d62 #fc7a4d #d39c88 #fa6237 #f14d50 #9f292b #bc3c3c #f06038 #db484c #ecf2ea #96402c #504038 #060305 #dd6b4e #8d7264 #c1fce5 #a88a7d #e3d5cb #ffffff
+  1 変異1 #3bfe77 #8afce3 #000000 #73d2b6 #312c2a #4bfd81 #5dfd8d #4dfcb4 #88d3b5 #37faa3 #4df181 #299f4e #3cbc67 #38f09d #48db75 #ebeaf2 #2c9663 #385048 #040603 #4edd9b #648d80 #f9c1fc #7da898 #cbe3dd #ffffff
+  2 変異2 #773bfe #e38afc #000000 #b673d2 #312c2a #814bfd #8d5dfd #b44dfc #b588d3 #a337fa #814df1 #4e299f #673cbc #9d38f0 #7548db #f2ebea #632c96 #483850 #030406 #9b4edd #80648d #fcf9c1 #987da8 #ddcbe3 #ffffff
 
 hirabe
   0 ふつう #182a2e #6eb4c9 #a8dcea #101a1c

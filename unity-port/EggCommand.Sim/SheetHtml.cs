@@ -1264,7 +1264,7 @@ function drawSpecies(){
   const pal=p.palettes[0]||['#000','#888','#ccc','#fff'];
   // ⭐ **大きさは絵から読む**（16 と 64 の両方が来る）。⚠️ 16 を焼き付けない
   const N=p.sprite.length, CELL=Math.max(6,Math.floor(320/N));
-  const DIG=D.dotDigits||'123456789abcdef';
+  const DIG=D.dotDigits;
   grid.style.gridTemplateColumns='repeat('+N+','+CELL+'px)';
   let pen=window.__pen===undefined?2:window.__pen;
   let down=false, dirty=false;
