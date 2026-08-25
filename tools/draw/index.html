@@ -509,6 +509,15 @@
   }
   .layer-row.active { border-color: var(--accent); background: rgba(212, 168, 92, 0.06); }
   .layer-row.dragging { opacity: 0.45; cursor: grabbing; }
+  /* 図形レイヤー（製図モード）だと一目で分かるよう、縁を緑に寄せる
+     （§6-3 の補助線・図形と同じ緑系 ── 「焼かない下敷き」の一貫した色）。 */
+  .layer-row-shapes { border-left: 3px solid rgba(110,225,150,0.85); }
+  .layer-shapes-badge {
+    width: 40px; height: 40px; min-height: 40px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid rgba(110,225,150,0.5); border-radius: 4px;
+    color: rgba(110,225,150,0.95); font-size: 16px;
+  }
   .layer-row-head { display: flex; align-items: center; gap: 8px; }
   .layer-eye {
     width: 40px; height: 40px; min-height: 40px; flex: 0 0 auto;
@@ -1331,6 +1340,10 @@
           <button id="layerUpBtn" disabled>▲</button>
           <button id="layerDownBtn" disabled>▼</button>
         </div>
+        <button id="layerAddShapesBtn" disabled style="width:100%; margin-top:6px;"
+                title="製図の下敷き（矩形・直線・円）を置く専用のレイヤー。1枚だけ持てる">
+          ▭ 図形レイヤーを足す
+        </button>
         <div id="layerList" class="layer-list"></div>
       </section>
 
@@ -1976,6 +1989,7 @@ const el = {
   frameCounter: document.getElementById('frameCounter'),
   frameStrip: document.getElementById('frameStrip'),
   sheetDownloadBtn: document.getElementById('sheetDownloadBtn'),
+  layerAddShapesBtn: document.getElementById('layerAddShapesBtn'),
   layerAddBtn: document.getElementById('layerAddBtn'),
   layerDupBtn: document.getElementById('layerDupBtn'),
   layerDelBtn: document.getElementById('layerDelBtn'),
@@ -2049,7 +2063,7 @@ function syncSizeButtons() {
 
 function applyCanvasSize(w, h) {
   const prevW = state.width, prevH = state.height;
-  if (w === prevW && h === prevH && state.pixels) return true;
+  if (w === prevW && h === prevH && hasArtwork()) return true;
   state.width = w;
   state.height = h;
   el.sizeLabel.textContent = state.width;
@@ -3011,6 +3025,7 @@ function compositeFrame(frameIdx) {
   const W = state.width, H = state.height;
   const out = new Uint8ClampedArray(W * H * 4);
   for (const layer of state.layers) {
+    if (isShapesLayer(layer)) continue;   // 🔴 焼かない（なぞる下敷き専用・設計 §3）
     if (!layer.visible) continue;
     const px = layer.frames[frameIdx];
     if (!px) continue;
@@ -3059,7 +3074,7 @@ function blitBuffer(ctx, buf, alpha, offX, offY) {
 function layoutSpriteBg() {
   const bg = el.spriteBg;
   if (!bg) return;
-  if (!state.pixels) { bg.style.display = 'none'; return; }
+  if (!hasArtwork()) { bg.style.display = 'none'; return; }
   const v = state.view;
   bg.style.display = 'block';
   bg.style.left   = `${v.panX}px`;
@@ -3075,7 +3090,10 @@ function renderEditor() {
   ctx.clearRect(0, 0, el.editorCanvas.width, el.editorCanvas.height);
   layoutSpriteBg();
   syncCanvasDependentUI();
-  if (!state.pixels) { renderPreview(); return; }
+  // 🔴 `state.pixels` では判定しない（図形レイヤーがアクティブだと null になるが、
+  //    その間も他のラスタレイヤーの絵と、下敷き・図形の重ね描きは続ける必要がある）。
+  //    「作品そのものが無い」ときだけ抜ける。
+  if (state.layers.length === 0) { renderPreview(); return; }
 
   // 前のコマを薄く重ねる (35%)
   if (state.onionSkin && state.currentFrame > 0) {
@@ -3136,7 +3154,10 @@ const DRAFT_SCALE = 4;
 const DRAFT_TAP_MIN = 28;
 
 function drawDraftOverlay(ctx) {
-  if (!state.pixels) return;
+  // 🔴 `state.pixels` では判定しない。図形レイヤーがアクティブだと
+  //    `state.pixels` は null になる（A3・製図モードの目印）が、
+  //    その間もこの下敷き自体（格子・中心線・ガイド・図形）は描き続ける必要がある。
+  if (state.layers.length === 0) return;
   const W = state.width, H = state.height;
   const v = state.view, d = v.dpr;
   const left = devX(0), right = devX(W), top = devY(0), bottom = devY(H);
@@ -3220,7 +3241,7 @@ function updateDraftReadout(cell) {
   if (cell !== undefined) _draftCell = cell;
   const box = el.draftReadout;
   if (!box) return;
-  if (!state.draft.readout || !state.pixels) { box.classList.remove('on'); return; }
+  if (!state.draft.readout || !hasArtwork()) { box.classList.remove('on'); return; }
 
   const px = (n) => `${n}<span class="v">・${n * DRAFT_SCALE}px</span>`;
   const rows = [];
@@ -3242,8 +3263,8 @@ function updateDraftReadout(cell) {
 
 // state.pixels の有無に連動する見た目をまとめて合わせる
 function syncCanvasDependentUI() {
-  if (el.emptyHint) el.emptyHint.classList.toggle('hidden', !!state.pixels);
-  if (el.panePreview) el.panePreview.classList.toggle('empty', !state.pixels);
+  if (el.emptyHint) el.emptyHint.classList.toggle('hidden', hasArtwork());
+  if (el.panePreview) el.panePreview.classList.toggle('empty', !hasArtwork());
   if (el.shareBtn) el.shareBtn.disabled = el.downloadBtn.disabled;
 }
 
@@ -3253,7 +3274,7 @@ function renderPreview() {
   if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, W, H);
-  if (!state.pixels) return;
+  if (!hasArtwork()) return;
   const id = ctx.createImageData(W, H);
   // While the animation is playing, show animFrameIdx instead of the
   // edited frame — so the preview keeps cycling while the user edits.
@@ -3357,7 +3378,7 @@ syncDraftUI();
 // ⚠️ ここは**描く処理より前に**割り込ませない（`pointermove` の本体は別に居る）。
 //    受け身で見るだけなので、既存のどの経路も邪魔しない。
 el.canvasStage.addEventListener('pointermove', (e) => {
-  if (!state.draft.readout || !state.pixels) return;
+  if (!state.draft.readout || !hasArtwork()) return;
   updateDraftReadout(pixelCoordsFromEvent(e));
 }, { passive: true });
 el.canvasStage.addEventListener('pointerleave', () => {
@@ -4751,6 +4772,9 @@ function switchLayer(idx) {
 
 function addLayer(copyCurrent) {
   if (state.layers.length === 0) return;
+  // 🔴 図形レイヤーは `frames` を持たないので、これで複製されると壊れる
+  // （ボタン側で無効化するが、キー操作等の他経路への備えとしてもここで弾く）。
+  if (copyCurrent && isShapesLayer(state.layers[state.currentLayer])) return;
   pushUndo();
   const W = state.width, H = state.height;
   const F = frameCount();
@@ -4781,6 +4805,9 @@ function addLayer(copyCurrent) {
 
 function deleteCurrentLayer() {
   if (state.layers.length <= 1) return;
+  // 🔴 ラスタレイヤーが0枚になる削除は拒む（`firstRasterLayer` 等が前提にしている）。
+  const willBeRaster = state.layers.filter((l, i) => i !== state.currentLayer && !isShapesLayer(l));
+  if (willBeRaster.length === 0) return;
   pushUndo();
   state.layers.splice(state.currentLayer, 1);
   if (state.currentLayer >= state.layers.length) state.currentLayer = state.layers.length - 1;
@@ -4806,12 +4833,33 @@ function moveLayer(delta) {
 
 function updateLayerButtons() {
   const has = state.layers.length > 0;
+  const activeIsShapes = has && isShapesLayer(state.layers[state.currentLayer]);
   el.layerAddBtn.disabled = !has;
-  el.layerDupBtn.disabled = !has;
+  // ⚠️ 「複製」は図形レイヤーには意味が無い（`.frames` を持たないので壊れる・§A8）。
+  el.layerDupBtn.disabled = !has || activeIsShapes;
   el.layerDelBtn.disabled = state.layers.length <= 1;
   el.layerUpBtn.disabled = !has || state.currentLayer >= state.layers.length - 1;
   el.layerDownBtn.disabled = !has || state.currentLayer === 0;
+  // ⭐ 図形レイヤーは1枚だけ（重ねる意味が薄いので2枚目は作れない・設計 §3）。
+  if (el.layerAddShapesBtn) el.layerAddShapesBtn.disabled = !has || !!shapesLayer();
 }
+
+/// <summary>図形レイヤー（製図モード）を1枚だけ作る。⚠️ 既にあれば何もしない
+/// （ボタン側で無効化するが、二重呼び出しへの備えとしてもここで弾く）。
+/// ⭐ 一番上（最前面）に足す ── なぞる下敷きは絵より手前にあるほうが見やすい。</summary>
+function addShapesLayer() {
+  if (state.layers.length === 0 || shapesLayer()) return;
+  pushUndo();
+  const newLayer = { name: '製図', opacity: 1.0, visible: true, kind: 'shapes', shapes: [] };
+  state.layers.push(newLayer);
+  state.currentLayer = state.layers.length - 1;
+  refreshActiveCel();
+  if (!state.floating) cancelSelection();
+  renderLayerPanel();
+  renderTimeline();
+  renderEditor();
+}
+el.layerAddShapesBtn.addEventListener('click', addShapesLayer);
 
 // 触ってレイヤーの順番を並べ替える。カスタムパレットの並べ替え
 // (attachPaletteDrag) と同じやり方 ── ドラッグ中は要素を作り直さず
@@ -4881,12 +4929,22 @@ function renderLayerPanel() {
   for (let i = state.layers.length - 1; i >= 0; i--) {
     const layer = state.layers[i];
     const row = document.createElement('div');
-    row.className = 'layer-row' + (i === state.currentLayer ? ' active' : '');
+    row.className = 'layer-row' + (i === state.currentLayer ? ' active' : '')
+      + (isShapesLayer(layer) ? ' layer-row-shapes' : '');
     row.dataset.layerIndex = i;
     attachLayerRowDrag(row);
 
     const head = document.createElement('div');
     head.className = 'layer-row-head';
+
+    if (isShapesLayer(layer)) {
+      // ⭐ 図形レイヤーだと一目で分かる印（普通のレイヤーのサムネイルの代わり）。
+      const badge = document.createElement('span');
+      badge.className = 'layer-shapes-badge';
+      badge.textContent = '▭';
+      badge.title = '図形レイヤー（製図モード・焼かない下敷き）';
+      head.appendChild(badge);
+    }
 
     const eye = document.createElement('button');
     eye.className = 'layer-eye' + (layer.visible ? ' on' : '');
@@ -4957,28 +5015,28 @@ el.editorCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
 // 一括で巻き戻せるよう、まるごと保存する素直な方針。
 function snapshotState() {
   return {
-    layers: state.layers.map(l => ({
-      name: l.name,
-      opacity: l.opacity,
-      visible: l.visible,
-      frames: l.frames.map(f => new Uint8ClampedArray(f)),
-    })),
+    layers: state.layers.map(l => isShapesLayer(l)
+      // 🔴 図形レイヤーも同じ取り消しの仕組みに乗せる（別の取り消し経路を作らない・
+      //    「1操作＝1取り消し」を壊さない）。深く複製する ── 後から shapes 配列を
+      //    直に書き換えるコードがあるので、参照を共有すると過去のスナップショットまで
+      //    一緒に書き換わってしまう。
+      ? { name: l.name, opacity: l.opacity, visible: l.visible, kind: 'shapes',
+          shapes: structuredClone(l.shapes) }
+      : { name: l.name, opacity: l.opacity, visible: l.visible,
+          frames: l.frames.map(f => new Uint8ClampedArray(f)) }),
     currentLayer: state.currentLayer,
     currentFrame: state.currentFrame,
   };
 }
 function applySnapshot(snap) {
-  state.layers = snap.layers.map(l => ({
-    name: l.name,
-    opacity: l.opacity,
-    visible: l.visible,
-    frames: l.frames.map(f => new Uint8ClampedArray(f)),
-  }));
+  state.layers = snap.layers.map(l => isShapesLayer(l)
+    ? { name: l.name, opacity: l.opacity, visible: l.visible, kind: 'shapes',
+        shapes: structuredClone(l.shapes) }
+    : { name: l.name, opacity: l.opacity, visible: l.visible,
+        frames: l.frames.map(f => new Uint8ClampedArray(f)) });
   state.currentLayer = Math.min(snap.currentLayer, state.layers.length - 1);
-  state.currentFrame = Math.min(
-    snap.currentFrame,
-    state.layers[state.currentLayer].frames.length - 1,
-  );
+  const raster = firstRasterLayer();
+  state.currentFrame = raster ? Math.min(snap.currentFrame, raster.frames.length - 1) : 0;
   refreshActiveCel();
 }
 function pushUndo() {
@@ -5068,17 +5126,37 @@ el.deleteColorBtn.addEventListener('click', () => {
 // フレーム追加/削除は全レイヤーに同時適用。switchFrame() 経由で再代入。
 
 // アクセサ: フレーム数は (任意レイヤーの) frames.length と一致 (全レイヤー同じ枚数)。
+// ── 図形レイヤー（製図モード）の土台 ──────────────────────
+//
+// ⭐ `state.layers` の中に、普通のレイヤー（`frames` を持つ）と並んで
+// `kind: 'shapes'` の1枚を持てる（1枚だけ）。⚠️ **`.frames` を持たない**ので、
+// 「全レイヤーを触る」既存コード（フレーム操作・undo等）はここで弾く必要がある。
+function isShapesLayer(layer) { return !!layer && layer.kind === 'shapes'; }
+// 🔴 「作品が読み込まれているか」の唯一の判定。`state.pixels` は図形レイヤーが
+// アクティブだと null になる（A3）ので、`state.pixels` を「作品が在るか」の
+// 代わりに使っていた既存箇所（保存・書き出し・プレビュー・ズーム等）は、
+// 図形レイヤーがアクティブなだけで機能ごと止まってしまう ── ここで区別する。
+function hasArtwork() { return state.layers.length > 0; }
+function firstRasterLayer() { return state.layers.find(l => !isShapesLayer(l)); }
+function shapesLayer() { return state.layers.find(isShapesLayer); }
+
 function frameCount() {
-  return state.layers.length > 0 ? state.layers[0].frames.length : 0;
+  const raster = firstRasterLayer();
+  return raster ? raster.frames.length : 0;
 }
 // (layer, frame) 座標で state.pixels エイリアスを再構築
 function refreshActiveCel() {
   if (state.layers.length === 0) return;
   if (state.currentLayer >= state.layers.length) state.currentLayer = state.layers.length - 1;
-  if (state.currentFrame >= state.layers[state.currentLayer].frames.length) {
-    state.currentFrame = state.layers[state.currentLayer].frames.length - 1;
+  const active = state.layers[state.currentLayer];
+  // 🔴 **図形レイヤーがアクティブ＝製図モード。**`.frames` を持たないので
+  // 鉛筆の的（`state.pixels`）を外す ── これだけで鉛筆・消しゴムは自然に描けなくなる
+  // （新しいモード切替ボタンを作らない、という設計 §4 の要）。
+  if (isShapesLayer(active)) { state.pixels = null; return; }
+  if (state.currentFrame >= active.frames.length) {
+    state.currentFrame = active.frames.length - 1;
   }
-  state.pixels = state.layers[state.currentLayer].frames[state.currentFrame];
+  state.pixels = active.frames[state.currentFrame];
 }
 
 function switchFrame(idx) {
@@ -5099,6 +5177,7 @@ function addFrame(copyCurrent) {
   const W = state.width, H = state.height;
   // 全レイヤーに新しいセル (空 or 現在のコピー) を追加
   state.layers.forEach((layer, lIdx) => {
+    if (isShapesLayer(layer)) return;   // 図形レイヤーはコマを持たない（常に同じ下敷き）
     const src = layer.frames[state.currentFrame];
     // 「複製」なら全レイヤーを写す。現在レイヤーだけ写して他を空にすると、
     // 多層の絵を複製したとき他の層の中身が黙って消える。
@@ -5120,6 +5199,7 @@ function deleteCurrentFrame() {
   pushUndo();
   // 全レイヤーから currentFrame を削除
   state.layers.forEach(layer => {
+    if (isShapesLayer(layer)) return;
     layer.frames.splice(state.currentFrame, 1);
   });
   if (state.currentFrame >= frameCount()) state.currentFrame = frameCount() - 1;
@@ -5297,7 +5377,7 @@ function frameToCanvas(idx, scale) {
 
 function updateExportNote() {
   if (!el.exportSizeNote) return;
-  if (!state.pixels) { el.exportSizeNote.textContent = ''; return; }
+  if (!hasArtwork()) { el.exportSizeNote.textContent = ''; return; }
   const k = exportScale(), W = state.width, H = state.height;
   el.exportSizeNote.textContent = k === 1
     ? `${W}×${H} px のまま`
@@ -5306,7 +5386,7 @@ function updateExportNote() {
 if (el.exportScale) el.exportScale.addEventListener('change', updateExportNote);
 
 el.downloadBtn.addEventListener('click', () => {
-  if (!state.pixels) return;
+  if (!hasArtwork()) return;
   const out = frameToCanvas(state.currentFrame, safeExportScale(1));
   out.toBlob((blob) => {
     saveBlob(blob, `${safeFolderName(el.spriteName.value)}_${out.width}x${out.height}.png`);
@@ -5659,7 +5739,7 @@ function zoomCentered(factor) {
 // 拡大縮小にする。⚠️ 以前はホイール全部が拡大縮小で、中ボタンの無い機種は
 // スクロールで画面を動かす手段が無かった（実際にあった不具合）。
 el.canvasStage.addEventListener('wheel', (e) => {
-  if (!state.pixels) return;
+  if (!hasArtwork()) return;
   e.preventDefault();
   if (e.ctrlKey || e.metaKey) {
     const factor = e.deltaY < 0 ? 1.15 : (1 / 1.15);
@@ -5715,7 +5795,7 @@ window.addEventListener('orientationchange', () => setTimeout(handleStageResize,
 
 // ============ Preview click → enlarged modal ============
 function openPreviewModal() {
-  if (!state.pixels) return;
+  if (!hasArtwork()) return;
   const W = state.width, H = state.height;
   const MODAL_MAX = Math.min(window.innerWidth, window.innerHeight) - 80;
   // Snap CSS size to an integer multiple of W/H so pixels stay perfectly square.
@@ -5841,15 +5921,21 @@ function makeWorkPayload() {
     currentFrame: state.currentFrame,
     color: state.color,
     palette: state.palette,
-    layers: state.layers.map(l => ({
-      name: l.name, opacity: l.opacity, visible: l.visible,
-      frames: l.frames.map(celToDataURL),
-    })),
+    // 🔴 図形レイヤーは `frames`（絵）の代わりに `shapes`（数値の図形一覧）を書き出す。
+    //    ⭐ これで内部保存（localStorage）と `.pixelizer.json` の書き出しの**両方**に
+    //    自動で乗る（`saveWorkNow` もファイル書き出しも、ここを呼ぶ唯一の経路のため）。
+    //    ⚠️ ゲーム側（`sim import-screen`）は `kind` フィールドを見て読み飛ばす
+    //    （`frames` が無い層として安全に無視されるので、無改修でも壊れない）。
+    layers: state.layers.map(l => isShapesLayer(l)
+      ? { name: l.name, opacity: l.opacity, visible: l.visible, kind: 'shapes',
+          shapes: l.shapes }
+      : { name: l.name, opacity: l.opacity, visible: l.visible,
+          frames: l.frames.map(celToDataURL) }),
   };
 }
 
 function saveWorkNow() {
-  if (!state.pixels || _restoring) return;
+  if (!hasArtwork() || _restoring) return;
   let id = currentWorkId();
   if (!id) { id = newWorkId(); setCurrentWorkId(id); }
   const payload = JSON.stringify(makeWorkPayload());
@@ -5901,12 +5987,18 @@ async function applyWorkPayload(data) {
 
     state.layers = [];
     for (const l of data.layers) {
+      if (l.kind === 'shapes') {
+        state.layers.push({ name: l.name, opacity: l.opacity, visible: l.visible,
+          kind: 'shapes', shapes: Array.isArray(l.shapes) ? l.shapes : [] });
+        continue;
+      }
       const frames = [];
       for (const u of l.frames) frames.push(await dataURLToCel(u, data.w, data.h));
       state.layers.push({ name: l.name, opacity: l.opacity, visible: l.visible, frames });
     }
     state.currentLayer = Math.min(data.currentLayer || 0, state.layers.length - 1);
-    state.currentFrame = Math.min(data.currentFrame || 0, state.layers[0].frames.length - 1);
+    const raster0 = firstRasterLayer();
+    state.currentFrame = raster0 ? Math.min(data.currentFrame || 0, raster0.frames.length - 1) : 0;
     refreshActiveCel();
     if (data.color) { state.color = data.color; updateColorUI(); }
     // 作った色見本も一緒に戻す。絵だけ戻って色が消えると作業を続けられない。
@@ -5931,7 +6023,7 @@ async function applyWorkPayload(data) {
 }
 
 async function openWork(id) {
-  if (state.pixels) saveWorkNow();      // 切り替える前に今の作品を確定させる
+  if (hasArtwork()) saveWorkNow();      // 切り替える前に今の作品を確定させる
   let data;
   try { data = JSON.parse(lsGet(workKey(id)) || 'null'); } catch (_) { data = null; }
   if (!data) { toast('その作品は開けませんでした'); return false; }
@@ -5951,7 +6043,7 @@ async function openWork(id) {
 }
 
 function startNewWork() {
-  if (state.pixels) saveWorkNow();
+  if (hasArtwork()) saveWorkNow();
   setCurrentWorkId(null);
   state.sourceImg = null;
   state.grid = null;
@@ -5975,7 +6067,7 @@ function startNewWork() {
 }
 
 function duplicateCurrentWork() {
-  if (!state.pixels) { toast('複製する作品がありません'); return; }
+  if (!hasArtwork()) { toast('複製する作品がありません'); return; }
   saveWorkNow();
   const from = currentWorkId();
   const id = newWorkId();
@@ -6066,7 +6158,7 @@ function renderWorksList() {
 // ブラウザの中の保存は、閲覧データを消せば一緒に消える。
 // 残しておきたい絵は手元のファイルにも出せるようにしておく。
 function exportWorkFile() {
-  if (!state.pixels) { toast('書き出す作品がありません'); return; }
+  if (!hasArtwork()) { toast('書き出す作品がありません'); return; }
   saveWorkNow();
   const data = makeWorkPayload();
   data.name = workName();
@@ -6081,7 +6173,7 @@ async function importWorkFile(file) {
   if (!data || data.v !== 1 || !Array.isArray(data.layers) || !data.layers.length) {
     toast('この形式には対応していません'); return;
   }
-  if (state.pixels) saveWorkNow();
+  if (hasArtwork()) saveWorkNow();
   const id = newWorkId();
   if (!lsSet(workKey(id), JSON.stringify(data))) { toast('保存先がいっぱいです'); return; }
   const fallback = file.name.replace(/\.pixelizer\.json$/i, '').replace(/\.json$/i, '');
@@ -6590,7 +6682,7 @@ const canShareFiles = !!(navigator.canShare && navigator.share);
 if (!canShareFiles && el.shareBtn) el.shareBtn.style.display = 'none';
 if (el.shareBtn) {
   el.shareBtn.addEventListener('click', async () => {
-    if (!state.pixels) return;
+    if (!hasArtwork()) return;
     const k = safeExportScale(1);
     const W = state.width * k, H = state.height * k;
     const blob = await frameToPngBlob(state.currentFrame, k);
