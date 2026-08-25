@@ -5,12 +5,15 @@
 #    種族名（354 から）と 2px 重なっていた（検査が指摘・2026-08-22）。
 #
 #  名前   種類    左   上    幅   高    付け足し
-empty    label   0    168   300  44    size=28 ink=faint anchor=center when=!full text=からっぽ
-ready    round   45   14    210  210   when=ready bind=ready
-art      pixel   66   34    168  168   when=full bind=art
-stars    label   0    218   300  44    size=28 ink=accent anchor=upper-center when=full bind=stars
-track    bar     30   272   240  18    when=full bind=track
-clock    label   0    304   300  50    size=32 anchor=upper-center when=full bind=clock
+empty    label   0    168   300  44    size=40 ink=faint anchor=center when=!full text=からっぽ
+ready    round   44   16    212  212   when=ready bind=ready
+art      pixel   68   36    168  168   when=full bind=art
+stars    label   0    220   300  44    size=40 ink=accent anchor=upper-center when=full bind=stars
+track    bar     32   272   240  20    when=full bind=track
+# ⚠️ **字が 32→40px になったので、時計の高さを 50→48 に、種族名の上を 354→352 に動かした。**
+#    ⭐ 304+48=352 が種族名の上（352）とちょうど接する（重ならない）── 四捨五入だけだと
+#    304+52=356 と 354→356 がぶつかるので、ここは意図してどちらも切り下げた（2026-08-25）。
+clock    label   0    304   300  48    size=40 anchor=upper-center when=full bind=clock
 # ⭐ **何を温めているか。**⚠️ ★と時計は「どれくらい」しか言わないので、
 #    これが無いと**何が孵るのか**を言う字が画面に1つも無い（2026-08-22）。
-who      label   0    354   300  26    size=22 ink=dim anchor=center when=full bind=who
+who      label   0    352   300  28    size=40 ink=dim anchor=center when=full bind=who

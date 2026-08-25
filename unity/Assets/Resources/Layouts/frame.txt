@@ -13,17 +13,20 @@
 #
 #  名前    種類    左   上    幅   高    付け足し
 top       box     0    0     1080 132
-  back    button  12   10    112  112   size=44 tap=back when=back text=‹
+  back    button  12   12    112  112   size=40 tap=back when=back text=‹
   title   label   140  0     620  132   size=40 anchor=center bind=title
-  badge   label   780  0     252  132   size=28 ink=faint anchor=right bind=badge when=!extra
+  # ⚠️ **252→260 に広げた。**⭐ 字が28→40px になり「パーティ編成」(6字)が240px要る。
+  #    252 だと余白12px しか無く詰まるので、260（4の倍数）へ広げた（2026-08-25）。
+  badge   label   780  0     260  132   size=40 ink=faint anchor=right bind=badge when=!extra
   # ⭐ **右肩は「本体に置けない入口」の口でもある**（Unity 版の `FrameView.ShowExtra`）。
   # ⚠️ 字だけだと題名と見分けが付かないので、**札を敷く**（レビュー指摘 2026-08-19）。
   # ⚠️ 右肩の字（EXP）とは**同時に出ない** ── 同じ場所を使うので `when` で入れ替える。
-  extra   button  780  10    252  112   size=28 tap=extra bind=extra when=extra
+  extra   button  780  12    260  112   size=40 tap=extra bind=extra when=extra
 
 dock      box     0    1688  1080 232   when=dock dock=no
   plate   card    0    0     1080 232
-  tab     card    48   42    234  148   repeat=tabs cols=4 gap=16 rows=148 max=4 tap=tab bind=tab
-    tname  label  0    28    234  44    size=32 anchor=upper-center bind=tname
+  tab     card    48   44    236  148   repeat=tabs cols=4 gap=16 rows=148 max=4 tap=tab bind=tab
+    tname  label  0    28    236  44    size=40 anchor=upper-center bind=tname
     # ⚠️ 0 を出さない。⭐ 数が無いことは**書かない**ことで伝わる
-    tcount label  0    84    234  36    size=24 anchor=upper-center bind=tcount
+    # ⚠️ 字が24→40pxになったので、高さを36→48に広げた（1行に収める余地を作る）。
+    tcount label  0    84    236  48    size=40 anchor=upper-center bind=tcount

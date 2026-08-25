@@ -9,27 +9,28 @@
 # ⚠️ 数は `Resources/Prefabs/HomeScreen.prefab` の実測（枠は 3列×2段・倍率1）。
 #
 #  名前   種類    左   上    幅    高    付け足し
-mats     card    0    0     1080  78
-  icon   round   48   19    40    40    bind=icon
+mats     card    0    0     1080  80
+  icon   round   48   20    40    40    bind=icon
   # ⭐ **EXP と書く。**⚠️ 数だけ出していた頃は、丸い印の隣の数が
   #    何の数なのか画面のどこにも書いていなかった。
-  count  label   104  0     400   78    size=40 anchor=left bind=count
+  count  label   104  0     400   80    size=40 anchor=left bind=count
   # ⭐ **この世界の番号。**⚠️ 端末ごとに違う世界を引くので、
   #    「この盤面で起きた」と伝える手立てがこれしか無い。
   # ⚠️ 説明の字は付けない ── 要る人だけが読む。⭐ 16進なら8桁で口に出せる。
-  world  label   540  0     492   78    size=24 ink=faint anchor=right bind=world
+  world  label   540  0     492   80    size=40 ink=faint anchor=right bind=world
 
-idle     host    0    90    1080  470
+idle     host    0    88    1080  472
 
-slot     card    70   616   300   380   repeat=slots cols=3 gap=20 rows=400 max=6 tap=slot use=slot
+slot     card    72   616   300   380   repeat=slots cols=3 gap=20 rows=400 max=6 tap=slot use=slot
 
-# ⚠️ **置ける行は 1420 の1行しか無い。**⭐ 実測: 素材 0〜78 / 放置 90〜560 /
+# ⚠️ **置ける行は 1420 の1行しか無い。**⭐ 実測: 素材 0〜80 / 放置 88〜560 /
 #    孵化枠 616〜1396 / **1420〜1532** / 帯 1556〜1788。
+#    ⚠️ 数字は2026-08-25の升目直し（4の倍数化）後の値（素材・放置の端が動いた）。
 #    ⚠️ 上へ重ねたら孵化枠と、下へ置いたら帯と重なる。
 # ⚠️ **下の帯より上位に見せない。**全幅の札にすると、ナビより大きくて階層が逆転する
 #    （レビュー指摘 2026-08-19）。⭐ 3つに割って横に並べる。
 # ⭐ **輪の外にあるもの**を、ここ1行にまとめてある（試練・編成・控え）。
 #    ⚠️ 遊びの輪（探索→潜入→戦闘→帰還）は下の帯が持つ。混ぜない。
-trial    button  48   1420  316   112   size=30 tap=trials bind=trials
-party    button  382  1420  316   112   size=30 tap=party text=パーティ編成
-keep     button  716  1420  316   112   size=30 tap=keep text=保存の控え
+trial    button  48   1420  316   112   size=40 tap=trials bind=trials
+party    button  384  1420  316   112   size=40 tap=party text=パーティ編成
+keep     button  716  1420  316   112   size=40 tap=keep text=保存の控え
