@@ -36,6 +36,23 @@
     <!-- 骨組みエディタ 段階2 Pass A「揃える・等間隔」の純関数。EditAttrs.cs と同じ理由・
          同じ形（Core にも Web の他の型にも依存しないので、そのまま直接コンパイルできる）。 -->
     <Compile Include="..\EggCommand.Web\EditAlign.cs" Link="EditAlign.cs" />
+    <!-- 骨組みエディタ E2「層」の判定。Core にしか依存しない純関数。 -->
+    <Compile Include="..\EggCommand.Web\EditLayers.cs" Link="EditLayers.cs" />
+    <!-- 骨組みエディタ E2「機能（tap=）」の一覧。唯一の出所は Shell.cs の switch ──
+         ずれを見張る検査は TapCatalogTests.cs（下の websrc\Shell.cs をテキストとして読む）。 -->
+    <Compile Include="..\EggCommand.Web\TapCatalog.cs" Link="TapCatalog.cs" />
+    <!-- 骨組みエディタ E2「冠の逆算」の純関数。Core にしか依存しない（Scenes/LayoutStore を
+         使う Web 側の呼び出し口は EditPage.razor にしか無い）。 -->
+    <Compile Include="..\EggCommand.Web\TapCrowns.cs" Link="TapCrowns.cs" />
+  </ItemGroup>
+
+  <!-- ⭐ E2: `tap=` 一覧のずれ検査（TapCatalogTests）が、`Shell.cs`/`AppPage.razor` を
+       **コンパイルせずテキストとして**読み直す（`LayoutRuleTests` の `view\*.cs` と同じ
+       「読むだけ」の型）。⚠️ Shell.cs は Web 専用の依存（LayoutDom/Deeds/Filters 等）を
+       多く持つのでコンパイルには持ち込めない ── ソースの文字列だけを検査する。 -->
+  <ItemGroup>
+    <None Include="..\EggCommand.Web\Shell.cs" Link="websrc\Shell.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\EggCommand.Web\Pages\AppPage.razor" Link="websrc\AppPage.razor" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- いまの実装の出力を凍らせた記録。⚠️ 移植の証拠ではない。

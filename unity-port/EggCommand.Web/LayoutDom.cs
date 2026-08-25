@@ -206,6 +206,13 @@ namespace EggCommand.Web
               .Append(" id=\"").Append(Esc(name)).Append('"')
               .Append(" class=\"").Append(cls).Append('"')
               .Append(" style=\"").Append(style).Append('"');
+            // ⭐ E2: **層（レイヤ）の見なし**（計画 §11-2）。⚠️ 骨組みの字には書かない
+            //    （保存されない・編集中の見なしだけ）ので、ここは HTML の属性としてのみ出す
+            //    ── `stage.css`（薄くする・二重縁）と `edit.js`（触れなくする）の
+            //    両方がこの1つの属性を読む（唯一の出所は `EditLayers.Of`）。
+            //    ⚠️ 遊ぶ画面（`/app`）にも同じ属性が付くが、`data-line`/`data-tap` と同じく
+            //    そちらの JS（`tap.js`）は読まないので無害（既存の作法どおり）。
+            sb.Append(" data-layer=\"").Append(EditLayers.Token(EditLayers.Of(node))).Append('"');
             // ⭐ **骨組みエディタの掴みどころ**（`data-line` ＝ 出所の行番号）。
             //
             // ⚠️ `use=` で差した部品の節点（`Layouts.Rename` を通ったもの）は

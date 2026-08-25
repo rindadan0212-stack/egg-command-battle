@@ -363,6 +363,68 @@
   background: rgba(245, 158, 11, .06);
   z-index: 2;
 }
+/* ⭐ E2: 「囲んで作る」（押しどころの層）のプレビューは「選ぶ」（ラバーバンド）と
+   見た目を変える ── 実線＋少し濃い面（Tiled `createobjecttool.cpp` と同じ「作っている
+   最中」の半透明プレビュー）。新しい色は増やさない（同じアンバーのまま濃さだけ変える）。 */
+.edband.edband-create {
+  border-style: solid;
+  background: rgba(245, 158, 11, .16);
+}
+
+/* ── ⭐ E2: 層（レイヤ）── 薄くする／見えないものの見せ方 ──────────
+   ⚠️ 「薄くする」（ここ）と「触れなくする」（`edit.js` の `_layerOk`）は別々の軸
+   （計画「片方だけだと必ず不満が出る」）── CSS 側はここでは opacity しか触らない。
+   🔴 `::deep` が要る（`.edfault-box` と同じ理由 ── `_html` は Razor が知らない
+   MarkupString の中身）。 */
+#edstage[data-layerfilter="paint"] ::deep .n:not([data-layer="paint"]),
+#edstage[data-layerfilter="dynamic"] ::deep .n:not([data-layer="dynamic"]),
+#edstage[data-layerfilter="tap"] ::deep .n:not([data-layer="tap"]),
+#edstage[data-layerfilter="container"] ::deep .n:not([data-layer="container"]) {
+  opacity: .4;
+}
+
+/* ⭐ E2: **見えないものの見せ方**（計画 §11-3・Tiled `mapobjectitem.cpp` の二重縁）。
+   押しどころ・入れ物は、どんな絵の上でも輪郭が消えない「白の実線＋黒の破線」で囲う。
+   ⚠️ `outline`（層の外・位置に影響しない）＋`border`（層の内側・box-sizing:border-box
+   なので大きさは変わらない）の2枚重ね ── 白が外側、黒い破線が縁そのものに重なる。
+   ⭐ 塗らない（この作品の約束・選んでいなくても輪郭だけ）。既にある選択の輪
+   （`#edring`/`#edsel`）とは別の層（こちらは節点自身に直接掛ける・混ぜない）。 */
+#edstage ::deep .n[data-layer="tap"],
+#edstage ::deep .n[data-layer="container"] {
+  outline: 1px solid rgba(255, 255, 255, .9);
+  border: 1px dashed rgba(20, 20, 24, .8);
+}
+
+/* ⭐ E2: 名札（節点の名前）── なし／選んだものだけ／全部 の3段階（計画 §11-3・
+   Tiled の `ObjectLabelVisibility`）。⚠️ 既定は「なし」（クラス無し）── どちらの
+   クラスも付いていなければ何も出さない。`content: attr(id)` で節点の id
+   （繰り返しの番号・部品の冠を含む・LayoutDom.One の `name` そのもの）をそのまま出す
+   ── 二重に名前を持たせない（`data-name` を別途持たせない）。 */
+#edstage ::deep .n[data-layer="tap"]::before,
+#edstage ::deep .n[data-layer="container"]::before {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 1px 4px;
+  font-size: 10px;
+  line-height: 1.3;
+  color: #fff;
+  background: rgba(0, 0, 0, .6);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 1;
+}
+#edstage.edlabels-all ::deep .n[data-layer="tap"]::before,
+#edstage.edlabels-all ::deep .n[data-layer="container"]::before {
+  display: block;
+  content: attr(id);
+}
+#edstage.edlabels-selected ::deep .n.edtagged[data-layer="tap"]::before,
+#edstage.edlabels-selected ::deep .n.edtagged[data-layer="container"]::before {
+  display: block;
+  content: attr(id);
+}
 /* ⭐ 大きさを変える掴みどころ。8個・盤の倍率の影響を受けない固定の実寸
    （.edring が盤の外に居るからこそ成立する）。 */
 .edhandle {
@@ -461,6 +523,19 @@
   padding: 6px 10px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, .08);
 }
+
+/* ⭐ E2: 層（レイヤ）の帯（計画 §11-2・§11-9「道具箱: 層の切替」）。⚠️ 新しい色は
+   増やさない ── `.edalign-btn` を共有し、選んでいるものだけ主役色（アンバー）にする
+   （画面内の主役は1つ、の作法を「いま選んでいる層」という形で守る）。 */
+.edlayerrow .edalign-btn.on {
+  background: #b45309;
+  border-color: #b45309;
+  color: #fff;
+}
+.edlayerrow .edalign-btn.on:hover { background: #c96613; }
+/* ⭐ 押しどころの層で「足す」が空になったときの案内。⚠️ 空の器を見せない代わりに、
+   何をすればいいかを1行だけ言う（計画 §11-12「まだ何も置いていない画面」と同じ作法）。 */
+.edaddhint { color: #9aa1b8; font-size: 12px; padding: 4px 2px; }
 
 /* ⭐⑥ 揃える・等間隔（`_selected.Count>=2` のときだけ出す）。⚠️ 通常の Inspector 欄
    （左/上/幅/高・属性表）とは同じ画面で混ぜない ── どちらかしか出ない。
@@ -750,6 +825,44 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── ⭐ E2: 機能（`tap=`）を選ぶ小窓 ─────────────────────
+   ⚠️ 「絵を選ぶ」小窓（`.edmodal`/`.edmodalbox`/`.edmodalhead`/`.edmodaltools`/
+   `.edfindinput`）を共有する ── 新しい色・新しい骨格を増やさない。ここは中身
+   （さがす欄の下・サムネイルの代わりに字の一覧）だけ足す。 */
+.edtapinfo {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  color: #9aa1b8;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.edtaplist {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 4px;
+}
+.edtap-item {
+  text-align: left;
+  background: #232840;
+  color: #d7dae6;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 6px;   /* ⭐ 押せる要素なので角丸（作法どおり） */
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+.edtap-item:hover { background: #2b3150; }
+/* ⭐ 「いま付いている機能」を選択状態で見せる ── 主役は1つ（作法どおり）。 */
+.edtap-item.on {
+  background: #b45309;
+  border-color: #b45309;
+  color: #fff;
+}
+.edtap-item.on:hover { background: #c96613; }
 
 /* ⭐ E-4: Inspector「絵を変える」。区切りは既存の `.edattrrow` の余白のみ（線は増やさない）。 */
 .edpicrow { display: flex; flex-direction: column; gap: 6px; }

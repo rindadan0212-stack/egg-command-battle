@@ -107,6 +107,22 @@ window.eggEdit = {
     return best
   },
 
+  /** ⭐ E2: いま選んでいる層（`EditLayers.Token` と同じ語彙: ""/"paint"/"dynamic"/"tap"/
+   * "container"）。⚠️ **「薄くする」と「触れなくする」は別々の軸**（計画「片方だけだと
+   * 必ず不満が出る」）── 「薄くする」は Razor が `#edstage` の `data-layerfilter` 属性を
+   * 直接持つ（CSS だけで完結・`EditPage.razor` の `_layer` と再描画のたびに揃う）。
+   * ここは「触れなくする」（`_layerOk`）の判定用に、JS 側の状態だけを更新する。
+   * @param {string|null} token 空文字/null なら「すべて」（掛けない）。 */
+  setLayer(token) {
+    this._layer = token || null
+  },
+
+  /** ⭐ E2: 「触れなくする」の判定そのもの。⚠️ 層を選んでいなければ常に true
+   * （素通し）。`el` は `data-layer` を持つ節点（`.n`）であること。 */
+  _layerOk(el) {
+    return !this._layer || (el instanceof Element && el.dataset.layer === this._layer)
+  },
+
   /** 器の大きさの変化を見張って、盤を追従させる。 */
   start(wrapId, stageId) {
     const wrap = document.getElementById(wrapId)
@@ -167,14 +183,21 @@ window.eggEdit = {
     //    ⭐ 他の部品や土台自身の節点（`data-line` しか持たない）は拾わない
     //    ── `[data-part="X"]` は X という部品自身の節点にしか付かない
     //    （`LayoutDom.cs` が `PartId` からそのまま出す）。
+    // ⭐ E2: 「触れなくする」── 層を選んでいるときは、その層でない節点を素通りして、
+    //    下に重なっている一致する節点を探す（`elementsFromPoint` は重なり順で全部返す）。
+    //    ⚠️ 一致するものが1つも無ければ null（`nodeAt` の呼び出し元は「押しどころが無い」
+    //    と同じ扱いにする ── だからラバーバンド／囲んで作るの候補になる）。
     const nodeAt = (x, y) => {
       cap.style.pointerEvents = 'none'
-      const el = document.elementFromPoint(x, y)
+      const stack = document.elementsFromPoint(x, y)
       cap.style.pointerEvents = 'auto'
-      if (!(el instanceof Element)) return null
-      return this._partId
-        ? el.closest('[data-part="' + this._partId + '"]')
-        : el.closest('[data-line]')
+      const sel = this._partId ? '[data-part="' + this._partId + '"]' : '[data-line]'
+      for (const el of stack) {
+        if (!(el instanceof Element)) continue
+        const found = el.closest(sel)
+        if (found && this._layerOk(found)) return found
+      }
+      return null
     }
 
     // ⭐ **タップで選ぶ（離したとき）だけに使う、別の探し方。**
@@ -191,10 +214,14 @@ window.eggEdit = {
     // （②の逆向き）土台を、正しく指す。
     const pickAt = (x, y) => {
       cap.style.pointerEvents = 'none'
-      const el = document.elementFromPoint(x, y)
+      const stack = document.elementsFromPoint(x, y)
       cap.style.pointerEvents = 'auto'
-      if (!(el instanceof Element)) return null
-      return el.closest('[data-part],[data-line]')
+      for (const el of stack) {
+        if (!(el instanceof Element)) continue
+        const found = el.closest('[data-part],[data-line]')
+        if (found && this._layerOk(found)) return found
+      }
+      return null
     }
 
     const down = (e) => {
@@ -277,14 +304,31 @@ window.eggEdit = {
 
       // ⭐④ バンドが実際に「遊び」を超えて描かれていたら、交差した節点を集めて終わる
       //    （タップ選択の分岐へは落とさない ── 別の動作として扱う）。
+      //
+      // 🔴 E2: **押しどころの層のときだけ「囲む＝作る」**（計画 §11-6）。他の層では
+      //    今までどおり「囲む＝選ぶ」（`BandSelect`）── 既存のラバーバンドと衝突しない
+      //    よう、層で分岐を切り分ける（同じ「囲む」ジェスチャの**先**だけを変える）。
       if (banding && bandActive) {
         const rect = {
           left: Math.min(bandFrom.x, e.clientX), right: Math.max(bandFrom.x, e.clientX),
           top: Math.min(bandFrom.y, e.clientY), bottom: Math.max(bandFrom.y, e.clientY),
         }
         this._bandHide()
-        const lines = this._bandCollect(rect)
-        owner.invokeMethodAsync('BandSelect', lines.join(','), additive)
+        if (this._layer === 'tap') {
+          const stage = document.getElementById('edstage')
+          if (stage) {
+            const sr = stage.getBoundingClientRect()
+            const k2 = Number(stage.dataset.scale || '1')
+            const left = (rect.left - sr.left) / k2
+            const top = (rect.top - sr.top) / k2
+            const width = (rect.right - rect.left) / k2
+            const height = (rect.bottom - rect.top) / k2
+            owner.invokeMethodAsync('CreateTapAt', left, top, width, height)
+          }
+        } else {
+          const lines = this._bandCollect(rect)
+          owner.invokeMethodAsync('BandSelect', lines.join(','), additive)
+        }
         banding = false; bandFrom = null; bandActive = false
         from = null; line = null; dragging = false; repeatIndex = ''
         return
@@ -643,6 +687,17 @@ window.eggEdit = {
     //    消えてしまう。
     this._selCsv = linesCsv; this._selPrimary = primaryLine; this._selMismatch = !!mismatch
     const lines = linesCsv ? linesCsv.split(',').filter(s => s !== '') : []
+
+    // ⭐ E2: 名札「選んだものだけ」用のタグ付け直し（`.edtagged`）。⚠️ 前回タグ付けした
+    //    節点は、盤が組み直っていることがあるので `classList` ではなく毎回集め直す
+    //    （消えた節点への参照が残っても実害は無いが、集め直すほうが単純）。
+    if (this._taggedNodes) for (const n of this._taggedNodes) n.classList.remove('edtagged')
+    this._taggedNodes = []
+    for (const line of lines) {
+      const node = document.querySelector('#edstage ' + this._selector(line))
+      if (node) { node.classList.add('edtagged'); this._taggedNodes.push(node) }
+    }
+
     const sel = document.getElementById('edsel')
     if (sel) sel.innerHTML = ''
 
@@ -802,6 +857,10 @@ window.eggEdit = {
     band.style.top = (top - wr.top) + 'px'
     band.style.width = Math.abs(x2 - x1) + 'px'
     band.style.height = Math.abs(y2 - y1) + 'px'
+    // ⭐ E2: 押しどころの層では「作る」プレビュー（Tiled `createobjecttool.cpp` と同じ
+    //    順序 ── ドラッグ中は半透明のプレビュー）。⚠️ 選ぶ（ラバーバンド）とは
+    //    見た目を変える（`.edband-create`）── 同じ枠でも「作る」と「選ぶ」を区別する。
+    band.classList.toggle('edband-create', this._layer === 'tap')
     band.style.display = 'block'
   },
 
@@ -822,6 +881,9 @@ window.eggEdit = {
     const seen = new Set()
     const out = []
     nodes.forEach(el => {
+      // ⭐ E2: 「触れなくする」はラバーバンドにも掛かる ── 層を選んでいるときは、
+      //    その層でない節点をバンドの交差判定から外す（`nodeAt`/`pickAt` と同じ判定）。
+      if (!this._layerOk(el)) return
       const lineStr = this._lineOf(el)
       if (lineStr === '') return
       const n = Number(lineStr)

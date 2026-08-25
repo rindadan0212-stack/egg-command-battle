@@ -78,6 +78,16 @@
         <input type="checkbox" checked="@_grid" @onchange="e => _grid = e.Value is bool b && b" />
         <span>格子</span>
       </label>
+      @* ⭐ E2: 名札（節点の名前）── なし / 選んだものだけ / 全部 の3段階
+         （計画 §11-3・Tiled の `ObjectLabelVisibility`）。既定は「なし」。 *@
+      <label class="edwho edlabelmode">
+        名札
+        <select value="@_labelMode" @onchange="OnLabelModeChange">
+          <option value="none">なし</option>
+          <option value="selected">選んだものだけ</option>
+          <option value="all">全部</option>
+        </select>
+      </label>
     }
 
     @if (!_checkedSupport)
@@ -106,6 +116,20 @@
   @if (_raw is not null)
   {
     <div class="edtools">
+      @* ⭐ E2: 層（レイヤ）の切替（計画 §11-2・§11-9「道具箱: 層の切替」）。
+         ⚠️ **層を選ぶ＝道具・カタログ・見え方が全部決まる**（LDtk の借用） ──
+         下の「足す」・木の並び・盤の薄くする／触れなくするが、全部ここ1つに従う。 *@
+      <div class="edstructrow edlayerrow">
+        <span class="edstructlabel">層</span>
+        @foreach (var layer in EditLayers.Switcher)
+        {
+          var lyr = layer;
+          <button type="button" class="edalign-btn @(_layer == lyr ? "on" : "")"
+                  title="@(EditLayers.Label(lyr))だけを編集する" @onclick="() => SetLayer(lyr)">
+            @EditLayers.Label(lyr)
+          </button>
+        }
+      </div>
       <div class="edstructrow">
         <button type="button" class="edalign-btn eddel-btn" disabled="@(_selected.Count == 0)"
                 title="消す（Delete キーでも）" @onclick="DeleteSelected">🗑 消す</button>
@@ -113,14 +137,27 @@
                 title="複製" @onclick="DuplicateSelected">複製</button>
       </div>
       @* ⭐ D-2: この行の札は掴んで盤へドラッグできる（`eggEdit.paletteListen` が id で見つける）。
-         ⚠️ 押しただけ（動かさず離した）は今までどおりネイティブ click →`@onclick`（`AddKind`）。 *@
+         ⚠️ 押しただけ（動かさず離した）は今までどおりネイティブ click →`@onclick`（`AddKind`）。
+         ⭐ E2: 層を選んでいるときは、その層のものだけに絞る（`FilteredAddPalette`）。
+         ⚠️ 押しどころの層は道具箱に何も出さない（囲んで作るだけ ── 計画 §11-6）ので、
+         代わりに1行の案内を出す（空の道具を見せない、の作法どおり）。 *@
       <div class="edstructrow" id="edaddpalette">
         <span class="edstructlabel">足す</span>
-        @foreach (var k in AddKindPalette)
+        @{ var pal = FilteredAddPalette(); }
+        @if (pal.Count == 0)
         {
-          var kind = k.Kind;
-          <button type="button" class="edalign-btn edadd-btn" data-kind="@kind"
-                  title="@(k.Label)を足す（掴んで盤へ落とすと、その場所に出る）" @onclick="() => AddKind(kind)">@k.Label</button>
+          <span class="edaddhint">
+            @(_layer == EditLayer.Tap ? "盤をドラッグして囲むと、押しどころができます" : "この層に足せるものはありません")
+          </span>
+        }
+        else
+        {
+          @foreach (var k in pal)
+          {
+            var kind = k.Kind;
+            <button type="button" class="edalign-btn edadd-btn" data-kind="@kind"
+                    title="@(k.Label)を足す（掴んで盤へ落とすと、その場所に出る）" @onclick="() => AddKind(kind)">@k.Label</button>
+          }
         }
       </div>
     </div>
@@ -231,7 +268,9 @@
          常に正しい）。 *@
       <div class="edscroll" id="edscroll">
         <div class="edstagewrap" id="edstagewrap">
-          <div class="edstage" id="edstage">
+          @* ⭐ E2: 「薄くする」は Razor がここで直接持つ（`data-layerfilter`・CSS だけで
+             完結する ── JS の状態と2重に持たない）。名札の3段階は class（`LabelModeClass`）。 *@
+          <div class="edstage @LabelModeClass()" id="edstage" data-layerfilter="@EditLayers.Token(_layer)">
             @((MarkupString)_html)
             @* ⭐ **透明な覆い。**盤のいちばん上（DOM の最後）に置いて、遊びの押しどころ
                （`data-tap`）より先に指を受け止める。中身は空 ── 押しどころも「掴んで動かす」も
@@ -422,6 +461,28 @@
                 </div>
               }
 
+              @* ⭐ E2: 機能（`tap=`）の付け替え（計画 §11-8・作者の決定6）。⚠️ `button` か、
+                 既に `tap=` を持つ節点だけに出す（空の道具を見せない）。押すと小窓が開き、
+                 一覧から選ぶ・外す・さがす（<see cref="OpenTapPicker"/> が唯一の入口 ──
+                 「囲んで作る」直後もここを通る）。 *@
+              @if (sel.Kind == "button" || sel.Option("tap") != null)
+              {
+                <div class="edattrrow edtaprow">
+                  <span class="edlabel">機能（tap=）</span>
+                  <div class="edpicpreview">
+                    @if (sel.Option("tap") is { } curTap)
+                    {
+                      <span class="edname">@curTap</span>
+                    }
+                    else
+                    {
+                      <span class="edmuted">（未設定）</span>
+                    }
+                    <button type="button" class="edalign-btn" @onclick="OpenTapPicker">機能を選ぶ</button>
+                  </div>
+                </div>
+              }
+
               @* ⭐①属性表（EditAttrs.All）から自動で欄を生む ── 効かない種類・条件
                  （例: gap は repeat= を持つ節点だけ）では出さない
                  （作者の pixelizer の教訓「空の欄を先に見せない」）。 *@
@@ -565,6 +626,51 @@
       </div>
     </div>
   }
+
+  @* ── ⭐ E2: 機能（`tap=`）を選ぶ小窓 ── §4「機能の付け替え」の唯一の入口 ──
+     ⚠️ 開き方は2つ（1: 囲んで作った直後 ／ 2: Inspector の「機能を選ぶ」）── どちらも
+     <see cref="OpenTapPicker"/> の1つの入口。⭐ 「絵を選ぶ」小窓（`.edmodal`/`.edmodalbox`/
+     `.edmodalhead`/`.edmodaltools`/`.edfindinput`）を骨格ごと共有する（新しい chrome を
+     増やさない）。 *@
+  @if (_tapPickerOpen)
+  {
+    <div class="edmodal" @onclick="CloseTapPicker">
+      <div class="edmodalbox" @onclick:stopPropagation="true">
+        <div class="edmodalhead">
+          <span>機能を選ぶ</span>
+          <button type="button" class="edmodalclose" title="閉じる" @onclick="CloseTapPicker">×</button>
+        </div>
+        <div class="edmodaltools">
+          <input type="text" class="edfindinput" placeholder="さがす" value="@_tapPickerFind"
+                 @oninput="e => _tapPickerFind = Convert.ToString(e.Value) ?? string.Empty" />
+          @* ⭐ 外せる（`tap=` を消す）。⚠️ いま付いていなければ押せない。 *@
+          <button type="button" class="edalign-btn" disabled="@(TapPickerCurrent is null)"
+                  @onclick="RemoveTap">外す</button>
+        </div>
+        @if (TapPickerByPart)
+        {
+          @* 🔴 冠の逆算の結果を、押す前に必ず見せる（黙って足りない候補を出さない）。 *@
+          <div class="edtapinfo">@TapPickerInfo()</div>
+        }
+        @{ var tapNames = FilteredTapNames(); }
+        @if (tapNames.Count == 0)
+        {
+          <div class="edhint">@TapPickerEmptyReason()</div>
+        }
+        else
+        {
+          <div class="edtaplist">
+            @foreach (var name in tapNames)
+            {
+              var pick = name;
+              <button type="button" class="edtap-item @(pick == TapPickerCurrent ? "on" : "")"
+                      @onclick="() => ChooseTap(pick)">@pick</button>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
 </div>
 
 @code {
@@ -687,6 +793,29 @@
     /// <summary>⭐ E1-1: 格子の表示・非表示（既定 ON・計画 §1「格子は既定 ON」）。
     /// ⚠️ `_step` の間隔で描く（`#edgrid`）。</summary>
     private bool _grid = true;
+
+    // ── ⭐ E2: 層（レイヤ）── この道具の背骨（計画 §11-2） ────────
+    // ⚠️ 骨組みの字には書かない（保存されない・編集中の見なしだけ）── 状態はこの頁の
+    //    中だけ。画面を切り替えても保つ（`_dotPx` と同じ考え方 ── 器が変わるたび
+    //    リセットすると、続けて作業しているうちに「毎回選び直す」不満が出る）。
+
+    /// <summary>いま選んでいる層。null なら「すべて」。</summary>
+    private EditLayer? _layer;
+
+    /// <summary>⭐ E2: 名札（節点の名前）── なし/選んだものだけ/全部 の3段階（計画 §11-3）。
+    /// ⚠️ CSS のクラス名と直結（<see cref="LabelModeClass"/>）── 増やすならそちらも直す。</summary>
+    private string _labelMode = "none";
+
+    // ── ⭐ E2: 機能（`tap=`）を選ぶ小窓 ─────────────────────
+    // ⚠️ 単純に保つ（他の小窓と同じ作法）── 「開いているか」「さがす」「冠の逆算の結果
+    //    （開いた瞬間に1回だけ計算・キー入力のたびに数え直さない）」の3つの薄い状態だけ。
+
+    private bool _tapPickerOpen;
+    private string _tapPickerFind = "";
+    /// <summary>🔴 冠の逆算の結果（<see cref="OpenTapPicker"/> が開くたびに1回だけ計算 ──
+    /// 「さがす」を打つたびに32枚を読み直さない）。⚠️ 部品を編集していない
+    /// （<see cref="TapPickerByPart"/> が false）ときは常に空（使わない）。</summary>
+    private List<string> _tapPickerCrowns = new();
 
     // ── ⭐ Pass B: 盤↔木の連動強調 ─────────────────────
 
@@ -861,6 +990,11 @@
         // ⭐③ `_ready` が立つ前の `RefreshView`（`LoadDemo`/`OnParametersSet` 経由）は
         //    「出ているものだけ」の JS 呼び出しを見送っている ── ここで一度だけ数え直す。
         _ = RefreshVisibleSet();
+        // ⭐ E2: `window.eggEdit` は頁をまたいで生き続ける JS の単体（SPA なので `/app` へ
+        //    移ってまた `/edit` へ戻っても JS 側の状態は自然には消えない）── この頁の
+        //    C# 側は毎回 `_layer = null`（既定）で始まるので、ここで一度だけ揃える
+        //    （前の訪問で「押しどころ」を選んだまま忘れていた、という食い違いを防ぐ）。
+        _ = ApplyLayerToJs();
         StateHasChanged();
     }
 
@@ -2025,6 +2159,205 @@
     /// <see cref="_step"/> が唯一の出所）。</summary>
     private float SnapStep(float v) => _step > 0 ? MathF.Round(v / _step) * _step : v;
 
+    // ── ⭐ E2: 層（レイヤ）── 切替・道具箱の絞り込み ────────────
+
+    /// <summary>層の帯の釦を押した。⚠️ ここでは値を書き換えない（見なしだけ）
+    /// ── `Apply`/`ApplyOption` を一度も通らない・undo は積まない。</summary>
+    private void SetLayer(EditLayer? layer)
+    {
+        _layer = layer;
+        _ = ApplyLayerToJs();
+        StateHasChanged();
+    }
+
+    /// <summary>⭐ E2: 「触れなくする」の判定は JS 側（`edit.js` の `_layerOk`）が持つ ──
+    /// ここはその状態を渡すだけ。⚠️ 「薄くする」は渡さない（Razor が `#edstage` の
+    /// `data-layerfilter` 属性を直接持つ ── CSS だけで完結する別の軸）。</summary>
+    private async Task ApplyLayerToJs()
+    {
+        if (_ready) await Js.InvokeVoidAsync("eggEdit.setLayer", EditLayers.Token(_layer));
+    }
+
+    /// <summary>⭐ E2: 道具箱「足す」を、いま選んでいる層のものだけに絞る。⚠️ 種類そのもの
+    /// から決まる層（<see cref="EditLayers.PaletteLayerOf"/>）── まだ作っていない節点には
+    /// `bind=`/`tap=` が無いので、既存節点の判定（<see cref="EditLayers.Of"/>）は使えない。</summary>
+    private List<(string Kind, string Label)> FilteredAddPalette()
+    {
+        var result = new List<(string, string)>();
+        foreach (var k in AddKindPalette)
+        {
+            if (_layer is not null && EditLayers.PaletteLayerOf(k.Kind) != _layer) continue;
+            result.Add(k);
+        }
+        return result;
+    }
+
+    /// <summary>名札の3段階トグルの CSS クラス（<see cref="_labelMode"/> と1対1）。
+    /// ⚠️ 「なし」はクラス無し（`EditPage.razor.css` は両方のクラスが無ければ何も出さない）。</summary>
+    private string LabelModeClass() => _labelMode switch
+    {
+        "selected" => "edlabels-selected",
+        "all" => "edlabels-all",
+        _ => "",
+    };
+
+    private void OnLabelModeChange(ChangeEventArgs e)
+    {
+        var v = Convert.ToString(e.Value);
+        _labelMode = v is "selected" or "all" ? v : "none";
+    }
+
+    // ── ⭐ E2: 押しどころを「囲んで作る」（計画 §11-6） ─────────
+
+    /// <summary>盤をドラッグして囲んで離した先（`edit.js` の `up` が押しどころの層のときだけ
+    /// 呼ぶ）。⚠️ 既存のラバーバンド（複数選択）とは JS 側で既に切り分けてある
+    /// （層が `tap` のときだけこちらへ来る）── ここでも念のため層を確かめる
+    /// （JS から来た値をそのまま信用しない、の作法どおり）。
+    ///
+    /// ⭐ 作るのは `button`（`tap=` を持てる種類）。**大きさは4の倍数に丸める**
+    /// （<see cref="RoundTo4"/>）。🔴 **作った直後に「機能を選ぶ」小窓を開く**
+    /// （<see cref="OpenTapPicker"/>）── 「絵に機能を付ける」が1続きの動作になる。
+    ///
+    /// <param name="left">設計px（`edit.js` が画面座標→設計座標へ変換済み）。以下同じ。</param></summary>
+    [JSInvokable]
+    public void CreateTapAt(double left, double top, double width, double height)
+    {
+        if (_raw is null || _layer != EditLayer.Tap) return;
+        BeginAction();
+        EnsureTrailingTerminator();
+
+        float w = Math.Max(MinSize, RoundTo4((float)width));
+        float h = Math.Max(MinSize, RoundTo4((float)height));
+        float l = RoundTo4((float)left);
+        float t = RoundTo4((float)top);
+
+        string name = UniqueRootName("button");
+        var node = NewNode(name, "button", l, t, w, h,
+            new Dictionary<string, string>(), new List<LayoutNode>(), 0);
+        var roots = new List<LayoutNode>(_raw.Roots) { node };
+        _raw = new Core.Layout(_raw.Id, roots, _raw.Lines);
+
+        Refresh();
+        SelectNewRoot(name);
+        CommitAction();
+        StateHasChanged();
+
+        OpenTapPicker();
+    }
+
+    /// <summary>⭐ 「4の倍数に丸める」の唯一の出所（計画 §11-6）。⚠️ `_step`（既定4だが
+    /// 自由に変えられる）とは別 ── 押しどころの大きさだけは常に4の倍数（升目の基本単位）
+    /// に固定する、という作者の決定そのもの。</summary>
+    private static float RoundTo4(float v) => MathF.Round(v / 4f) * 4f;
+
+    // ── ⭐ E2: 機能（`tap=`）の付け替え（計画 §11-8・作者の決定6） ─────
+
+    /// <summary>「機能を選ぶ」小窓を開く**唯一の入口**（囲んで作った直後／Inspector の
+    /// 釦、どちらもここを通る）。⚠️ 開くたびに「さがす」を空へ戻し、冠の逆算を
+    /// **1回だけ**やり直す（<see cref="_tapPickerCrowns"/> の註）。</summary>
+    private void OpenTapPicker()
+    {
+        _tapPickerFind = "";
+        _tapPickerCrowns = TapPickerByPart ? PartCrowns() : new List<string>();
+        _tapPickerOpen = true;
+    }
+
+    private void CloseTapPicker() => _tapPickerOpen = false;
+
+    /// <summary>選んだら**1 undo**（<see cref="ApplyOption"/> の既存経路そのまま）。</summary>
+    private void ChooseTap(string name)
+    {
+        ApplyOption("tap", name);
+        CloseTapPicker();
+    }
+
+    /// <summary>外す（`tap=` を消す）。⚠️ ボタン自体は残る（種類は変えない）。</summary>
+    private void RemoveTap()
+    {
+        ApplyOption("tap", null);
+        CloseTapPicker();
+    }
+
+    /// <summary>**部品を編集中か**（`Scenes.Of(_of).ByPart`）── 冠の逆算が要るかどうかの
+    /// 唯一の分かれ目（計画 §11-8「土台の画面を編集中→そのまま出す／部品を編集中→逆算する」）。</summary>
+    private bool TapPickerByPart => Scenes.Of(_of).ByPart;
+
+    /// <summary>いま選んでいる節点の、生の（冠の付いていない）`tap=`。⚠️ 部品ファイルの
+    /// 中身は元々冠が付いていない状態で書かれている（`Layouts.Rename` は差し込む側が
+    /// 掛けるだけ）ので、これがそのまま候補（<see cref="TapCandidates"/>）と同じ物差し。</summary>
+    private string? TapPickerCurrent =>
+        _raw is not null && _selectedLine >= 0 ? Find(_raw.Roots, _selectedLine)?.Option("tap") : null;
+
+    /// <summary>🔴 冠の逆算 ── いま編集している部品ファイル（<see cref="_of"/>）が、
+    /// 32枚の中で実際にどんな名前（冠）で `use=` されているか。⚠️ **Web 専用の配線
+    /// （`Scenes`/`LayoutStore`）はここだけに閉じ込める**（純関数の本体は
+    /// <see cref="TapCrowns.Crowns"/> ── `EggCommand.Core` にしか依存しない形で
+    /// `EggCommand.Tests` が直接検査できるように）。⚠️ 読めない骨組みが1枚あっても
+    /// 残りは見る（黙って壊さない側へ倒す）。</summary>
+    private List<string> PartCrowns()
+    {
+        var layouts = new List<Core.Layout>();
+        foreach (var scene in Scenes.All)
+        {
+            try { layouts.Add(LayoutStore.Of(scene.Id)); }
+            catch { /* 読めない骨組みは無視 */ }
+        }
+        return TapCrowns.Crowns(layouts, _of);
+    }
+
+    /// <summary>候補（生の・冠の付いていない名前）の一覧。⚠️ 土台の画面を編集中なら
+    /// `Shell.Tap` の名前をそのまま（<see cref="TapCatalog.Names"/>）。部品を編集中なら、
+    /// **`Shell.Tap` の名前のうち、冠を外すと一致するもの**だけ（計画 §11-8）
+    /// ── 逆算できた冠（<see cref="_tapPickerCrowns"/>）のどれか1つにでも一致すれば候補。</summary>
+    private List<string> TapCandidates()
+    {
+        if (!TapPickerByPart) return new List<string>(TapCatalog.Names);
+        if (_tapPickerCrowns.Count == 0) return new List<string>();
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<string>();
+        foreach (var crown in _tapPickerCrowns)
+        {
+            string prefix = crown + "-";
+            foreach (var full in TapCatalog.Names)
+            {
+                if (!full.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                string local = full.Substring(prefix.Length);
+                if (local.Length > 0 && seen.Add(local)) result.Add(local);
+            }
+        }
+        result.Sort(StringComparer.Ordinal);
+        return result;
+    }
+
+    /// <summary>「さがす」で絞った候補。⚠️ 木・絵を選ぶ小窓の「さがす」とは別の状態
+    /// （<see cref="_tapPickerFind"/>）── 混ぜない。</summary>
+    private List<string> FilteredTapNames()
+    {
+        var all = TapCandidates();
+        if (_tapPickerFind.Length == 0) return all;
+        return all.FindAll(n => n.Contains(_tapPickerFind, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>⭐ 冠の逆算の結果を、押す前に必ず見せる一言（部品を編集中のときだけ出す）。</summary>
+    private string TapPickerInfo() => _tapPickerCrowns.Count == 0
+        ? "この部品はまだどこにも差されていません"
+        : "この部品は " + string.Join(" ", _tapPickerCrowns.Select(c => c + "-")) + " として差されています";
+
+    /// <summary>🔴 候補0件のとき、空の一覧を黙って出さず理由を言う（計画 §11-8「逆算できない・
+    /// 候補が無いときは空の一覧を出さない」）。⚠️ 「まだどこにも差されていない」（冠が
+    /// 逆算できない）と「差されてはいるが、対応する機能が見つからない」（冠は分かるが
+    /// 候補が無い）を**別の文で**言う ── 前者は差し込み自体をまず作ってほしい、後者は
+    /// この部品ファイルには `tap=` を書いても機能させられないかもしれない、で対処が違う。</summary>
+    private string TapPickerEmptyReason()
+    {
+        if (!TapPickerByPart) return "見つかりません";
+        return _tapPickerCrowns.Count == 0
+            ? "この部品はまだどこにも差されていません"
+            : "この部品は " + string.Join(" ", _tapPickerCrowns.Select(c => c + "-"))
+                + " として差されていますが、対応する機能が見つかりません";
+    }
+
     // ── 3) 複製 ──────────────────────────────────────
 
     /// <summary>選んでいる部分木を -1 の新しいルートとして複製する。⚠️ 親（複製の根）の
@@ -2608,7 +2941,7 @@
     private List<(int Depth, LayoutNode Node)> FilteredRows()
     {
         var all = Flatten();
-        if (_find.Length == 0 && !_onlyVisible) return all;
+        if (_find.Length == 0 && !_onlyVisible && _layer is null) return all;
         var result = new List<(int, LayoutNode)>(all.Count);
         foreach (var row in all)
         {
@@ -2617,6 +2950,9 @@
                 && row.Node.Kind.IndexOf(_find, StringComparison.OrdinalIgnoreCase) < 0)
                 continue;
             if (_onlyVisible && !IsVisible(row.Node)) continue;
+            // ⭐ E2: 層を選んでいるときは、木もその層の行だけにする（計画 §11-2
+            //    「木（左のパネル）も、その層の行だけになる」）。
+            if (_layer is not null && EditLayers.Of(row.Node) != _layer) continue;
             result.Add(row);
         }
         return result;
