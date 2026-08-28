@@ -109,7 +109,8 @@ window.eggTap = {
    *   ここは級（class）の付け外しと、幅・字の書き換えだけで足りる）。
    * ⚠️ 名前は小文字で来る（Blazor が camelCase に直す）── `FoeArt` ではなく `foeArt`。
    *
-   * @param {{foeArt: string|null, foeLeft: number, foeKey: number, eggs: number, exp: string}} view */
+   * @param {{foeArt: string|null, foeLeft: number, foeKey: number, eggs: number, exp: string,
+   *   down: boolean[]}} view */
   idle(view) {
     const foe = document.getElementById('foe')
     if (foe) {
@@ -154,6 +155,16 @@ window.eggTap = {
     if (exp && exp.textContent !== view.exp) exp.textContent = view.exp
 
     if (view.eggs > 0) this._eggHop(view.eggs)
+
+    // ⭐ 仕事4: 倒れた味方。⚠️ 帯は組み直さないので、`idle-walk<i>`（`Idle.Draw` が振った
+    //   id）の級（`.idle-down`）を付け外しするだけ ── 消す・作り直すことはしない
+    //   （`#foe` の `idle-hidden` と同じ流儀）。
+    if (view.down) {
+      for (let i = 0; i < view.down.length; i++) {
+        const walker = document.getElementById('idle-walk' + i)
+        if (walker) walker.classList.toggle('idle-down', !!view.down[i])
+      }
+    }
   },
 
   /** 卵が飛び込む。⭐ **相手と同じ弧**（`idle-come`）で来る（作者の指示 ──

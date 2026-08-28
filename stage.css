@@ -408,18 +408,37 @@ html, body {
 @keyframes bg-roll { from { transform: translateX(0); } to { transform: translateX(-1080px); } }
 
 /* ⭐ 放置の相手の残り。
-   🔴 **.3s に縮めた**（2026-08-28・仕事4）。⚠️ 旧 .95s は差し替えが1秒に1回だった頃の
+   🔴 **.3s に縮めた**（2026-08-28）。⚠️ 旧 .95s は差し替えが1秒に1回だった頃の
    数（戦闘の帯 `.n.bar-fill` が1秒16回の差し替えに対して .1s なのと同じ考え方で、
-   間隔の半分より少し長く取って階段を消していた）。⭐ いまは打ち合いが0.5秒ごとに
-   1段落ちる（`Core.Idle.StrikeCount`＝8段／`FightSeconds`＝4.0秒）── .95s のままだと
-   次の段が来る前に前の段の途中にしか着かず、帯が「詰まって」見える。.3s なら
-   0.5秒の間隔に十分収まる。 */
+   間隔の半分より少し長く取って階段を消していた）。⭐ いまは打ち合いが
+   `Core.Idle.ActSeconds`（0.5秒）ごとに1段落ちる（`Core.Idle.StrikeCount`＝8段で相手が
+   尽きる）── .95s のままだと次の段が来る前に前の段の途中にしか着かず、帯が「詰まって」
+   見える。.3s なら0.5秒の間隔に十分収まる。
+   ⚠️ **旧 `FightSeconds`（打ち合い一律7.0秒固定）は削除された**（本物の手番制への
+   作り直し・`Core.Idle` の doc 参照）。打ち合いの長さ自体は味方8発ぶんで最短4.0秒
+   （`FightMinSeconds`）── 敵の手が挟まるほど伸びる**可変長**になったが、1段の間隔
+   （0.5秒＝`ActSeconds`）そのものは変わらないので、この帯の縮む速さは直さなくてよい。 */
 .idle-drain { transition: width .3s linear; }
 
 /* ⭐ 歩幅の揺れ。⚠️ 大きいと跳ねて見えて「進んでいる」から離れる（`Core.Beats.Bob`）。
    ⚠️ 一人ずつずらす ── 揃うと行進になり、めいめいが歩いている感じが消える。 */
 .idle-walk { animation: idle-bob .86s ease-in-out infinite; }
 @keyframes idle-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+/* ⭐ 倒れた味方（2026-08-28・仕事4）。⚠️ 出所は `tap.js` の `idle()` が
+   `Idle.Draw` の振った id（`idle-walk<i>`）へ付け外しする級 ── 帯そのものは組み直さない
+   造り（背景のアニメが巻き戻るため）なので、見た目の切り替えは全部この級1つで表す。
+   🔴 **`.idle-walk` の揺れは必ず止める**── 倒れているのに歩幅で上下していると壊れて
+   見える。`.idle-walk.idle-down`（2つ重ねた選び手）で `.idle-walk` 単体より強く
+   掛かるので、`!important` は要らない。
+   ⭐ 横に倒す（`rotate`）＋彩度を落とす＋薄くする、の3つで「動けない」に見せる。 */
+.idle-walk.idle-down {
+  animation: none;
+  transform: rotate(90deg);
+  filter: grayscale(.7);
+  opacity: .55;
+  transition: transform .2s ease-out, filter .2s ease-out, opacity .2s ease-out;
+}
 
 /* ⭐ 相手も卵も、**画面外の右から放物線を描いて飛び込んでくる**
    （2026-08-28・作者の指示「回転してくる演出から、放射線状に飛び込んでくる演出に（卵も）」）。
@@ -460,6 +479,10 @@ html, body {
   #dim-roll { background: rgba(0,0,0,.34); }
   #pop-fan, #burst-fan { animation: none; }
   .roll-sky, .roll-hill, .idle-walk, .idle-come { animation: none; }
+  /* ⭐ `.idle-down` の見た目（倒れた姿勢）自体は残す ── 情報はここにある。
+     ⚠️ 消すのは**移り変わる動き**（`transition`）だけ ── 級を2つ重ねた選び手で書く
+     （`.idle-walk`（1つ）より強く掛ける必要がある。`.idle-walk.idle-down` の doc 参照）。 */
+  .idle-walk.idle-down { transition: none; }
 }
 
 /* icon ── ⭐ **絵を出して、その上から色を掛ける。**
