@@ -1,10 +1,10 @@
 {
   "mainAssemblyName": "EggCommand.Web",
   "resources": {
-    "hash": "sha256-d9oAvtaUYLNRFmvu0VimgRPz3HN06kLxll11fzKtPAs=",
+    "hash": "sha256-Lxmo1n54ZnHflMKP+W2garHUL8xY8oFrZ1qcXt1lzho=",
     "fingerprinting": {
-      "EggCommand.Core.wbv1n2guh5.wasm": "EggCommand.Core.wasm",
-      "EggCommand.Web.gmp0lu25p5.wasm": "EggCommand.Web.wasm",
+      "EggCommand.Core.zkycvq2w9i.wasm": "EggCommand.Core.wasm",
+      "EggCommand.Web.y99lg7lzs5.wasm": "EggCommand.Web.wasm",
       "Microsoft.AspNetCore.Components.p2w4gy1epi.wasm": "Microsoft.AspNetCore.Components.wasm",
       "Microsoft.AspNetCore.Components.Web.1yakqi01wu.wasm": "Microsoft.AspNetCore.Components.Web.wasm",
       "Microsoft.AspNetCore.Components.WebAssembly.7y85u24785.wasm": "Microsoft.AspNetCore.Components.WebAssembly.wasm",
@@ -62,8 +62,8 @@
       "System.Runtime.InteropServices.JavaScript.ljbeaupw5z.wasm": "sha256-D7zUMmvQGq6/86QXq4/FMXLHt+dmvf3HI1iXe8Gr3Fo="
     },
     "assembly": {
-      "EggCommand.Core.wbv1n2guh5.wasm": "sha256-3JMlOnvayfxIKORQfa+QV0V5XXz1z8lqZHUZZMMjhOU=",
-      "EggCommand.Web.gmp0lu25p5.wasm": "sha256-SLHT+zIV2H6m6ztx5xMttVZJn+roju3dcu3nHbmzkpk=",
+      "EggCommand.Core.zkycvq2w9i.wasm": "sha256-7X4AlWbWsHL2ZfOxfDj7jUTvJE598ccCHQytreaA3W0=",
+      "EggCommand.Web.y99lg7lzs5.wasm": "sha256-ykFNa96kO/a4449+j/ujc9G91CJBdTdAVx0sXuFZcfs=",
       "Microsoft.AspNetCore.Components.p2w4gy1epi.wasm": "sha256-nxyh+jLGcvzkwHxrPQoVcKHWP6hilC1KiXxekb+DgxU=",
       "Microsoft.AspNetCore.Components.Web.1yakqi01wu.wasm": "sha256-l2nhWchyExXwcMK0taObpufked8jsOVA7Gr29/nsuWs=",
       "Microsoft.AspNetCore.Components.WebAssembly.7y85u24785.wasm": "sha256-cR0KnFqxzW+iJH8JYEcUnoxFCVk+V6jAzZCG48Y/Whw=",

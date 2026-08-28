@@ -407,17 +407,40 @@ html, body {
 .roll-hill { animation: bg-roll  90s linear infinite; }
 @keyframes bg-roll { from { transform: translateX(0); } to { transform: translateX(-1080px); } }
 
+/* ⭐ 放置の相手の残り。⚠️ 差し替えは1秒に1回なので、少し長めに取って階段を消す
+   （戦闘の帯 `.n.bar-fill` が 1秒16回の差し替えに対して .1s なのと同じ考え方）。 */
+.idle-drain { transition: width .95s linear; }
+
 /* ⭐ 歩幅の揺れ。⚠️ 大きいと跳ねて見えて「進んでいる」から離れる（`Core.Beats.Bob`）。
    ⚠️ 一人ずつずらす ── 揃うと行進になり、めいめいが歩いている感じが消える。 */
 .idle-walk { animation: idle-bob .86s ease-in-out infinite; }
 @keyframes idle-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 
-/* ⭐ 相手は**外から転がって来る**。⚠️ 定位置にぽんと現れると「回復した」に見える */
-.idle-come { animation: idle-enter 1.4s ease-out both; }
+/* ⭐ 相手も卵も、**画面外の右から放物線を描いて飛び込んでくる**
+   （2026-08-28・作者の指示「回転してくる演出から、放射線状に飛び込んでくる演出に（卵も）」）。
+   ⚠️ **回転は入れない**（作者が「回転してくる演出から」離れたいと言っている ── 旧
+   `idle-enter`＝`translateX(700px) rotate(-720deg)` は削除した）。
+   ⚠️ 定位置にぽんと現れると「回復した」に見えるので、瞬間移動にはしない。
+   ⭐ 1本の `@keyframes` で `translate(x, y)` を3段に刻めば弧になる ── 立ち上がりは
+   ゆっくり（`ease-out`）、**落ち際は速く**（`ease-in`。`die3d-roll` と同じ
+   「区間ごとに `animation-timing-function` を切り替える」手）。
+   ⚠️ **相対移動**（`translate`）なので、掛ける相手の元の置き場所（`left`/`top`）は
+   問わない ── 相手（`#foe`、位置固定）にも、卵（`tap.js` が動的に作る、位置いろいろ）
+   にも同じ級をそのまま使い回せる。 */
+.idle-come { animation: idle-enter .74s both; }
 @keyframes idle-enter {
-  from { transform: translateX(700px) rotate(-720deg); }
-  to   { transform: translateX(0) rotate(0deg); }
+  0%   { animation-timing-function: ease-out;
+         transform: translate(640px, 60px) scale(.75); opacity: 0; }
+  20%  { opacity: 1; }
+  56%  { animation-timing-function: ease-in;
+         transform: translate(200px, -190px) scale(1.08); }
+  100% { transform: translate(0, 0) scale(1); opacity: 1; }
 }
+
+/* ⭐ **消えている・まだ来ていない**（`Idle.Draw`/`eggTap.idle` が付け外しする）。
+   ⚠️ `display:none` ── 要素そのものは消さない（`tap.js` の `idle()` 参照:
+   組み直さずに毎秒 出す/隠す を切り替えるため、触る対象を常に残しておく）。 */
+.idle-hidden { display: none; }
 
 /* ⚠️ **動きを望まない人には出さない。**⭐ 何が起きたかは字と数で残す
    （動きは読み取りやすさのためであって、情報の出所ではない）。 */

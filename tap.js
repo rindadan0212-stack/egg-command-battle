@@ -100,4 +100,92 @@ window.eggTap = {
       if (w.tint) el.style.color = w.tint
     }
   },
+
+  /** 放置の帯（相手・HP・EXP・卵）を、組み直さずに毎秒差し替える（`Idle.Peek` の出）。
+   *
+   * ⚠️ 🔴 **`bars`/`words` と同じ理由で在る**（毎秒 `Draw()` すると押しどころが
+   *   作り直されて触れなくなる ── 2026-08-28・作者の報告で、5拍に1回の全面組み直しを
+   *   丸ごとやめた。放置の帯の要素そのものは `Idle.Draw` が**常に**作るので、
+   *   ここは級（class）の付け外しと、幅・字の書き換えだけで足りる）。
+   * ⚠️ 名前は小文字で来る（Blazor が camelCase に直す）── `FoeArt` ではなく `foeArt`。
+   *
+   * @param {{foeArt: string|null, foeLeft: number, foeKey: number, eggs: number, exp: string}} view */
+  idle(view) {
+    const foe = document.getElementById('foe')
+    if (foe) {
+      if (view.foeArt) {
+        foe.classList.remove('idle-hidden')
+        // ⚠️ id を持つのは `walker.txt` が描く「絵の器」（`artf#foe`）であって、
+        //   中の `<img>` 自身は id を持たない（`LayoutDom.Dots` は器にだけ id を振る）
+        //   ── だから一段くぐって探す。
+        const body = document.getElementById('artf#foe')
+        const img = body && body.querySelector('img')
+        if (img && img.getAttribute('src') !== view.foeArt) img.setAttribute('src', view.foeArt)
+        // ⭐ **相手が入れ替わったときだけ**、飛び込みをやり直す。
+        //   ⚠️ 「前に見えていたときの番号」とだけ比べる ── 隠れている間は更新しない。
+        //   でないと、倒した瞬間（＝隠れる瞬間）に番号が変わり、次に見えたときには
+        //   もう「同じ番号」になっていて、本来やり直したい飛び込みが起きない。
+        //   ⚠️ 初回（`_foeKey` が undefined）はやり直さない ── ページを開いた瞬間、
+        //   もう戦っている最中の相手にまで飛び込みを再生してしまう。
+        if (this._foeKey !== undefined && view.foeKey !== this._foeKey) {
+          // ⚠️ 同じ級を付け直しても animation は再生されない（`fx.js` の `_nudge` と同じ罠）。
+          //   ⭐ 一度測らせて読み直す。
+          foe.classList.remove('idle-come')
+          void foe.offsetWidth
+          foe.classList.add('idle-come')
+        }
+        this._foeKey = view.foeKey
+      } else {
+        // ⭐ これが「倒れた」の見え方。⚠️ 消さない ── 次に出るときも同じ枠を使い回す
+        //   （`_foeKey` もここでは更新しない。上のコメント参照）。
+        foe.classList.add('idle-hidden')
+      }
+    }
+    for (const id of ['hptrack', 'hpfill']) {
+      const el = document.getElementById(id)
+      if (el) el.classList.toggle('idle-hidden', !view.foeArt)
+    }
+    const hpfill = document.getElementById('hpfill')
+    // ⚠️ 帯の地（`hptrack`）と同じ 280px を最大に、実数のまま px で伸ばす
+    //   （`Idle.Draw` が最初に置く幅の作り方と同じ ── ％ではない）。
+    if (hpfill) hpfill.style.width = (view.foeLeft * 280) + 'px'
+
+    const exp = document.getElementById('count')
+    if (exp && exp.textContent !== view.exp) exp.textContent = view.exp
+
+    if (view.eggs > 0) this._eggHop(view.eggs)
+  },
+
+  /** 卵が飛び込む。⭐ **相手と同じ弧**（`idle-come`）で来る（作者の指示 ──
+   * 「敵出現時の演出を、卵も」）。⚠️ `idle-come` は着地して止まったままなので、
+   * ここは自分で**留めてから片付ける**（`fx.js` の演出と同じ「作って、自分で消す」流儀）。
+   *
+   * ⚠️ **`#fx` の中へ差す**（`fx.js` と同じ置き場・同じ理由 ── `AppPage.razor` の
+   *   `#fx` の註「Blazor は自分で描いた節点しか触らないので、ここへ差したものは
+   *   組み直しで消えない」）。`#idle` は放置の帯そのものが `Draw()` で丸ごと
+   *   組み直されうる（タップ・画面遷移のたび）ので、そちらへ差すと消える恐れがある。
+   * ⚠️ `#fx` は `#stage` 直下（座標系 0〜1080×0〜1920）── 放置の帯（`#idle`、
+   *   0〜1080×0〜472）とは基準が違うので、帯の上端ぶん（`#app-body` の 132px ＋
+   *   `#idle` の 88px ＝ 220px）を足して合わせる。⚠️ 「画面の外」は `#stage` 自身の
+   *   `overflow:hidden`（1080px 幅）がちょうど隠す ── 相手の飛び込みと同じ切れ方になる。
+   * @param {number} many */
+  _eggHop(many) {
+    const yard = document.getElementById('fx')
+    if (!yard) return
+    for (let i = 0; i < many; i++) {
+      const el = document.createElement('img')
+      el.src = 'paint/nest-egg.png'
+      el.alt = ''
+      el.className = 'n paint idle-come'
+      // ⭐ 複数まとめて出るとき（久しぶりに開いた清算など）は少しずつ間を空ける
+      //   ── 重なって出ると1個に見える。
+      const wait = i * 0.14
+      el.style.cssText = `left:780px;top:480px;width:100px;height:125px;`
+        + (wait > 0 ? `animation-delay:${wait}s` : '')
+      yard.appendChild(el)
+      // ⚠️ `animationend` を待たない ── `idle-come` は着地して止まったままなので発火しない。
+      //   ⭐ 飛び込み（.74秒）＋ 留める間（.6秒）で自分から消す。
+      setTimeout(() => el.remove(), (740 + 600) + wait * 1000)
+    }
+  },
 }
