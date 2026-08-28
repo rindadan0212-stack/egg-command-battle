@@ -1,0 +1,530 @@
+/* 画面の意匠。⭐ **色はこの12定数が唯一の出所**。
+   （元は Unity 時代の `Ui.cs` からの転記だが、Unity は 2026-08-22 に出たので
+    追従させる相手はもう無い。参考: `old/unity/Scripts/View/Ui.cs`）
+   ⚠️ ここで新しい色を作らない。 */
+
+:root {
+  --ink:        #2b3350;
+  --paper:      #f7f7f9;
+  --ink-dim:    #4c536b;
+  --ink-faint:  #636980;
+  --on-lead:    #2b3350;
+  --accent:     #f59e0b;
+  --accent-ink: #b45309;
+  --danger:     #e04f5f;
+  --good:       #2fa84a;
+  --good-ink:   #1e7a38;
+  --danger-ink: #c0303f;
+
+  /* 空。⚠️ Ui.SkyOf と同じ数 */
+  --sky-home:   #8fd8f7;
+  --sky-nest:   #bdebff;
+  --sky-battle: #a7dcf0;
+  --sky-breed:  #ffdfe8;
+
+  /* ⭐ 設計の1px。器の幅を 1080 に写す倍率。JS が入れる */
+  --u: 1px;
+}
+
+/* ⚠️ 作者の決定（2026-08-22）: 絶対座標のまま。
+   ⭐ 1080x1920 を、外枠の拡大縮小だけで実機へ写す。
+   ⚠️ 引き受けた代償: 20:9 の端末で上下に帯が出る（課題 §9-7）。 */
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #0d1220;
+  overflow: hidden;
+  /* 🔴 採用フォント: PixelMplus10（ドット絵化計画 §6・2026-08-25・実測して決定）。
+     ⚠️ `font-smooth`/`-webkit-font-smoothing` に頼らない ── にじみが1画素も出ないかは
+     「font-size が10の倍数か」だけで決まる（8〜200px 総当たりで確認済み）。
+     ⭐ `Mochiy Pop One` は消さない（`index.html` の @font-face に残す。戻せるように）。 */
+  font-family: "PixelMplus10", system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ⚠️ **格子の中央寄せに頼らない。**中身（1080）が器より広いとき、
+   溢れ方は当てにならない（実測 2026-08-22: stage が viewport の外 left=345 に出た）。
+   ⭐ 中心を明示して、そこから縮める。 */
+#stage-wrap {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* ⭐ **設計上の画面。**中身は全部この中の絶対座標。 */
+#stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1080px;
+  height: 1920px;
+  /* ⭐ 中心を合わせてから縮める。⚠️ JS が scale を足す（translate は残す） */
+  transform-origin: center center;
+  transform: translate(-50%, -50%);
+  background: var(--sky-nest);
+  overflow: hidden;
+  /* ⚠️ 端末の縁（ノッチ・ホームバー）に潜らせない */
+  box-shadow: 0 0 0 1px rgba(0,0,0,.15);
+}
+
+/* 骨組みが作る部品。⚠️ ここに座標は書かない（ローダーが差す） */
+.n {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+/* label ── ⚠️ Unity は枠より高い字を枠の外へ描く（VerticalWrapMode.Overflow）ので、
+   ここも切らない。⭐ 切ると「収まっているのに見えない」が生まれる。 */
+.n.label {
+  display: flex;
+  flex-direction: column;
+  white-space: pre;
+  color: var(--ink);
+  line-height: 1.15;
+}
+/* ⚠️ **寄せは2重に指定する** ── flex は行を寄せ、`text-align` は行の中を寄せる。
+   ⭐ 2行の字（`text=空き
+（自動で埋まる）`）でこの違いが出る。 */
+/* ⚠️ **縦に積むので、`justify` が上下・`align` が左右。**
+   ⭐ 横に積むつもりで書くと、寄せが丸ごと入れ替わる。 */
+.n.label.a-left    { justify-content: center;     align-items: flex-start; text-align: left; }
+.n.label.a-center  { justify-content: center;     align-items: center;     text-align: center; }
+.n.label.a-right   { justify-content: center;     align-items: flex-end;   text-align: right; }
+.n.label.a-upper-left   { justify-content: flex-start; align-items: flex-start; text-align: left; }
+.n.label.a-upper-center { justify-content: flex-start; align-items: center;     text-align: center; }
+.n.label.a-upper-right  { justify-content: flex-start; align-items: flex-end;   text-align: right; }
+
+/* ⭐ **折り返す字**（説明文）。⚠️ 既定は折り返さない
+   ── 1行の見出しが枠の都合で勝手に2行になると、上下の間隔が崩れる。 */
+.n.label.wrapped { white-space: pre-wrap; }
+
+.ink-dim    { color: var(--ink-dim); }
+.ink-faint  { color: var(--ink-faint); }
+.ink-accent { color: var(--accent-ink); }
+.ink-danger { color: var(--danger-ink); }
+.ink-good   { color: var(--good-ink); }
+.ink-on-lead{ color: var(--on-lead); }
+
+/* card ── ⭐ **実物（`Resources/UI/panel.png`）に合わせる。**
+   白地・薄墨の細い縁・角丸。⚠️ 「面だけで区切る」ほうが作法には近いが、
+   ⭐ いま出荷しているのはこの絵なので、移し替えでは見た目を変えない。
+
+   ⚠️ **縁は `border` でなく内側の影で描く。**⭐ `border` は中の座標の起点を
+   2px ずらすので、984 の中に 984 を置いた子が**全部はみ出す**
+   （実測 2026-08-22: それだけで 258件 出た）。骨組みは絶対座標なので、
+   縁が場所を食う描き方は使えない。 */
+.n.card {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 2px rgba(43, 51, 80, .16);
+  border-radius: 20px;
+}
+
+/* ⭐ **沈んだ札**（特性の帯・技の枠）。⚠️ 縁は出さない ── 面と線を二重に使わない。 */
+.n.card.ink-faint {
+  background: rgba(0, 0, 0, .05);
+  box-shadow: none;
+}
+
+/* button ── ⭐ 押せるものだけ角丸 */
+.n.button {
+  border: 0;
+  border-radius: 18px;
+  background: #dfe3ee;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* ⚠️ 🔴 **折り返さない**（`.n.label` と同じ約束・Unity も折り返さない）。
+     ⭐ 既定の `normal` のままだと、入らない字が**黙って2行に折れる**
+     ── 折れた字は横にはみ出さないので「字が枠より広い」に映らず、
+     `wrap=yes` でもないので「字が枠より高い」にも映らない。
+     ⚠️ **どちらの検査にも映らない形**だった（実測 2026-08-22「オート  OFF」）。 */
+  white-space: pre;
+}
+.n.button.lead { background: var(--accent); }
+.n.button:disabled { background: #e8e9ee; color: var(--ink-faint); cursor: default; }
+/* ⭐ 2026-08-25 ドット絵化 段取り4: 下に paint を敷いた釦は、地を透明にして絵を見せる
+   （`ink=clear`）。⚠️ 押しどころ自体は button のまま（tap= は生きている）。 */
+.n.button.ink-clear,
+.n.button.ink-clear:disabled { background: transparent; }
+
+/* scroll ── ⭐ CSS に任せる。⚠️ Unity では ScrollRect を組んでいた所 */
+.n.scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.n.round { border-radius: 50%; }
+
+/* line ── ⭐ **区切りの1本。**⚠️ 一辺だけ。面（明度差）と二重に使わない。
+   色は Prefab の実測（`#2e261c` α.34 / 行の間は α.14）。 */
+.n.line { background: rgba(46, 38, 28, .34); }
+.n.line.ink-faint { background: rgba(46, 38, 28, .14); }
+
+/* ⭐ **選んでいる升は「輪」で示す**（塗りつぶさない）。
+   ⚠️ べた塗りにすると絵が読めなくなり、同じ升が画面ごとに別物に見えていた。 */
+.n.card.lead {
+  background: transparent;
+  box-shadow: inset 0 0 0 6px var(--accent);
+}
+
+/* bar ── ⭐ **割合で伸びる帯**（孵化の残り・HP）。
+   ⚠️ 幅だけがデータで変わるので、骨組みには書けない。
+   色は Prefab の実測（地 `#000` α.14 ── 伸びた分は差す側が決める）。 */
+.n.bar {
+  background: rgba(0, 0, 0, .14);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.n.bar-fill {
+  position: absolute;
+  background: var(--accent);
+  /* ⭐ **帯はじわっと動く。**⚠️ 差し替えは1秒に16回来る（`Core.Beats.FrameSeconds`）ので、
+     それより少し長く取ると刻みが見えなくなる（Unity は毎フレーム描いていた）。
+     ⚠️ 色は変えない（孵化の橙→緑は「切り替わった」ことが伝わるべき瞬間）。 */
+  transition: width .1s linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .n.bar-fill { transition: none; }
+}
+
+/* ── 盤の演出 ────────────────────────────────────────
+   ⭐ **「何が起きたか」を字で説明しないための道具**（`fx.js` が差す）。
+   ⚠️ Blazor に描かせない ── 組み直すたびに最初からやり直しになる。 */
+.egg-fx {
+  position: absolute;
+  pointer-events: none;
+  z-index: 8;
+}
+/* 字 ── ⭐ 上へ昇りながら薄くなる。⚠️ 読める時間を残す（下限は技名が読める長さ） */
+.fx-say, .fx-shout {
+  text-align: center;
+  white-space: pre;
+  line-height: 1.1;
+  /* ⭐ 縁取りで、どんな地の上でも読める（絵の上に出るため） */
+  text-shadow: 0 2px 0 var(--paper), 0 -2px 0 var(--paper), 2px 0 0 var(--paper), -2px 0 0 var(--paper);
+  /* ⭐ `both` ── ⚠️ **`forwards` では駄目**。順番に出すために `animation-delay` を掛けるので
+     （`fx.js`）、待っている間の姿を 0%（透明）に留めないと**先に全部見えてしまう**。 */
+  animation: fx-rise .9s ease-out both;
+}
+/* ⭐ 名乗りは**留まる**（読ませる時間が要る）。⚠️ 数字より長く、間より短く */
+.fx-shout { animation: fx-hold .72s ease-out both; }
+
+@keyframes fx-rise {
+  0%   { transform: translateY(10px) scale(.7); opacity: 0; }
+  18%  { transform: translateY(0) scale(1.08); opacity: 1; }
+  30%  { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-58px) scale(1); opacity: 0; }
+}
+@keyframes fx-hold {
+  0%   { transform: translateY(8px); opacity: 0; }
+  16%  { transform: translateY(0); opacity: 1; }
+  78%  { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-14px); opacity: 0; }
+}
+
+/* 輪 ── ⭐ 足元から広がって消える（名乗り・回復・盾） */
+.fx-ring {
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 8px var(--fx-tint);
+  animation: fx-spread .5s ease-out both;
+}
+@keyframes fx-spread {
+  0%   { transform: scale(.35); opacity: .9; }
+  100% { transform: scale(3.5); opacity: 0; }
+}
+
+/* 光 ── ⭐ 当たった瞬間に一度だけ弾ける */
+.fx-hit {
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--fx-tint) 0%, transparent 70%);
+  animation: fx-flash .3s ease-out both;
+}
+@keyframes fx-flash {
+  0%   { transform: scale(.5); opacity: .85; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+
+/* 体の動き ── ⭐ 踏み込み（横）と、当たった跳ね（下）
+   ⚠️ 🔴 **敵の絵は `scaleX(-1)` で裏返してある。**⭐ `transform` は後から書いたほうが
+   丸ごと勝つので、動きの中に**反転を書き足さないと敵が正面を向く**。
+   だから味方用と敵用を分けてある（`.foe` が付いているかで選ぶ）。 */
+.fx-step  { animation: fx-step  .5s ease-out; }
+.fx-shock { animation: fx-shock .22s ease-out; }
+.n.pixel.foe.fx-step  { animation: fx-stepf .5s ease-out; }
+.n.pixel.foe.fx-shock { animation: fx-shockf .22s ease-out; }
+@keyframes fx-step   { 0%,100% { transform: translateX(0); }  40% { transform: translateX(30px); } }
+@keyframes fx-shock  { 0%,100% { transform: translateY(0); }  45% { transform: translateY(14px); } }
+/* ⚠️ 反転が先なので、`translateX(+30)` は**画面の左**へ動く（敵の前へ出る向き） */
+@keyframes fx-stepf  { 0%,100% { transform: scaleX(-1) translateX(0); }  40% { transform: scaleX(-1) translateX(30px); } }
+@keyframes fx-shockf { 0%,100% { transform: scaleX(-1) translateY(0); }  45% { transform: scaleX(-1) translateY(14px); } }
+
+/* ── さいころ ────────────────────────────────────────
+   ⭐ **目が決まる瞬間だけを見せる。**⚠️ 出目は Core が先に決めている
+   ── ここは回して、止めて、読ませるだけ。
+
+   🔴 **立体で転がす**（2026-08-28・作者の指示「さいころを3D表示に」）。
+   ⭐ 6面を `Sheets.DieCube` が作り、**出た目を必ず正面に置く**
+   ── だからここは出目を1つも知らない（止まる向きは常に「回転なし」）。
+
+   ⚠️ 🔴 **2つ目の動きに `both` を付けて、後ろに並べてはいけない。**
+   `animation: A .42s, B .12s .42s ease-out both` と書くと、B の**巻き戻し塗り**
+   （`backwards`）が待っている 0〜.42秒 のあいだも効き、しかも後ろに書いたほうが勝つので
+   **A（回転）が丸ごと見えなくなる**。⭐ だから1本の動きにまとめ、
+   区間ごとの緩急は**キーフレーム側**（`animation-timing-function`）で切り替える。 */
+/* ⭐ 立方体そのもの。⚠️ `preserve-3d` が無いと6面が同じ平面へ潰れる。
+   ⚠️ **奥行き（`perspective`）は器ではなく、動きの中で持つ** ── 器を `#face-roll` で
+   指すと、冠の付かない場面（`Scenes` の見取り図）で奥行きが消えて平べったく見える。 */
+.die3d {
+  position: absolute;
+  left: 0; top: 0; width: 100%; height: 100%;
+  transform-style: preserve-3d;
+  animation: die3d-roll .58s both;
+}
+/* ⭐ 1面。地は紙、絵は墨 ── ⚠️ `die-N.png` は「白い角丸に、目のところが穴」なので、
+   絵を墨で塗ると**穴から紙が覗いて目になる**。
+   ⚠️ 角丸 52px は絵の実測（128px の絵で半径 26px ＝ ちょうど倍）── ずらすと縁に紙の輪が出る。 */
+.die3d-face {
+  position: absolute;
+  inset: 0;
+  color: var(--ink);
+  background: var(--paper);
+  border-radius: 52px;
+  backface-visibility: hidden;
+}
+/* ⚠️ 128px は面の半分（256px の器）。⭐ ここを間違えると立方体が箱にならない */
+.die3d-front  { transform: translateZ(128px); }
+.die3d-back   { transform: rotateY(180deg) translateZ(128px); }
+.die3d-right  { transform: rotateY(90deg)  translateZ(128px); }
+.die3d-left   { transform: rotateY(-90deg) translateZ(128px); }
+.die3d-top    { transform: rotateX(90deg)  translateZ(128px); }
+.die3d-bottom { transform: rotateX(-90deg) translateZ(128px); }
+
+/* ⭐ **段で送る**（`steps()`）── ⚠️ なめらかに回すと、ドット絵の面がぶれて溶ける。
+   ⭐ 72%（＝ `Beats.Spin` の .42秒）で 720°/1080° ＝ **どちらも 360 の倍数**なので、
+   ちょうど正面（＝出た目）が来る。そこから先は着地の捻りだけ。 */
+@keyframes die3d-roll {
+  0%   { animation-timing-function: steps(9, end);
+         transform: perspective(900px) rotateX(0deg) rotateY(0deg) scale(.86); }
+  72%  { animation-timing-function: ease-out;
+         transform: perspective(900px) rotateX(720deg) rotateY(1080deg) scale(1.14); }
+  88%  { animation-timing-function: ease-in-out;
+         transform: perspective(900px) rotateX(734deg) rotateY(1066deg) scale(1.04); }
+  100% { transform: perspective(900px) rotateX(720deg) rotateY(1080deg) scale(1); }
+}
+
+/* ⚠️ 覆いは**溶かして入れる** ── いきなり暗くすると、さいころが出るより先に
+   「画面が切り替わった」ように見えて、転がりの始まりが見えない。 */
+#dim-roll { animation: die-veil .18s ease-out both; }
+/* ⚠️ 濃さは実物と同じ（濃いと盤が読めず、薄いと転がりが背景に紛れる） */
+@keyframes die-veil { from { background: rgba(0,0,0,0); } to { background: rgba(0,0,0,.34); } }
+
+/* ── 告知 ────────────────────────────────────────────
+   ⭐ 横から伸びる。動いて止まると、そこを読む。 */
+#strip-tell {
+  transform-origin: left center;
+  animation: tell-in .22s ease-out both;
+  background: var(--ink);
+  box-shadow: none;
+  border-radius: 0;
+}
+#line-tell { color: #ffffff; letter-spacing: .12em; }
+@keyframes tell-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* ── 祝い（Fanfare）───────────────────────────────────
+   ⭐ 手に入れた・生まれた瞬間の全画面演出。⚠️ 告知（tell）と違って**閉じるまで出しっぱなし**
+   ── 覆いは画面いっぱいで濃い（Unity 実測 `rgba(10,15,31,.82)`。他の覆いより暗いのは
+   意図 ── 後ろの画面を完全に止める・お祝いだけに目を向けさせる）。
+   ⚠️ 秒は `Core.Beats.CheerPop`/`CheerSpin` と同じ数（唯一の出所は Beats）── 変えるなら
+   両方直す。 */
+#dim-fan { background: rgba(10, 15, 31, .82); }
+
+/* 🔴 **「どこを押しても閉じる」を本当に画面いっぱいにする。**
+   ⚠️ `burst`/`pop`/`line` は `dim` の**兄弟**（`fanfare.txt` 参照 ── burst を pop の子に
+   しなかったのと同じ理由）なので、絵の上を押すと `closest('[data-tap]')` は**祖先しか
+   遡らず**、兄弟の `dim-fan` へは辿り着けない ── 実測: 卵の絵の真上を押しても閉じなかった。
+   ⭐ 絵・光・字はどれも押しどころを持たないので、`pointer-events:none` で**素通りさせ**、
+   実際に押されるのは常に下の `dim-fan` にする（Unity の Raycast Target とは違う道だが、
+   「どこを押しても閉じる」を字義どおり満たすのはこちら）。 */
+#pop-fan, #burst-fan, #line-fan { pointer-events: none; }
+
+/* ⭐ **飛び出して1度沈む。**⚠️ Lerp だけだと「置いた」だけに見えて弾まない
+   （Unity `Fanfare.PlayIn` の式 `k*(1+sin(k*π)*0.35)` を 10% 刻みで写した数列）。
+   ⚠️ burst はここに含めない ── `fanfare.txt` 側のコメント参照（回すと矩形が膨らむ）。 */
+#pop-fan {
+  transform-origin: center center;
+  animation: cheer-pop .42s linear both;
+}
+@keyframes cheer-pop {
+  0%   { transform: scale(0); }
+  10%  { transform: scale(.111); }
+  20%  { transform: scale(.241); }
+  30%  { transform: scale(.385); }
+  40%  { transform: scale(.533); }
+  50%  { transform: scale(.675); }
+  60%  { transform: scale(.800); }
+  70%  { transform: scale(.898); }
+  80%  { transform: scale(.965); }
+  90%  { transform: scale(.997); }
+  100% { transform: scale(1); }
+}
+
+/* ⭐ 後ろの光がゆっくり回る。⚠️ 動いているものが1つあるだけで「今起きたこと」に見える
+   （Unity `Fanfare.Update` と同じ 360°/6秒・線形）。 */
+#burst-fan {
+  transform-origin: center center;
+  animation: cheer-spin 6s linear infinite;
+}
+@keyframes cheer-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* ⭐ ★は明るい金（`--accent`）。⚠️ Unity の実測色（`--accent-ink` 相当の暗い橙）のままだと、
+   web の濃い覆い（`#dim-fan`）の上で沈む（実測 1.79:1・`scripts/audit.mjs` の基準は 2.0:1）
+   ── Unity の覆いより web のほうが暗いので、色はそのまま移せない。 */
+#stars-fan { color: var(--accent); }
+
+/* ⭐ 告知の字は白＋軽い縁取り。⚠️ 骨組みの既定色（`--ink`）のままだと、暗い覆いの上で
+   ほぼ読めない（実測 1.10:1）── Unity の実測色（白・`Outline` effectDistance 5,5・ink 色）
+   をそのまま写す。 */
+#line-fan { color: #ffffff; text-shadow: 5px -5px 0 var(--ink); }
+
+/* ── 放置の帯 ────────────────────────────────────────
+   ⭐ 進んでいることは**地面が左へ流れる**ことで見せる。走者は歩幅だけ揺らす。
+   ⚠️ 地面は画面幅の2倍あるので、1枚ぶん流れたら折り返す（`Core.Beats.Scroll`）。 */
+/* 🔴 **級で指す（id で指さない）。**
+   ⚠️ 前は `#ground` だった ── ところが**すごろくの盤の器も `ground`**
+   （`assets/layouts/trail.txt`）。id は画面で唯一でなければならないのに、
+   画面をまたいで同じ名前だったので、この動きが**潜入の盤にも掛かっていた**
+   ── 盤が12秒かけて左へ流れ続け、マスが指の下から逃げる
+   （実測 2026-08-26「画面が動き続けて、進むマスが押せない」の正体）。
+   ⭐ 別の画面の物に触れない書き方（級）に直す。⚠️ 草も同じ動き（一緒に流す
+   ── 地面だけ動くと、生えている物が滑って見える）。 */
+.idle-flow, .idle-tuft { animation: idle-roll 12s linear infinite; }
+@keyframes idle-roll { from { transform: translateX(0); } to { transform: translateX(-1080px); } }
+
+/* ⭐ **ホームの背景（空と山）を、ゆっくり左へ流す。**
+   ⚠️ 絵は「元＋左右反転」を横に並べた2枚幅（2160px）。1枚ぶん（1080px）流したら
+   先頭へ戻すので、途切れずに繋がる ── ⭐ 継ぎ目が鏡写しなので線が合って目立たない。
+   ⭐ **空のほうが遅い**（作者の指示 2026-08-27）── 遠いものほどゆっくり動いて見える。
+   ⚠️ 🔴 **級で掛ける。id では掛けない。**別の画面に同じ名前があると両方に効く
+   （2026-08-26 に `#ground` でそれを踏み、すごろくが遊べなくなった）。 */
+.roll-sky  { animation: bg-roll 180s linear infinite; }
+.roll-hill { animation: bg-roll  90s linear infinite; }
+@keyframes bg-roll { from { transform: translateX(0); } to { transform: translateX(-1080px); } }
+
+/* ⭐ 歩幅の揺れ。⚠️ 大きいと跳ねて見えて「進んでいる」から離れる（`Core.Beats.Bob`）。
+   ⚠️ 一人ずつずらす ── 揃うと行進になり、めいめいが歩いている感じが消える。 */
+.idle-walk { animation: idle-bob .86s ease-in-out infinite; }
+@keyframes idle-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+/* ⭐ 相手は**外から転がって来る**。⚠️ 定位置にぽんと現れると「回復した」に見える */
+.idle-come { animation: idle-enter 1.4s ease-out both; }
+@keyframes idle-enter {
+  from { transform: translateX(700px) rotate(-720deg); }
+  to   { transform: translateX(0) rotate(0deg); }
+}
+
+/* ⚠️ **動きを望まない人には出さない。**⭐ 何が起きたかは字と数で残す
+   （動きは読み取りやすさのためであって、情報の出所ではない）。 */
+@media (prefers-reduced-motion: reduce) {
+  .fx-say, .fx-shout { animation: fx-hold .9s linear both; }
+  .fx-ring, .fx-hit { display: none; }
+  .fx-step, .fx-stepf, .fx-shock { animation: none; }
+  /* ⭐ 動きを望まない人には転がさない ── ⚠️ ただし**正面は出す**
+     （`.die3d` の動きを消すと `transform` が素になり、出た目の面がそのまま正面に来る）。 */
+  .die3d { animation: none; transform: perspective(900px); }
+  #dim-roll, #strip-tell { animation: none; }
+  #dim-roll { background: rgba(0,0,0,.34); }
+  #pop-fan, #burst-fan { animation: none; }
+  .roll-sky, .roll-hill, .idle-flow, .idle-tuft, .idle-walk, .idle-come { animation: none; }
+}
+
+/* icon ── ⭐ **絵を出して、その上から色を掛ける。**
+   ⚠️ Unity の `Image.color` は**掛け算**（白なら素のまま）。抱き合わせ（mask）だけにすると
+   **さいころの目が消える**（実測 2026-08-22: 濃紺の四角になった）。
+   ⭐ だから2枚重ねる ── 素の絵と、絵の形に切った色を「掛ける」で乗せる。 */
+.n.icon { color: var(--ink); }
+/* 🔴 **絵は全部 pixelated**（ドット絵化計画 §2・2026-08-25・土台の決定5）。
+   ⚠️ 以前は `crisp=yes` を付けた icon だけに絞っていたが、土台の決定で
+   「絵を出す要素すべて」に広げた ── 既存の Kenney 絵（さいころ・盤の印）も
+   これからはドットのまま拡大される。`crisp` 属性・クラス自体は残す
+   （骨組み側の `node.Option("crisp")` は触らない。付いていても付いていなくても
+   同じ見た目になっただけ）。 */
+.n.icon-art {
+  position: absolute;
+  background-image: var(--pic);
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+}
+.n.icon-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  mix-blend-mode: multiply;
+  -webkit-mask-image: var(--pic);
+  mask-image: var(--pic);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  image-rendering: pixelated;
+}
+
+/* ⭐ **絵が無いときの印。**⚠️ 空の四角と混同しない ── `IconManifest`/`PaintManifest` が
+   「実体が無い」と判じた `pic=` にだけ出る（`NOTICE.md` 参照）。
+   ⚠️ `.n.paint-missing` は `paint` 用（段取り4・第2部「絵が無いとき」）── 見た目は同じで足りる。 */
+.n.icon-missing,
+.n.paint-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  background: repeating-linear-gradient(45deg,
+    rgba(224, 79, 95, .22) 0 6px, rgba(224, 79, 95, .06) 6px 12px);
+  box-shadow: inset 0 0 0 2px var(--danger);
+  color: var(--danger-ink);
+  border-radius: 6px;
+  font-size: 70%;
+}
+
+/* host ── ⭐ **中は骨組みが知らないと宣言した枠。**
+   ⚠️ 見た目は何も与えない ── 中を描く側が全部決める。 */
+.n.host { overflow: hidden; }
+/* 🔴 **巻物の中の器だけは切らない**（`grow=yes`）。
+   ⚠️ 切ると、外の巻物の `scrollHeight` が器の高さで頭打ちになり、
+   はみ出した中身は**見えないうえ押せない**（実測 2026-08-26・すごろくの盤）。
+   ⭐ 高さの指定はそのまま残す ── 器の高さは骨組みの検査が見る値であって、
+   実際に描かれる高さは中身（`#ground-in`）が名乗る。 */
+.n.host.grow { overflow: visible; }
+
+/* ⭐ **覆い。**地を暗くして、後ろを押させない。
+   ⚠️ ここを押しても閉じない ── 聞いている最中に、触っただけで消えるのは危ない
+   （`AskPanel` の決めごとをそのまま持ち込む）。 */
+.n.veil { background: rgba(0, 0, 0, .62); }
+
+/* pixel ── ⚠️ **整数倍でなくてもボケさせない。**
+   ⭐ ドット絵は必ず crisp に（罠23: 小数倍で拡大するとボケる） */
+.n.pixel {
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
+  display: block;
+}
+
+/* ⚠️ **敵は左右反転**（作者の指示 2026-08-21・すべての敵に適応）。
+   ⭐ Unity では pivot を中央へ寄せてから localScale.x を負にする2段構えが要ったが、
+   CSS は transform-origin の既定が中央なので1行で足りる。 */
+.n.pixel.foe { transform: scaleX(-1); }
+
+/* paint ── ⭐ 絵をそのまま出す（色を掛け合わせない・ドット絵化計画 決定10・段取り4）。
+   ⚠️ icon と違い抱き合わせ（mask）の層を持たない。⭐ pixel と同じく必ず crisp に。 */
+.n.paint {
+  image-rendering: pixelated;
+  display: block;
+}

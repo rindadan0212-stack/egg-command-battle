@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="utf-8" />
+    <!-- ⚠️ 拡大を止める。⭐ 遊びの画面は外枠の倍率で写すので、二重にずらさない -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>卵強奪バトル</title>
+    <base href="/egg-command-battle/" />
+    <link rel="stylesheet" href="stage.css" />
+    <!-- ⭐ 骨組みエディタ（`/edit`）専用の意匠（`Pages/EditPage.razor.css`）。
+         ⚠️ Blazor WASM は自動で足してくれない（hosted/server 版と違う）ので手で書く。 -->
+    <link rel="stylesheet" href="EggCommand.Web.styles.css" />
+    <style>
+      /* ⭐ フォントは同梱。⚠️ CDN に頼らない ── 落ちると字送りが変わり、
+         Unity で詰めた座標の前提が崩れる。 */
+      /* ⚠️ 今は使わない（stage.css は PixelMplus10 を使う）が、戻せるように残す
+         （ドット絵化計画 §6・2026-08-25）。 */
+      @font-face {
+        font-family: "Mochiy Pop One";
+        src: url("fonts/MochiyPopOne-Regular.ttf") format("truetype");
+        font-display: block;
+      }
+      /* 🔴 採用フォント（ドット絵化計画 §6・2026-08-25）。
+         ⭐ PixelMplus10 は「10の倍数」の font-size でだけ、にじみが1画素も出ない
+         （8〜200px 総当たりで確認済み）。 */
+      @font-face {
+        font-family: "PixelMplus10";
+        src: url("fonts/PixelMplus10-Regular.ttf") format("truetype");
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: "PixelMplus10";
+        src: url("fonts/PixelMplus10-Bold.ttf") format("truetype");
+        font-weight: 700;
+        font-display: block;
+      }
+      #app { height: 100%; }
+      .loading { position: fixed; inset: 0; display: grid; place-items: center;
+                 color: #cfd6ea; font: 16px/1.6 system-ui, sans-serif; }
+    </style>
+</head>
+
+<body>
+    <div id="app"><div class="loading">読み込んでいます…</div></div>
+
+    <div id="blazor-error-ui" style="display:none;position:fixed;bottom:0;left:0;right:0;
+         background:#c0303f;color:#fff;padding:12px;font:14px system-ui">
+        何かが壊れました。<a href="." class="reload" style="color:#fff">読み直す</a>
+        <span class="dismiss" style="float:right;cursor:pointer">🗙</span>
+    </div>
+    <script src="_framework/blazor.webassembly.js"></script>
+    <!-- ⭐ 押しどころを拾う（字を組み立てて流し込むので @onclick が付けられない） -->
+    <script src="tap.js"></script>
+    <!-- ⭐ 保存の置き場（同期な localStorage ── 閉じる瞬間に間に合う） -->
+    <script src="save.js"></script>
+    <!-- ⭐ 盤の演出（⚠️ Blazor に描かせない ── 組み直すたびにやり直しになる） -->
+    <script src="fx.js"></script>
+    <!-- ⭐ すごろくの盤を巻く（⚠️ 組み直しで 0 へ戻るので、描くたびに寄せ直す） -->
+    <script src="board.js"></script>
+    <!-- ⭐ 骨組みエディタ（`/edit`）専用。⚠️ 遊ぶ頁（`/app`）は読み込むだけで使わない -->
+    <script src="disk.js"></script>
+    <script src="edit.js"></script>
+    <script>
+      // ⭐ **設計 1080x1920 を、外枠の拡大縮小だけで実機へ写す。**
+      // ⚠️ 作者の決定（絶対座標のまま）の帰結。20:9 では上下に帯が出る（課題 §9-7）。
+      //
+      // 🔴 **整数倍だけで拡大し、余りは黒帯**（ドット絵化計画 §3・2026-08-25）。
+      // ⚠️ 半端倍率（前は `min(innerWidth/1080, innerHeight/1920)`）だと、絵のドットが
+      //    端末ごとにバラバラの太さになる（計画 §0 の実測 13通り）── 二度と使わない。
+      //
+      // 升目は 270x480 ドット（1ドット = 設計4px）。実ピクセルから
+      // 「1ドットが実際に何pxか」= P を整数で決め、CSS 倍率 k = P / (4 * DPR) を掛ける。
+      function fit() {
+        const s = document.getElementById('stage');
+        if (!s) return;
+        const dpr = window.devicePixelRatio || 1;
+        // 🔴 **`floor` の直前に「ほぼ整数なら整数に寄せる」を挟む。**
+        //    ⚠️ `devicePixelRatio` は 3 のつもりでも **2.9999998661** のような値を返す
+        //    （実測 2026-08-25・Chrome）。素直に floor すると
+        //    360x640/DPR3 で 4 が **3** に落ち、盤が 360x640 → 270x480 へ縮んで
+        //    帯が 90/160 も余計に出る（本来この端末はぴったり0のはず）。
+        //    ⭐ 0.1% 以内のズレは「実は整数」とみなす ── 逆に本当に 3.999 なら
+        //    4 にしても実ピクセルで 0.1% 溢れるだけで、目には見えない。
+        const nearInt = (v) => Math.abs(v - Math.round(v)) < 1e-3 ? Math.round(v) : Math.floor(v);
+        const p = Math.max(1, nearInt(Math.min(
+          innerWidth  * dpr / 270,
+          innerHeight * dpr / 480)));
+        const k = p / (4 * dpr);
+        s.style.transform = 'translate(-50%, -50%) scale(' + k + ')';
+        document.documentElement.style.setProperty('--u', k + 'px');
+      }
+      addEventListener('resize', fit);
+      new MutationObserver(fit).observe(document.documentElement, {childList: true, subtree: true});
+      // ⚠️ **`devicePixelRatio` は変わりうる**（別ディスプレイへ移す・ブラウザのズーム）。
+      //    ⭐ `resize` だけでは拾えないことがあるので、`matchMedia('(resolution: …)')` で
+      //    現在の DPR を監視し、外れたら fit() をやり直して監視し直す（単純に保つ）。
+      function watchDpr() {
+        const q = matchMedia('(resolution: ' + devicePixelRatio + 'dppx)');
+        q.addEventListener('change', () => { fit(); watchDpr(); }, { once: true });
+      }
+      watchDpr();
+      fit();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,882 @@
+/* /Pages/EditPage.razor.rz.scp.css */
+/* 骨組みエディタ（`/edit`）の器。
+   ⚠️ 遊ぶ画面（stage.css）とは別の意匠 ── ここは道具であって、遊びの絵ではない。
+   ⭐ 3層・スクロール0（wiki `web移行計画.md` §11）。柱ぜんぶを縦に並べたときに
+   溢れたら、畳み方を間違えている合図 ── 溢れる前提の場所（木・その1つ）だけ
+   内側で `overflow-y:auto` を持つ。 */
+
+.edroot[b-lc27aevk28] {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #12151f;
+  color: #d7dae6;
+  font: 14px/1.4 "Segoe UI", system-ui, sans-serif;
+}
+
+/* ── 上の帯 ─────────────────────────────────────── */
+/* ⭐ D-1: 盤を主役にするため、上の帯も詰めて高さを盤へ回す。 */
+.edtop[b-lc27aevk28] {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #191d2b;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.edwho[b-lc27aevk28] { display: flex; align-items: center; gap: 6px; color: #9aa1b8; font-size: 13px; }
+.edtop select[b-lc27aevk28] {
+  background: #12151f;
+  color: #d7dae6;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+}
+.edtop button[b-lc27aevk28] {
+  background: #232840;
+  color: #d7dae6;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+.edtop button:hover:not(:disabled)[b-lc27aevk28] { background: #2b3150; }
+.edtop button:disabled[b-lc27aevk28] { color: #565c72; cursor: default; }
+/* ⭐ 主役は保存だけ（画面内で1つだけ突出させる） */
+.edtop button:last-of-type:not(:disabled)[b-lc27aevk28] { background: #b45309; border-color: #b45309; color: #fff; }
+.edtop button:last-of-type:not(:disabled):hover[b-lc27aevk28] { background: #c96613; }
+
+.edwarn[b-lc27aevk28] { color: #f0a5ad; font-size: 12px; }
+.edmuted[b-lc27aevk28] { color: #6d7390; font-size: 12px; }
+.edstatus[b-lc27aevk28] { color: #8fd0a3; font-size: 12px; margin-left: auto; }
+
+/* ⭐ Pass B: 拡大（ズーム）操作。⚠️ 控えめに ── 主役は保存の1つだけ（作法どおり）
+   なので、ここは無彩色のまま。角丸は押せる要素だけ（区切りには使わない）。 */
+.edzoom[b-lc27aevk28] { display: flex; align-items: stretch; }
+.edzoom button[b-lc27aevk28] {
+  background: #232840;
+  color: #d7dae6;
+  border: 1px solid rgba(255, 255, 255, .12);
+  padding: 5px 9px;
+  font: inherit;
+  cursor: pointer;
+}
+.edzoom button:first-child[b-lc27aevk28] { border-radius: 6px 0 0 6px; border-right: 0; }
+.edzoom button:last-child[b-lc27aevk28] { border-radius: 0 6px 6px 0; border-left: 0; }
+.edzoom button:hover:not(:disabled)[b-lc27aevk28] { background: #2b3150; }
+.edzoom button:disabled[b-lc27aevk28] { color: #565c72; cursor: default; }
+/* ⭐ E1-2: 「1ドット=4px」のような表示（％をやめた）── 「120%」より幅が要る。 */
+.edzoomval[b-lc27aevk28] { min-width: 88px; font-variant-numeric: tabular-nums; }
+.edgridtoggle[b-lc27aevk28] { margin-left: 2px; }
+
+/* ── 3本の柱 ─────────────────────────────────────── */
+.edmain[b-lc27aevk28] { flex: 1 1 auto; display: flex; min-height: 0; }
+
+/* ⭐ Pass B 段階制: フォルダを選ぶ前は、空の3列を見せず1つの入口だけ
+   （pixelizer の教訓）。⚠️ `.edmain`（3列）はまだ何も読んでいないとき丸ごと出さない
+   （`EditPage.razor` の `@if (_raw is null)` 側）── 木・盤・Inspector の空カラムを
+   個別に隠すのではなく、この状態そのものを別の見た目にする。 */
+.edstart[b-lc27aevk28] {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.edstartbox[b-lc27aevk28] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 40px;
+}
+/* ⭐ 画面内の主役はこの1つだけ（作法どおり ── 塗りで突出させ、他は引っ込める）。 */
+.edstartbtn[b-lc27aevk28] {
+  background: #b45309;
+  color: #fff;
+  border: 1px solid #b45309;
+  border-radius: 8px;
+  padding: 16px 30px;
+  font: inherit;
+  font-size: 17px;
+  cursor: pointer;
+}
+.edstartbtn:hover:not(:disabled)[b-lc27aevk28] { background: #c96613; }
+.edstartbtn:disabled[b-lc27aevk28] { background: #232840; border-color: rgba(255, 255, 255, .12); color: #565c72; cursor: default; }
+.edstarthint[b-lc27aevk28] { color: #6d7390; font-size: 12px; max-width: 320px; text-align: center; }
+
+/* ⭐ D-1: 盤を主役にする ── 木は細く、畳めるようにする（つまみは常に見える帯・
+   本文は `.edtreebody` に分けて畳んだときだけ隠す）。畳んだ／広げた分だけ #edwrap
+   の幅が変わり、ResizeObserver が拾って fit() を自動で走らせる（CSS 幅を変えるだけでよい）。 */
+.edtree[b-lc27aevk28] {
+  flex: 0 0 170px;
+  display: flex;
+  min-width: 0;
+  border-right: 1px solid rgba(255, 255, 255, .08);
+}
+.edtree.edtree-collapsed[b-lc27aevk28] { flex: 0 0 22px; }
+.edtreebody[b-lc27aevk28] {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+/* ⭐ 畳む／開くつまみ。⚠️ 木は盤との境目（右端）に置く。新しい色は増やさない。 */
+.edpaneltoggle[b-lc27aevk28] {
+  flex: 0 0 20px;
+  align-self: stretch;
+  background: #191d2b;
+  color: #9aa1b8;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.edpaneltoggle:hover[b-lc27aevk28] { background: #232840; color: #d7dae6; }
+/* ⭐③ さがす／出ているものだけ。⚠️ 木の行と同じ余白（0 8px→10px）で揃え、
+   下端だけ線1本で区切る（区切りは面でなく線・全周でなく一辺、の作法どおり）。 */
+.edtreetools[b-lc27aevk28] {
+  padding: 2px 10px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.edfind[b-lc27aevk28] { display: flex; align-items: center; gap: 4px; }
+.edfindinput[b-lc27aevk28] {
+  flex: 1 1 auto;
+  width: 0;
+  min-width: 0;
+  height: 26px;
+  background: #0d1220;
+  color: #eef1fa;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 4px;
+  padding: 0 8px;
+  font: inherit;
+}
+.edfindclear[b-lc27aevk28] {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  background: #232840;
+  color: #9aa1b8;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+}
+.edfindclear:hover[b-lc27aevk28] { background: #2b3150; color: #d7dae6; }
+.edtoggle[b-lc27aevk28] { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #9aa1b8; cursor: pointer; }
+.edtoggle input[b-lc27aevk28] { width: 14px; height: 14px; }
+.edrow[b-lc27aevk28] {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.edrow:hover[b-lc27aevk28] { background: rgba(255, 255, 255, .04); }
+/* ⚠️ 選んでいる行は「面」でなく「線」で示す ── 塗り潰さない約束をここでも守る */
+.edrow.on[b-lc27aevk28] { border-left-color: #f59e0b; background: rgba(245, 158, 11, .10); }
+/* ⭐③④ 主以外の選択（複数選択）。⚠️ `.on` より薄い ── 主が1つだけ突出する（作法どおり）。 */
+.edrow.sel[b-lc27aevk28] { border-left-color: rgba(245, 158, 11, .5); background: rgba(245, 158, 11, .05); }
+/* ⭐ Pass B 盤→木ホバー。⚠️ 選択（`.on`/`.sel`・アンバー系）と混ざらないよう、
+   新しい色は増やさず無彩色の面だけ足す（`:hover` の既存の薄い背景と同じ考え方）。 */
+.edrow.hover[b-lc27aevk28] { background: rgba(255, 255, 255, .08); }
+.edname[b-lc27aevk28] { color: #d7dae6; }
+.edkind[b-lc27aevk28] { color: #6d7390; font-size: 11px; }
+/* ⭐ E1-5: 木の印（枠と絵が合わない節点）。⚠️ 新しい色は増やさない ── 既存の警告色
+   （#e04f5f・.edfault-focus/.edfaultitem と同じ）を使う。 */
+.edmismark[b-lc27aevk28] { color: #e04f5f; margin-left: 2px; font-size: 11px; }
+
+.edboardwrap[b-lc27aevk28] {
+  flex: 1 1 auto;
+  position: relative;
+  overflow: hidden;
+  background: #05070c;
+}
+/* ⭐ Pass B: 拡大時にスクロールで盤の全域を見て回れるようにする層。
+   ⚠️ **`#edring`/`#edsel`/`#edband`/guide/`#edhover` は、この層の外
+   （`#edwrap` 直下）に置いたまま** ── ここに入れると、それらは「スクロールする
+   コンテンツの一部」になってしまい、`getBoundingClientRect` の差分（viewport 基準）で
+   置いた screen-px の輪の計算式（`nr.left - wr.left`）がスクロール量ぶんだけ
+   二重に効いてずれる。`#edwrap` 自身は今までどおりスクロールしない（この層
+   `#edscroll` だけが `overflow:auto`）ので、`#edwrap` を基準にした差分計算は
+   スクロール状態によらず常に正しい（詳細は EditPage.razor の註）。
+   ⭐ `display:flex` + 子（`.edstagewrap`）の `margin:auto` で中央寄せする ──
+   `justify-content:center`/`align-items:center` は使わない（器より子が大きいとき、
+   はみ出した先頭側がスクロールで届かなくなる既知の不具合があるため。`margin:auto`
+   は空きが無くなると素直に 0 へ落ちるので、その不具合が起きない）。 */
+.edscroll[b-lc27aevk28] {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  display: flex;
+}
+.edstagewrap[b-lc27aevk28] {
+  position: relative;
+  margin: auto;   /* ⭐ 小さいときは中央、器より大きいときは左上起点でスクロール可能 */
+  flex: 0 0 auto;
+  /* ⭐ 初期値（edit.js の fit() が上書き）。#edstage の初期 scale(.3) と揃えておく。 */
+  width: 324px;
+  height: 576px;
+}
+.edstage[b-lc27aevk28] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1080px;
+  height: 1920px;
+  transform-origin: 0 0;
+  /* ⭐ 初期値。⚠️ 実際の倍率は edit.js の ResizeObserver が上書きする */
+  transform: scale(.3);
+  background: #bdebff;
+}
+/* ⭐ 不備を描く層。⚠️ #edstage と**同じ位置・同じ倍率**（edit.js の fit() が
+   両方へ transform を掛ける）── だから中の要素は設計 px をそのまま置くだけでよい
+   （実寸換算は要らない）。既定 pointer-events:none（Box は下の本体へ素通しする ──
+   #edcap のいちばん上に不備の絵を重ねると、盤全体の掴み・押しどころを覆ってしまう）。 */
+.edfaults[b-lc27aevk28] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1080px;
+  height: 1920px;
+  transform-origin: 0 0;
+  transform: scale(.3);   /* ⭐ 初期値。edit.js の fit() が上書き */
+  pointer-events: none;
+  z-index: 1;   /* ⚠️ #edstage/#edcap の上・#edring/#edguide（2）の下 */
+}
+/* ⭐ Pass B: 格子（きざみ間隔の薄い線）。⚠️ #edstage と同じ基準・同じ倍率
+   （edit.js の fit() が3層まとめて scale する）── だから間隔はそのまま `_step` px
+   でよい（実寸換算は要らない）。既定 off（`EditPage._grid`）・塗り面ではなく極薄の線のみ
+   （塗り潰さない約束）。`#edcap` より下（指を奪わない ── そもそも pointer-events:none）。 */
+.edgrid[b-lc27aevk28] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1080px;
+  height: 1920px;
+  transform-origin: 0 0;
+  transform: scale(.3);   /* ⭐ 初期値。edit.js の fit() が上書き */
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(to right, rgba(255, 255, 255, .10) 0 1px, transparent 1px var(--edstep, 10px)),
+    repeating-linear-gradient(to bottom, rgba(255, 255, 255, .10) 0 1px, transparent 1px var(--edstep, 10px));
+}
+/* ⚠️ 🔴 **`::deep` が要る。**`.edfault-box`/`.edfault-focus` は Razor の要素ではなく
+   `(MarkupString)_faultHtml`（C# が組み立てた生の HTML 文字列）の中身 ── Blazor の
+   CSS 分離はコンパイル時に「Razor が知っている要素」だけへ scope 属性（`b-xxxxx`）を
+   振るので、MarkupString の中身は対象外になり、`::deep` を付けない素の `.edfault-box`
+   は一致しない（実測 2026-08-24: 属性が付かず `position` が `static` に落ち、`left`/`top`
+   が効かず縦積みになった）。⭐ `.n`（`_html` も同じ MarkupString）が `stage.css`
+   という**別の・分離していない**シートで描かれているのも同じ理由 ── ただしこちらは
+   `stage.css`（遊びの絵の意匠）を汚したくないので、`::deep` でこのファイルのまま守る。 */
+.edfaults[b-lc27aevk28]  .edfault-box {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid rgba(224, 79, 95, .55);
+  box-sizing: border-box;
+}
+/* ⭐ 「ここが悪い」の形。⚠️ 面で塗らず、薄い斜線だけ（輪郭は少し濃くして目立たせる）。
+   `pointer-events:auto` はここだけ ── 実体の外（画面の外・親の外・足りない高さの帯）
+   にはみ出すことがあり、下の本体だけでは拾えないため（`eggEdit.faultsListen` が受ける）。 */
+.edfaults[b-lc27aevk28]  .edfault-focus {
+  position: absolute;
+  pointer-events: auto;
+  cursor: pointer;
+  box-sizing: border-box;
+  border: 2px solid #e04f5f;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(224, 79, 95, .38) 0 8px,
+    rgba(224, 79, 95, .14) 8px 16px
+  );
+}
+
+/* ⭐ 選んでいる節点を輪で囲む。⚠️ 塗り潰さない（この作品の約束・stage.css の
+   `.n.card.lead` と同じ考え方）。
+   ⚠️ **盤（#edstage）の外の層に置く**（EditPage.razor 参照）── #edstage には
+   scale(k) が掛かるので、輪の中に掴みどころを置くと盤を縮めるほど一緒に縮んで
+   指で押せなくなる。外に出せば実寸（screen px）だけで置ける。 */
+.edring[b-lc27aevk28] {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  box-shadow: 0 0 0 4px #f59e0b, inset 0 0 0 4px #f59e0b;
+  border-radius: 4px;
+  z-index: 2;
+}
+/* ⭐ E1-5: 選んでいる節点が「枠と絵が合わない」ときの輪。⚠️ 新しい色は増やさない ──
+   既存の警告色（#e04f5f・.edfault-focus/.edfaultitem/.edmismark と同じ）に差し替えるだけ。 */
+.edring.edring-warn[b-lc27aevk28] {
+  box-shadow: 0 0 0 4px #e04f5f, inset 0 0 0 4px #e04f5f;
+}
+/* ⭐②④ 選択の輪の多重化（`eggEdit.reselect` が中身を作り直す）。⚠️ `.edring` と同じく
+   盤の外の層 ── 実寸（screen px）だけで置ける。塗らない（輪郭だけ）。
+   🔴 `::deep` が要る（`.edfault-box` と同じ理由 ── 中身は JS が作る素の DOM で、
+   Razor の CSS 分離スコープの対象外）。 */
+#edsel[b-lc27aevk28] {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+#edsel[b-lc27aevk28]  .edselbox {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid rgba(245, 158, 11, .55);
+}
+/* ⭐ 主の節点だけ、他の選択より少し濃い輪郭にする（主役が1つ、の作法どおり）。 */
+#edsel[b-lc27aevk28]  .edselbox-primary {
+  border-width: 2px;
+  border-color: #f59e0b;
+}
+/* ⭐ Pass B 木→盤ホバー。⚠️ **選択の輪（`#edring`/`#edsel`）とは別レイヤ**
+   （`eggEdit.hoverOn`/`hoverOff` だけが触る・混ぜない）。輪の外の層と同じ理由
+   （盤の倍率の影響を受けない実寸 screen px）で `#edwrap` 基準に置く。
+   ⚠️ 塗らない（輪郭だけ）。破線＋同じアンバー系だが選択の輪より細く・薄く ──
+   新しい色を増やさず、太さ／実線か破線かで「選択」と「ホバー」を区別する
+   （UI 作法「アクセントは1〜2色を点で」に沿う）。 */
+#edhover[b-lc27aevk28] {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  border: 1px dashed rgba(245, 158, 11, .65);
+  border-radius: 4px;
+  z-index: 2;
+}
+/* ⭐④ ドラッグ枠（ラバーバンド）。⚠️ 塗り潰さない約束の**唯一の例外**
+   （一時的な道具の chrome ── edguide と同じ位置づけ）。 */
+.edband[b-lc27aevk28] {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  border: 1px dashed #f59e0b;
+  background: rgba(245, 158, 11, .06);
+  z-index: 2;
+}
+/* ⭐ E2: 「囲んで作る」（押しどころの層）のプレビューは「選ぶ」（ラバーバンド）と
+   見た目を変える ── 実線＋少し濃い面（Tiled `createobjecttool.cpp` と同じ「作っている
+   最中」の半透明プレビュー）。新しい色は増やさない（同じアンバーのまま濃さだけ変える）。 */
+.edband.edband-create[b-lc27aevk28] {
+  border-style: solid;
+  background: rgba(245, 158, 11, .16);
+}
+
+/* ── ⭐ E2: 層（レイヤ）── 薄くする／見えないものの見せ方 ──────────
+   ⚠️ 「薄くする」（ここ）と「触れなくする」（`edit.js` の `_layerOk`）は別々の軸
+   （計画「片方だけだと必ず不満が出る」）── CSS 側はここでは opacity しか触らない。
+   🔴 `::deep` が要る（`.edfault-box` と同じ理由 ── `_html` は Razor が知らない
+   MarkupString の中身）。 */
+#edstage[data-layerfilter="paint"][b-lc27aevk28]  .n:not([data-layer="paint"]),
+#edstage[data-layerfilter="dynamic"][b-lc27aevk28]  .n:not([data-layer="dynamic"]),
+#edstage[data-layerfilter="tap"][b-lc27aevk28]  .n:not([data-layer="tap"]),
+#edstage[data-layerfilter="container"][b-lc27aevk28]  .n:not([data-layer="container"]) {
+  opacity: .4;
+}
+
+/* ⭐ E2: **見えないものの見せ方**（計画 §11-3・Tiled `mapobjectitem.cpp` の二重縁）。
+   押しどころ・入れ物は、どんな絵の上でも輪郭が消えない「白の実線＋黒の破線」で囲う。
+   ⚠️ `outline`（層の外・位置に影響しない）＋`border`（層の内側・box-sizing:border-box
+   なので大きさは変わらない）の2枚重ね ── 白が外側、黒い破線が縁そのものに重なる。
+   ⭐ 塗らない（この作品の約束・選んでいなくても輪郭だけ）。既にある選択の輪
+   （`#edring`/`#edsel`）とは別の層（こちらは節点自身に直接掛ける・混ぜない）。 */
+#edstage[b-lc27aevk28]  .n[data-layer="tap"],
+#edstage[b-lc27aevk28]  .n[data-layer="container"] {
+  outline: 1px solid rgba(255, 255, 255, .9);
+  border: 1px dashed rgba(20, 20, 24, .8);
+}
+
+/* ⭐ E2: 名札（節点の名前）── なし／選んだものだけ／全部 の3段階（計画 §11-3・
+   Tiled の `ObjectLabelVisibility`）。⚠️ 既定は「なし」（クラス無し）── どちらの
+   クラスも付いていなければ何も出さない。`content: attr(id)` で節点の id
+   （繰り返しの番号・部品の冠を含む・LayoutDom.One の `name` そのもの）をそのまま出す
+   ── 二重に名前を持たせない（`data-name` を別途持たせない）。 */
+#edstage[b-lc27aevk28]  .n[data-layer="tap"]::before,
+#edstage[b-lc27aevk28]  .n[data-layer="container"]::before {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 1px 4px;
+  font-size: 10px;
+  line-height: 1.3;
+  color: #fff;
+  background: rgba(0, 0, 0, .6);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 1;
+}
+#edstage.edlabels-all[b-lc27aevk28]  .n[data-layer="tap"]::before,
+#edstage.edlabels-all[b-lc27aevk28]  .n[data-layer="container"]::before {
+  display: block;
+  content: attr(id);
+}
+#edstage.edlabels-selected[b-lc27aevk28]  .n.edtagged[data-layer="tap"]::before,
+#edstage.edlabels-selected[b-lc27aevk28]  .n.edtagged[data-layer="container"]::before {
+  display: block;
+  content: attr(id);
+}
+/* ⭐ 大きさを変える掴みどころ。8個・盤の倍率の影響を受けない固定の実寸
+   （.edring が盤の外に居るからこそ成立する）。 */
+.edhandle[b-lc27aevk28] {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  background: #f59e0b;
+  border: 2px solid #12151f;
+  border-radius: 4px;   /* ⭐ 押せる要素なので角丸（作法どおり ── 区切りには使わない） */
+  pointer-events: auto;
+  touch-action: none;
+  transform: translate(-50%, -50%);
+}
+.edhandle[data-handle="nw"][b-lc27aevk28] { left: 0;    top: 0;    cursor: nwse-resize; }
+.edhandle[data-handle="n"][b-lc27aevk28]  { left: 50%;  top: 0;    cursor: ns-resize; }
+.edhandle[data-handle="ne"][b-lc27aevk28] { left: 100%; top: 0;    cursor: nesw-resize; }
+.edhandle[data-handle="e"][b-lc27aevk28]  { left: 100%; top: 50%;  cursor: ew-resize; }
+.edhandle[data-handle="se"][b-lc27aevk28] { left: 100%; top: 100%; cursor: nwse-resize; }
+.edhandle[data-handle="s"][b-lc27aevk28]  { left: 50%;  top: 100%; cursor: ns-resize; }
+.edhandle[data-handle="sw"][b-lc27aevk28] { left: 0;    top: 100%; cursor: nesw-resize; }
+.edhandle[data-handle="w"][b-lc27aevk28]  { left: 0;    top: 50%;  cursor: ew-resize; }
+
+/* ⭐ 吸い付いた瞬間だけ見せる細い線。⚠️ 面で塗らない・線は一辺だけ
+   （画面の作法「区切りは余白で」と同じ約束をここでも守る）。 */
+.edguide[b-lc27aevk28] {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  background: #f59e0b;
+  z-index: 2;
+}
+.edguide-x[b-lc27aevk28] { width: 1px; }
+.edguide-y[b-lc27aevk28] { height: 1px; }
+
+/* ⭐ 透明な覆い。盤のいちばん上（DOM の最後）に置き、遊びの押しどころより先に拾う */
+.edcap[b-lc27aevk28] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1080px;
+  height: 1920px;
+  background: transparent;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* ⭐ Pass B 変更点の明滅。⚠️ `eggEdit.flash`/`flashLines` が盤の節点自身（`#edstage`
+   の中・`(MarkupString)_html` の中身）へ一時クラス `edflash` を付ける。
+   🔴 **`::deep` が要る**（`.edfault-box` と同じ理由 ── `_html` は Razor が知らない
+   MarkupString の中身なので、`::deep` を付けない素の `.edflash` は一致しない）。
+   ⚠️ 塗らない（輪郭のパルスのみ）・面は増やさない。 */
+@keyframes edflashpulse-b-lc27aevk28 {
+  0%   { box-shadow: 0 0 0 0 rgba(245, 158, 11, .85); }
+  60%  { box-shadow: 0 0 0 5px rgba(245, 158, 11, .35); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+#edstage[b-lc27aevk28]  .edflash {
+  animation: edflashpulse-b-lc27aevk28 .35s ease-out;
+}
+
+/* ⭐ D-1: Inspector も細く・畳めるように（木と同じ形。つまみは盤との境目＝左端）。 */
+.edinspector[b-lc27aevk28] {
+  flex: 0 0 230px;
+  display: flex;
+  min-width: 0;
+  border-left: 1px solid rgba(255, 255, 255, .08);
+}
+.edinspector.edinspector-collapsed[b-lc27aevk28] { flex: 0 0 22px; }
+.edinspectorbody[b-lc27aevk28] {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 12px;
+}
+.edhead[b-lc27aevk28] { font-size: 15px; margin-bottom: 10px; display: flex; gap: 8px; align-items: baseline; }
+.edhint[b-lc27aevk28] { color: #6d7390; padding: 10px; font-size: 12px; }
+
+/* ⭐ 段階3: 削除・追加・複製（構造編集）。⚠️ 選択数にかかわらず常に出る帯 ── 揃える・
+   等間隔（.edmulti・下）や通常の Inspector 欄とは同じ画面で混ざるので、線1本（下端だけ）
+   で区切る（区切りは余白／面／線のどれか一つ、の作法どおり）。⭐ 釦の見た目は
+   `.edalign-btn` をそのまま共有する（新しい色は増やさない）。 */
+.edstruct[b-lc27aevk28] {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.edstructrow[b-lc27aevk28] { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.edstructrow + .edstructrow[b-lc27aevk28] { margin-top: 6px; }
+.edstructlabel[b-lc27aevk28] { color: #9aa1b8; font-size: 11px; flex: 0 0 auto; }
+
+/* ⭐ 道具箱の帯（上の帯のすぐ下・**常に見える**）。⚠️ Inspector を畳んでも消えないよう、
+   脇のパネルではなくここに置いた（2026-08-24）。区切りは**下線一辺だけ**（面と二重にしない）。
+   ⭐ 釦の見た目は `.edalign-btn` を共有（新しい色を増やさない）。 */
+.edtools[b-lc27aevk28] {
+  flex: 0 0 auto;
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+
+/* ⭐ E2: 層（レイヤ）の帯（計画 §11-2・§11-9「道具箱: 層の切替」）。⚠️ 新しい色は
+   増やさない ── `.edalign-btn` を共有し、選んでいるものだけ主役色（アンバー）にする
+   （画面内の主役は1つ、の作法を「いま選んでいる層」という形で守る）。 */
+.edlayerrow .edalign-btn.on[b-lc27aevk28] {
+  background: #b45309;
+  border-color: #b45309;
+  color: #fff;
+}
+.edlayerrow .edalign-btn.on:hover[b-lc27aevk28] { background: #c96613; }
+/* ⭐ 押しどころの層で「足す」が空になったときの案内。⚠️ 空の器を見せない代わりに、
+   何をすればいいかを1行だけ言う（計画 §11-12「まだ何も置いていない画面」と同じ作法）。 */
+.edaddhint[b-lc27aevk28] { color: #9aa1b8; font-size: 12px; padding: 4px 2px; }
+
+/* ⭐⑥ 揃える・等間隔（`_selected.Count>=2` のときだけ出す）。⚠️ 通常の Inspector 欄
+   （左/上/幅/高・属性表）とは同じ画面で混ぜない ── どちらかしか出ない。
+   区切りは余白で（線で囲わない）・角丸は押せる釦だけ、の作法どおり。 */
+.edmultihead[b-lc27aevk28] { font-size: 15px; margin-bottom: 10px; color: #d7dae6; }
+.edmultirow[b-lc27aevk28] { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.edalign-btn[b-lc27aevk28] {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: #232840;
+  color: #d7dae6;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 6px;   /* ⭐ 押せる要素なので角丸（作法どおり） */
+  padding: 7px 6px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.edalign-btn:hover:not(:disabled)[b-lc27aevk28] { background: #2b3150; }
+.edalign-btn:disabled[b-lc27aevk28] { color: #565c72; cursor: default; }
+/* ⭐ D-2: 道具箱の札は掴んでドラッグする対象でもある ── タッチでスクロールと
+   競合しないように。 */
+.edadd-btn[b-lc27aevk28] { touch-action: none; }
+
+/* ⭐ D-4: 左/上/幅/高＋きざみ の畳み／開き。⚠️ 既定は畳む・つまみは1行だけ。
+   区切りは線一辺のみ・面は塗らない・新しい色は増やさない。 */
+.edcollapsebtn[b-lc27aevk28] {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: #9aa1b8;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  padding: 4px 0 8px;
+  margin-bottom: 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.edcollapsebtn:hover[b-lc27aevk28] { color: #d7dae6; }
+
+.edfieldrow[b-lc27aevk28] { display: flex; gap: 8px; margin-bottom: 8px; }
+.edfield[b-lc27aevk28] { flex: 1 1 50%; min-width: 0; }
+.edlabel[b-lc27aevk28] { display: block; color: #9aa1b8; font-size: 11px; margin-bottom: 3px; }
+
+/* ⭐①属性表（EditAttrs）の欄。⚠️ 座標4つ（左/上/幅/高）と違い型が混ざる
+   （数・切替・選択肢・字）ので、2列に並べず1行1欄で積む ── 型ごとに幅の意味が
+   違うものを無理に2列へ詰めない（作者の Unity 版の欄も1列で積む形）。 */
+.edattrrow[b-lc27aevk28] { margin-bottom: 8px; }
+.edattrrow .edtoggle[b-lc27aevk28] { font-size: 13px; color: #d7dae6; }
+.edattrrow .edtoggle input[b-lc27aevk28] { width: 16px; height: 16px; }
+.edselect[b-lc27aevk28] {
+  width: 100%;
+  height: 34px;
+  background: #0d1220;
+  color: #eef1fa;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 4px;
+  padding: 0 8px;
+  font: inherit;
+}
+.edtextarea[b-lc27aevk28] {
+  width: 100%;
+  min-height: 54px;
+  background: #0d1220;
+  color: #eef1fa;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.ednum[b-lc27aevk28] { display: flex; align-items: stretch; }
+.edstep-btn[b-lc27aevk28] {
+  flex: 0 0 30px;
+  background: #232840;
+  color: #d7dae6;
+  border: 1px solid rgba(255, 255, 255, .14);
+  font-size: 16px;
+  cursor: pointer;
+}
+.edstep-btn:first-child[b-lc27aevk28] { border-radius: 6px 0 0 6px; border-right: 0; }
+.edstep-btn:last-child[b-lc27aevk28] { border-radius: 0 6px 6px 0; border-left: 0; }
+.edstep-btn:hover[b-lc27aevk28] { background: #2b3150; }
+.ednuminput[b-lc27aevk28] {
+  flex: 1 1 auto;
+  width: 0;
+  min-width: 0;
+  height: 34px;
+  text-align: center;
+  font-size: 15px;
+  background: #0d1220;
+  color: #eef1fa;
+  border: 1px solid rgba(255, 255, 255, .14);
+}
+/* ⭐ D-4: 位置を「左/上/幅/高」の畳みグループへ移した（元は属性表の下だった）。
+   上下どちらの隣にも余白を持たせる。 */
+.edstepwrap[b-lc27aevk28] { display: flex; align-items: center; gap: 8px; margin: 10px 0 12px; color: #9aa1b8; font-size: 12px; }
+.edstepnum[b-lc27aevk28] {
+  width: 56px;
+  height: 26px;
+  background: #0d1220;
+  color: #eef1fa;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 4px;
+  text-align: center;
+}
+
+/* ── 下の帯（不備） ─────────────────────────────── */
+/* ⭐ E1-5: 「不備」と「枠と絵が合わない」を**別の行**にする（縦に積む）── 同じ行に
+   詰めると2つの一覧が幅を奪い合って読みにくい。⚠️ 各行の中身（`.edbottomrow`）は
+   今までの `.edbottom` と同じ横並び。 */
+.edbottom[b-lc27aevk28] {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 12px;
+  background: #191d2b;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+  font-size: 12px;
+}
+.edbottomrow[b-lc27aevk28] {
+  display: flex;
+  /* ⚠️ 一覧が複数行に畳まれても、件数の印は上端で揃える（center だと沈んで見える）。 */
+  align-items: flex-start;
+  gap: 10px;
+}
+.edbad[b-lc27aevk28] { padding-top: 4px; }   /* ⭐ 一覧の釦（padding込み）と字の頭を揃える */
+.edok[b-lc27aevk28] { color: #2fa84a; padding-top: 4px; }
+/* ⭐ 一覧。⚠️ ここだけ横スクロールでなく**下へ畳む**（`flex-wrap`）── この頁は
+   スクロール0が作法（`画面の作法.md`）だが、件数はデータ次第で読めないので、
+   唯一「帯そのものが伸びる」ことを選んだ（`edmain` が押される・溢れない）。 */
+.edfaultlist[b-lc27aevk28] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.edfaultitem[b-lc27aevk28] {
+  background: #232840;
+  color: #d7dae6;
+  border: 1px solid rgba(224, 79, 95, .45);
+  border-radius: 6px;   /* ⭐ 押せる要素なので角丸（区切りには使わない、の作法どおり） */
+  padding: 3px 10px;
+  font: inherit;
+  cursor: pointer;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.edfaultitem:hover[b-lc27aevk28] { background: #2b3150; border-color: #e04f5f; }
+
+/* ⭐ D-2: 道具箱から盤へ掴んで落とすときのゴースト（作ろうとしている四角の輪郭）。
+   ⚠️ viewport 座標（position:fixed）── ドラッグの起点はパレット（Inspector 側・
+   #edwrap の外）なので、#edwrap の overflow:hidden に巻き込まれない場所に置く。
+   塗らない ── `.edband`（一時的な道具の chrome）と同じ色・同じ薄さを流用する
+   （新しい色は増やさない）。 */
+.edghost[b-lc27aevk28] {
+  position: fixed;
+  display: none;
+  pointer-events: none;
+  border: 1px dashed #f59e0b;
+  background: rgba(245, 158, 11, .06);
+  border-radius: 4px;
+  z-index: 50;
+}
+
+/* ⭐ D-3: 盤の上でその場の文字入力。⚠️ #edring と同じ層（#edwrap 基準の実寸・
+   #edscroll の外）── `eggEdit.editAt` が対象節点の実位置へ合わせる。
+   z-index は #edring/#edsel/#edhover/#edband/#edguide（すべて2）より上に置く
+   （入力欄を隠さない）。 */
+.edtextedit[b-lc27aevk28] {
+  position: absolute;
+  display: none;
+  z-index: 3;
+}
+#edtexteditinput[b-lc27aevk28] {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  background: #0d1220;
+  color: #eef1fa;
+  border: 2px solid #f59e0b;
+  border-radius: 2px;
+  padding: 2px 4px;
+  font: inherit;
+}
+
+/* ── 段E: 絵を選ぶ小窓／自作PNG ─────────────────────
+   ⚠️ 新しい色は増やさない ── 既存の無彩色（#12151f/#191d2b/#232840/#0d1220）と
+   アンバー系アクセント（#f59e0b）だけで組む。区切りは余白＋一辺だけの線、
+   角丸は押せる要素だけ（画面の作法どおり）。 */
+
+/* ⭐ E-2: 覆い。⚠️ 盤の覆い（`.edcap`）とは別物 ── 一時的な chrome（`.edband`/
+   `.edghost` と同じ扱い）。背景は盤の地色（#05070c）を薄く伸ばしただけ ── 新色を足さない。 */
+.edmodal[b-lc27aevk28] {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 7, 12, .72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.edmodalbox[b-lc27aevk28] {
+  width: min(560px, 92vw);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  background: #191d2b;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 8px;
+}
+.edmodalhead[b-lc27aevk28] {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  font-size: 14px;
+  color: #d7dae6;
+}
+.edmodalclose[b-lc27aevk28] {
+  background: transparent;
+  color: #9aa1b8;
+  border: 0;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.edmodalclose:hover[b-lc27aevk28] { color: #d7dae6; }
+.edmodaltools[b-lc27aevk28] {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.edmodalimport[b-lc27aevk28] {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.edimport-btn[b-lc27aevk28] { cursor: pointer; }
+
+/* ⭐ E-2: サムネイル一覧。⚠️ 名前は下に小さく（打たせない・目で見て選ぶ）。 */
+.edicongrid[b-lc27aevk28] {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 8px;
+  padding: 14px;
+}
+.edicon-item[b-lc27aevk28] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: #232840;
+  color: #d7dae6;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 6px;   /* ⭐ 押せる要素なので角丸（作法どおり） */
+  padding: 8px 4px 6px;
+  cursor: pointer;
+  font: inherit;
+}
+.edicon-item:hover[b-lc27aevk28] { background: #2b3150; border-color: rgba(255, 255, 255, .22); }
+.edicon-item img[b-lc27aevk28] { width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; }
+.edicon-item span[b-lc27aevk28] {
+  color: #9aa1b8;
+  font-size: 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── ⭐ E2: 機能（`tap=`）を選ぶ小窓 ─────────────────────
+   ⚠️ 「絵を選ぶ」小窓（`.edmodal`/`.edmodalbox`/`.edmodalhead`/`.edmodaltools`/
+   `.edfindinput`）を共有する ── 新しい色・新しい骨格を増やさない。ここは中身
+   （さがす欄の下・サムネイルの代わりに字の一覧）だけ足す。 */
+.edtapinfo[b-lc27aevk28] {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  color: #9aa1b8;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.edtaplist[b-lc27aevk28] {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 4px;
+}
+.edtap-item[b-lc27aevk28] {
+  text-align: left;
+  background: #232840;
+  color: #d7dae6;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 6px;   /* ⭐ 押せる要素なので角丸（作法どおり） */
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+.edtap-item:hover[b-lc27aevk28] { background: #2b3150; }
+/* ⭐ 「いま付いている機能」を選択状態で見せる ── 主役は1つ（作法どおり）。 */
+.edtap-item.on[b-lc27aevk28] {
+  background: #b45309;
+  border-color: #b45309;
+  color: #fff;
+}
+.edtap-item.on:hover[b-lc27aevk28] { background: #c96613; }
+
+/* ⭐ E-4: Inspector「絵を変える」。区切りは既存の `.edattrrow` の余白のみ（線は増やさない）。 */
+.edpicrow[b-lc27aevk28] { display: flex; flex-direction: column; gap: 6px; }
+.edpicpreview[b-lc27aevk28] { display: flex; align-items: center; gap: 8px; }
+.edpicthumb[b-lc27aevk28] {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  background: #0d1220;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 4px;
+}
+/* ⭐ E1-5: Inspector 内「枠と絵に合わせる」。⚠️ 区切りは面でなく余白＋既存の警告色の文字
+   （新しい色は増やさない）。「絵に合わせる」釦の見た目は `.edalign-btn` を共有する。 */
+.edpicwarn[b-lc27aevk28] { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
