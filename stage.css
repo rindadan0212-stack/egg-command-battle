@@ -391,18 +391,11 @@ html, body {
 #line-fan { color: #ffffff; text-shadow: 5px -5px 0 var(--ink); }
 
 /* ── 放置の帯 ────────────────────────────────────────
-   ⭐ 進んでいることは**地面が左へ流れる**ことで見せる。走者は歩幅だけ揺らす。
-   ⚠️ 地面は画面幅の2倍あるので、1枚ぶん流れたら折り返す（`Core.Beats.Scroll`）。 */
-/* 🔴 **級で指す（id で指さない）。**
-   ⚠️ 前は `#ground` だった ── ところが**すごろくの盤の器も `ground`**
-   （`assets/layouts/trail.txt`）。id は画面で唯一でなければならないのに、
-   画面をまたいで同じ名前だったので、この動きが**潜入の盤にも掛かっていた**
-   ── 盤が12秒かけて左へ流れ続け、マスが指の下から逃げる
-   （実測 2026-08-26「画面が動き続けて、進むマスが押せない」の正体）。
-   ⭐ 別の画面の物に触れない書き方（級）に直す。⚠️ 草も同じ動き（一緒に流す
-   ── 地面だけ動くと、生えている物が滑って見える）。 */
-.idle-flow, .idle-tuft { animation: idle-roll 12s linear infinite; }
-@keyframes idle-roll { from { transform: translateX(0); } to { transform: translateX(-1080px); } }
+   🔴 **旧・仮の背景（`.idle-flow`/`.idle-tuft`/`idle-roll`）は 2026-08-28 に削除**
+   （作者の指示）。`home.txt` の作者のドット絵背景（空・山・草木・地面）に
+   置き換わったので、仮の帯を左へ流す動きはもう要らない ── 他に使い手が無いことは
+   確認済み。⚠️ **`Core.Beats.Scroll`（旧・流れる速さ）はもう使っていない**
+   （`Core/Beats.cs` は担当外なので消さず残してある）。 */
 
 /* ⭐ **ホームの背景（空と山）を、ゆっくり左へ流す。**
    ⚠️ 絵は「元＋左右反転」を横に並べた2枚幅（2160px）。1枚ぶん（1080px）流したら
@@ -438,7 +431,7 @@ html, body {
   #dim-roll, #strip-tell { animation: none; }
   #dim-roll { background: rgba(0,0,0,.34); }
   #pop-fan, #burst-fan { animation: none; }
-  .roll-sky, .roll-hill, .idle-flow, .idle-tuft, .idle-walk, .idle-come { animation: none; }
+  .roll-sky, .roll-hill, .idle-walk, .idle-come { animation: none; }
 }
 
 /* icon ── ⭐ **絵を出して、その上から色を掛ける。**

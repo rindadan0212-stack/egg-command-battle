@@ -84,4 +84,20 @@ window.eggTap = {
       if (fill) fill.style.width = (bars[id] * 100) + '%'
     }
   },
+
+  /** 字だけ差し替える（`Clocks.Words` の1秒ごとの差し替え）。
+   *
+   * ⚠️ 🔴 **画面を組み直さないために在る**（`bars` と同じ理由 ── 毎秒組み直すと
+   *   押しどころが作り直されて触れなくなる）。
+   * ⚠️ 名前は小文字で来る（Blazor が camelCase に直す）── `At` ではなく `at`。
+   *
+   * @param {Array<{at: string, text: string, tint: string|null}>} words */
+  words(words) {
+    for (const w of words) {
+      const el = document.getElementById(w.at)
+      if (!el) continue
+      if (el.textContent !== w.text) el.textContent = w.text
+      if (w.tint) el.style.color = w.tint
+    }
+  },
 }
