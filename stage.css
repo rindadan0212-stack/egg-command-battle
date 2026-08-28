@@ -407,9 +407,14 @@ html, body {
 .roll-hill { animation: bg-roll  90s linear infinite; }
 @keyframes bg-roll { from { transform: translateX(0); } to { transform: translateX(-1080px); } }
 
-/* ⭐ 放置の相手の残り。⚠️ 差し替えは1秒に1回なので、少し長めに取って階段を消す
-   （戦闘の帯 `.n.bar-fill` が 1秒16回の差し替えに対して .1s なのと同じ考え方）。 */
-.idle-drain { transition: width .95s linear; }
+/* ⭐ 放置の相手の残り。
+   🔴 **.3s に縮めた**（2026-08-28・仕事4）。⚠️ 旧 .95s は差し替えが1秒に1回だった頃の
+   数（戦闘の帯 `.n.bar-fill` が1秒16回の差し替えに対して .1s なのと同じ考え方で、
+   間隔の半分より少し長く取って階段を消していた）。⭐ いまは打ち合いが0.5秒ごとに
+   1段落ちる（`Core.Idle.StrikeCount`＝8段／`FightSeconds`＝4.0秒）── .95s のままだと
+   次の段が来る前に前の段の途中にしか着かず、帯が「詰まって」見える。.3s なら
+   0.5秒の間隔に十分収まる。 */
+.idle-drain { transition: width .3s linear; }
 
 /* ⭐ 歩幅の揺れ。⚠️ 大きいと跳ねて見えて「進んでいる」から離れる（`Core.Beats.Bob`）。
    ⚠️ 一人ずつずらす ── 揃うと行進になり、めいめいが歩いている感じが消える。 */
