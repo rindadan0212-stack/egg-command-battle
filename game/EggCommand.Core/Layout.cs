@@ -578,6 +578,12 @@ namespace EggCommand.Core
             "tap",      // 押しどころ（⭐ 指で押す── 高さ 112 以上）
             "hold",     // ⭐ **長押しで開く札**（⚠️ 押しどころではない）
             "lead",     // 主導線の見た目にするか
+            // ⭐ **流れる絵**（`roll=sky` など）（背景の空・山）。⚠️ `ink=` を流用しない ── あちらは
+            //    色の札で、絵に使うと**地の色まで塗ってしまう**（`LayoutDom` が背景に掛ける）。
+            // 🔴 **id で動かさない。**別の画面に同じ名前があると CSS が両方に効く
+            //    （2026-08-26 に `#ground` でそれを踏み、すごろくが遊べなくなった）。
+            //    ⭐ だから「流す」は級で掛ける ── 速さの出所は `stage.css` ひとつ。
+            "roll",
             "repeat",   // 繰り返す元（データの名前）
             "cols",     // 繰り返しの列数
             "gap",      // 繰り返しの隙間
@@ -593,6 +599,13 @@ namespace EggCommand.Core
             "pic",      // ⭐ 絵の名前（`Resources/UI/icon/<名前>.png`）
             "turn",     // ⭐ 絵を回す度数（矢印を ±90 するのに使う）
             "crisp",    // ⭐ icon を補間しない（自作の仮ドット絵など・`crisp=yes`）
+            // 🔴 **器の高さで中身を切らない**（`grow=yes`・`host` だけ）。
+            // ⚠️ `host` は既定で切る（`.n.host{overflow:hidden}`）── 中身の高さを
+            //    骨組みが知らないので、はみ出しを黙って外へ流さないための備え。
+            // ⭐ だが**巻物の中の `host`** は逆で、切ると巻く高さが器の高さで頭打ちになり、
+            //    下half分が**見えないうえ押せない**（実測 2026-08-26・すごろくの盤
+            //    ── 中身 4566 が器 1164 で切られ、`scrollHeight == clientHeight` だった）。
+            "grow",     // ⭐ 中身の高さに任せる（`host` を切らない）
         };
 
         /// <summary>⭐ **兄弟を上から詰めるか。**
@@ -635,10 +648,20 @@ namespace EggCommand.Core
         {
             if (node.Option("repeat") == null) return node.Height;
             int count = countOf != null ? countOf(node) : node.Number("max", 0);
-            int cols = Math.Max(1, node.Number("cols", 1));
+            int cols = ColsOf(node);
             int rows = (count + cols - 1) / cols;
             return rows <= 0 ? 0f : (rows - 1) * StepOf(node) + node.Height;
         }
+
+        /// <summary>⭐ **割り算に使う実際の列数。**⚠️ **唯一の出所**（2026-08-27）。
+        ///
+        /// ⚠️ `cols=0`（不備）をそのまま割り算に渡すと 0除算で落ちる ──
+        /// `Faults`（`Walk` の中）は `cols<1` を <see cref="FaultKind.InvalidCols"/> として
+        /// **報告する**だけで、その直後の `(max+cols-1)/cols` に生の `cols` を使っていたため、
+        /// **その画面を読み込んだ時点でアプリごと落ちていた**（2026-08-27 発見）。
+        /// ⭐ 不備の検出（`cols<1` か）は呼び側が生の <see cref="LayoutNode.Number"/> で見る
+        /// ── ここは「割り算に使ってよい値」を返すだけ（0以下を1へ押し上げる）。</summary>
+        private static int ColsOf(LayoutNode node) => Math.Max(1, node.Number("cols", 1));
 
         /// <summary>⭐ **動かない字は骨組みに、動く字だけ `bind`。**
         ///
@@ -1129,7 +1152,7 @@ namespace EggCommand.Core
             //    （巻物は縦にしか動かない）。
             if (parentW > 0f)
             {
-                if (node.Left < -0.5f || node.Left + node.Width > parentW + 0.5f)
+                // ⭐ **流す絵は、はみ出して当たり前**（`roll=`）── 元＋左右反転を                //    横に並べた2枚幅で、1枚ぶん流したら戻す作りだから。                //    ⚠️ 巻物の中を見逃すのと同じ理由 ── **意図して枠の外へ出る節点**。                if (node.Option("roll") == null                    && (node.Left < -0.5f || node.Left + node.Width > parentW + 0.5f))
                 {
                     // ⭐ 左右どちらへ出たかで帯の向きが変わる（両方は無い ── 幅が親を超えない限り）。
                     Box focus = node.Left < -0.5f
@@ -1154,7 +1177,7 @@ namespace EggCommand.Core
             }
 
             // ⚠️ 巻物の中は画面より下に在ってよい（動かせば見える）
-            bool offScreen = x < -0.5f || x + node.Width > ScreenWidth + 0.5f;
+            // ⭐ 流す絵は横へはみ出すのが正しい（上と同じ理由）            bool offScreen = node.Option("roll") == null                && (x < -0.5f || x + node.Width > ScreenWidth + 0.5f);
             // ⚠️ ここは `insideScroll`。⭐ 巻物の中なら、何段目でも下に在ってよい
             if (!insideScroll && (y < -0.5f || y + node.Height > ScreenHeight + 0.5f)) offScreen = true;
             if (offScreen)
@@ -1217,7 +1240,13 @@ namespace EggCommand.Core
                     }
                     else if (parentH > 0f)
                     {
-                        int rows = (max + cols - 1) / cols;
+                        // ⚠️ 🔴 **割り算には生の `cols` を使わない。**`cols=0`（不備。
+                        //    上の `InvalidCols` が報告する）をそのまま渡すと 0除算で
+                        //    落ちる ── `LayoutStore.Of` は骨組みを読むたびに `Faults` を
+                        //    呼ぶので、**該当行を含む画面が1つでもあるとアプリ全体が
+                        //    その場で落ちていた**（2026-08-27 発見）。⭐ 他の場所
+                        //    （`DeepOf`）と同じ守り方（<see cref="ColsOf"/>）に揃える。
+                        int rows = (max + ColsOf(node) - 1) / ColsOf(node);
                         float deep = top + rows * StepOf(node) - gap;
                         if (deep > parentH + 0.5f)
                             Add(FaultKind.RepeatMaxOverflow,

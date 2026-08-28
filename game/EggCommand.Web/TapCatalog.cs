@@ -24,6 +24,7 @@ namespace EggCommand.Web
             "nest", "boss", "roll", "square", "pay", "skip",
             "s0", "s1", "s2", "pick", "give", "stop", "go",
             "slot", "egg", "fuse", "melt", "train", "row", "chip", "feed", "grow",
+            "levelup", "spend",
             "pa", "pb", "breed",
             "party", "set", "seat", "done",
             "keep",

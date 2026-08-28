@@ -39,6 +39,12 @@ namespace EggCommand.Core
                 case EffectKind.Stun: return "スタン";
                 case EffectKind.Sleep: return "睡眠";
                 case EffectKind.Block: return "ブロック";
+                // ── 2026-08-27 に足した5つ ─────────────────────────
+                case EffectKind.Seal: return "封印";
+                case EffectKind.Anchor: return "固着";
+                case EffectKind.Invincible: return "無敵";
+                case EffectKind.Extend: return "弱化延長";
+                case EffectKind.Counter: return "反撃";
                 case EffectKind.Ct: return effect.Delta < 0 ? "CT短縮" : "CT延長";
                 case EffectKind.Gauge: return effect.Percent < 0 ? "ゲージ減少" : "ゲージ上昇";
                 case EffectKind.Taunt: return "挑発";
@@ -191,11 +197,31 @@ namespace EggCommand.Core
                 // ⚠️ 条件つきと飛び先つきは、あとで**別の文**にする
                 if (effect.Own == null && effect.When == null) main.Add(effect);
             }
-            var sb = new StringBuilder(Sentence(skill.Id, skill.Target, main));
+
+            // ⭐ **前置きは「まず〜。そのうえで〜」と言う**（2026-08-27）。
+            // ⚠️ 普通の効果より**前に書いた**飛び先つきは先に撃たれ、その一撃自体が伸びる
+            //    （`Battle` の前置き）。⭐ 同じ2つの効果でも書く順で強さが変わるのに、
+            //    どちらも「〜する、さらに〜」と出ていたので、遊ぶ側から区別できなかった。
+            int firstMain = skill.Effects.Count;
+            for (int k = 0; k < skill.Effects.Count; k++)
+            {
+                if (skill.Effects[k].Own == null) { firstMain = k; break; }
+            }
+            var sb = new StringBuilder();
+            for (int k = 0; k < firstMain; k++)
+            {
+                var ahead = skill.Effects[k];
+                sb.Append(k == 0 ? "まず" : "、")
+                  .Append(Sentence(skill.Id, ahead.Own!.Value, new List<Effect> { ahead }));
+            }
+            if (firstMain > 0) sb.Append("。そのうえで");
+            sb.Append(Sentence(skill.Id, skill.Target, main));
+
             // ⭐ **1手2役は別の文にする。**⚠️ 同じ文へ混ぜると狙い先が2つある文になり、
             //    「敵全体に自分を回復し」のような読めない並びになる。
-            foreach (var effect in skill.Effects)
+            for (int k = firstMain; k < skill.Effects.Count; k++)
             {
+                var effect = skill.Effects[k];
                 if (effect.Own == null) continue;
                 sb.Append("、さらに")
                   .Append(Sentence(skill.Id, effect.Own.Value, new List<Effect> { effect }));
@@ -282,6 +308,8 @@ namespace EggCommand.Core
             if (effect.Scale != DamageScale.Atk)
                 how.Add(Skills.LabelOf(effect.Scale) + "で伸びる");
             if (effect.Pierce) how.Add("防御力を無視する");
+            // ⭐ 2026-08-27。⚠️ 防御無視（素の硬さ）と言い分ける ── こちらは「掛けた札」を無視する
+            if (effect.Bare) how.Add("相手の強化を無視する");
             string shots = effect.Repeat > 1 ? $"{effect.Repeat}回" : "";
             // ⚠️ 「攻撃を2回する」。修飾が付くときだけ「〜攻撃を」の形にする
             string body = how.Count == 0

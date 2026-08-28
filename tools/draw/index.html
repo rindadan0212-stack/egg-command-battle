@@ -1492,6 +1492,15 @@
         <rect x="0" y="10" width="12" height="2"/>
       </svg><span>消し</span>
     </button>
+    <button class="tool-btn" data-tool="movelayer" title="レイヤーを動かす (M) ── ドラッグでこのレイヤーの絵を丸ごとずらす">
+      <svg width="16" height="16" viewBox="0 0 12 12" shape-rendering="crispEdges" fill="currentColor">
+        <rect x="5" y="0" width="2" height="1"/><rect x="4" y="1" width="1" height="1"/><rect x="7" y="1" width="1" height="1"/>
+        <rect x="0" y="5" width="1" height="2"/><rect x="1" y="4" width="1" height="1"/><rect x="1" y="7" width="1" height="1"/>
+        <rect x="11" y="5" width="1" height="2"/><rect x="10" y="4" width="1" height="1"/><rect x="10" y="7" width="1" height="1"/>
+        <rect x="5" y="11" width="2" height="1"/><rect x="4" y="10" width="1" height="1"/><rect x="7" y="10" width="1" height="1"/>
+        <rect x="5" y="5" width="2" height="2"/>
+      </svg><span>移動</span>
+    </button>
     <button class="tool-btn" data-tool="eyedropper" title="スポイト (I) ── 使うと鉛筆に戻ります">
       <svg width="16" height="16" viewBox="0 0 12 12" shape-rendering="crispEdges" fill="currentColor">
         <rect x="7" y="0" width="4" height="4"/>
@@ -1867,11 +1876,15 @@ function centerView() {
 function clampPan() {
   const v = state.view;
   const w = state.width * v.cell, h = state.height * v.cell;
-  const keep = Math.min(48, w * 0.5, h * 0.5);   // 最低これだけは画面に残す
+  // 🔴 端を画面の中央まで持っていけるように、余白の上限を「画面の半分」にした
+  //    （2026-08-25・以前は 48px 固定で、ズームすると中央までしか動かせなかった
+  //    ── 実際にあった不具合）。半分までしか許さないので、画面の半分は必ず
+  //    絵が映っている（全部画面の外へ逃げてしまうことはない）。
+  const keepX = v.vw * 0.5, keepY = v.vh * 0.5;
   if (w <= v.vw) v.panX = (v.vw - w) / 2;
-  else v.panX = Math.min(keep, Math.max(v.vw - w - keep, v.panX));
+  else v.panX = Math.min(keepX, Math.max(v.vw - w - keepX, v.panX));
   if (h <= v.vh) v.panY = (v.vh - h) / 2;
-  else v.panY = Math.min(keep, Math.max(v.vh - h - keep, v.panY));
+  else v.panY = Math.min(keepY, Math.max(v.vh - h - keepY, v.panY));
 }
 
 // キャンバスの寸法が変わったときに呼ぶ (サイズ選択・変換・読込)。
@@ -3290,38 +3303,46 @@ function drawDraftOverlay(ctx) {
 
 // ── 図形（製図モード・§3/§6-3）── 焼かない・なぞる下敷き ────────
 //
-// ⭐ 滑らかに描く（`ctx.ellipse` 等）。ジャギーなドット近似にしない ──
-//    焼かないと決めたので、ラスタ化の精度を気にする必要が無い。
+// 🔴 **見た目はドット絵と同じ「ドットの並び」で描く**（2026-08-26 改訂）。
+//    最初は `ctx.ellipse` 等で滑らかに描いていたが、「置いたものがドットで
+//    描かれてほしい」という要望どおり、実際にラスタ化したときと同じ形で
+//    見えるようにした（下は焼かない・触れば形も動かせる、は変わらない）。
+// 図形の輪郭を「ドットの並び」に変える。ラスタの線/四角/丸ツールと同じ
+// 関数（`bresenhamLine`/`rectPixels`/`ellipsePixelsBox`）を使う ──
+// **実際にラスタ化したときと寸分違わぬ形**にするため（描き直しではなく共用）。
+function shapeOutlineDots(s) {
+  if (s.kind === 'line') {
+    return bresenhamLine(Math.round(s.x1), Math.round(s.y1), Math.round(s.x2), Math.round(s.y2));
+  }
+  const b = shapeBBox(s);
+  const x0 = Math.round(b.x), y0 = Math.round(b.y);
+  const x1 = Math.round(b.x + b.w), y1 = Math.round(b.y + b.h);
+  return s.kind === 'ellipse' ? ellipsePixelsBox(x0, y0, x1, y1, false) : rectPixels(x0, y0, x1, y1, false);
+}
+
 function drawShapesLayer(ctx) {
   const layer = shapesLayer();
   if (!layer || !layer.visible) return;
   const v = state.view, d = v.dpr;
-  const active = isShapesLayer(state.layers[state.currentLayer]);
+  // 🔴 「今のレイヤーが図形レイヤーか」ではなく「図形の道具を構えているか」で
+  //    判定する（2026-08-26・道具とレイヤー選択を切り離した設計変更）。
+  const active = SHAPE_EDIT_TOOLS.includes(state.tool);
   const selId = state.draft.selectedShapeId;
 
   ctx.save();
   for (const s of layer.shapes) {
     const selected = active && s.id === selId;
-    ctx.beginPath();
-    if (s.kind === 'rect') {
-      ctx.rect(devX(s.x), devY(s.y), devX(s.x + s.w) - devX(s.x), devY(s.y + s.h) - devY(s.y));
-    } else if (s.kind === 'line') {
-      ctx.moveTo(devX(s.x1), devY(s.y1));
-      ctx.lineTo(devX(s.x2), devY(s.y2));
-    } else if (s.kind === 'ellipse') {
-      const cx = devX(s.x + s.w / 2), cy = devY(s.y + s.h / 2);
-      const rx = (devX(s.x + s.w) - devX(s.x)) / 2, ry = (devY(s.y + s.h) - devY(s.y)) / 2;
-      ctx.ellipse(cx, cy, Math.max(0.01, rx), Math.max(0.01, ry), 0, 0, Math.PI * 2);
+    // 🔴 **細い線ではなく、実際のドットで置く**（2026-08-26）。ラスタの鉛筆で
+    //    引いたときと同じ形のまま、自由に動かせる・変形できる下敷きにする。
+    ctx.fillStyle = selected ? 'rgba(255,190,90,0.95)' : 'rgba(110,225,150,0.8)';
+    for (const p of shapeOutlineDots(s)) {
+      const x0 = devX(p.x), y0 = devY(p.y);
+      ctx.fillRect(x0, y0, devX(p.x + 1) - x0, devY(p.y + 1) - y0);
     }
-    ctx.lineWidth = (selected ? 2 : 1.25) * d;
-    ctx.setLineDash(selected ? [] : [6 * d, 4 * d]);
-    ctx.strokeStyle = selected ? 'rgba(255,190,90,0.95)' : 'rgba(110,225,150,0.85)';
-    ctx.stroke();
 
     // ⭐ 選んでいる図形だけハンドルを出す（製図モードの間だけ ── なぞる下敷きの
     //    ときにハンドルが出ていると紛らわしい）。
     if (selected) {
-      ctx.setLineDash([]);
       ctx.fillStyle = 'rgba(255,190,90,0.95)';
       const HS = 4 * d;
       for (const h of shapeHandles(s)) {
@@ -3663,6 +3684,17 @@ function hitHandle(s, dotX, dotY) {
 // ジェスチャの最初に1回だけ（ドラッグ中の毎フレームは積まない ──「1操作＝1取り消し」）。
 let shapeDrag = null;   // { mode:'create'|'move'|'resize', id, handle, from:{x,y}, orig }
 
+// 🔴 **図形の道具は `state.tool` の値そのもの**（2026-08-26）。
+//    以前は「図形レイヤーを選ぶこと＝製図モード」だったので、道具を構えると
+//    強制でレイヤーが切り替わり、鉛筆が使えなくなっていた（実際にあった不具合 ──
+//    「製図モードでもドットで書きたい」）。今は鉛筆・消し等と対等な道具の1つに
+//    したので、今のレイヤーを離れずに図形を置く・選ぶができる。
+const SHAPE_EDIT_TOOLS = ['shapeRect', 'shapeLine', 'shapeEllipse', 'shapeSelect'];
+function shapeKindForTool(tool) {
+  return tool === 'shapeRect' ? 'rect' : tool === 'shapeLine' ? 'line'
+    : tool === 'shapeEllipse' ? 'ellipse' : null;
+}
+
 function shapesPointerDown(e) {
   const c = pixelCoordsFromEvent(e);
   if (!c) return;
@@ -3685,17 +3717,18 @@ function shapesPointerDown(e) {
   }
 
   // 2) 配置ツールが選ばれていれば、新しい図形を作り始める。
-  if (state.draft.shapeTool) {
+  const placeKind = shapeKindForTool(state.tool);
+  if (placeKind) {
     const p = snapPoint(dotX, dotY, null);
     _lastSnapKind = p.kind;
     const id = newShapeId();
     let shape;
-    if (state.draft.shapeTool === 'line') shape = { id, kind: 'line', x1: p.x, y1: p.y, x2: p.x, y2: p.y };
-    else shape = { id, kind: state.draft.shapeTool, x: p.x, y: p.y, w: 0, h: 0 };
+    if (placeKind === 'line') shape = { id, kind: 'line', x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+    else shape = { id, kind: placeKind, x: p.x, y: p.y, w: 0, h: 0 };
     pushUndo();
     layer.shapes.push(shape);
     selectShape(id);
-    shapeDrag = { mode: 'create', id, handle: state.draft.shapeTool === 'line' ? 'p2' : 'se', orig: { ...shape } };
+    shapeDrag = { mode: 'create', id, handle: placeKind === 'line' ? 'p2' : 'se', orig: { ...shape } };
     try { el.canvasStage.setPointerCapture(e.pointerId); } catch (_) {}
     renderEditor();
     return;
@@ -3803,30 +3836,37 @@ function deleteSelectedShape() {
 
 // ── 図形の道具（四角／直線／円／選ぶ） ─────────────────────
 //
-// ⭐ 四角・直線・円を押すと、図形レイヤーが無ければ**その場で作って**アクティブにする
+// ⭐ 四角・直線・円を押すと、図形レイヤーが無ければ**その場で作る**
 // （設計 §4 ── レイヤーを先に用意しに行く手間を無くす）。
+// 🔴 **今のレイヤーは切り替えない**（2026-08-26 ── レイヤー切替＝製図モード、
+// という前の設計だと道具を構えるたびに鉛筆が使えなくなっていた）。
+// `setActive()` を通す（鉛筆・消し等と同じ「道具を選ぶ」1本の道）ので、
+// 逆に鉛筆へ戻しても選択中の図形はそのまま（また構えれば続きから触れる）。
+const SHAPE_TOOL_MAP = { rect: 'shapeRect', line: 'shapeLine', ellipse: 'shapeEllipse' };
 function setShapeTool(tool) {
-  if (tool !== null && !shapesLayer()) addShapesLayer();
-  if (tool !== null && !isShapesLayer(state.layers[state.currentLayer])) {
-    const idx = state.layers.indexOf(shapesLayer());
-    if (idx >= 0) switchLayer(idx);
-  }
-  state.draft.shapeTool = tool;
-  [el.shapeToolRectBtn, el.shapeToolLineBtn, el.shapeToolEllipseBtn, el.shapeToolSelectBtn]
-    .forEach(b => b.classList.remove('active'));
-  ({ rect: el.shapeToolRectBtn, line: el.shapeToolLineBtn, ellipse: el.shapeToolEllipseBtn,
-     null: el.shapeToolSelectBtn }[tool === null ? 'null' : tool]).classList.add('active');
-  syncShapesPanelVisibility();
+  if (!shapesLayer()) addShapesLayer(false);
+  setActive(tool === null ? 'shapeSelect' : SHAPE_TOOL_MAP[tool]);
 }
 el.shapeToolRectBtn.addEventListener('click', () => setShapeTool('rect'));
 el.shapeToolLineBtn.addEventListener('click', () => setShapeTool('line'));
 el.shapeToolEllipseBtn.addEventListener('click', () => setShapeTool('ellipse'));
 el.shapeToolSelectBtn.addEventListener('click', () => setShapeTool(null));
 
-// ⭐ 図形レイヤーが選ばれている間だけ、道具の詳細（スナップ・インスペクタ等）を出す
+// data-tool を持たない図形道具ボタン（かたち道具ドックとは別枠）を
+// `state.tool` に合わせて光らせる。`setActive()` から呼ぶ。
+function syncShapeToolButtons() {
+  const map = { shapeRect: el.shapeToolRectBtn, shapeLine: el.shapeToolLineBtn,
+    shapeEllipse: el.shapeToolEllipseBtn, shapeSelect: el.shapeToolSelectBtn };
+  [el.shapeToolRectBtn, el.shapeToolLineBtn, el.shapeToolEllipseBtn, el.shapeToolSelectBtn]
+    .forEach(b => b.classList.remove('active'));
+  const btn = map[state.tool];
+  if (btn) btn.classList.add('active');
+}
+
+// ⭐ 図形の道具を構えている間だけ、道具の詳細（スナップ・インスペクタ等）を出す
 // （空の道具を先に見せない・作者の pixelizer の教訓と同じ考え方）。
 function syncShapesPanelVisibility() {
-  const active = isShapesLayer(state.layers[state.currentLayer]);
+  const active = SHAPE_EDIT_TOOLS.includes(state.tool);
   el.shapesPanel.style.display = active ? '' : 'none';
   if (el.shapesHint) el.shapesHint.style.display = active ? 'none' : '';
 }
@@ -3925,12 +3965,12 @@ el.shapeArrayBtn.addEventListener('click', () => {
   renderEditor();
 });
 
-// Delete キー ── 図形レイヤーがアクティブで、図形を選んでいるときだけ効く
-// （手書きモードの「選択→Delete」＝ドットを消す、とはモードで自然に分かれる・設計 §5）。
+// Delete キー ── 図形の道具を構えていて、図形を選んでいるときだけ効く
+// （手書きモードの「選択→Delete」＝ドットを消す、とは道具で自然に分かれる・設計 §5）。
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Delete' && e.key !== 'Backspace') return;
   if (document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
-  if (!isShapesLayer(state.layers[state.currentLayer])) return;
+  if (!SHAPE_EDIT_TOOLS.includes(state.tool)) return;
   if (state.draft.selectedShapeId == null) return;
   e.preventDefault();
   deleteSelectedShape();
@@ -3993,6 +4033,11 @@ function setActive(tool) {
   el.toolButtons.forEach(b => {
     b.classList.toggle('active', b.dataset.tool === tool);
   });
+  // 🔴 図形の道具（`data-tool` を持たない別枠のボタン）も、鉛筆等と同じ
+  //    `state.tool` で管理するようにした（2026-08-26）ので、ここで同期する。
+  syncShapeToolButtons();
+  syncShapesPanelVisibility();
+  renderEditor();
 }
 
 // 矩形/楕円: 枠 / 塗りつぶし
@@ -4167,8 +4212,9 @@ function markActiveSwatch() {
 const ptrs = new Map();        // pointerId -> {x, y} (client 座標)
 let strokeId = null;           // いま描いている指/マウスの id
 let pinch = null;              // つまみ操作の基準
-let panDrag = null;            // 中ボタン、または Space+左ドラッグでの画面移動
+let panDrag = null;            // 中ボタン、右ボタン、または Space+左ドラッグでの画面移動
 let spaceDown = false;         // Space を押している間は左ドラッグで画面を動かす（PC 向け。中ボタンが無い機種のため）
+let layerMove = null;          // レイヤー丸ごと移動ドラッグ中: { startX, startY, dx, dy, orig:[Uint8ClampedArray,...] }
 let pressTimer = null, pressOrigin = null;
 const LONG_PRESS_MS = 500;
 const MOVE_SLOP = 10;          // これ以上動いたら長押しとみなさない (CSS px)
@@ -4416,9 +4462,11 @@ el.canvasStage.addEventListener('pointerdown', (e) => {
   if (ptrs.size === 2) { abortStroke(); beginPinch(); e.preventDefault(); return; }
   if (ptrs.size > 2) return;
 
-  // 中ボタン、または Space を押しながらの左ドラッグ = 画面を掴んで動かす。
+  // 中ボタン・右ボタン、または Space を押しながらの左ドラッグ = 画面を掴んで動かす。
   // 中ボタンが無いノートPCのトラックパッドでも画面を動かせるようにするため。
-  if (e.pointerType === 'mouse' && (e.button === 1 || (e.button === 0 && spaceDown))) {
+  // 🔴 右ドラッグも同じ扱いにした（2026-08-25・実際にあった不具合 ──
+  //    ズーム後に左右へ動かす手段が中ボタン/Spaceしか無く、見つけられなかった）。
+  if (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2 || (e.button === 0 && spaceDown))) {
     panDrag = { x: e.clientX, y: e.clientY };
     el.canvasStage.style.cursor = 'grabbing';
     e.preventDefault();
@@ -4429,6 +4477,14 @@ el.canvasStage.addEventListener('pointerdown', (e) => {
   //    （A3）ので、ここを直さないと製図モードでは何も押せなくなる。
   if (!hasArtwork()) return;
 
+  // 🔴 **レイヤー丸ごと移動ツール。**通常の描画より必ず先で奪う
+  //    （ガイド・図形レイヤーと同じ位置・同じ理由）。
+  if (state.tool === 'movelayer' && !isShapesLayer(state.layers[state.currentLayer])) {
+    e.preventDefault();
+    beginLayerMove(e);
+    return;
+  }
+
   // 🔴 **補助線を置くモードなら、ここで奪う。**⚠️ 通常の描画（`beginStroke`）より
   //    必ず先 ── 後ろだと「置いたはずが線も引いていた」になる。
   if (state.draft.guideMode) {
@@ -4438,9 +4494,13 @@ el.canvasStage.addEventListener('pointerdown', (e) => {
     return;
   }
 
-  // 🔴 **図形レイヤーがアクティブ＝製図モード。**通常の描画（`beginStroke`）より
-  //    必ず先で奪う（ガイドと同じ位置・同じ理由）。
-  if (isShapesLayer(state.layers[state.currentLayer])) {
+  // 🔴 **図形の道具を構えている ── 通常の描画（`beginStroke`）より必ず先で奪う**
+  //    （ガイドと同じ位置・同じ理由）。2026-08-26: 判定を「今のレイヤーが図形
+  //    レイヤーか」から「図形の道具を選んでいるか」に変えたので、鉛筆のまま
+  //    ラスタ層に居ながら図形も併用できる。ただし図形レイヤーをレイヤー欄で
+  //    直に選んだ場合（`state.pixels` が無い＝描く先が無い）は道具の値に関わらず
+  //    ここで拾う ── そうしないと「押しても何も起きない」になる。
+  if (SHAPE_EDIT_TOOLS.includes(state.tool) || isShapesLayer(state.layers[state.currentLayer])) {
     e.preventDefault();
     shapesPointerDown(e);
     return;
@@ -4481,6 +4541,7 @@ el.canvasStage.addEventListener('pointermove', (e) => {
     return;
   }
   if (shapeDrag) { shapesPointerMove(e); return; }
+  if (layerMove) { layerMoveMove(e); return; }
   if (pressOrigin && e.pointerId === pressOrigin.id &&
       Math.hypot(e.clientX - pressOrigin.x, e.clientY - pressOrigin.y) > MOVE_SLOP) {
     cancelLongPress();
@@ -4497,6 +4558,7 @@ function releasePointer(e) {
   try { el.canvasStage.releasePointerCapture(e.pointerId); } catch (_) {}
 
   if (shapeDrag) { shapesPointerUp(); return; }
+  if (layerMove) { layerMoveUp(); return; }
   if (panDrag) { panDrag = null; el.canvasStage.style.cursor = ''; updateCursor(e); return; }
   if (pinch) {
     if (ptrs.size >= 2) beginPinch();   // 3 本目が離れたら基準を取り直す
@@ -4590,12 +4652,13 @@ function effectiveTool(e) {
 
 function updateCursor(e) {
   if (!e) return;
-  if (panDrag) return; // ドラッグ中は pointerdown/up 側が cursor を管理する
+  if (panDrag || layerMove) return; // ドラッグ中は pointerdown/up 側が cursor を管理する
   if (spaceDown) { el.editorCanvas.style.cursor = 'grab'; return; }
   const t = effectiveTool(e);
   el.editorCanvas.style.cursor = t === 'eyedropper' ? 'copy'
     : t === 'eraser' ? 'cell'
     : t === 'bucket' ? 'pointer'
+    : t === 'movelayer' ? 'grab'
     : t === 'lasso' ? (state.floating ? 'move' : 'crosshair')
     : 'crosshair';
 }
@@ -4659,9 +4722,13 @@ function paintPixel(x, y, tool) {
 
 function eyedropAt(c) {
   if (!c) return;
+  // 🔴 今のレイヤーの画素ではなく、**見えている合成結果**から拾う（2026-08-25）。
+  //    今のレイヤーが透明でも、下のレイヤーに色があれば拾えないと不便
+  //    （実際にあった不具合 ── レイヤーをまたいでスポイトできなかった）。
+  const buf = compositeFrame(state.currentFrame);
   const i = c.i;
-  if (state.pixels[i+3] < 128) return; // transparent — ignore
-  state.color = { r: state.pixels[i], g: state.pixels[i+1], b: state.pixels[i+2] };
+  if (buf[i+3] < 128) return; // 透明 — 拾わない
+  state.color = { r: buf[i], g: buf[i+1], b: buf[i+2] };
   updateColorUI();
 }
 
@@ -5330,7 +5397,9 @@ window.addEventListener('keydown', (e) => {
     // 上に何か開いているならそちらが先。手前の板を閉じただけのつもりで
     // 切り取り中の絵まで消えるのを防ぐ。
     if (escapeTopLayer()) return;
-    if (state.lassoActive) {
+    if (layerMove) {
+      cancelLayerMove();
+    } else if (state.lassoActive) {
       state.lassoActive = false;
       state.lassoPath = null;
       state.drawing = false;
@@ -5356,6 +5425,13 @@ function switchLayer(idx) {
   if (!state.floating) cancelSelection();
   state.currentLayer = idx;
   refreshActiveCel();
+  // 🔴 レイヤー欄で図形レイヤーを直に選んだら、道具も図形編集に合わせる
+  //    （ハンドル・インスペクタがすぐ出るように）。逆にラスタ層へ戻すときは
+  //    道具を強制で戻さない ── 道具を構えたまま鉛筆と行き来する、が
+  //    この変更の要（2026-08-26）。
+  if (isShapesLayer(state.layers[idx]) && !SHAPE_EDIT_TOOLS.includes(state.tool)) {
+    setActive('shapeSelect');
+  }
   syncShapesPanelVisibility();
   renderInspector();
   renderLayerPanel();
@@ -5439,25 +5515,37 @@ function updateLayerButtons() {
   el.layerDownBtn.disabled = !has || state.currentLayer === 0;
   // ⭐ 図形レイヤーは1枚だけ（重ねる意味が薄いので2枚目は作れない・設計 §3）。
   if (el.layerAddShapesBtn) el.layerAddShapesBtn.disabled = !has || !!shapesLayer();
+  // ⚠️ 「レイヤーを動かす」は図形レイヤーには意味が無い（`.frames` を持たない）。
+  const moveLayerBtn = document.querySelector('[data-tool="movelayer"]');
+  if (moveLayerBtn) {
+    moveLayerBtn.disabled = !has || activeIsShapes;
+    if (moveLayerBtn.disabled && state.tool === 'movelayer') setActive('pencil');
+  }
 }
 
 /// <summary>図形レイヤー（製図モード）を1枚だけ作る。⚠️ 既にあれば何もしない
 /// （ボタン側で無効化するが、二重呼び出しへの備えとしてもここで弾く）。
 /// ⭐ 一番上（最前面）に足す ── なぞる下敷きは絵より手前にあるほうが見やすい。</summary>
-function addShapesLayer() {
+// switchTo=false: 道具を構えただけの自動作成では、今のラスタレイヤーを離れない
+// （2026-08-26 ── 離れると鉛筆が使えなくなるので、この変更の意味が無くなる）。
+// switchTo=true（既定）: レイヤー欄の「＋」から明示で足したときは、他のレイヤー
+// 追加ボタンと同じく足した先へ移る。
+function addShapesLayer(switchTo = true) {
   if (state.layers.length === 0 || shapesLayer()) return;
   pushUndo();
   const newLayer = { name: '製図', opacity: 1.0, visible: true, kind: 'shapes', shapes: [] };
   state.layers.push(newLayer);
-  state.currentLayer = state.layers.length - 1;
-  refreshActiveCel();
-  if (!state.floating) cancelSelection();
+  if (switchTo) {
+    state.currentLayer = state.layers.length - 1;
+    refreshActiveCel();
+    if (!state.floating) cancelSelection();
+  }
   syncShapesPanelVisibility();
   renderLayerPanel();
   renderTimeline();
   renderEditor();
 }
-el.layerAddShapesBtn.addEventListener('click', addShapesLayer);
+el.layerAddShapesBtn.addEventListener('click', () => addShapesLayer(true));
 
 // 触ってレイヤーの順番を並べ替える。カスタムパレットの並べ替え
 // (attachPaletteDrag) と同じやり方 ── ドラッグ中は要素を作り直さず
@@ -5604,6 +5692,7 @@ el.layerUpBtn.addEventListener('click', () => moveLayer(+1));
 el.layerDownBtn.addEventListener('click', () => moveLayer(-1));
 
 el.editorCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+el.canvasStage.addEventListener('contextmenu', (e) => e.preventDefault());  // 右ドラッグ＝画面移動にしたので、メニューを出さない
 
 // ============ Undo / Redo (レイヤー × フレーム対応) ============
 // スナップショット形式:
@@ -5691,7 +5780,7 @@ window.addEventListener('keydown', (e) => {
 // 呼ばない）。「かたち」グループの開閉やドックの active 表示など、
 // クリック時に付随する処理を二重管理しないため。
 const TOOL_KEYS = {
-  b: 'pencil', e: 'eraser', i: 'eyedropper', g: 'bucket',
+  b: 'pencil', e: 'eraser', i: 'eyedropper', g: 'bucket', m: 'movelayer',
   l: 'line', r: 'rect', o: 'ellipse', s: 'lasso', t: 'texture',
 };
 window.addEventListener('keydown', (e) => {
@@ -5761,6 +5850,94 @@ function refreshActiveCel() {
     state.currentFrame = active.frames.length - 1;
   }
   state.pixels = active.frames[state.currentFrame];
+}
+
+// ============ レイヤー丸ごと移動 ============
+//
+// ⭐ 投げ輪の浮遊バッファ（今のコマだけ）とは別物 ──「レイヤー丸ごと」＝
+// **そのレイヤーの全コマを同じだけずらす**（アニメの背景がコマ間でズレないため）。
+// ⚠️ `pixelCoordsFromEvent` は使わない ── キャンバスの外までドラッグしたい
+// （中身を大きくずらすとき、指がキャンバス外に出て当然ある）ので、
+// クライアント座標の差分から直接ドット数を出す。
+
+function shiftedFrame(src, W, H, dx, dy) {
+  const out = new Uint8ClampedArray(W * H * 4);
+  for (let y = 0; y < H; y++) {
+    const sy = y - dy;
+    if (sy < 0 || sy >= H) continue;
+    for (let x = 0; x < W; x++) {
+      const sx = x - dx;
+      if (sx < 0 || sx >= W) continue;
+      const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+      out[di] = src[si]; out[di+1] = src[si+1]; out[di+2] = src[si+2]; out[di+3] = src[si+3];
+    }
+  }
+  return out;
+}
+
+function beginLayerMove(e) {
+  if (state.layers.length === 0) return;
+  const layer = state.layers[state.currentLayer];
+  if (isShapesLayer(layer)) return;
+  if (state.floating) commitFloating();
+  // pushUndo は redo を捨てる。ドラッグしただけで動かさず Escape した時に
+  // やり直しの履歴まで失わないよう、鉛筆と同じく先に退避しておく。
+  state.redoBeforeStroke = state.redoStack.slice();
+  pushUndo();
+  layerMove = {
+    startX: e.clientX, startY: e.clientY,
+    dx: 0, dy: 0,
+    orig: layer.frames.map(f => new Uint8ClampedArray(f)),
+  };
+  el.canvasStage.style.cursor = 'grabbing';
+}
+
+function layerMoveMove(e) {
+  if (!layerMove) return;
+  const cell = state.view.cell || 1;
+  const dx = Math.round((e.clientX - layerMove.startX) / cell);
+  const dy = Math.round((e.clientY - layerMove.startY) / cell);
+  if (dx === layerMove.dx && dy === layerMove.dy) return;
+  layerMove.dx = dx; layerMove.dy = dy;
+  const layer = state.layers[state.currentLayer];
+  const W = state.width, H = state.height;
+  layer.frames = layerMove.orig.map(f => shiftedFrame(f, W, H, dx, dy));
+  refreshActiveCel();
+  renderEditor();
+}
+
+function layerMoveUp() {
+  if (!layerMove) return;
+  // ドラッグせずに離しただけ（クリックのみ）なら、何も動いていないので
+  // 積んだ undo を捨てる（鉛筆の abortStroke と同じ考え方）。
+  const noop = layerMove.dx === 0 && layerMove.dy === 0;
+  layerMove = null;
+  el.canvasStage.style.cursor = '';
+  if (noop) {
+    state.undoStack.pop();
+    if (state.redoBeforeStroke) state.redoStack = state.redoBeforeStroke;
+  }
+  state.redoBeforeStroke = null;
+  renderTimeline();
+  renderLayerPanel();
+  updateHistoryButtons();
+}
+
+// Escape でのキャンセル用。元のコマ配列をそのまま持っているので、
+// 積んだだけの undo は捨てて（＝適用はしない）自前で戻す。
+function cancelLayerMove() {
+  if (!layerMove) return;
+  const layer = state.layers[state.currentLayer];
+  layer.frames = layerMove.orig;
+  refreshActiveCel();
+  layerMove = null;
+  el.canvasStage.style.cursor = '';
+  state.undoStack.pop();
+  if (state.redoBeforeStroke) { state.redoStack = state.redoBeforeStroke; state.redoBeforeStroke = null; }
+  updateHistoryButtons();
+  renderTimeline();
+  renderLayerPanel();
+  renderEditor();
 }
 
 function switchFrame(idx) {
@@ -6350,8 +6527,11 @@ el.canvasStage.addEventListener('wheel', (e) => {
     zoomAtClient(state.view.cell * factor, e.clientX, e.clientY);
   } else {
     const v = state.view;
-    v.panX -= e.deltaX;
-    v.panY -= e.deltaY;
+    // 🔴 Shift+ホイールで左右に動かせるようにした（2026-08-25）。
+    //    普通の縦ホイールしか無いマウスは deltaX が常に 0 のままなので、
+    //    トラックパッド以外では左右移動の手段が無かった（実際にあった不具合）。
+    if (e.shiftKey && e.deltaX === 0) v.panX -= e.deltaY;
+    else { v.panX -= e.deltaX; v.panY -= e.deltaY; }
     clampPan();
     renderEditor();
   }

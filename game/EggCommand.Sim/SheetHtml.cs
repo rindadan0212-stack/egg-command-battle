@@ -72,7 +72,9 @@ namespace EggCommand.Sim
             j.Append($"\"baseTotal\":{SpeciesTable.BaseTotal},\"debuffTotal\":{SpeciesTable.DebuffBaseTotal},");
             j.Append($"\"powerUnit\":{Skills.PowerUnit},\"damageBase\":{Battle.DamageBase},");
             j.Append($"\"defSoften\":{Battle.DefSoften},\"hpScale\":{Battle.HpScale},");
-            j.Append($"\"buffPercent\":{Skills.BuffPercent},\"tickPercent\":{Skills.TickPercent},");
+            // ⭐ 強化の割合は**軸ごと**（攻撃・防御 50 / 速度 30）。⚠️ 片方だけ渡すと JS がずれる
+            j.Append($"\"buffPercent\":{Skills.BuffStatPercent},\"buffSpdPercent\":{Skills.BuffSpdPercent},");
+            j.Append($"\"innatePercent\":{Skills.InnatePercent},\"tickPercent\":{Skills.TickPercent},\"perBonus\":{Skills.PerBonusPercent},\"counterPercent\":{Battle.CounterPercent},");
             j.Append($"\"party\":{Games.PartySize},\"minChance\":{Effect.MinChance},\"wildMax\":{Stats.WildStatMax},");
             j.Append($"\"poolMax\":{Skills.PoolMax},\"spreadMax\":{Skills.SpreadMax},");
             j.Append($"\"atk\":{mid.Atk},\"def\":{mid.Def},\"spd\":{mid.Spd},\"maxHp\":{mid.Hp * Battle.HpScale},\"one\":{one}");
@@ -105,6 +107,24 @@ namespace EggCommand.Sim
             //    （スピード依存を足した日に、画面だけ古いままになる）
             // ⭐ 画面に語を手で並べない（Spd を足した日に画面だけ古くなる）
             Words(j, "scales", Skills.LabelOf, (DamageScale[])Enum.GetValues(typeof(DamageScale)));
+            // ⭐ 1手2役の選択肢。⚠️ enum から引く（画面に手で並べない）
+            Words(j, "skillWhens", Sheet.WordOfWhen, (SkillWhen[])Enum.GetValues(typeof(SkillWhen)));
+            // ⭐ 生まれつきの向き（帳面の語と同じ）
+            j.Append("\"ways\":[\"上\",\"下\"],");
+            // ⭐ 帳面の短い札 → 画面の言い回し（JS が説明文を組み直すのに要る）
+            j.Append("\"whenSays\":{");
+            for (int k = 0; k < WhenList.Length; k++)
+                j.Append(k > 0 ? "," : "").Append(Str(Sheet.WordOfWhen(WhenList[k])))
+                 .Append(':').Append(Str(SkillText.WhenOf(WhenList[k])));
+            j.Append("},\"tallySays\":{");
+            for (int k = 0; k < TallyList.Length; k++)
+                j.Append(k > 0 ? "," : "").Append(Str(Sheet.WordOfTally(TallyList[k])))
+                 .Append(':').Append(Str(SkillText.TallyOf(TallyList[k])));
+            j.Append("},");
+            j.Append($"\"perCap\":{Skills.PerCap},");
+            // ⚠️ `Tally.None` は「数えない」で、帳面には語が無い ── 画面の「—」がそれ
+            Words(j, "tallies", Sheet.WordOfTally,
+                new[] { Tally.FoeBanes, Tally.FoeBoons, Tally.OwnBoons });
 
             // ⭐ 特性が割り込める場面
             Words(j, "whens", Traits.LabelOf, (TraitWhen[])Enum.GetValues(typeof(TraitWhen)));
@@ -168,13 +188,14 @@ namespace EggCommand.Sim
             {
                 if (!first) j.Append(',');
                 first = false;
-                double value = Program.TurnValueOf(s, out _);
+                double value = SkillValues.Of(s, out _);
                 j.Append('{')
                  .Append("\"id\":").Append(Str(s.Id))
                  .Append(",\"name\":").Append(Str(s.Name))
                  .Append(",\"gist\":").Append(Str(s.Gist))
                  .Append(",\"type\":").Append(Str(Skills.LabelOf(s.Type)))
                  .Append(",\"ct\":").Append(s.Ct)
+                 .Append(",\"passive\":").Append(s.Passive ? "true" : "false")
                  .Append(",\"target\":").Append(Str(SkillText.TargetOf(s.Target)))
                  .Append(",\"value\":")// ⚠️ **丸めて渡さない。**4桁で丸めていた頃、自己検査は
                  //    「式のちがい」と「丸めのちがい」を区別できず、
@@ -200,6 +221,9 @@ namespace EggCommand.Sim
                  .Append("\"id\":").Append(Str(sp.Id))
                  .Append(",\"name\":").Append(Str(sp.Name))
                  .Append(",\"skill1\":").Append(Str(sp.Skill1))
+                 // ⭐ 2026-08-27 追加。⚠️ 無いと JS の toSpecies/blockOfSp が「特性」の行を
+                 //    素通りし、種族を1件でも保存すると全種族の特性が消えていた（自己検査の穴②）
+                 .Append(",\"traitId\":").Append(Str(sp.TraitId))
                  .Append(",\"base\":{");
                 for (int i = 0; i < Stats.Keys.Length; i++)
                 {
@@ -208,6 +232,9 @@ namespace EggCommand.Sim
                 }
                 j.Append("},\"slot2\":").Append(Json(sp.Slot2))
                  .Append(",\"slot3\":").Append(Json(sp.Slot3))
+                 // ⭐ 技・特性と同じく正解の書式を渡す。⚠️ ここが無かったせいで、自己検査は
+                 //    種族の書式を1件も突き合わせておらず、②③のずれを見逃していた（穴①）
+                 .Append(",\"block\":").Append(Str(Sheet.BlockOf(sp)))
                  .Append(",\"sprite\":[");
                 for (int y = 0; y < sp.Sprite.Height; y++)
                 {
@@ -215,7 +242,11 @@ namespace EggCommand.Sim
                     for (int x = 0; x < sp.Sprite.Width; x++)
                     {
                         byte v = sp.Sprite.At(x, y);
-                        row.Append(v == 0 ? '.' : (char)('0' + v));
+                        // 🔴 **`PixelSprite.CharOf` を必ず通す**（`Sheet.CodeOf(Species)` と同じ理由。
+                        //    そちらは 2026-08-25 に修正済みだったが、この並行実装だけ取り残されていた）。
+                        //    ⚠️ 自前で `(char)('0'+v)` と組み立てると、添字が10以上（実データに
+                        //    18・22・25・26色の種族があり確実に踏む）で ':' ';' '<' … を吐く。
+                        row.Append(v == 0 ? '.' : PixelSprite.CharOf(v));
                     }
                     j.Append(y > 0 ? "," : "").Append(Str(row.ToString()));
                 }
@@ -272,10 +303,13 @@ namespace EggCommand.Sim
                     j.Append(",\"威力\":").Append(Str(Skills.LabelOf(e.Power)))
                      .Append(",\"依存\":").Append(Str(Skills.LabelOf(e.Scale)));
                     Put("発数", e.Repeat);
-                    j.Append(",\"防御無視\":").Append(e.Pierce ? "true" : "false");
+                    j.Append(",\"防御無視\":").Append(e.Pierce ? "true" : "false")
+                     .Append(",\"強化無視\":").Append(e.Bare ? "true" : "false");
                     break;
                 case EffectKind.Buff:
                     j.Append(",\"ステ\":").Append(Str(Stats.LabelOf(e.Stat)));
+                    // ⭐ パッシブは持続を持たない代わりに向きを書く（帳面と同じ）
+                    if (e.Innate) j.Append(",\"向き\":").Append(Str(e.Sign > 0 ? "上" : "下"));
                     Put("ターン", e.Turns);
                     break;
                 case EffectKind.Poison:
@@ -293,6 +327,11 @@ namespace EggCommand.Sim
                 case EffectKind.Stun:
                 case EffectKind.Sleep:
                 case EffectKind.Block:
+                case EffectKind.Seal:
+                case EffectKind.Anchor:
+                case EffectKind.Invincible:
+                case EffectKind.Extend:
+                case EffectKind.Counter:
                 case EffectKind.Guts:
                 case EffectKind.Immune:
                     Put("ターン", e.Turns); break;
@@ -301,9 +340,21 @@ namespace EggCommand.Sim
                 case EffectKind.Taunt:
                     Put("回数", e.Hits); break;
             }
+            // ⭐ 盤面を数える技。⚠️ 渡していなかったので JS の手ぶんが素の一撃と同じだった
+            // ⭐ **1手2役の3つ**（飛び先・条件・数え）。⚠️ 渡していなかったので
+            //    帳面から編集すると黙って落ちていた（自己検査が 25件 赤かった原因）。
+            if (e.Own != null) j.Append(",\"飛び先\":").Append(Str(SkillText.TargetOf(e.Own.Value)));
+            if (e.When != null) j.Append(",\"条件\":").Append(Str(Sheet.WordOfWhen(e.When.Value)));
+            if (e.Per != Tally.None) j.Append(",\"数え\":").Append(Str(Sheet.WordOfTally(e.Per)));
             Put("確率", e.Chance);
             return j.Append('}').ToString();
         }
+
+        /// <summary>⚠️ 画面へ渡す条件・数えの並び。⭐ enum から引く（手で並べない）。</summary>
+        private static readonly SkillWhen[] WhenList =
+            (SkillWhen[])Enum.GetValues(typeof(SkillWhen));
+        private static readonly Tally[] TallyList =
+            { Tally.FoeBanes, Tally.FoeBoons, Tally.OwnBoons };
 
         private static string Str(string? value)
         {
@@ -543,7 +594,12 @@ const FREE=D.freeKind, MEMO=D.memoKey;
 
 // ── 効果の型ごとの札。⚠️ Sheet.cs の ParseEffect と同じ並びにする ──
 const ARGS={
- 'ダメージ':[['威力','sel','powers'],['依存','sel','scales'],['発数','num',1],['防御無視','chk']],
+ // ⭐ パッシブ専用。⚠️ 持続も確率も無い（帳面が書いても読み返せない）
+ '生まれつき':[['ステ','sel','buffStats'],['向き','sel','ways']],
+ // ⭐ 2026-08-27。⚠️ 強化無視（Effect.Bare）が抜けていて画面にチェックが出なかった
+ //    ── 防御無視（素の防御ステを踏む）とは別物。強化無視は相手が掛けた札（防御UP・
+ //    シールド・無敵・ガッツ）を踏む。Sheet.EffectLine / SkillText.AttackClause と対にする
+ 'ダメージ':[['威力','sel','powers'],['依存','sel','scales'],['発数','num',1],['防御無視','chk'],['強化無視','chk']],
  // ⚠️ 強化に確率は効かない（Effect.Buff が 100 に固定する）ので欄を出さない
  '強化':[['ステ','sel','buffStats'],['ターン','num',3]],
  '弱化':[['ステ','sel','buffStats'],['ターン','num',3],['確率','num',100]],
@@ -562,6 +618,12 @@ const ARGS={
  'CT':[['増減','num',2],['確率','num',100]],
  'ゲージ':[['割合','num',25],['確率','num',100]],
  '挑発':[['回数','num',3],['確率','num',100]],
+ // ⭐ 2026-08-27 に足した5つ（`sim mamo` で「本作に語彙が無い」と出たもの）
+ '封印':[['ターン','num',2],['確率','num',100]],
+ '固着':[['ターン','num',3],['確率','num',100]],
+ '無敵':[['ターン','num',1]],
+ '弱化延長':[['ターン','num',2],['確率','num',100]],
+ '反撃':[['ターン','num',3]],
 };
 // ⭐ **書けないことは言葉で書く。**これが「あらゆる場合に耐える」の正体。
 //    ⚠️ 画面は通す。実装した扱いにはしない（✍️ として数える）。
@@ -589,18 +651,52 @@ const AT_ALL=t=>t==='敵全体'||t==='味方全体';
 
 // ── 雛形 ──
 const TPL={
+// ── 素直な形（1つのことをする）──────────────────────
  '攻撃技':{type:'アタック',ct:3,target:'敵1体',effects:[{k:'ダメージ',威力:'中',依存:'攻撃',発数:1,防御無視:false,確率:100}]},
  '弱化技':{type:'デバフ',ct:4,target:'敵1体',effects:[{k:'弱化',ステ:'攻撃力',ターン:3,確率:70}]},
  '支援技':{type:'サポート',ct:4,target:'味方1体',effects:[{k:'シールド',個数:2,確率:100}]},
  '回復技':{type:'ヒール',ct:4,target:'味方1体',effects:[{k:'HP割合',割合:30,確率:100}]},
- '複合技':{type:'デバフ',ct:4,target:'敵1体',effects:[
-   {k:'ダメージ',威力:'小',依存:'攻撃',発数:1,防御無視:false,確率:100},
-   {k:'スタン',ターン:1,確率:45}]},
  '速さで殴る':{type:'アタック',ct:3,target:'敵1体',effects:[{k:'ダメージ',威力:'小',依存:'スピード',発数:1,防御無視:false,確率:100}]},
+ '硬さで殴る':{type:'アタック',ct:3,target:'敵1体',effects:[{k:'ダメージ',威力:'中',依存:'防御',発数:1,防御無視:false,確率:100}]},
  'ランダム':{type:'アタック',ct:4,target:'敵のだれか1体',effects:[{k:'ダメージ',威力:'小',依存:'攻撃',発数:3,防御無視:false,確率:100}]},
  '味方全体':{type:'ヒール',ct:5,target:'味方全体',effects:[{k:'HP割合',割合:20,確率:100}]},
  '割合で削る':{type:'デバフ',ct:5,target:'敵1体',effects:[{k:'HP割合',割合:-30,確率:60}]},
  '弱化を治す':{type:'ヒール',ct:4,target:'味方1体',effects:[{k:'解除',個数:-2,確率:100}]},
+
+// ── ⭐ 参考作品で**上位レア専用**だった形（`sim mamo` 実測）───────
+//    代償 100%UR / 攻→自 93%UR / 強＋弱 88%UR。⚠️ N・R には1本も無い形。
+ '⭐代償を負う':{type:'アタック',ct:3,target:'敵1体',effects:[
+   {k:'ダメージ',威力:'特大',依存:'攻撃',発数:1,防御無視:false,確率:100},
+   {k:'弱化',ステ:'防御力',ターン:3,確率:100,飛び先:'自分'}]},
+ '⭐掛けてから撃つ':{type:'アタック',ct:4,target:'敵1体',effects:[
+   {k:'強化',ステ:'攻撃力',ターン:3,飛び先:'自分'},
+   {k:'ダメージ',威力:'大',依存:'攻撃',発数:1,防御無視:false,確率:100}]},
+ '⭐殴って得をする':{type:'アタック',ct:4,target:'敵1体',effects:[
+   {k:'ダメージ',威力:'中',依存:'攻撃',発数:1,防御無視:false,確率:100},
+   {k:'HP割合',割合:15,確率:100,飛び先:'自分'}]},
+ '⭐上げて下げる':{type:'デバフ',ct:4,target:'敵1体',effects:[
+   {k:'弱化',ステ:'防御力',ターン:3,確率:75},
+   {k:'強化',ステ:'攻撃力',ターン:3,飛び先:'味方1体'}]},
+ '⭐全体を両方動かす':{type:'デバフ',ct:5,target:'敵全体',effects:[
+   {k:'弱化',ステ:'攻撃力',ターン:2,確率:60},
+   {k:'強化',ステ:'攻撃力',ターン:2,飛び先:'味方全体'}]},
+
+// ── 仕込んで回収する形（条件・数え）────────────────────
+ '殴りつつ崩す':{type:'デバフ',ct:4,target:'敵1体',effects:[
+   {k:'ダメージ',威力:'小',依存:'攻撃',発数:1,防御無視:false,確率:100},{k:'スタン',ターン:1,確率:45}]},
+ '弱化を数えて殴る':{type:'アタック',ct:3,target:'敵1体',effects:[
+   {k:'ダメージ',威力:'小',依存:'攻撃',発数:1,防御無視:false,確率:100,数え:'相手の弱化1種'}]},
+ '条件で化ける':{type:'アタック',ct:4,target:'敵1体',effects:[
+   {k:'ダメージ',威力:'中',依存:'攻撃',発数:1,防御無視:false,確率:100},
+   {k:'ダメージ',威力:'大',依存:'攻撃',発数:1,防御無視:false,確率:100,条件:'相手が半分以下'}]},
+ '弱化を伸ばす':{type:'デバフ',ct:3,target:'敵1体',effects:[{k:'弱化延長',ターン:2,確率:70}]},
+
+// ── 新しい語彙（2026-08-27 に足した5つ）──────────────────
+ '封印する':{type:'デバフ',ct:4,target:'敵1体',effects:[{k:'封印',ターン:2,確率:60}]},
+ '固める':{type:'デバフ',ct:3,target:'敵1体',effects:[{k:'固着',ターン:3,確率:70}]},
+ '無敵にする':{type:'サポート',ct:5,target:'味方1体',effects:[{k:'無敵',ターン:1}]},
+ '反撃を張る':{type:'サポート',ct:4,target:'味方1体',effects:[{k:'反撃',ターン:3}]},
+
  'まだ書けない':{type:'アタック',ct:4,target:'敵1体',effects:[{k:FREE,文:'ここに、やりたいことを日本語で書く'}]},
 };
 
@@ -627,6 +723,9 @@ function parseLine(text){
   const e={k:k}; const tags={};
   for(let i=1;i<parts.length;i++){
     if(parts[i]==='防御無視'){ e.防御無視=true; continue; }
+    // ⭐ 2026-08-27。⚠️ 強化無視も「札:値」の形を持たない語なので、ここで拾わないと
+    //    `c<0` で黙って読み捨てられていた（Sheet.ParseEffectCore と同じ拾い方に揃える）
+    if(parts[i]==='強化無視'){ e.強化無視=true; continue; }
     const c=parts[i].indexOf(':');
     if(c>0) tags[parts[i].slice(0,c)]=parts[i].slice(c+1);
   }
@@ -636,6 +735,8 @@ function parseLine(text){
     else e[n]=(t==='num')?d:(D[d]||[])[d==='powers'?1:0];
   }
   e.確率 = ('確率' in tags) ? (parseInt(tags.確率,10)||100) : 100;
+  // ⭐ **1手2役の3つを読み戻す。**⚠️ 読めないと、開いて保存するだけで札が落ちる
+  for(const n of ['飛び先','条件','数え']) if(n in tags) e[n]=tags[n];
   return e;
 }
 function parseSheet(text,head){
@@ -669,7 +770,7 @@ function toSkill(b){
   const eff=many(b,'効果').map(t=>parseLine(t)||{k:FREE,文:t,_unread:true});
   return {id:b.id, name:one(b,'名前',''), gist:one(b,'説明',''),
     type:one(b,'型',D.types[0]), ct:parseInt(one(b,'CT','3'),10)||0,
-    target:one(b,'狙い',D.targets[0]),
+    target:one(b,'狙い',D.targets[0]), passive:one(b,'パッシブ','')==='はい',
     effects:eff.length?eff:[fresh('ダメージ')], memo:one(b,MEMO,'')};
 }
 function toSpecies(b){
@@ -687,7 +788,10 @@ function toSpecies(b){
   const odd = sprite.length!==16 || sprite.some(r=>r.length!==16);
   if(!sprite.length) sprite=Array.from({length:16},()=>'.'.repeat(16));   // ⭐ 新しい種族は 16×16 から
   const pals=many(b,'色').map(v=>v.split(/ +/).filter(x=>x.startsWith('#')));
-  return {id:b.id, name:one(b,'名前',''), skill1:one(b,'枠1',''), base:base,
+  // ⭐ 2026-08-27。⚠️ **特性を読んでいなかった。**Sheet.BlockOf(Species) は
+  //    「特性 = {id}」の行を書くのに、ここが拾わずに捨てていたので、開いて保存するだけで
+  //    その値が失われていた（Sheet.cs:1768 と対で読むこと）
+  return {id:b.id, name:one(b,'名前',''), skill1:one(b,'枠1',''), traitId:one(b,'特性',''), base:base,
     slot2:pool(one(b,'枠2','')), slot3:pool(one(b,'枠3','')),
     sprite:sprite, palettes:pals.length?pals:[['#2e2418','#8fc96e','#c8eaa8','#1a1410']],
     memo:one(b,MEMO,'')};
@@ -716,9 +820,17 @@ const list=()=>tab==='skill'?S:tab==='species'?P:T;
 
 // ══ 手ぶん ══════════════════════════════════════
 // ⚠️ Program.ValueOf の写し。⭐ ずれたら上の「自己検査」が赤くなる。
-const LATE=0.7, G={ct:0.31,taunt:0.3,guts:1.0,ward:0.3,buff:0.9,revive:3.0};
+// ⭐ AREA＝全体技が実際に効く体数（4体そのままは高く見すぎる）/ PACE＝1体が動ける回数
+// ⚠️ Program.AreaTargets・PaceTurns の写し。ずれたら自己検査が赤くなる
+// ⚠️ **SkillValues の写し。**⭐ 実測で潰した値（`sim guess`）と 🚧未測定の見積りが混在する
+const LATE=0.7, AREA=2.0, PACE=5.6, G={ct:0.31,pull:0.06,gutsSave:0.68,ward:0.09,blunt:0.39,
+  buff:0.9,reviveActs:0.3,tally:2,seal:0.31,anchor:0.2,extend:0.3};
 function dmg(power,atk,def){
-  const raw=atk*power/D.c.powerUnit*D.c.damageBase*D.c.defSoften/(D.c.defSoften+def);
+  // 🔴 **軽減は二乗**（Battle.DamageOf の写し・2026-08-26 に1乗から変わった）。
+  //    ⚠️ ここが1乗のまま取り残されていて、帳面の自己検査が全ダメージ技で
+  //    1.1148倍ずれていた（2026-08-27 に発見）── 式の複製は片方だけ直すと必ずこうなる。
+  const soften=D.c.defSoften/(D.c.defSoften+def);
+  const raw=atk*power/D.c.powerUnit*D.c.damageBase*soften*soften;
   return Math.max(1,Math.floor(raw));
 }
 function statOf(dep){ return dep==='防御'?D.c.def : dep==='スピード'?D.c.spd : D.c.atk; }
@@ -730,8 +842,12 @@ function valueOf(sk){
       case FREE: free=true; break;
       case 'ダメージ':{
         const hit=dmg(D.powerVals[e.威力],statOf(e.依存),e.防御無視?0:c.def);
-        const n=sk.target==='敵全体'?c.party:1;
-        v=hit*(e.発数||1)*n/c.one; why.push(`ダメージ ${hit.toLocaleString()}×${e.発数||1}×${n}体`); break;}
+        const n=sk.target==='敵全体'?AREA:1;
+        v=hit*(e.発数||1)*n/c.one; why.push(`ダメージ ${hit.toLocaleString()}×${e.発数||1}×${n}体`);
+        // ⚠️ 数えるぶん（Tally）を足す。⭐ Program.ValueOf の写し
+        if(e.数え){ guessed=true; v*=1+c.perBonus*G.tally/100;
+          why.push(`数え${G.tally}つぶん（威力+${c.perBonus*G.tally}%）`); }
+        break;}
       case 'HP割合': v=c.maxHp*Math.abs(e.割合)/100/c.one;
         why.push(`${e.割合>0?'回復':'削り'} 最大HPの${Math.abs(e.割合)}%`); break;
       case '毒': case 'リジェネ':{
@@ -740,29 +856,51 @@ function valueOf(sk){
       case 'シールド': v=e.個数; why.push(`盾${e.個数}枚`); break;
       case 'スタン': v=e.ターン; why.push(`相手の${e.ターン}手を消す`); break;
       case '睡眠': v=e.ターン*0.5; why.push(`相手の${e.ターン}手（殴ると解ける）`); break;
-      case '強化': case '弱化':{
-        const pct=c.buffPercent/100, sign=e.k==='強化'?1:-1;
-        if(e.ステ===D.buffStats[1]){
+      case '強化': case '弱化': case '生まれつき':{
+        // ⭐ 割合は軸ごと（攻撃・防御 50 / 速度 30）。生まれつきだけ別の小さい値
+        const innate=e.k==='生まれつき', isDef=e.ステ===D.buffStats[1], isSpd=e.ステ===D.buffStats[2];
+        const base=innate?c.innatePercent:(isSpd?c.buffSpdPercent:c.buffPercent);
+        const pct=base/100, sign=e.k==='弱化'?-1:1;
+        // ⚠️ 持続が負なら「切れない」の印。回数として掛けると符号が逆になる
+        const lasting=(e.ターン??PACE)<0, turns=lasting?PACE:(e.ターン??PACE);
+        const span=lasting?'戦闘中ずっと':`${e.ターン}T`;
+        if(isDef&&!innate){
+          // ⭐ 札の防御は**被ダメそのもの**に掛かる（Battle.Guarded の写し）
+          v=pct*turns*LATE; why.push(`${sign>0?'被ダメ −':'与ダメ +'}${Math.round(pct*100)}% × ${span}`);
+        } else if(isDef){
+          // ⚠️ 生まれつきはステに焼かれるので軽減式を通る（**二乗**・Battle.DamageOf と同じ）
           const now=c.defSoften/(c.defSoften+c.def);
-          const moved=c.defSoften/(c.defSoften+c.def*(1+pct*sign));
-          const gap=Math.abs(1-moved/now);
-          v=gap*e.ターン*LATE; why.push(`${sign>0?'被ダメ −':'与ダメ +'}${Math.round(gap*100)}% × ${e.ターン}T`);
-        } else { v=pct*e.ターン*LATE; why.push(`${e.ステ} ${sign>0?'+':'−'}${c.buffPercent}% × ${e.ターン}T`); }
+          const moved=c.defSoften/(c.defSoften+c.def*(1+pct));
+          const gap=Math.abs(1-(moved*moved)/(now*now));
+          v=gap*turns*LATE; why.push(`${sign>0?'被ダメ −':'与ダメ +'}${(gap*100).toFixed(1)}% × ${span}`);
+        } else { v=pct*turns*LATE; why.push(`${e.ステ} ${sign>0?'+':'−'}${Math.round(pct*100)}% × ${span}`); }
         break;}
       case 'ゲージ': v=Math.abs(e.割合)/100; why.push(`ゲージ ${e.割合>0?'+':''}${e.割合}%`); break;
       case 'CT': guessed=true; v=Math.abs(e.増減)*G.ct; why.push(`CT ${e.増減>0?'+':''}${e.増減}`); break;
-      case '挑発': guessed=true; v=e.回数*G.taunt; why.push(`狙いを${e.回数}回ずらす`); break;
-      case 'ガッツ': guessed=true; v=G.guts; why.push('致命傷を1回耐える'); break;
-      case '免疫': case 'ブロック': guessed=true; v=e.ターン*G.ward; why.push(`弱化を${e.ターン}T無駄に`); break;
+      // ⭐ 挑発・免疫・ブロック・ガッツは**実測に置き換え済み**（`sim guess`・SkillValues の写し）
+      case '挑発': guessed=true; v=e.回数*G.pull; why.push(`狙いを${e.回数}回ずらす`); break;
+      case 'ガッツ': v=G.gutsSave; why.push('致命傷を耐える'); break;
+      // 🔴 **持続を掛けない。**実測で3Tと6Tの効き目が同じだった
+      case '免疫': v=G.ward; why.push('弱化を弾く（持続では増えない）'); break;
+      case 'ブロック': v=G.blunt; why.push('回復・強化を弾く'); break;
+      // ── 2026-08-27 に足した5つ ─────────────────────────
+      case '封印': guessed=true; v=e.ターン*G.seal; why.push(`枠2・3 を${e.ターン}回封じる`); break;
+      case '固着': guessed=true; v=e.ターン*G.anchor; why.push(`弱化を${e.ターン}回落とせなくする`); break;
+      case '無敵': v=e.ターン; why.push(`${e.ターン}回ぶん一撃を消す`); break;
+      case '弱化延長': guessed=true; v=e.ターン*G.extend; why.push(`弱化を${e.ターン}回伸ばす`); break;
+      case '反撃': guessed=true; v=e.ターン*c.counterPercent/100*LATE;
+        why.push(`受けたぶんの${c.counterPercent}%を${e.ターン}回返す`); break;
       case '解除': guessed=true; v=Math.abs(e.個数)*G.buff;
         why.push(`${e.個数>0?'強化':'弱化'}を${Math.abs(e.個数)}つ消す`); break;
       case '強化強奪': guessed=true; v=e.個数*G.buff*2; why.push(`強化を${e.個数}つ奪う`); break;
-      case '蘇生': guessed=true; v=G.revive; why.push(`HP${e.割合}%で復帰`); break;
+      // ⭐ **算数にした。**値打ちの本体は「戻した HP を相手に削り直させること」
+      case '蘇生': v=c.maxHp*e.割合/100/c.one+G.reviveActs;
+        why.push(`HP${e.割合}%で復帰（動き直すのは ${G.reviveActs}回）`); break;
     }
     total+=v*(e.確率===undefined?100:e.確率)/100;
   }
   const hasDmg=sk.effects.some(e=>e.k==='ダメージ');
-  if(!hasDmg&&AT_ALL(sk.target)) total*=D.c.party;
+  if(!hasDmg&&AT_ALL(sk.target)) total*=AREA;
   return {v:total,why:(guessed?'見積 ':'')+why.join(' ＋ '),free};
 }
 
@@ -785,9 +923,12 @@ function stateClause(e){
   const name=nameOf(e);
   const c=(e.確率===undefined||e.確率>=100)?'':`${e.確率}%の確率で`;
   const of=(p,b,v,caus)=>({p:p,b:b,v:v,caus:!!caus});
+  // ⚠️ サ変でない動詞（削る・奪う）。⭐ `of` は「〜する」を付けるので「削りする」になる
+  const bare=(p,b,stem)=>({p:p,b:b,v:stem,plain:true});
   switch(e.k){
     case 'HP割合':
-      return e.割合<0 ? of('の',`HPを${c}${-e.割合}%`,'削減')
+      // ⚠️ 削る側は「**最大HP**を〜削る」（SkillText の写し）
+      return e.割合<0 ? bare('の',`最大HPを${c}${-e.割合}%`,'削')
                       : of('の',`HPを${c}${e.割合}%`,'回復');
     case '蘇生': return of('を',`${c}HP${e.割合}%で`,'蘇生',true);
     case 'ゲージ': return of('の',`ゲージを${c}${Math.abs(e.割合)}%`,e.割合<0?'減少':'上昇',true);
@@ -807,21 +948,55 @@ function attackClause(e){
   const how=[];
   if(e.依存!=='攻撃') how.push(e.依存+'で伸びる');
   if(e.防御無視) how.push('防御力を無視する');
+  // ⭐ 2026-08-27。⚠️ 防御無視（素の硬さ）と言い分ける ── こちらは「掛けた札」を無視する
+  //    （SkillText.AttackClause の写し。ここが無いと describe() が s.says と食い違う）
+  if(e.強化無視) how.push('相手の強化を無視する');
   const shots=(e.発数||1)>1?`${e.発数}回`:'';
   return {p:how.length?'に':'を',
     b:how.length?how.join('・')+'攻撃を'+shots:shots,
     v:how.length?'':'攻撃', caus:false};
 }
-function describe(sk){
+// ⚠️ **SkillText.Describe の写し。**⭐ 1手2役（飛び先）・条件・数えは**別の文**にする
+//    ── 同じ文へ混ぜると狙い先が2つある文になり、読めない並びになる。
+function sentence(target,effects){
   const cl=[];
-  for(const e of sk.effects) if(e.k!=='ダメージ'&&e.k!==FREE) cl.push(stateClause(e));
-  for(const e of sk.effects) if(e.k==='ダメージ') cl.push(attackClause(e));
+  for(const e of effects) if(e.k!=='ダメージ'&&e.k!==FREE) cl.push(stateClause(e));
+  for(const e of effects) if(e.k==='ダメージ') cl.push(attackClause(e));
   if(!cl.length) return '';
-  const end=(c,last)=>c.caus ? c.b+c.v+(last?'させる':'させ') : c.b+c.v+(last?'する':'し');
-  let t=sk.target+cl[0].p;
+  const end=(c,last)=>c.plain ? c.b+c.v+(last?'る':'り')
+    : c.caus ? c.b+c.v+(last?'させる':'させ') : c.b+c.v+(last?'する':'し');
+  let t=target+cl[0].p;
   cl.forEach((c,i)=>{ if(i>0) t+='、'; t+=end(c,i===cl.length-1); });
   return t;
 }
+function describe(sk){
+  // ⭐ パッシブは「押して起きること」ではなく「ずっとそうであること」を書く
+  //    ⚠️ 普通の技と同じ言い回しにすると、押せる技だと読まれる（SkillText の写し）
+  if(sk.passive){
+    return '常に'+sk.effects.map(e=>
+      `${e.ステ}が${D.c.innatePercent}%`+(e.向き==='上'?'高い':'低い')).join('、');
+  }
+  // ⚠️ 条件つきと飛び先つきは、あとで別の文にする
+  const main=sk.effects.filter(e=>!e.飛び先&&!e.条件);
+  // ⭐ **前置きは「まず〜。そのうえで〜」**（SkillText の写し）── 書く順で強さが変わるので
+  let firstMain=sk.effects.length;
+  for(let k=0;k<sk.effects.length;k++) if(!sk.effects[k].飛び先){ firstMain=k; break; }
+  let t='';
+  for(let k=0;k<firstMain;k++)
+    t+=(k===0?'まず':'、')+sentence(sk.effects[k].飛び先,[sk.effects[k]]);
+  if(firstMain>0) t+='。そのうえで';
+  t+=sentence(sk.target,main);
+  for(let k=firstMain;k<sk.effects.length;k++){ const e=sk.effects[k];
+    if(e.飛び先) t+='、さらに'+sentence(e.飛び先,[e]); }
+  for(const e of sk.effects) if(e.条件&&!e.飛び先)
+    t+='。'+whenWord(e.条件)+'、さらに'+sentence(sk.target,[e]);
+  for(const e of sk.effects) if(e.数え)
+    t+=`。${tallyWord(e.数え)}につき威力が${D.c.perBonus}%上がる（最大${D.perCap}）`;
+  return t;
+}
+// ⭐ 帳面の短い札 → 画面の言い回し（SkillText.WhenOf / TallyOf の写し）
+function whenWord(w){ return (D.whenSays||{})[w]||w; }
+function tallyWord(t){ return (D.tallySays||{})[t]||t; }
 
 // ══ 帳面の文字列 ════════════════════════════════
 // ⚠️ Sheet.EffectLine / BlockOf の写し。自己検査が突き合わせる。
@@ -830,18 +1005,27 @@ function lineOf(e){
   const t=[e.k]; const p=(n,v)=>t.push(`${n}:${v}`);
   switch(e.k){
     case 'ダメージ': p('威力',e.威力); p('依存',e.依存);
-      if((e.発数||1)>1)p('発数',e.発数); if(e.防御無視)t.push('防御無視'); return t.join(' ');
+      if((e.発数||1)>1)p('発数',e.発数); if(e.防御無視)t.push('防御無視');
+      // ⭐ 2026-08-27。⚠️ 強化無視も書き出さないと、読み返したとき黙って消える
+      if(e.強化無視)t.push('強化無視'); break;   // ⚠️ **return しない** ── 下の 飛び先・条件・数え へ進む
     case '強化': case '弱化': p('ステ',e.ステ); p('ターン',e.ターン); break;
+    case '生まれつき': p('ステ',e.ステ); p('向き',e.向き); break;
     case '毒': case 'リジェネ': p('スタック',e.スタック); p('ターン',e.ターン); break;
     case '蘇生': p('割合',e.割合); break;
     case 'HP割合': case 'ゲージ': p('割合',(e.割合>0?'+':'')+e.割合); break;
     case 'シールド': case '強化強奪': p('個数',e.個数); break;
     case '解除': p('個数',(e.個数>0?'+':'')+e.個数); break;
-    case 'スタン': case '睡眠': case 'ブロック': case 'ガッツ': case '免疫': p('ターン',e.ターン); break;
+    case 'スタン': case '睡眠': case 'ブロック': case 'ガッツ': case '免疫':
+    case '封印': case '固着': case '無敵': case '弱化延長': case '反撃':
+      p('ターン',e.ターン); break;
     case 'CT': p('増減',(e.増減>0?'+':'')+e.増減); break;
     case '挑発': p('回数',e.回数); break;
   }
   if(e.確率<100) p('確率',e.確率);
+  // ⭐ **1手2役の3つ。**⚠️ 書き落とすと読み返したとき別の技になる（Sheet.LineOf と同じ順）
+  if(e.飛び先) p('飛び先',e.飛び先);
+  if(e.条件) p('条件',e.条件);
+  if(e.数え) p('数え',e.数え);
   return t.join(' ');
 }
 // ⚠️ **改行を畳む。**帳面は1行1札なので、改行入りのメモは
@@ -851,11 +1035,16 @@ const memoLine=o=>o.memo&&o.memo.trim()
 function blockOf(s){
   let t=`# 技 ${s.id}\n名前 = ${s.name}\n説明 = ${s.gist}\n`;
   t+=`型 = ${s.type}\nCT = ${s.ct}\n狙い = ${s.target}\n`;
+  // ⭐ パッシブは押せない技。⚠️ 書き落とすと、読み返したとき普通の技になる
+  if(s.passive) t+='パッシブ = はい'+String.fromCharCode(10);
   for(const e of s.effects) t+=`効果 = ${lineOf(e)}\n`;
   return t;
 }
 function blockOfSp(p){
-  let t=`# 種族 ${p.id}\n名前 = ${p.name}\n枠1 = ${p.skill1}\n基礎 = `;
+  // ⭐ 2026-08-27。⚠️ **特性を書いていなかった。**種族ファイルは毎回全件を書き直すので、
+  //    ここが空のまま保存すると Sheet.BlockOf(Species) が出す形と食い違い、
+  //    エディタで種族を1つ触っただけで11種族すべての特性が消えていた
+  let t=`# 種族 ${p.id}\n名前 = ${p.name}\n枠1 = ${p.skill1}\n特性 = ${p.traitId}\n基礎 = `;
   t+=D.stats.map(k=>`${k}:${p.base[k]}`).join(' ')+'\n';
   t+=`枠2 = ${p.slot2.pool.join(' ')}\n`;
   t+=`枠3 = ${p.slot3.pool.join(' ')}\n姿 =\n`;
@@ -883,6 +1072,10 @@ const outOf=o=>(tab==='skill'?blockOf(o):tab==='species'?blockOfSp(o):blockOfTr(
     if(Math.abs(valueOf(s).v-s.value)>1e-9*Math.max(1,s.value)) bad.push(`${s.name}: 手ぶん`);
   }
   for(const t of D.traits) if(blockOfTr(t)!==t.block) bad.push(`${t.name}: 書式`);
+  // ⭐ 2026-08-27 追加。⚠️ **種族だけ検査していなかった穴。**技・特性しか回していなかったので、
+  //    種族側の「特性が消える」「10色以上で姿が壊れる」の2件が画面は緑のまま見逃されていた
+  //    （監査で発覚 ── この検査が塞がって初めて②③が赤く出るようになる）。
+  for(const sp of D.species) if(blockOfSp(sp)!==sp.block) bad.push(`${sp.name}: 書式`);
   // ⭐ **読んで書いて元に戻るか。**戻らなければ、帳面を開くだけで中身が変わる。
   for(const s of D.skills){
     const back=parseSheet(s.block,'技').map(toSkill)[0];
@@ -891,6 +1084,10 @@ const outOf=o=>(tab==='skill'?blockOf(o):tab==='species'?blockOfSp(o):blockOfTr(
   for(const t of D.traits){
     const back=parseSheet(t.block,'特性').map(toTrait)[0];
     if(!back||blockOfTr(back)!==t.block) bad.push(`${t.name}: 読み書き`);
+  }
+  for(const sp of D.species){
+    const back=parseSheet(sp.block,'種族').map(toSpecies)[0];
+    if(!back||blockOfSp(back)!==sp.block) bad.push(`${sp.name}: 読み書き`);
   }
   const n=$('#self');
   // ⚠️ 帳面が読めなかったときは、**保存を止める**（上書きで消えるため）
@@ -907,7 +1104,7 @@ const outOf=o=>(tab==='skill'?blockOf(o):tab==='species'?blockOfSp(o):blockOfTr(
     return;
   }
   if(bad.length){ n.className='ng'; n.textContent=`🚧 自己検査 ${bad.length}件ずれ: `+bad.slice(0,3).join(' / '); }
-  else n.textContent=`⭐ 自己検査 ${D.skills.length+D.traits.length}件一致`;
+  else n.textContent=`⭐ 自己検査 ${D.skills.length+D.traits.length+D.species.length}件一致`;
 })();
 
 // ⚠️ **常に見える場所に「いつの写しか」を出す。**ブラウザからは実物のディスクを
@@ -977,6 +1174,9 @@ function checkSp(sp,i){
   const pair=(+sp.base[D.stats[4]]||0)+(+sp.base[D.stats[5]]||0);
   if(pair!==D.c.debuffTotal) say.push(`弱化2本が ${pair}（他は ${D.c.debuffTotal}）── 同上`);
   if(!S.some(s=>s.id===sp.skill1)) stop.push(`枠1 の ${sp.skill1} が無い`);
+  // ⭐ 特性も枠1と同じ外部参照。⚠️ 無いと SpeciesTable.Audit がそこで落ちるので、
+  //    帳面の時点で言っておく（2026-08-27）
+  if(!T.some(x=>x.id===sp.traitId)) stop.push(`特性 の ${sp.traitId} が無い`);
   const roles=new Set();
   for(const [nm,sl] of [['枠2',sp.slot2],['枠3',sp.slot3]]){
     if(!sl.pool.length){ stop.push(`${nm} が空`); continue; }
@@ -1213,6 +1413,10 @@ function fresh(kind){
   }
   return e;
 }
+// ⭐ ラベル付きの選び札を1つ作る（`pick` の薄い包み）。
+function one_(name,now,opts,on){
+  const box=el('div','a'); box.append(pick(name,now||opts[0],opts,on)); return box;
+}
 function effRow(s,e,i){
   const w=el('div','eff'+(e.k===FREE?' free':''));
   const hd=el('div','head');
@@ -1246,6 +1450,23 @@ function effRow(s,e,i){
     else box.append(field(n,e[n],x=>{e[n]=x;},'number'));
     ar.append(box);
   }
+  // ⭐ **1手2役の3つ。**⚠️ どの効果にも付けられるので、種類ごとの欄ではなくここに並べる。
+  //    ⚠️ 欄が無かったので「自分に掛けてから撃つ」「代償を負う」型が画面から書けなかった。
+  if(e.k!==FREE){
+    const ex=el('div','args');
+    ex.style.borderTop='1px solid #0002'; ex.style.marginTop='6px'; ex.style.paddingTop='6px';
+    const none='—';
+    // 飛び先: この効果だけ別の相手へ飛ばす（空なら技の狙い先のまま）
+    ex.append(one_('飛び先',e.飛び先,[none].concat(D.targets),x=>{
+      if(x===none) delete e.飛び先; else e.飛び先=x; draw();}));
+    // 条件: 満たさなければこの効果だけ出ない
+    ex.append(one_('条件',e.条件,[none].concat(D.skillWhens||[]),x=>{
+      if(x===none) delete e.条件; else e.条件=x; draw();}));
+    // 数え: 盤面を数えて威力が上がる（ダメージにだけ効く）
+    if(e.k==='ダメージ') ex.append(one_('数え',e.数え,(D.tallies||[]),x=>{
+      if(x===(D.tallies||[])[0]) delete e.数え; else e.数え=x; draw();}));
+    w.append(ex);
+  }
   w.append(ar); return w;
 }
 
@@ -1263,6 +1484,9 @@ function drawSpecies(){
   g.append(field('id（英数字）',p.id,x=>{p.id=x;}));
   g.append(field('名前',p.name,x=>{p.name=x;}));
   g.append(pick('枠1（通常攻撃）',p.skill1,S.map(s=>s.id),x=>{p.skill1=x;draw();}));
+  // ⭐ 2026-08-27。⚠️ 画面から選べないと、テキストで手直しするしかなかった
+  //    （D.traits の一覧は既に在ったので、枠1と同じ形の選び札にする）
+  g.append(pick('特性',p.traitId,T.map(t=>t.id),x=>{p.traitId=x;draw();}));
   c1.append(g);
   const h2=el('h2'); h2.textContent='基礎ステ'; h2.style.marginTop='18px'; c1.append(h2);
   const g2=el('div','grid g6');
@@ -1615,7 +1839,10 @@ $('#add').onclick=()=>{
     S.push(born_);
   } else if(tab==='species'){
     const b={}; D.stats.forEach(k=>b[k]=100);
-    P.push({id:'new-species',name:'新しい種族',skill1:S.length?S[0].id:'',base:b,
+    // ⭐ 特性も枠1と同じく、無ければ一覧の先頭を仮に入れる（未定義だと保存で
+    //    「特性 = undefined」という読めない行になる）
+    P.push({id:'new-species',name:'新しい種族',skill1:S.length?S[0].id:'',
+      traitId:T.length?T[0].id:'',base:b,
       slot2:{pool:[]},slot3:{pool:[]},
       sprite:Array.from({length:16},()=>'.'.repeat(16)),
       palettes:[['#2e2418','#8fc96e','#c8eaa8','#1a1410']],memo:''});

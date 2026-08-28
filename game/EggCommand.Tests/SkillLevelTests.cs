@@ -84,7 +84,15 @@ public class SkillLevelTests
     public void 卵をまとめて食わせると合計が入る()
     {
         var game = Games.NewGame(2026_08_21);
-        var eater = game.Storage.Creatures[0];
+        // 🔴 **NewGame の個体は使わない**（2026-08-27・★→格）。開幕の卵は
+        //    暗黙に★1（Nests.MakeEgg の既定 rarity=1）なので、枠2 は「その種族の
+        //    格1以下の技」に絞られる ── tamaru の枠2 だと「ガッツ」（持続もの専用の
+        //    縮んだ成長表）に固定されがちで、5個ぶん（17pt）を注ぐには枠が狭すぎる
+        //    （実際にここで Expected 17 / Actual 8 で落ちた）。
+        //    ⭐ このテストが見たいのは「まとめて注ぐと合計が入る」ことだけなので、
+        //    枠の広さを潰さない skill2（既定の "attack"）を持つ個体を別に用意する。
+        var eater = Make("eater");
+        game.Storage = Storages.Accept(game.Storage, eater);
         var nest = Nests.ById("thicket-fang");
         var ids = new List<string>();
         int want = 0;
@@ -189,15 +197,37 @@ public class SkillLevelTests
     // ── 成長表 ──────────────────────────────────────
 
     /// <summary>⚠️ **上げても何も起きない段**が1つも無いこと。
-    /// ⭐ これが無いと「Lv3 にしたのに何も変わらない」が黙って通る。</summary>
+    /// ⭐ これが無いと「Lv3 にしたのに何も変わらない」が黙って通る。
+    ///
+    /// ⚠️ 🔴 2026-08-27 追記: **段数（＝上限レベル）は技ごとに変わる**ので、
+    /// 「0 か <c>MaxLevel-1</c>（4）のどちらか」という2値では確かめられなくなった。
+    /// 味方に配る持続もの「だけ」の技（攻撃力UP・ガッツ・免疫・リジェネの単発技など）は、
+    /// CT だけを段数ぶん（既定2、収まらなければ1→0）伸ばす専用式で育つため、
+    /// 成長表が 0〜2 段の技も**正常**になる（<see cref="Skills.MaxLevelOf"/>）。
+    /// ⭐ だから「段の数」ではなく「**レベルを上げたら実際に何かが変わるか**」を、
+    /// その技の上限（<see cref="Skills.MaxLevelOf"/>）まで直に確かめる形に変えた。
+    /// これなら段数がいくつでも、想定どおりの検査になる。
+    /// ⚠️ 上限が0段（＝ Lv1 から一切育たない）技があっても、ここでは何も確かめない
+    /// （ループが1回も回らないだけ）── それが安全な凍結かどうかは
+    /// `Skills.Audit()`（この行の直後）が別途見張る。
+    /// ⚠️ 2026-08-27 時点で0段の技は表に無い（`guts-deep`/`immune-long` を持続4Tに
+    /// 作り直して2段＝Lv3まで育つようにしたのが最後の1組だった）。⭐ それでも
+    /// この防衛線は外さない ── 持続の長い技を足せばまた0段が起こりうる式のまま。</summary>
     [Fact]
     public void 死んでいる成長が一つも無い()
     {
         Skills.Audit();
         foreach (var skill in Skills.All)
         {
-            var growth = Skills.GrowthOf(skill);
-            Assert.Equal(Skills.MaxLevel - 1, growth.Count);
+            int maxLevel = Skills.MaxLevelOf(skill);
+            var last = Skills.BoostOf(skill, 1);
+            for (int level = 2; level <= maxLevel; level++)
+            {
+                var now = Skills.BoostOf(skill, level);
+                Assert.False(Same(last, now),
+                    $"{skill.Id}: Lv{level} で何も変わらない（上限 Lv{maxLevel}）");
+                last = now;
+            }
         }
     }
 
@@ -334,9 +364,16 @@ public class SkillLevelTests
         }
     }
 
+    // ⚠️ 🔴 **前任者のバグ: `ExtraInnate` が抜けていた。**⚠️ これまで `Same` は
+    //    枠1（種族固定の通常攻撃）の比較にしか使っておらず、枠1に生まれつき（Innate）
+    //    を持つ技（パッシブ）が入ることは無かったので、この抜けは一度も踏まれていなかった。
+    //    ⭐ 「死んでいる成長が一つも無い」がここを全技（パッシブ含む）へ使うようになって
+    //    初めて表に出た ── `vigor`（生命力）が「Lv2 で何も変わらない」と誤って落ちていた
+    //    （実際は ExtraInnate が2ずつ伸びており、比較から漏れていただけ）。
     private static bool Same(SkillBoost a, SkillBoost b) =>
         a.PowerPercent == b.PowerPercent && a.CtCut == b.CtCut
         && a.ChancePoints == b.ChancePoints && a.ExtraTurns == b.ExtraTurns
         && a.ExtraRepeat == b.ExtraRepeat && a.ExtraPercent == b.ExtraPercent
-        && a.ExtraCount == b.ExtraCount && a.ExtraAmount == b.ExtraAmount;
+        && a.ExtraCount == b.ExtraCount && a.ExtraAmount == b.ExtraAmount
+        && a.ExtraInnate == b.ExtraInnate;
 }

@@ -70,8 +70,21 @@ public static class Deeds
     /// <summary>さいころが止まった。⭐ ここで初めて「行ける先」を出す。</summary>
     private static void Landed(Shell s)
     {
-        var raid = s.Raid_;
         s.Roam_ = Roam.Still;
+        Choose(s);
+    }
+
+    /// <summary>⭐ 🔴 **「行ける先」を出す唯一の入口。**
+    ///
+    /// `Landed`（さいころが止まった直後）と `After`（関門で払った対価が
+    /// <see cref="GiftKind.Hop"/> で、進み残り <c>raid.Pending</c> が在るまま
+    /// <see cref="RaidStep.Choosing"/> に戻った直後）の**両方から呼ぶ**。
+    /// ⚠️ 同じ判断を2か所に書くと、片方だけ直したときにもう片方が古いままになる
+    /// ── 実際に `Pay` → `After` の道には <see cref="Shell.Open_"/> の再設定が無く、
+    /// 光る枠もさいころ釦も出ないまま詰んで見えていた（2026-08-27 監査で発覚）。</summary>
+    private static void Choose(Shell s)
+    {
+        var raid = s.Raid_;
         if (raid == null) return;
 
         var open = Trails.Reach(raid, raid.Pending);
@@ -198,6 +211,11 @@ public static class Deeds
                 raid.Hp, raid.Cooldowns);
             return;
         }
+        // ⚠️ 🔴 **関門の対価が `GiftKind.Hop` だったときは、ここで拾う。**
+        //    Core（`Trails.Onward`）は `raid.Pending > 0` なら `Choosing` に戻すだけで、
+        //    `Open_` はここでは触らない。⭐ 唯一 `Open_` を組む `Choose` を呼ばないと、
+        //    光る枠もさいころ釦も出ないまま何もできなくなる（2026-08-27 監査で発覚）。
+        if (raid.Step == RaidStep.Choosing) { Choose(s); return; }
         if (raid.Result == null) return;
 
         bool won = raid.Result == StealOutcome.Success;
@@ -247,6 +265,8 @@ public static class Deeds
         s.Ticks = 0;
         s.Cast = null;
         s.CastAim = null;
+        // ⚠️ 渡した印も前の戦いの体を指している（`Cast` と同じ理由）
+        s.Handed = null;
         s.Sparks.Clear();
         s.Banner = null;
     }
@@ -333,9 +353,10 @@ public static class Deeds
                 EggCommand.Core.Battle.PerformAction(state, s.Cast!, s.CastSlot, s.CastAim);
                 s.Cast = null;
                 s.CastAim = null;
-                Since(s, state, before);
+                // ⭐ **順番に出すぶんだけ、次の手を待たせる。**⚠️ 待たせないと、
+                //    3連撃の3発目が出る前に次の体が名乗り始める（2026-08-28）。
                 s.Stage = Stage.Settling;
-                s.Wait = Beats.Settle;
+                s.Wait = Beats.Settle + Since(s, state, before);
                 return Tick.Acted;
             }
 
@@ -369,7 +390,7 @@ public static class Deeds
         int whole = (int)s.Ticks;
         // ⚠️ 🔴 **刻みが立たない拍では、何もしないで返す。**
         //    ⭐ ここを素通りさせると `NextActor` まで毎拍降りてきて、
-        //    **画面を1秒に10回組み直す**ことになる（押しどころが触れなくなる）。
+        //    **画面を1秒に16回組み直す**ことになる（押しどころが触れなくなる）。
         if (whole <= 0) return Tick.Filling;
         s.Ticks -= whole;
         if (EggCommand.Core.Battle.AdvanceGauges(state, whole) > 0) return Tick.Filling;
@@ -379,14 +400,25 @@ public static class Deeds
         int ticked = state.Log.Count;
         var next = EggCommand.Core.Battle.NextActor(state);
         bool noisy = state.Log.Count > ticked;
-        if (noisy) Since(s, state, ticked);
+        // ⭐ 毒・リジェネもここで順番に出る（複数体に入ることがある）
+        double spread = noisy ? Since(s, state, ticked) : 0;
 
         // ⚠️ 誰も満ちていない。⭐ 組み直す理由が無い（毒が入った拍だけは出す）
         if (next == null) return noisy ? Tick.Acted : Tick.Filling;
 
         // ⭐ 味方の手番は人へ渡す（オートなら機械が選ぶ）
         if (next.Side == Side.Ally && !s.Auto)
-            return s.Sparks.Count > 0 ? Tick.Acted : Tick.Stopped;
+        {
+            // 🔴 **渡した拍だけ、画面を組み直す。**⚠️ 組み直さないと、
+            //    札が「押せない」状態のまま止まる（描いたのは、まだ誰も立っていなかった拍）。
+            //    ⚠️ かといって毎拍組み直すと、押した直後に部品が入れ替わって触れなくなる
+            //    ── だから「もう渡してあるか」を覚えておく（`Shell.Handed`）。
+            bool fresh = !ReferenceEquals(s.Handed, next);
+            s.Handed = next;
+            return fresh || s.Sparks.Count > 0 ? Tick.Acted : Tick.Stopped;
+        }
+        // ⭐ 人以外が動く拍では、渡した印を消す（次にまた渡すときは新しい手番）
+        s.Handed = null;
 
         int slot = Ai.ChooseAction(state, next);
         var skill = EggCommand.Core.Battle.SkillAt(next, slot);
@@ -400,6 +432,8 @@ public static class Deeds
                 mine ? (ally ? s.AimAlly : s.AimFoe) : null);
         }
         Queue(s, next, slot, aim);
+        // ⭐ 毒の数字が出切ってから名乗らせる（`Queue` が置いた溜めに足す）
+        s.Wait += spread;
         return Tick.Acted;
     }
 
@@ -420,7 +454,10 @@ public static class Deeds
     {
         var state = s.Fight_;
         if (state == null || state.Result != null || s.Stage != Stage.Idle) return;
-        var actor = EggCommand.Core.Battle.NextActor(state);
+        // 🔴 **押されたときに `NextActor` を呼ばない**（2026-08-28）。⚠️ あれは進める関数なので、
+        //    技を押すたびに毒がもう一度入り、強化の残りがもう1つ減っていた。
+        //    ⭐ ここが知りたいのは「いま誰が立っているか」だけ ── 進めるのは `Beat` の仕事。
+        var actor = EggCommand.Core.Battle.Standing(state);
         if (actor == null || actor.Side != Side.Ally) return;
         if (!EggCommand.Core.Battle.IsUsable(actor, slot)) return;
 
@@ -433,6 +470,9 @@ public static class Deeds
             aim = Pick(state, ally ? Side.Ally : Side.Enemy, ally ? s.AimAlly : s.AimFoe);
         }
         // ⭐ **溜めは要らない**（札が出て考える時間が、そのまま溜めになっている）
+        // ⚠️ 渡した印はここで返す ── 同じ体が続けて立つ（畳み掛け）ときも、
+        //    次の手番はきちんと「新しく渡した」と数えられる
+        s.Handed = null;
         s.Cast = actor;
         s.CastSlot = slot;
         s.CastAim = aim;
@@ -457,10 +497,23 @@ public static class Deeds
     /// ⭐ **ここが「説明文の代わり」。**⚠️ 増やすときは字数でなく**見え方**を足す。
     /// ⚠️ 同じ体に2つ以上出ることがある（殴って毒を盛って CT を伸ばす、など）。
     /// ⭐ 同じ場所に重ねると下の字が読めないので、1つ出すごとに上へ積む。
-    /// ⚠️ 「数を減らす」方向では直さない ── 起きたことを隠すことになる。</summary>
-    private static void Since(Shell s, BattleState state, int from)
+    /// ⚠️ 「数を減らす」方向では直さない ── 起きたことを隠すことになる。
+    ///
+    /// ⭐ **さらに、1つ出すごとに間を置く**（2026-08-28・作者の指示「連続攻撃や
+    /// 複数のダメージが与えられたときダメージ表記を順番に表示するように。回復効果も同様に」）。
+    /// ⚠️ 前は1手ぶんが**全部同時に**飛んでいた ── 積んであるので読めはするが、
+    /// 一度に現れるので「何回当たったか」が数えられなかった。
+    /// ⚠️ **場所（積む段）と時間（間）は両方要る** ── 順に出しても、
+    /// 前の字が消える前に次が出るので、同じ高さだと重なる。</summary>
+    /// <returns>ぜんぶ出し切るのに掛かる秒。⭐ 呼んだ側はそのぶん次の手を待たせる
+    /// （待たせないと、次の手が始まってから前の手の数字が出る）。</returns>
+    private static double Since(Shell s, BattleState state, int from)
     {
         var stacked = new Dictionary<string, int>();
+        int first = s.Sparks.Count;
+        // ⭐ 何番目に起きたことか。⚠️ **出るものが在った事象だけ**数える
+        //    （見た目に何も出ない事象を数えると、そこだけ間が空く）
+        int order = 0;
 
         for (int i = from; i < state.Log.Count; i++)
         {
@@ -468,6 +521,7 @@ public static class Deeds
             string at = Named(state, e.Unit);
             // ⭐ 「打った」は積まない（名乗りで既に出している）
             int up = e.Kind == BattleEventKind.Act ? 0 : Stack(stacked, e.Unit);
+            int mark = s.Sparks.Count;
 
             switch (e.Kind)
             {
@@ -506,7 +560,11 @@ public static class Deeds
 
                 // ⚠️ 以下が出ないと「効いたのか外れたのか」が読めず、
                 //    弱化を持つ技が「何も起きない技」に見える。
-                case BattleEventKind.Missed: Say(at, "外れ", Dim, 40, up); break;
+                // ⭐ **効き目が付かなかったら「MISS」**（2026-08-28・作者の指示）。
+                //    ⚠️ 前は「外れ」。⭐ 弱化・眠り・スタンなど**確率のあるものが
+                //    通らなかった**ときに出る唯一の印なので、遠目にも一目で分かる字にする
+                //    （免疫で弾かれた／ブロックで通らなかったのは別の字 ── 原因が違う）。
+                case BattleEventKind.Missed: Say(at, "MISS", Dim, 44, up); break;
                 case BattleEventKind.Applied: Say(at, e.Label ?? "", Ink, 34, up); break;
                 case BattleEventKind.Ct:
                     // ⚠️ **増える方が悪い**（待たされる）。符号ではなく色で読ませる
@@ -531,7 +589,27 @@ public static class Deeds
                     Say(at, "+" + Face.Digits(e.Amount), Good, 46, up);
                     break;
             }
+
+            // ⭐ この事象で出たものに、まとめて**順番の番号**を書き込む
+            //    （光・数字・跳ねは1つの出来事なので、同じ番号＝同時に出る）。
+            //    ⚠️ 秒に直すのは最後（総数が分からないと間隔を決められない）。
+            if (s.Sparks.Count > mark)
+            {
+                for (int k = mark; k < s.Sparks.Count; k++)
+                    s.Sparks[k] = s.Sparks[k] with { Wait = order };
+                order++;
+            }
         }
+
+        // ⭐ 番号を秒へ直す。⚠️ **必ず `PopMost` までに出し切る**
+        //    ── 全体攻撃＋弱化のように1手で10件以上起きることがあり、
+        //    素の間隔を掛けると次の手が始まってから前の手の数字が出る。
+        int most = order - 1;
+        if (most <= 0) return 0;
+        double step = Math.Min(Beats.PopStep, Beats.PopMost / most);
+        for (int k = first; k < s.Sparks.Count; k++)
+            s.Sparks[k] = s.Sparks[k] with { Wait = s.Sparks[k].Wait * step };
+        return most * step;
 
         void Say(string at, string text, string tint, int size, int up) =>
             s.Sparks.Add(new Spark(at, "say", text, tint, size, up));
@@ -579,6 +657,30 @@ public static class Deeds
         return "a0";
     }
 
+    /// <summary>スピードゲージの伸び具（0〜1）。⭐ **刻みの端数まで見せる。**
+    ///
+    /// 🔴 空から満タンまでは**わずか7刻み**しかない（`GaugeMax ÷ (GaugeBase＋速度)`）。
+    /// ⚠️ 素の <see cref="Unit.Gauge"/> をそのまま出すと、帯は7段の階段になる
+    /// ── どれだけ拍を細かくしても、値そのものが飛び飛びなので滑らかにならない
+    /// （2026-08-28 に実測して分かった。「ゆっくり溜まる」の本当の敵はこちらだった）。
+    ///
+    /// ⭐ まだ1刻みに満たない端数（<see cref="Shell.Ticks"/>）ぶんも**進んだものとして描く**。
+    /// ⚠️ **見せるだけ。**遊びの数（<see cref="Unit.Gauge"/>）には1つも足さない
+    /// ── 足すと「見せるためのコードが勝敗を変える」（`Battle.AdvanceGauges` の注記）。</summary>
+    public static double GaugeAt(Shell s, Unit u)
+    {
+        double gauge = u.Gauge;
+        // ⚠️ **誰かが立っている間は足さない。**⭐ その間ゲージのレースは止まっている
+        //    （`Battle.AdvanceGauges` が 0 を返す）のに、端数だけが 0→1→0 と巡るので、
+        //    立っていない体の帯が1刻みぶん**行ったり来たり**して見える。
+        bool racing = s.Fight_ == null || EggCommand.Core.Battle.Standing(s.Fight_) == null;
+        // ⚠️ 満ちている者・倒れた者には足さない（満タンの帯がさらに伸びる意味が無い）
+        if (racing && gauge < EggCommand.Core.Battle.GaugeMax && EggCommand.Core.Battle.IsAlive(u))
+            gauge += s.Ticks * EggCommand.Core.Battle.GaugeRate(
+                EggCommand.Core.Battle.SpeedOf(u), u.Tempo);
+        return Math.Clamp(gauge / EggCommand.Core.Battle.GaugeMax, 0, 1);
+    }
+
     /// <summary>いまの帯の伸び具。⭐ 組み直さずに、これだけを差し替える。</summary>
     public static Dictionary<string, double> Bars(Shell s)
     {
@@ -589,8 +691,7 @@ public static class Deeds
         foreach (var u in state.Units)
         {
             string at = u.Side == Side.Ally ? "a" + a++ : "f" + f++;
-            bars["gauge#" + at] =
-                Math.Clamp(u.Gauge / (double)EggCommand.Core.Battle.GaugeMax, 0, 1);
+            bars["gauge#" + at] = GaugeAt(s, u);
             bars["hpfill#" + at] =
                 u.MaxHp > 0 ? Math.Clamp(u.Hp / (double)u.MaxHp, 0, 1) : 0;
         }
@@ -765,7 +866,10 @@ public static class Deeds
         var one = s.PickedOne();
         if (one == null) return;
         int points = one.SkillPoints[s.Slot_];
-        int room = SkillCosts.TotalFor(Skills.MaxLevel) - points;
+        // ⚠️ 上限は技ごと（Skills.MaxLevelOf）。空き枠（skill==null）は今までどおり全体の天井のまま
+        var skill = Creatures.SkillsOf(one)[s.Slot_];
+        int maxLevel = skill == null ? Skills.MaxLevel : Skills.MaxLevelOf(skill);
+        int room = SkillCosts.TotalFor(maxLevel) - points;
         int gain = 0;
         foreach (var e in eggs) if (s.Feeds.Contains(e.Id)) gain += Rarities.PointsOf(e.Rarity);
         int worth = Rarities.PointsOf(eggs[at].Rarity);
@@ -801,6 +905,25 @@ public static class Deeds
         if (Core.Idle.Spend(s.Game.Idle, one) > 0) { s.Say = $"Lv {Levels.Of(one)} になった"; return; }
         s.Say = one.Earned >= Levels.GrowMax ? "これ以上は育たない"
             : $"EXP が {Face.Digits(Levels.ExpToNext(one))} 要る";
+    }
+
+    /// <summary>🔴 **点を1つ振る**（2026-08-26・ARK式の自由配分）。
+    /// ⚠️ **戻せない**（作者の決定）ので、黙って何もしないをしない ── 何が足りないか言う。</summary>
+    public static void SpendPoint(Shell s, int at)
+    {
+        var one = s.PickedOne();
+        if (one == null) return;
+        if (at < 0 || at >= Stats.Keys.Length) return;
+        var key = Stats.Keys[at];
+        if (Creatures.Spend(one, key, 1) > 0)
+        {
+            int left = Creatures.UnspentOf(one);
+            s.Say = $"{Stats.LabelOf(key)} に振った（残り {left}）";
+            return;
+        }
+        s.Say = one.Earned >= Levels.GrowMax
+            ? "これ以上は点が増えない"
+            : $"振れる点が無い（EXP {Face.Digits(Levels.ExpToNext(one))} で1点）";
     }
 
     // ── 配合 ────────────────────────────────────────

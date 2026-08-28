@@ -6,7 +6,7 @@ namespace EggCommand.Web;
 public enum Sheet { Home, Nests, Breed, Box, Book, Fight, Raid, Trial }
 
 /// <summary>覆いで前に出る札。⚠️ 画面とは別に数える（後ろの画面は残る）。</summary>
-public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train, Ask, Keep }
+public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train, Ask, Keep, Grow }
 
 /// <summary>すごろくの演出がどこまで進んだか。</summary>
 public enum Roam
@@ -28,8 +28,11 @@ public enum Roam
 /// <param name="Kind">出し方。`say` 字 / `shout` 名乗り / `ring` 輪 /
 /// `hit` 光 / `shock` 跳ね / `step` 踏み込み（`stepf` は左へ）。</param>
 /// <param name="Up">同じ体に重ねないための段（0 が頭の上）。</param>
+/// <param name="Wait">出るまでの間（秒）。⭐ **1手で2つ以上起きたとき、順番に出すための数。**
+/// ⚠️ 0 なら即座。⭐ 積む段（<paramref name="Up"/>）と役が違う ── あちらは**場所**、
+/// こちらは**時間**。両方要る（順に出しても、前のが消える前に次が出るので重なる）。</param>
 public readonly record struct Spark(
-    string At, string Kind, string Text, string? Tint, int Size, int Up);
+    string At, string Kind, string Text, string? Tint, int Size, int Up, double Wait = 0);
 
 /// <summary>いま祝っている物（卵を得た・生まれた）。⚠️ Unity 版 `View.Fanfare` が
 /// `EggGot`/`Born` で組み立てる中身と同じ4つ（絵・パレット・★・告知の字）に、
@@ -80,7 +83,27 @@ public readonly record struct Cheer(PixelSprite Art, Palette Palette, string Sta
 public sealed class Shell
 {
     public Game Game;
-    public long Now;
+
+    /// <summary>いまの時刻（Unix秒）。
+    ///
+    /// 🔴 **前は生成時の1度きりの値をそのまま持つだけの `long` フィールドで、
+    /// どこからも更新されていなかった**（作者の報告 2026-08-27）。⚠️ 孵化器の残り時間
+    /// （<see cref="Hatchery.LeftOf"/>）や巣の居座り時間（<see cref="Encounters.LeftOf"/>）は
+    /// この値で出すので、**画面を開いた瞬間の時刻に固定され、待っても減らなかった**。
+    /// ⭐ いまは既定で「いま」を都度返す ── **時計の出所を1つにする**（前任者は
+    /// `_shell.Now` を諦めて `DateTimeOffset.UtcNow` を都度取り直す形で放置報酬のバグを
+    /// 避けたが、それは根を直さず穴を回避しただけだった。`AppPage.razor` の `BeatIdle` 参照）。
+    ///
+    /// ⚠️ **確認画面（`Demo.Game()` 系）だけは凍結する。**⭐ 確認画面は「いつ見ても
+    /// 同じ絵」でなければならない（毎回時刻が動くとスクショが比べられなくなる）── そちらは
+    /// コンストラクタへ `live: false`（既定）で渡した `now` を動かさず返す。
+    /// ⚠️ **本番（`/app` の実プレイ）だけ `live: true` を渡す。**Core からは1つも
+    /// 読まれない（`Shell` は `EggCommand.Web` だけの型）ので、ここを動く時計に
+    /// 変えても Core の計算には影響しない。</summary>
+    public long Now => _live ? DateTimeOffset.UtcNow.ToUnixTimeSeconds() : _frozenAt;
+
+    private readonly long _frozenAt;
+    private readonly bool _live;
 
     public Sheet Now_Sheet = Sheet.Home;
     public Panel Open = Panel.None;
@@ -171,6 +194,17 @@ public sealed class Shell
     public double Pace = 1;
     /// <summary>まだ進めていない端数の刻み。⚠️ 切り捨てると遅い者が永久に進まない。</summary>
     public double Ticks;
+    /// <summary>🔴 **もう人へ渡してある手番。**⚠️ 無ければ null。
+    ///
+    /// ⭐ 人の手番が来た拍で**一度だけ**画面を組み直すために要る。
+    /// ⚠️ 毎回組み直すと、押した直後に部品が入れ替わって触れなくなる
+    /// （2026-08-22 の実測 ── `AppPage.Beat` の `Tick.Stopped` の注記）。
+    /// ⚠️ 逆に一度も組み直さないと、**札が押せないまま止まる**
+    /// （2026-08-28 に実測。それまでは `Sheets.Fight` が描くたびに `NextActor` を
+    /// 呼んで戦いを進めていたので、たまたま最新の画面になっていた ── 描く側の
+    /// 副作用に頼っていた形。`Battle.Standing` の注記を参照）。</summary>
+    public Unit? Handed;
+
     /// <summary>名乗り済みで、まだ打っていない手。</summary>
     public Unit? Cast;
     public int CastSlot;
@@ -200,7 +234,15 @@ public sealed class Shell
     /// <summary>画面に出す一言。⚠️ 黙って変わらないことを防ぐ。</summary>
     public string? Say;
 
-    public Shell(Game game, long now) { Game = game; Now = now; }
+    /// <param name="game">この器が動かすゲーム。</param>
+    /// <param name="now">凍結するとき（<paramref name="live"/> が false）の固定時刻。
+    /// ⚠️ <paramref name="live"/> が true のときも、初期状態（生成した瞬間）を
+    /// 揃えるために使う場所がある（例: `Games.NewGame` の作成時刻）── `Shell.Now` 自体は
+    /// 以後 `live` に従う。</param>
+    /// <param name="live">⭐ **本番だけ true。**⚠️ 既定 false ── 呼び側を増やさずに
+    /// 済むよう、これまでどおりの「固定」を既定の振る舞いにしてある
+    /// （確認画面が20か所以上あり、すべてが凍結を期待しているため）。</param>
+    public Shell(Game game, long now, bool live = false) { Game = game; _frozenAt = now; _live = live; }
 
     // ── 一覧 ────────────────────────────────────────
 
@@ -294,7 +336,12 @@ public sealed class Shell
             case "row": Slot_ = i; Feeds.Clear(); break;
             case "chip": Deeds.Feed_(this, i); break;
             case "feed": Deeds.Feed(this); break;
-            case "grow": Deeds.Grow(this); break;
+            // 🔴 **「育てる」は札を開くだけ**（2026-08-26・ARK式の自由配分）。
+            //    ⚠️ 以前はここで直に Lv＋1 していたが、振り先を選ぶ場所が要る。
+            //    ⭐ EXP→点（`levelup`）も、点を振る（`spend`）も、その札の中でやる。
+            case "grow": Open = Panel.Grow; break;
+            case "levelup": Deeds.Grow(this); break;
+            case "spend": Deeds.SpendPoint(this, i); break;
 
             // ── 配合 ────────────────────────────────
             case "pa": ParentA = null; break;
@@ -349,7 +396,8 @@ public sealed class Shell
             if (slot >= skills.Length || skills[slot] == null) return;
             SkillId = skills[slot]!.Id;
             SkillSlot = slot;
-            SkillLevel = SkillCosts.LevelOf(one.SkillPoints[slot]);
+            // ⚠️ 上限は技ごと（Skills.MaxLevelOf）。skills[slot] は直前の null チェック済み
+            SkillLevel = SkillCosts.LevelOf(one.SkillPoints[slot], Skills.MaxLevelOf(skills[slot]!));
             Under = Open;
             Open = Panel.Skill;
         }

@@ -1,51 +1,51 @@
 {
   "note": "現行の記録。移植の証拠ではない。sim record で作り直す",
   "defenders": [
-    {"nest":"shallow-scale","id":"shallow-scale-0","species":"tamaru","wild":[12,2,2,7,4,9],"skills":["guts","regen"]},
-    {"nest":"thicket-fang","id":"thicket-fang-0","species":"tsunoga","wild":[15,11,3,3,6,19],"skills":["attack-def-twice","def-down"]},
-    {"nest":"cliff-plume","id":"cliff-plume-0","species":"haneru","wild":[5,2,27,20,9,15],"skills":["bulwark","dash"]},
-    {"nest":"deep-scale","id":"deep-scale-0","species":"tamaru","wild":[34,26,11,6,3,19],"skills":["harden","regen"]},
-    {"nest":"peak-fang","id":"peak-fang-0","species":"tsunoga","wild":[6,23,7,13,40,31],"skills":["attack-all","def-down"]}
+    {"nest":"shallow-scale","id":"shallow-scale-0","species":"tamaru","wild":[12,2,2,7,4,9],"skills":["counter-stance","regen"]},
+    {"nest":"thicket-fang","id":"thicket-fang-0","species":"tsunoga","wild":[15,11,3,3,6,19],"skills":["attack-all","def-down"]},
+    {"nest":"cliff-plume","id":"cliff-plume-0","species":"haneru","wild":[5,2,27,20,9,15],"skills":["bulwark","immune"]},
+    {"nest":"deep-scale","id":"deep-scale-0","species":"tamaru","wild":[34,26,11,6,3,19],"skills":["counter-stance","regen"]},
+    {"nest":"peak-fang","id":"peak-fang-0","species":"tsunoga","wild":[6,23,7,13,40,31],"skills":["attack-def-twice","atk-down"]}
   ],
   "eggs": [
-    {"nest":"shallow-scale","how":"Stolen","wild":[6,2,1,8,11,3],"mutationCounter":0,"generation":1,"skills":["guts","heal-big"],"trait":"grit"},
-    {"nest":"shallow-scale","how":"Defeated","wild":[7,10,4,13,2,3],"mutationCounter":0,"generation":1,"skills":["harden","heal-big"],"trait":"grit"},
-    {"nest":"thicket-fang","how":"Stolen","wild":[8,2,11,14,1,5],"mutationCounter":0,"generation":1,"skills":["attack-all","stun"],"trait":"pursuit"},
-    {"nest":"thicket-fang","how":"Defeated","wild":[3,11,19,6,3,15],"mutationCounter":0,"generation":1,"skills":["attack-all","stun"],"trait":"pursuit"},
+    {"nest":"shallow-scale","how":"Stolen","wild":[6,2,1,8,11,3],"mutationCounter":0,"generation":1,"skills":["counter-stance","regen"],"trait":"grit"},
+    {"nest":"shallow-scale","how":"Defeated","wild":[7,10,4,13,2,3],"mutationCounter":0,"generation":1,"skills":["guts","regen"],"trait":"grit"},
+    {"nest":"thicket-fang","how":"Stolen","wild":[8,2,11,14,1,5],"mutationCounter":0,"generation":1,"skills":["bind-down","stun"],"trait":"pursuit"},
+    {"nest":"thicket-fang","how":"Defeated","wild":[3,11,19,6,3,15],"mutationCounter":0,"generation":1,"skills":["bind-down","stun"],"trait":"pursuit"},
     {"nest":"cliff-plume","how":"Stolen","wild":[1,7,16,4,12,21],"mutationCounter":0,"generation":1,"skills":["spd-down","dash"],"trait":"aim"},
-    {"nest":"cliff-plume","how":"Defeated","wild":[15,20,3,26,8,5],"mutationCounter":0,"generation":1,"skills":["bulwark","ct-short"],"trait":"aim"},
-    {"nest":"deep-scale","how":"Stolen","wild":[5,8,14,20,2,26],"mutationCounter":0,"generation":1,"skills":["shield","regen"],"trait":"grit"},
+    {"nest":"cliff-plume","how":"Defeated","wild":[15,20,3,26,8,5],"mutationCounter":0,"generation":1,"skills":["bulwark","spd-up"],"trait":"aim"},
+    {"nest":"deep-scale","how":"Stolen","wild":[5,8,14,20,2,26],"mutationCounter":0,"generation":1,"skills":["counter-stance","regen"],"trait":"grit"},
     {"nest":"deep-scale","how":"Defeated","wild":[11,19,6,35,4,27],"mutationCounter":0,"generation":1,"skills":["guts","regen"],"trait":"grit"},
-    {"nest":"peak-fang","how":"Stolen","wild":[10,5,17,4,24,31],"mutationCounter":0,"generation":1,"skills":["attack-heavy","poison"],"trait":"pursuit"},
-    {"nest":"peak-fang","how":"Defeated","wild":[22,5,40,13,7,31],"mutationCounter":0,"generation":1,"skills":["attack-def","atk-down"],"trait":"pursuit"}
+    {"nest":"peak-fang","how":"Stolen","wild":[10,5,17,4,24,31],"mutationCounter":0,"generation":1,"skills":["attack-def","poison"],"trait":"pursuit"},
+    {"nest":"peak-fang","how":"Defeated","wild":[22,5,40,13,7,31],"mutationCounter":0,"generation":1,"skills":["bind-down","atk-down"],"trait":"pursuit"}
   ],
   "games": [
-    {"seed":1,"id":"c001","species":"tamaru","wild":[6,2,1,9,4,12],"skills":["harden","heal-big"],"strong":"Res","weak":"Acc","element":"Water","trait":"grit"},
-    {"seed":1,"id":"c002","species":"tamaru","wild":[4,9,7,1,12,2],"skills":["harden","heal-big"],"strong":"Hp","weak":"Acc","element":"Water","trait":"grit"},
-    {"seed":1,"id":"c003","species":"tamaru","wild":[4,13,7,10,1,2],"skills":["shield","regen"],"strong":"Hp","weak":"Atk","element":"Wood","trait":"grit"},
-    {"seed":1,"id":"c004","species":"tamaru","wild":[6,1,4,9,11,2],"skills":["guts","regen"],"strong":"Def","weak":"Spd","element":"Water","trait":"grit"},
-    {"seed":20260816,"id":"c001","species":"tamaru","wild":[9,1,4,12,2,7],"skills":["harden","regen"],"strong":"Res","weak":"Hp","element":"Fire","trait":"grit"},
-    {"seed":20260816,"id":"c002","species":"tamaru","wild":[1,6,2,9,4,12],"skills":["shield","heal-big"],"strong":"Spd","weak":"Acc","element":"Water","trait":"grit"},
-    {"seed":20260816,"id":"c003","species":"tamaru","wild":[13,10,3,2,7,4],"skills":["shield","heal-big"],"strong":"Acc","weak":"Spd","element":"Water","trait":"grit"},
-    {"seed":20260816,"id":"c004","species":"tamaru","wild":[13,7,2,10,2,4],"skills":["shield","regen"],"strong":"Res","weak":"Hp","element":"Water","trait":"grit"}
+    {"seed":1,"id":"c001","species":"tamaru","wild":[6,2,1,9,4,12],"skills":["guts","regen"],"strong":"Res","weak":"Acc","element":"Water","trait":"grit"},
+    {"seed":1,"id":"c002","species":"tamaru","wild":[4,9,7,1,12,2],"skills":["counter-stance","regen"],"strong":"Hp","weak":"Acc","element":"Water","trait":"grit"},
+    {"seed":1,"id":"c003","species":"tamaru","wild":[4,13,7,10,1,2],"skills":["guts","regen"],"strong":"Hp","weak":"Atk","element":"Wood","trait":"grit"},
+    {"seed":1,"id":"c004","species":"tamaru","wild":[6,1,4,9,11,2],"skills":["counter-stance","regen"],"strong":"Def","weak":"Spd","element":"Water","trait":"grit"},
+    {"seed":20260816,"id":"c001","species":"tamaru","wild":[9,1,4,12,2,7],"skills":["counter-stance","regen"],"strong":"Res","weak":"Hp","element":"Fire","trait":"grit"},
+    {"seed":20260816,"id":"c002","species":"tamaru","wild":[1,6,2,9,4,12],"skills":["counter-stance","regen"],"strong":"Spd","weak":"Acc","element":"Water","trait":"grit"},
+    {"seed":20260816,"id":"c003","species":"tamaru","wild":[13,10,3,2,7,4],"skills":["counter-stance","regen"],"strong":"Acc","weak":"Spd","element":"Water","trait":"grit"},
+    {"seed":20260816,"id":"c004","species":"tamaru","wild":[13,7,2,10,2,4],"skills":["counter-stance","regen"],"strong":"Res","weak":"Hp","element":"Water","trait":"grit"}
   ],
   "breeds": [
-    {"seed":7,"mutations":1,"species":"tamaru","wild":[1,1,4,9,6,12],"mutationCounter":1,"generation":2,"skills":["regen","harden"]},
-    {"seed":1035,"mutations":1,"species":"tamaru","wild":[9,8,2,12,4,12],"mutationCounter":1,"generation":2,"skills":["heal-big","shield"]},
-    {"seed":20260816,"mutations":0,"species":"tamaru","wild":[9,1,2,9,4,12],"mutationCounter":0,"generation":2,"skills":["harden","heal-big"]}
+    {"seed":7,"mutations":1,"species":"tamaru","wild":[1,1,4,9,6,12],"mutationCounter":1,"generation":2,"skills":["regen","counter-stance"]},
+    {"seed":1035,"mutations":1,"species":"tamaru","wild":[9,8,2,12,4,12],"mutationCounter":1,"generation":2,"skills":["counter-stance","regen"]},
+    {"seed":20260816,"mutations":0,"species":"tamaru","wild":[9,1,2,9,4,12],"mutationCounter":0,"generation":2,"skills":["counter-stance","regen"]}
   ],
   "battles": [
-    {"seed":1,"name":"shallow-scale","outcome":"Enemy","actions":170,"logLength":410,"finalHp":[0,0,0,0,40501],"digest":"47617786bd5adf9e"},
-    {"seed":1,"name":"thicket-fang","outcome":"Ally","actions":45,"logLength":97,"finalHp":[16905,16905,4123,20475,0],"digest":"789b3570e7b357ba"},
-    {"seed":1,"name":"cliff-plume","outcome":"Enemy","actions":57,"logLength":155,"finalHp":[0,0,0,0,15617],"digest":"6a9de40dcdbf50b8"},
-    {"seed":1,"name":"deep-scale","outcome":"Enemy","actions":113,"logLength":274,"finalHp":[0,0,0,0,121800],"digest":"eb89c0557da52401"},
-    {"seed":1,"name":"peak-fang","outcome":"Ally","actions":59,"logLength":142,"finalHp":[1691,11480,0,11320,0],"digest":"346daf106a4cf376"},
-    {"seed":1,"name":"boss","outcome":"Enemy","actions":60,"logLength":140,"finalHp":[0,0,0,0,28510],"digest":"49ae83c0f7390232"},
-    {"seed":20260816,"name":"shallow-scale","outcome":"Draw","actions":300,"logLength":695,"finalHp":[19425,16485,14700,11057,37730],"digest":"62eb6b9d58d0eaba"},
-    {"seed":20260816,"name":"thicket-fang","outcome":"Ally","actions":52,"logLength":110,"finalHp":[19425,16485,14700,9039,0],"digest":"3a9749eb68439baf"},
-    {"seed":20260816,"name":"cliff-plume","outcome":"Enemy","actions":62,"logLength":162,"finalHp":[0,0,0,0,11384],"digest":"3a3919c40531337b"},
-    {"seed":20260816,"name":"deep-scale","outcome":"Draw","actions":300,"logLength":717,"finalHp":[19425,16485,14700,11368,120168],"digest":"d0fb096f965bae0d"},
-    {"seed":20260816,"name":"peak-fang","outcome":"Ally","actions":65,"logLength":153,"finalHp":[13398,10216,12323,11212,0],"digest":"a6296cebf5760f07"},
-    {"seed":20260816,"name":"boss","outcome":"Enemy","actions":145,"logLength":344,"finalHp":[0,0,0,0,1324],"digest":"d4bd0465fb18b5f6"}
+    {"seed":1,"name":"shallow-scale","outcome":"Ally","actions":32,"logLength":75,"finalHp":[0,401,0,20475,0],"digest":"a85083782950c6cb"},
+    {"seed":1,"name":"thicket-fang","outcome":"Ally","actions":16,"logLength":40,"finalHp":[0,11335,0,14935,0],"digest":"62bf93702a7115ad"},
+    {"seed":1,"name":"cliff-plume","outcome":"Enemy","actions":14,"logLength":40,"finalHp":[0,0,0,0,26218],"digest":"a2252a22fe28f356"},
+    {"seed":1,"name":"deep-scale","outcome":"Enemy","actions":34,"logLength":81,"finalHp":[0,0,0,0,97710],"digest":"280c76fb0f5ecaaf"},
+    {"seed":1,"name":"peak-fang","outcome":"Enemy","actions":19,"logLength":44,"finalHp":[0,0,0,0,14134],"digest":"8326d5144b113e18"},
+    {"seed":1,"name":"boss","outcome":"Enemy","actions":15,"logLength":37,"finalHp":[0,0,0,0,50935],"digest":"5138c4785054eb91"},
+    {"seed":20260816,"name":"shallow-scale","outcome":"Enemy","actions":36,"logLength":86,"finalHp":[0,0,0,0,29535],"digest":"3ea05c54bbc82e48"},
+    {"seed":20260816,"name":"thicket-fang","outcome":"Ally","actions":24,"logLength":58,"finalHp":[10530,1569,0,0,0],"digest":"b367a4811c7b159f"},
+    {"seed":20260816,"name":"cliff-plume","outcome":"Enemy","actions":23,"logLength":60,"finalHp":[0,0,0,0,13960],"digest":"19806df4859160cf"},
+    {"seed":20260816,"name":"deep-scale","outcome":"Enemy","actions":29,"logLength":72,"finalHp":[0,0,0,0,118758],"digest":"8789a29628d27436"},
+    {"seed":20260816,"name":"peak-fang","outcome":"Enemy","actions":28,"logLength":62,"finalHp":[0,0,0,0,2553],"digest":"466da3ccf22cf7cc"},
+    {"seed":20260816,"name":"boss","outcome":"Enemy","actions":15,"logLength":37,"finalHp":[0,0,0,0,65414],"digest":"8464f48ff123a502"}
   ]
 }

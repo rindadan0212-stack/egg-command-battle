@@ -131,6 +131,22 @@ namespace EggCommand.Core
         /// ⭐ 定数を足したらここにも足すこと。</summary>
         public const int Scale = 5;
 
+        /// <summary>弱化命中・弱化耐性だけに掛ける倍率。🔴 **2026-08-26 に新設**（作者の指示）。
+        ///
+        /// ⚠️ **他の4本（<see cref="Scale"/>=5）と別にしてある。**⭐ 通る率の式は
+        /// <c>技の基礎率 ＋ 命中 − 耐性</c> という**引き算**なので、ダメージ式のように
+        /// 桁を揃える必要が無い ── むしろ揃えると数が大きくなりすぎて読めない。
+        ///
+        /// ⭐ **狙っている目盛り**（作者の指定 2026-08-26）:
+        /// <list type="bullet">
+        /// <item>振っていないアタッカー … 命中 20</item>
+        /// <item>素質を振ったデバッファー … 命中 100</item>
+        /// <item>素質＋育成のタンク … 耐性 150</item>
+        /// </list>
+        /// 「耐性150 は 命中20 の弱化を完全に弾く。通したければ命中100は要る」が
+        /// 式から直に読めるようにするための単位。</summary>
+        public const int DebuffScale = 2;
+
         /// <summary>1つのステに振れる野生レベルの上限。
         /// ⚠️ **点の単位**（実値ではない）。実値にするときに <see cref="Scale"/> が掛かる。</summary>
         public const int WildStatMax = 40;
@@ -265,13 +281,14 @@ namespace EggCommand.Core
         /// ⭐ ここが「点」と「実値」の境目 ── 唯一の出所。</summary>
         public static StatBlock ActualStats(StatBlock baseStats, StatBlock wild, StatBlock trained)
         {
+            // ⚠️ 🔴 **弱化2本だけ <see cref="DebuffScale"/>。**他の4本と単位が違う（2026-08-26）。
             return new StatBlock(
                 baseStats.Hp + wild.Hp * Scale + trained.Hp,
                 baseStats.Atk + wild.Atk * Scale + trained.Atk,
                 baseStats.Def + wild.Def * Scale + trained.Def,
                 baseStats.Spd + wild.Spd * Scale + trained.Spd,
-                baseStats.Acc + wild.Acc * Scale + trained.Acc,
-                baseStats.Res + wild.Res * Scale + trained.Res);
+                baseStats.Acc + wild.Acc * DebuffScale + trained.Acc,
+                baseStats.Res + wild.Res * DebuffScale + trained.Res);
         }
     }
 }

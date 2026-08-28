@@ -183,12 +183,18 @@ namespace EggCommand.Core
         /// ⚠️ 既存の4本は**1つも触っていない** ── 触ると戦闘の較正が丸ごと動く。
         /// 新しい 40 を弱化命中・弱化耐性へ配っただけ。
         /// ⭐ 配分は種族の性格で決めた（攻めは命中寄り・守りは耐性寄り）。合計は必ず 40。</summary>
-        public const int BaseTotal = 120 * Stats.Scale;
+        // 🔴 **2026-08-26 に 600 → 440。**弱化命中/耐性を人が読める桁（0〜150）へ
+        //    引き直したため（作者の指示）。⭐ 体の4本（HP/攻/防/速）は 400 のまま動かしていない。
+        public const int BaseTotal = 80 * Stats.Scale + DebuffBaseTotal;
 
         /// <summary>弱化命中＋弱化耐性の合計。⭐ **全種族で同じ。**差は配分で出す。
         /// ⚠️ 移植元は4本ぶん（80 × <see cref="Stats.Scale"/>）だけで、この2本は 2026-08-19 に足した。
         /// ⭐ ここを揃えておけば、移植元の4本ぶんも自動的に全種族で揃う。</summary>
-        public const int DebuffBaseTotal = 40 * Stats.Scale;
+        // 🔴 **2026-08-26 に 200 → 40。**⭐ 命中・耐性は他の4本と**別の物差し**にした
+        //    （`Stats.DebuffScale`）── 通る率の式が引き算なので、桁が揃っている必要が無い。
+        //    ⚠️ 揃えていたせいで「何も振っていないアタッカーが既に命中90」になり、
+        //    150 が高い数に見えなかった（作者の指摘 2026-08-26）。
+        public const int DebuffBaseTotal = 40;
 
         // ── 意匠 ───────────────────────────────────────────
         // 文字の格子で持つ。テキストのまま人が手で直せる。
@@ -754,51 +760,61 @@ namespace EggCommand.Core
             // ⚠️ 型は技に手で書かない（Skills.TypeOf が効果から導く）。ここで嘘を書くと Audit が落とす。
 
             new Species("tamaru", "タマル", "attack-def", Traits.Grit, // 防御スケール
-                new StatBlock(120, 90, 110, 80, 90, 110), TamaruSprite, TamaruPalettes,
-                // 守り ── 固めて、癒す
-                new SkillPool("shield", "guts", "harden"),
+                new StatBlock(120, 90, 110, 80, 18, 22), TamaruSprite, TamaruPalettes,
+                // 守り ── 固めて、癒す。⭐ counter-stance（Counter・2026-08-27）を追加
+                //    ── 防御を固めた先に「反撃」を持たせるのは、この種族の看板そのもの。
+                new SkillPool("shield", "guts", "harden", "counter-stance"),
                 new SkillPool("regen", "heal-big")),
 
             new Species("tsunoga", "ツノガ", "attack", Traits.Pursuit, // 攻撃スケール・単体
-                new StatBlock(110, 120, 90, 80, 120, 80), TsunogaSprite, TsunogaPalettes,
-                // 攻め ── 殴って、崩す
-                new SkillPool("attack-heavy", "attack-def", "attack-def-twice", "attack-all"),
-                new SkillPool("def-down", "poison", "stun", "atk-down")),
+                new StatBlock(110, 120, 90, 80, 24, 16), TsunogaSprite, TsunogaPalettes,
+                // 攻め ── 殴って、崩す。⭐ bind-down（Anchor・2026-08-27）を追加
+                //    ── 既に持つ def-down・collapse と同じ「崩す」筋で、崩した状態を固定する。
+                new SkillPool("attack-heavy", "attack-def", "attack-def-twice", "attack-all", "bind-down"),
+                new SkillPool("def-down", "poison", "stun", "atk-down", "collapse")),
 
             // ⚠️ 枠1 は "attack-all" だった。⭐ **枠1＝通常攻撃**と定めたので差し替えた（2026-08-17）。
             //    全体攻撃が CT 0 で毎手番飛ぶのは通常攻撃ではないし、実害も出た
             //    （「手数」の特性が対象数ぶん効いて、毎行動 CT が3ずつ減っていた）。
             new Species("haneru", "ハネル", "attack-twice", Traits.Aim, // 速さで手数を稼ぐ
-                new StatBlock(100, 90, 80, 130, 120, 80), HaneruSprite, HaneruPalettes,
-                // 撹乱 ── 止めて、逃げる
+                new StatBlock(100, 90, 80, 130, 24, 16), HaneruSprite, HaneruPalettes,
+                // 撹乱 ── 止めて、逃げる。⭐ lockdown（Seal＋Anchor・2026-08-27）を追加
+                //    ── 「止めて、逃げる」の締めくくりとして、枠そのものを封じる札を持たせた。
                 new SkillPool("spd-down", "atk-down", "ct-long", "taunt", "bulwark"),
-                new SkillPool("spd-up", "immune", "ct-short", "dash")),
+                new SkillPool("spd-up", "immune", "ct-short", "dash", "lockdown")),
 
             // ── 増やしたぶん（2026-08-17）。⚠️ 絵は仮 ─────────────
             // ⭐ 基礎値の合計は全種族 120 で揃える（差は配分だけ）。
 
             new Species("nobiru", "ノビル", "attack-twice", Traits.Flurry, // 多段・攻撃スケール
-                new StatBlock(90, 110, 80, 120, 110, 90), NobiruSprite, NobiruPalettes,
+                new StatBlock(90, 110, 80, 120, 22, 18), NobiruSprite, NobiruPalettes,
                 // 削り ── 手数で押して、自分を速くする
-                new SkillPool("attack-thrice", "pierce-strike", "venom-fang"),
+                new SkillPool("attack-thrice", "pierce-strike", "venom-fang", "venom-barrage"),
                 new SkillPool("dash", "spd-up", "gauge-boost", "atk-up")),
 
             // ⚠️ 最初は枠1を防御スケールにしていたら、総合勝率 81.1% で突出した。
             //    防御寄りの配分と防御スケールが重なって**防御を二重に得**にしていた。
             new Species("hirabe", "ヒラベ", "attack", Traits.Stubborn, // 攻撃スケール。硬いが攻めは細い
-                new StatBlock(130, 70, 130, 70, 70, 130), HirabeSprite, HirabePalettes,
-                // 壁 ── 立て直して、耐える
-                new SkillPool("heal-big", "revive"),
-                new SkillPool("shield-wall", "guts-deep", "immune-long")),
+                new StatBlock(130, 70, 130, 70, 14, 26), HirabeSprite, HirabePalettes,
+                // 壁 ── 立て直して、耐える。⭐ invincible（Invincible・2026-08-27）を追加
+                //    ── guts-deep・immune-long と並ぶ「耐える」の頂点として据えた。
+                // 🔴 **atk-up・immune も追加**（2026-08-27・★→格の監査で発覚）。
+                //    ⚠️ 直す前は両袋とも「格2以上の技しか無い」── ★1 の卵がこの種族を引くと、
+                //    CappedPool の落とし先（プール最低格）でも格2以上になり、
+                //    「★N は格N以下」が破れていた（EggSkillGradeTests で検出）。
+                //    ⭐ 各袋に格1以下を最低1本入れて、★1でも格を超えない形にする。
+                new SkillPool("heal-big", "revive", "atk-up"),
+                new SkillPool("shield-wall", "guts-deep", "immune-long", "invincible", "immune")),
 
             new Species("togeru", "トゲル", "attack", Traits.Surge, // 削って待つ
-                new StatBlock(100, 120, 100, 80, 130, 70), TogeruSprite, TogeruPalettes,
-                // 毒 ── 弱らせて、抜く
+                new StatBlock(100, 120, 100, 80, 26, 14), TogeruSprite, TogeruPalettes,
+                // 毒 ── 弱らせて、抜く。⭐ extend-strike（Extend・2026-08-27）を追加
+                //    ── 弱化を撒く枠2 の技（毒・大／呪詛／麻痺 大 等）を長引かせる回収先。
                 new SkillPool("venom-heavy", "curse", "sleep", "stun-heavy", "gauge-drain"),
-                new SkillPool("attack-twice", "crush", "venom-fang")),
+                new SkillPool("attack-twice", "crush", "venom-fang", "extend-strike")),
 
             new Species("marumi", "マルミ", "attack", Traits.Opener, // 素直。支える側
-                new StatBlock(120, 80, 90, 110, 80, 120), MarumiSprite, MarumiPalettes,
+                new StatBlock(120, 80, 90, 110, 16, 24), MarumiSprite, MarumiPalettes,
                 // 支え ── 癒して、剥がす
                 new SkillPool("heal-ratio", "heal-miracle", "regen"),
                 new SkillPool("slow-all", "dispel", "block", "ct-lock", "buff-steal")),
@@ -810,19 +826,21 @@ namespace EggCommand.Core
             //    キバネ＝止める（不意打ち）/ イワオ＝崩れてから（遺志）/ ホムラ＝速さを配る
 
             new Species("kibane", "キバネ", "attack-twice", Traits.Ambush, // 手数で通す
-                new StatBlock(90, 110, 80, 120, 130, 70), KibaneSprite, KibanePalettes,
-                // 止める ── 眠らせ、痺れさせ、縛る
+                new StatBlock(90, 110, 80, 120, 26, 14), KibaneSprite, KibanePalettes,
+                // 止める ── 眠らせ、痺れさせ、縛る。⭐ seal-strike（Seal・2026-08-27）を追加
+                //    ── 「止める」役の総仕上げ。眠り・スタンで動きを止め、封印で選択肢も削る。
                 new SkillPool("stun-strike", "taunt-long", "poison-all", "stun", "sleep"),
-                new SkillPool("strip-strike", "pierce-strike")),
+                new SkillPool("strip-strike", "pierce-strike", "stagnate", "seal-strike")),
 
             new Species("iwao", "イワオ", "attack-def", Traits.Legacy, // 硬さがそのまま火力
-                new StatBlock(140, 85, 115, 60, 90, 110), IwaoSprite, IwaoPalettes,
-                // 重い ── 一撃が遠く、代わりに深い
-                new SkillPool("pierce-strike-heavy", "attack-all-twice", "attack-heavy", "crush"),
+                new StatBlock(140, 85, 115, 60, 18, 22), IwaoSprite, IwaoPalettes,
+                // 重い ── 一撃が遠く、代わりに深い。⭐ bare-strike（Effect.Bare・2026-08-27）を追加
+                //    ── pierce-strike-heavy（防御無視）と対になる「守りの買い物を無視する」一撃。
+                new SkillPool("pierce-strike-heavy", "attack-all-twice", "attack-heavy", "crush", "bare-strike"),
                 new SkillPool("guts", "harden", "def-up", "shield")),
 
             new Species("homura", "ホムラ", "attack", Traits.Parting, // 素直に速い
-                new StatBlock(110, 95, 80, 115, 95, 105), HomuraSprite, HomuraPalettes,
+                new StatBlock(110, 95, 80, 115, 19, 21), HomuraSprite, HomuraPalettes,
                 // 配る ── 速さとゲージを味方へ
                 new SkillPool("tailwind", "gauge-boost-heavy", "def-up"),
                 new SkillPool("regen-heavy", "revive-heavy", "heal-ratio")),
@@ -831,7 +849,7 @@ namespace EggCommand.Core
             // ⚠️ 枠1は CT が無いので、大技を置くと毎回撃ててしまう。
             //    震撼（CT7 の全体大技）は枠2へ回し、ここは中程度に留める。
             new Species("nushi", "ヌシ", "attack-def", Traits.Desperation,
-                new StatBlock(130, 100, 120, 50, 100, 100), NushiSprite, NushiPalettes,
+                new StatBlock(130, 100, 120, 50, 20, 20), NushiSprite, NushiPalettes,
                 new SkillPool("attack-all-heavy"),
                 new SkillPool("spd-down", "taunt")),
         };

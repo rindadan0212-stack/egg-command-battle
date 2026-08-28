@@ -401,11 +401,18 @@ public class SheetRoundTripTests
     //    ここで確かめるのは「その件数を正しく数えて言うか」だけ ── 振る舞いは変えていない。
 
     /// <summary>作り物の1枚を <c>sheet write</c> に通し、書き出された中身と、
-    /// そのとき標準出力に出た文言を両方持ち帰る。⭐ <see cref="WriteAndCapture"/> と同じ CWD の作法に、
-    /// 標準出力の捕捉を足しただけ。
-    /// ⚠️ Console.Out もプロセス全体の状態なので、CWD と同じ <see cref="CwdGate"/> で直列化する
-    /// （2026-08-23 時点、他のテストは Console.Out を差し替えていないので実害は無いが、
-    ///   差し替えるテストが増えたらそちらもこの lock に混ぜること）。</summary>
+    /// そのとき出た言葉を両方持ち帰る。⭐ <see cref="WriteAndCapture"/> と同じ CWD の作法に、
+    /// 出力の捕捉を足しただけ。
+    ///
+    /// ⚠️ 🔴 **`Console.SetOut` は使わない**（2026-08-27 に直した）。⚠️ xUnit は検査の組を
+    /// 並列で走らせるので、グローバルな出し先を差し替えると他の検査の出力まで奪う ──
+    /// `ImportScreenTests`（2026-08-25）が同じ罠を踏んで直った後も、**ここ（当のテスト自身）
+    /// だけ直っていなかった**（監査で発覚。「直した本人の目の前で、隣の実装は直っていない」の実例）。
+    /// ⭐ `Sheet.Run` に `TextWriter` を直接渡せる形（`ImportScreen.Run` と同じ流儀）を足したので、
+    /// ここもそれを使う ── `StringWriter` はスレッドをまたいで共有しない限り安全なので、
+    /// もう `Console.Out` を横取りする理由が無い。
+    /// ⚠️ CWD（`Environment.CurrentDirectory`）はプロセス全体の状態のままなので、
+    /// そちらは今までどおり <see cref="CwdGate"/> で直列化する。</summary>
     private static (string File, string Console) WriteAndCaptureBoth(string file, string original)
     {
         string temp = Directory.CreateTempSubdirectory("eggcommand-sheet-writeback-").FullName;
@@ -418,27 +425,22 @@ public class SheetRoundTripTests
             var utf8 = new UTF8Encoding(false);
             File.WriteAllText(Path.Combine(sheetsDir, file), original, utf8);
 
-            string consoleText;
+            var sw = new StringWriter();
             lock (CwdGate)
             {
                 string prevDir = Environment.CurrentDirectory;
-                var prevOut = Console.Out;
-                var sw = new StringWriter();
                 try
                 {
                     Environment.CurrentDirectory = cwdDir;
-                    Console.SetOut(sw);
-                    Sheet.Run("write");
+                    Sheet.Run("write", sw);
                 }
                 finally
                 {
-                    Console.SetOut(prevOut);
                     Environment.CurrentDirectory = prevDir;
                 }
-                consoleText = sw.ToString();
             }
             string produced = File.ReadAllText(Path.Combine(sheetsDir, file), utf8);
-            return (produced, consoleText);
+            return (produced, sw.ToString());
         }
         finally
         {

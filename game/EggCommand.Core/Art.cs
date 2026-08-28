@@ -55,6 +55,11 @@ namespace EggCommand.Core
             [StatusKind.Immune] = "status-immune",
             [StatusKind.Sleep] = "status-sleep",
             [StatusKind.Block] = "status-block",
+            // ⭐ 2026-08-27 に足した4つ
+            [StatusKind.Seal] = "status-seal",
+            [StatusKind.Anchor] = "status-anchor",
+            [StatusKind.Invincible] = "status-invincible",
+            [StatusKind.Counter] = "status-counter",
         };
 
         /// <summary>状態異常 → `Resources/UI/icon/<名前>.png`。</summary>

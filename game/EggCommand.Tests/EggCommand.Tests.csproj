@@ -59,6 +59,21 @@
          「テキストとして読むだけ」の形にする（2026-08-25・`fanfare` が足されていなかった
          監査を受けて追加）。 -->
     <None Include="..\EggCommand.Web\Scenes.cs" Link="websrc\Scenes.cs" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 🔴 意匠が **id で** 別の画面の物に触れていないか見張る（`StageCssTests`）。
+         ⚠️ id は画面をまたいでも唯一 ── `#ground` が「放置の地面」と「すごろくの盤」の
+         両方に当たり、潜入の盤が流れ続けて操作不能になっていた（2026-08-26）。
+         ⭐ `Idle.cs` も同じ理由で読む（描く側が出す生の id を突き合わせる）。 -->
+    <None Include="..\EggCommand.Web\wwwroot\stage.css" Link="websrc\stage.css" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\EggCommand.Web\Idle.cs" Link="websrc\Idle.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\EggCommand.Web\Board.cs" Link="websrc\Board.cs" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 🔴 盤に出る字と、演出の順番の見張り（`BattleWordTests`）。⚠️ `Deeds.cs` は
+         `Shell`/`Sheets`/`Face` 等 Web 専用の依存が多くコンパイルには持ち込めないので、
+         `Shell.cs`/`Scenes.cs` と同じ「テキストとして読むだけ」の形にする。
+         ⭐ `fx.js` は「`animation-delay` を `cssText` より後に書く」を見張るために読む
+         （2026-08-28 に、先に書いていて丸ごと消えていた）。 -->
+    <None Include="..\EggCommand.Web\Deeds.cs" Link="websrc\Deeds.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\EggCommand.Web\wwwroot\fx.js" Link="websrc\fx.js" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\EggCommand.Web\Sheets.cs" Link="websrc\Sheets.cs" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- いまの実装の出力を凍らせた記録。⚠️ 移植の証拠ではない。
@@ -99,6 +114,9 @@
        「実体はあるのに誰にも指されていないか（死蔵）」を検査するのに要る。 -->
   <ItemGroup>
     <None Include="..\..\assets\ui\icon\*.png" Link="icon\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 🔴 `paint` の一覧。⚠️ `EggSkinTests` が「種族ぶんの卵を焼き忘れていないか」を見る
+         （焼き忘れると画面は「？」を出すが、それに気づくのは画面を開いた人だけ）。 -->
+    <None Include="..\..\assets\ui\paint\paint-manifest.txt" Link="paint\paint-manifest.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- 表示用に焼いた (種族 × パレット) の PNG（`SpritePng.RunDisplay` が書く）。

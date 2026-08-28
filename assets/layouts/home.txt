@@ -12,6 +12,24 @@
 #    ⚠️ いまは仮置き（`sim paint-placeholder`）── 枠線＋薄い塗り＋隅の印で、本物と見間違えない。
 #
 #  名前   種類    左   上    幅    高    付け足し
+# ⭐ **背景（作者のドット絵・2026-08-27）。**4層で、奥から 空 → 山 → 草木 → 地面。
+#    ⚠️ **一番上に書く ＝ 一番奥に描かれる**（あとの節点が上に乗る）。
+#
+# ⭐ **空と山は流れる。**⚠️ 絵は「元＋左右反転」を横に並べて2枚幅にしてある
+#    （540ドット＝2160px）── 継ぎ目が鏡写しになるので、線が合って目立たない。
+#    ⭐ 1枚ぶん（1080px）流れたら先頭へ戻すので、途切れずに繋がる。
+#    ⚠️ 動きは級（`roll=sky` / `roll=hill`）で掛ける ── 骨組みは**置き場所だけ**を持ち、
+#    速さは `stage.css` が持つ（放置の帯 `idle-flow` と同じ流儀）。
+#    🔴 **id で動かさない。**別の画面に同じ名前があると両方に効く
+#    （2026-08-26 に `#ground` でそれを踏んで、すごろくが遊べなくなった）。
+#
+# ⚠️ 上端は作者の絵の実測（空=0 / 山=102 / 草木=55 / 地面=77 ドット）。×4 で px。
+skyband  paint   0    0     2160 708   pic=home-sky roll=sky
+hillband paint   0    408   2160 252   pic=home-hill roll=hill
+grass    paint   0    220   1080 488   pic=home-grass
+# ⚠️ 地面は**下の帯の裏まで敷く**背景なので、潜っていてよい（`dock=no`）。
+ground   paint   0    308   1080 1612  pic=home-ground dock=no
+
 mats     paint   0    0     1080  80    pic=home-mats
   icon   round   48   20    40    40    bind=icon
   # ⭐ **EXP と書く。**⚠️ 数だけ出していた頃は、丸い印の隣の数が
@@ -23,8 +41,15 @@ mats     paint   0    0     1080  80    pic=home-mats
   world  label   540  0     492   80    size=40 ink=faint anchor=right bind=world
 
 idle     host    0    88    1080  472
+# ⭐ 放置の帯を囲む枠（作者のドット絵「放置枠」）。⚠️ 中は空洞なので歩く3体は隠れない。
+#    ⚠️ 帯より**後**に書く ── 枠は上に乗る。
+idleframe paint  16   108   1048  460   pic=home-idle-frame
 
-slot     paint   72   616   300   380   repeat=slots cols=3 gap=20 rows=400 max=6 tap=slot use=slot pic=slot-frame
+# ⭐ **4つ目の `host`。**⚠️ 巣5つは 2-1-2 の菱形に置いてあり（作者のドット絵
+#    「ホーム画面」の実測）、格子ではないので `repeat=` の桁と段では書けない
+#    ── 置き場所は `Incubator.cs` が持つ（`Board` のマスと同じ理由）。
+# ⚠️ 中の1つぶんは `slot.txt`（304x376）。ここは枠だけ。
+nests    host    0    620   1080  880
 
 # ⚠️ **置ける行は 1420 の1行しか無い。**⭐ 実測: 素材 0〜80 / 放置 88〜560 /
 #    孵化枠 616〜1396 / **1420〜1532** / 帯 1556〜1788。
@@ -36,9 +61,13 @@ slot     paint   72   616   300   380   repeat=slots cols=3 gap=20 rows=400 max=
 #    ⚠️ 遊びの輪（探索→潜入→戦闘→帰還）は下の帯が持つ。混ぜない。
 # ⚠️ **釦の地は `ink=clear` で透明にし、下に敷いた paint を見せる**
 #    （button 自体は `.n.button` の地色 #dfe3ee を持つので、透明にしないと絵が隠れる）。
-trialbg  paint   48   1420  316   112   pic=home-trial
-trial    button  48   1420  316   112   size=40 tap=trials bind=trials ink=clear
-partybg  paint   384  1420  316   112   pic=home-party
-party    button  384  1420  316   112   size=40 tap=party ink=clear text=パーティ編成
-keepbg   paint   716  1420  316   112   pic=home-keep
-keep     button  716  1420  316   112   size=40 tap=keep ink=clear text=保存の控え
+# 🔴 **1420 の1行はもう無い。**⚠️ 巣が 620〜1500 を使うので、以前の「下に3つ横並び」
+#    は巣と重なる。⭐ 代わりに**菱形の真ん中の空き**へ縦に置いた
+#    （巣は左右に寄っているので、中央の帯 376〜692 はどの巣とも重ならない）。
+#    ⚠️ 作者のモックにはこの3つが無い ── 置き場所はこちらの判断。動かせる。
+trialbg  paint   376  690   316  112   pic=home-trial
+trial    button  376  690   316  112   size=40 tap=trials bind=trials ink=clear
+partybg  paint   376  1284  316  112   pic=home-party
+party    button  376  1284  316  112   size=40 tap=party ink=clear text=パーティ編成
+keepbg   paint   376  1408  316  112   pic=home-keep
+keep     button  376  1408  316  112   size=40 tap=keep ink=clear text=保存の控え

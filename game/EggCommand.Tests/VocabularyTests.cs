@@ -61,7 +61,7 @@ public class VocabularyTests
         Battle.ApplyOne(state, Ally(state, 0), friend, Effect.Cleanse(2));
 
         Assert.True(Battle.IsOn(friend.Status.Atk));
-        Assert.Equal(Skills.BuffPercent, friend.Status.Atk.Percent);
+        Assert.Equal(Skills.BuffPercentOf(StatKey.Atk), friend.Status.Atk.Percent);
         Assert.False(Battle.IsOn(friend.Status.Def));
     }
 
@@ -221,8 +221,12 @@ public class VocabularyTests
     [Fact]
     public void 生まれつきは強化より効き目が小さい()
     {
-        Assert.True(Skills.InnatePercent < Skills.BuffPercent,
-            $"生まれつき {Skills.InnatePercent}% が強化 {Skills.BuffPercent}% 以上ある");
+        foreach (var stat in new[] { StatKey.Atk, StatKey.Def, StatKey.Spd })
+        {
+            Assert.True(Skills.InnatePercent < Skills.BuffPercentOf(stat),
+                $"生まれつき {Skills.InnatePercent}% が {Stats.LabelOf(stat)} の強化 "
+                + $"{Skills.BuffPercentOf(stat)}% 以上ある");
+        }
     }
 
     /// <summary>⭐ レベルを上げると効き目が伸びること。

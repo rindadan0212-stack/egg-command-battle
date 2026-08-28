@@ -28,9 +28,13 @@
 
 @if (_say.Length > 0)
 {
-  @* ⚠️ **黙って諦めない。**⭐ 起きたことに気づけないほうが困る。 *@
+  @* ⚠️ **黙って諦めない。**⭐ 起きたことに気づけないほうが困る。
+     🔴 **`pointer-events:none` は必須。**⚠️ `position:fixed` で舞台の座標系の外
+     （実ピクセル）に置いているので、下の帯（ホーム／探索／配合／BOX）と重なりうる ──
+     素通しにしないと、居座っている間ずっと下の押しどころを食う
+     （2026-08-27 監査で発覚。消す仕組みは `Tapped`/`Held` の `_say = ""` を見ること）。 *@
   <div id="say" style="position:fixed;left:0;right:0;bottom:0;padding:10px 14px;
-       background:#2b3350;color:#fff;font:14px/1.5 system-ui;z-index:9">@_say</div>
+       background:#2b3350;color:#fff;font:14px/1.5 system-ui;z-index:9;pointer-events:none">@_say</div>
 }
 
 @code {
@@ -66,6 +70,7 @@
     private Vault _vault = default!;
     private DotNetObjectReference<AppPage>? _me;
     private System.Threading.Timer? _clock;
+    private System.Threading.Timer? _idleClock;
     private string _body = "", _frame = "", _over = "", _say = "";
     private int _tall = 1556;
 
@@ -76,9 +81,14 @@
         long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         // ⚠️ あふれの場面は種と時刻も固定する（Demo.Seed／Demo.Now）── 毎回違う画面を
         //    撮ると、差が「直したから」なのか「引きが違うから」なのか分からなくなる。
+        //    ⭐ `Full` は `Pace` と同じ「検査の入口」なので、ここも凍結（`live` は既定 false）
+        //    のまま ── 動く時計にすると、あふれの確認スクショが毎回変わってしまう。
+        // 🔴 **実プレイだけ `live: true`。**⚠️ ここが `Shell.Now` を「都度いまを返す」時計に
+        //    する唯一の入口 ── 孵化器の残り時間・巣の居座り時間はこれで進むようになる
+        //    （2026-08-27・作者報告で修正。詳しい経緯は `Shell.Now` のコメントを参照）。
         _shell = Full
             ? new Shell(Demo.Overflow(), Demo.Now)
-            : new Shell(Games.NewGame(Seed ?? unchecked((int)now), now), now);
+            : new Shell(Games.NewGame(Seed ?? unchecked((int)now), now), now, live: true);
         _shell.Pace = Pace is > 0 ? Pace.Value : 1;
         _shell.Now_Sheet = At switch
         {
@@ -89,7 +99,7 @@
         {
             "party" => Panel.Party, "fuse" => Panel.Fuse, "train" => Panel.Train,
             "eggs" => Panel.Eggs, "ask" => Panel.Ask, "species" => Panel.Species,
-            "keep" => Panel.Keep,
+            "keep" => Panel.Keep, "grow" => Panel.Grow,
             "skill" => Panel.Skill, _ => Panel.None,
         };
         // ⭐ 技の詳細は**種族の札の上に出る**（そこが重なる形）
@@ -124,7 +134,7 @@
         // ⚠️ 🔴 **演出は「描き終わってから」出す。**⭐ 体の枠を測って場所を決めるので、
         //    組み直しの前に出すと**古い枠**の上に出るか、組み直しで消える
         //    （踏み込みは絵そのものに掛けるため、作り直されると止まる）。
-        if (!first) { await Spill(); return; }
+        if (!first) { await Spill(); await Follow(); return; }
 
         _me = DotNetObjectReference.Create(this);
         await Js.InvokeVoidAsync("eggTap.listen", _me);
@@ -137,9 +147,52 @@
             _say = "⚠️ 別のタブが開いています。こちらは見るだけです（保存しません）";
 
         foreach (var note in _vault.Notes) Console.WriteLine("保存の読み替え: " + note);
+
+        // ⚠️ 🔴 **放置報酬（`Core.Idle`）は Web のどこからも呼ばれていなかった**
+        //    （Core とテストにしか無い ── 旧 Unity 版 `IdleStrip.cs` は毎フレーム呼んでいた）。
+        //    ⭐ `Wind()` のタイマーは「戦闘中・すごろく移動中」だけ回るので、ホームを
+        //    眺めているだけの放置プレイでは一度も Beat が呼ばれない。
+        //    ⭐ 放置は画面を見ていなくても進む設計なので、タイマーに頼りきらず
+        //    **画面を開いた時点で経過ぶんをまとめて進める**（`Idle.Advance` は経過秒
+        //    から計算する作りなので、これで足りる）。
+        //    ⚠️ ここ（保存を読み終えたあと）で呼ぶ ── 先に呼ぶと、直後に保存が
+        //    `_shell.Game` を丸ごと差し替えてしまい、進めた分が消える。
+        //    ⚠️ **時刻は `_shell.Now`（既存の `DateTimeOffset.UtcNow` 由来）を使う**
+        //    ── 新しい時刻の出所を作らない。
+        //    ⚠️ 再入は起きない ── `Idle.Advance` が `run.LastUnix` を自分で進め、
+        //    かつここは `first` の1回しか通らない（保存にも `LastUnix` が乗るので、
+        //    次に開いたときは「前回開いてからの経過」がそのまま計算される）。
+        //    ⚠️ 放置の編成（`PartyKind.Idle`）は巣の出撃（`PartyKind.Nest`）と別物 ──
+        //    戦闘中・すごろく移動中でも気にせず進めてよい（両者は競合しない）。
+        Core.Idle.Advance(_shell.Game.Idle, Games.PartyOf(_shell.Game, PartyKind.Idle), _shell.Now);
+
+        // 🔴 **画面を開いた瞬間だけでなく、開いたまま眺めている間も進める**
+        //    （2026-08-27 監査で発覚。上の1回きりの `Idle.Advance` は「見ていない間に
+        //    進んだ分」を清算するだけで、ホームを開いたまま止まっていると、
+        //    次にどこかを押すまで一度も呼ばれない ── 止まって見える）。
+        //    ⭐ `Wind()`/`Beat()`（戦闘・すごろく専用、62ms 刻み）とは**別本**で回す
+        //    ── あちらは「戦闘中・すごろく移動中だけ」動く前提の作りで、放置は逆に
+        //    「それ以外のときも」進む必要がある。詳細は `WindIdle`/`BeatIdle` を参照。
+        WindIdle();
+
         Draw();
         StateHasChanged();
+        await Follow();
         await Keep();
+    }
+
+    /// <summary>すごろくの盤を、駒が見える所へ巻く。
+    ///
+    /// ⚠️ 🔴 **描き終わるたびに呼ぶ。**⭐ 本体は `MarkupString` を丸ごと差し替えるので、
+    /// `#board` は組み直しのたびに**別の部品**になり、巻いた位置は 0 へ戻る
+    /// ── 覚えて戻すのではなく、そのつど駒から測り直す（`board.js`）。
+    /// ⚠️ 盤が出ていない画面では呼ばない（`#board` が無いだけなので害は無いが、
+    /// 毎描画の JS 往復を無駄に増やさない）。</summary>
+    private async Task Follow()
+    {
+        if (_shell.Now_Sheet != Sheet.Raid) return;
+        try { await Js.InvokeVoidAsync("eggBoard.follow"); }
+        catch { /* ⚠️ 巻けなくても遊びは続く */ }
     }
 
     /// <summary>押しどころから呼ばれる。⚠️ 名前と番号だけが届く
@@ -151,6 +204,12 @@
         //    ⭐ `Shell` は遊びの状態しか持たない。
         if (what is "out" or "in") { await Trade(what); return; }
 
+        // 🔴 **押したら、居座っている帯を消す。**⚠️ `_say` を空へ戻す経路が初期化以外に
+        //    無かったので、レベルアップ・分解・潜入の失敗・試練の勝敗などで頻繁に立つ
+        //    `Shell.Say` が、一度出たら以後ずっと帯に残っていた（2026-08-27 監査で発覚）。
+        //    ⭐ この手番で新しく `Shell.Say` が立てば、下の `Draw()` がすぐ埋め直すので
+        //    「本当は伝えたい今回のお知らせまで消える」ことにはならない。
+        _say = "";
         _shell.Tap(what, at);
         Draw();
         StateHasChanged();
@@ -210,6 +269,8 @@
     [JSInvokable]
     public void Held(string what, string at)
     {
+        // ⭐ 長押しも「押しどころ」の一つ ── `Tapped` と同じ理由で居座りを消す
+        _say = "";
         _shell.Hold(what, at);
         Draw();
         StateHasChanged();
@@ -217,22 +278,35 @@
         if (_shell.Open != Panel.None) { _clock?.Dispose(); _clock = null; }
     }
 
-    /// <summary>拍と拍の間（ミリ秒）。⭐ `Core.Beats.TicksPerSecond` の逆数
-    /// ── 1秒に 10.5 刻み進めるので、1刻みは 95ms。
+    /// <summary>拍と拍の間（ミリ秒）。⭐ `Core.Beats.FrameSeconds` ── 1秒に16回。
+    ///
+    /// 🔴 **`TicksPerSecond` の逆数ではなくなった**（2026-08-28）。⚠️ 前は同じ数だったので、
+    /// 「ゲージをゆっくりにする」と描き替えまで粗くなり、帯が階段に見えた
+    /// ── 遅くするほど汚くなる、という逆さまの作りだった。
+    /// ⭐ いまは**描き替えの速さ**（ここ）と**時の進む速さ**（`TicksPerSecond`）が別物で、
+    /// 1拍で進む刻みは 1 未満でもよい（端数は `Shell.Ticks` に残り、`Deeds.GaugeAt` が帯に出す）。
     /// ⚠️ ここを変えると戦いの見え方だけが変わる（勝敗も手数も変わらない）。</summary>
-    private const int Every = (int)(1000 / Beats.TicksPerSecond);
+    private const int Every = (int)(1000 * Beats.FrameSeconds);
 
     /// <summary>時計。⭐ **人の手番では止まる** ── そこが「選ぶ」ところ。
     ///
     /// ⭐ 戦いは1手を3拍（名乗り・着弾・間）、すごろくはさいころと駒
     /// ── 割り方と数は `Core.Beats`。
-    /// ⚠️ **1本で足りる** ── 戦いと潜入は同時に動かない。</summary>
+    /// ⚠️ **1本で足りる** ── 戦いと潜入は同時に動かない。
+    ///
+    /// 🔴 **period は付けない（1回きり）。**⚠️ 前は `Every` 周期で繰り返す Timer
+    /// だったが、`Beat` は JS 側を呼ぶ（`await`）ので、混み合うと**前の拍が終わる前に
+    /// 次の拍が起きる**（実際にあった不具合 2026-08-26「すごろく画面が常に動き続けて
+    /// 操作不能」── 単一スレッドの WASM でも `await` の継ぎ目でイベントループが
+    /// 次の Timer を先に処理でき、`Beat` が二重三重に重なって `RoamWait` を
+    /// 縮め合い、止まる隙が無くなる）。⭐ 次の拍は `Beat` 自身が**終わってから**
+    /// 仕掛け直す（下記 `Change`）── 重ね打ちを構造的に無くす。</summary>
     private void Wind()
     {
         _clock?.Dispose();
         _clock = null;
         if (_shell.Fight_ == null && _shell.Roam_ == Roam.Still) return;
-        _clock = new System.Threading.Timer(_ => InvokeAsync(Beat), null, Every, Every);
+        _clock = new System.Threading.Timer(_ => InvokeAsync(Beat), null, Every, System.Threading.Timeout.Infinite);
     }
 
     private async Task Beat()
@@ -247,6 +321,10 @@
         if (how == Deeds.Tick.Filling)
         {
             await Js.InvokeVoidAsync("eggTap.bars", Deeds.Bars(_shell));
+            // 🔴 一回きりの Timer なので、ここで次の拍を明示的に仕掛け直す
+            //    （`Wind()` は呼ばない ── 呼ぶと Draw/StateHasChanged 抜きで
+            //    済ませたいだけの「帯だけ更新」の意図が変わってしまう）。
+            _clock?.Change(Every, System.Threading.Timeout.Infinite);
             return;
         }
         // ⚠️ 🔴 **人の手番になったら、時計を止めて、組み直しもしない。**
@@ -263,6 +341,63 @@
         //    ── オートで勝った育ちが、閉じた瞬間に丸ごと消えていた。
         //    ⚠️ 中身が変わっていなければ `Keep` は書かないので、無駄打ちにはならない。
         await Keep();
+    }
+
+    /// <summary>放置の見た目を進める間隔（ミリ秒）。⭐ 戦闘/すごろく用の <see cref="Every"/>（62ms・
+    /// 名乗り→着弾→間の1手を滑らかに見せる）とは**桁が違ってよい**。放置は数値が数秒おきに
+    /// 動けば「止まっていない」と分かるので十分 ── 短くしても見た目は滑らかにならない
+    /// （`Core.Idle.Advance` は 0.25秒刻みで内部計算するだけで、アニメーションではない）。
+    /// ⚠️ 電池と描画の負担を増やしすぎない（作者の指示）ための数字でもある。</summary>
+    private const int IdleEvery = 5000;
+
+    /// <summary>放置の時計。⭐ **`Wind`/`Beat`（戦闘・すごろく専用）とは別本。**
+    ///
+    /// ⚠️ 🔴 **`Wind()` は逆の条件で止まる**（戦闘中でも移動中でもなければ動かさない）。
+    /// 放置はその**逆** ── ホームを眺めているだけの、何も起きていない時間にこそ
+    /// 進む必要がある。⚠️ 混ぜると条件が絡み合って読めなくなるので、別のタイマーにする
+    /// （`Core.Idle` 側も「戦闘中・すごろく移動中でも気にせず進めてよい（競合しない）」
+    /// という前提で作ってある ── `OnAfterRenderAsync` 内の最初の `Idle.Advance` 呼び出しの
+    /// コメントを参照）。
+    /// ⭐ 単発 Timer を都度張り直す流儀は `Wind`/`Beat` と同じ ── 前の拍が終わる前に
+    /// 次の拍が起きる事故（2026-08-26 に踏んだやつ）をここでも避ける。
+    /// ⚠️ **ページを離れるまで止めない**（`Wind` と違って早期 return が無い）。
+    /// 放置は「どの画面を見ていても裏で進む」設計なので、ホーム以外を見ていても
+    /// 計算そのものは続ける（描き直すかどうかは <see cref="BeatIdle"/> 側で絞る）。</summary>
+    private void WindIdle()
+    {
+        _idleClock?.Dispose();
+        _idleClock = new System.Threading.Timer(
+            _ => InvokeAsync(BeatIdle), null, IdleEvery, System.Threading.Timeout.Infinite);
+    }
+
+    private async Task BeatIdle()
+    {
+        // 🔴 **前は `_shell.Now` を諦めて `DateTimeOffset.UtcNow` を都度取り直していた**
+        //    （Shell 生成時の一度きりの値で固定されていて、時計代わりに使うと経過秒が
+        //    常に 0 になり、何回呼んでも進まなかったため）。それは穴を避けただけで、
+        //    孵化器の残り時間など `_shell.Now` を読む他の場所は直っていなかった。
+        //    ⭐ 根を直した（`Shell.Now` 自体を「実プレイでは都度いまを返す」時計にした
+        //    ── `AppPage(live: true)`）ので、ここも素直に `_shell.Now` を読めばよい
+        //    ── **時計の出所を1つに戻す**（2026-08-27）。
+        // ⚠️ 二重に数えない ── `Idle.Advance` が `run.LastUnix` を自分で進めるので、
+        //    素直に呼ぶだけでよい（`OnAfterRenderAsync` の最初の1回と、ここでの
+        //    繰り返し呼び出しが競合しないことは `Idle.Advance` の実装で確かめた）。
+        Core.Idle.Advance(_shell.Game.Idle, Games.PartyOf(_shell.Game, PartyKind.Idle), _shell.Now);
+
+        // ⭐ **ホームを、何も覆わずに眺めているときだけ描き直す。**⚠️ カード（育てる・
+        //    分解など）や戦闘・すごろく・演出の最中に割り込んで組み直すと、
+        //    押しどころが作り直されて触れなくなる（`Beat` の Filling/Stopped 分岐と同じ理由）。
+        //    ⭐ 進めた計算そのもの（上の `Idle.Advance`）は画面を問わず毎回行うので、
+        //    見ていない間の分が失われることはない ── ここで絞るのは**再描画だけ**。
+        if (_shell.Now_Sheet == Sheet.Home && _shell.Open == Panel.None && _shell.Under == Panel.None
+            && _shell.Fight_ == null && _shell.Roam_ == Roam.Still
+            && _shell.Cheer_ == null && _shell.Banner == null)
+        {
+            Draw();
+            StateHasChanged();
+        }
+
+        WindIdle();
     }
 
     /// <summary>溜まった演出を盤へ出す。⚠️ **出したら空にする**
@@ -340,6 +475,7 @@
         Panel.Party => Sheets.Party(_shell, _shell.IdleParty, suffix),
         Panel.Fuse => Sheets.Fuse(_shell, suffix),
         Panel.Train => Sheets.Train(_shell, suffix),
+        Panel.Grow => Sheets.Grow(_shell, suffix),
         Panel.Eggs => Sheets.Eggs(_shell, suffix),
         Panel.Ask => Sheets.Ask(_shell, suffix),
         Panel.Keep => Sheets.Keep(_shell, suffix),
@@ -348,5 +484,14 @@
         _ => "",
     };
 
-    public void Dispose() { _me?.Dispose(); _clock?.Dispose(); }
+    public void Dispose()
+    {
+        // ⚠️ `eggTap.listen` は document に直接 pointerdown 等を付けている（捕捉段階）。
+        //    DOM がこの頁のものでなくなっても listener 自体は自然には外れない ── 外さないと
+        //    捨てられた `DotNetObjectReference` へ向けて古い購読が呼び続け、他の頁（`/edit` 等）
+        //    へ移ってから押すたびに例外になる。⭐ `EditPage.Dispose` の `eggEdit.stop` と同じ
+        //    流儀（`Dispose` は同期メソッドなので `IAsyncDisposable` にはせず、投げ捨てる）。
+        _ = Js.InvokeVoidAsync("eggTap.stop");
+        _me?.Dispose(); _clock?.Dispose(); _idleClock?.Dispose();
+    }
 }

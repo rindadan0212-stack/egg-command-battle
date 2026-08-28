@@ -26,7 +26,13 @@ public static class Idle
 
         // ⭐ 地面。⚠️ 画面幅の2倍あるのは、左へ流して**折り返す**ため
         //    （1枚ぶん流れたら元へ戻るので、繋ぎ目が見えない）
-        sb.Append(Box("ground", 0, GroundTop, Wide * 2, GroundHigh, "#f2b34b"));
+        // 🔴 **名前は `ground` にしない。**⚠️ すごろくの盤の器がその名前を使っている
+        //    （`assets/layouts/trail.txt`）── 画面が違えば別物、ではない。
+        //    id は画面をまたいでも唯一で、`stage.css` の `#ground` が**両方**に当たり、
+        //    潜入の盤が左へ流れ続けていた（実測 2026-08-26）。
+        //    ⭐ 動きは級（`idle-flow`）で掛ける ── 草（`idle-tuft`）と同じやり方。
+        sb.Append(Box("idleground", 0, GroundTop, Wide * 2, GroundHigh, "#f2b34b",
+            "idle-flow"));
         // ⚠️ 草も一緒に流す ── ⭐ 地面だけ動くと、生えている物が滑って見える
         for (int i = 0; i < 16; i++)
             sb.Append(Box($"tuft#{i}", 90 + 260 * i, GroundTop - 26, 46, 26, "#9ac95e",

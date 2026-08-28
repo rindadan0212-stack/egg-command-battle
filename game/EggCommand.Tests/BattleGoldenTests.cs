@@ -27,14 +27,23 @@ public class BattleGoldenTests
         // ⚠️ **桁を上げた**（2026-08-19・作者の指示）。ステと同じ倍率で動かした定数は
         //    倍率で戻して照合する。⭐ どれも比の式なので、揃えて動かせば釣り合いは1つも動かない
         //    ── その証拠が下の damageNormalize（倍率が約分されて移植元と同じ値のまま）。
-        Assert.Equal(golden.GetProperty("gaugeMax").GetInt32() * Stats.Scale, Battle.GaugeMax);
-        Assert.Equal(golden.GetProperty("gaugeBase").GetInt32() * Stats.Scale, Battle.GaugeBase);
+        // 🔴 **ゲージの2つは意図して動かした**（2026-08-26・作者の指定「最速は最遅の3〜3.5倍」）。
+        //    ⭐ `GaugeBase` を上げると速度の差が圧縮される（土台が大きいほど比が縮む）。
+        //    ⚠️ `GaugeMax` も同じだけ上げないと、実時間で戦闘が3割速くなる。
+        //    ⚠️ 移植元との比は**もう保てない** ── 意図した食い違いとして1行ずつ書く。
+        Assert.Equal(1000, golden.GetProperty("gaugeMax").GetInt32());
+        Assert.Equal(1500 * Stats.Scale, Battle.GaugeMax);
+        Assert.Equal(55, golden.GetProperty("gaugeBase").GetInt32());
+        Assert.Equal(115 * Stats.Scale, Battle.GaugeBase);
         Assert.Equal(golden.GetProperty("maxActions").GetInt32(), Battle.MaxActions);
         // ⚠️ HP は「ステの桁」に加えて HpBoost ぶん大きい（技の威力にも同じだけ掛けてある）
         Assert.Equal(golden.GetProperty("hpScale").GetInt32() * Battle.HpBoost, Battle.HpScale);
         Assert.Equal(golden.GetProperty("elementAdvantage").GetDouble(), Battle.ElementAdvantage);
         Assert.Equal(golden.GetProperty("atkSoften").GetInt32() * Stats.Scale, Battle.AtkSoften);
-        Assert.Equal(golden.GetProperty("defSoften").GetInt32() * Stats.Scale, Battle.DefSoften);
+        // 🔴 **防御の軟化も意図して動かした**（作者の指定「育て切った壁は 70〜80% 止める」）。
+        //    ⚠️ 550 のままだと 94% 止めてしまい、戦闘が98発かかっていた（実測 2026-08-26）。
+        Assert.Equal(110, golden.GetProperty("defSoften").GetInt32());
+        Assert.Equal(340 * Stats.Scale, Battle.DefSoften);
         Assert.Equal(golden.GetProperty("damageNormalize").GetDouble(), Battle.DamageNormalize);
     }
 
@@ -79,12 +88,14 @@ public class BattleGoldenTests
         //    ⭐ ずれても倍率ぶん（Stats.Scale）未満であることまで見る。
         foreach (var entry in golden.GetProperty("gaugeRate").EnumerateArray())
         {
-            int want = entry.GetProperty("out").GetInt32() * Stats.Scale;
-            int got = Battle.GaugeRate(
-                entry.GetProperty("speed").GetInt32() * Stats.Scale,
-                entry.GetProperty("tempo").GetDouble());
-            Assert.True(System.Math.Abs(got - want) < Stats.Scale,
-                $"speed={entry.GetProperty("speed").GetInt32()} → {got}（移植元 × 倍率 = {want}）");
+            // 🔴 **`GaugeBase` を上げたので移植元の値には戻らない**（2026-08-26）。
+            //    ⭐ 代わりに**式どおりか**を見る ── 検査したい性質は
+            //    「(GaugeBase ＋ 速度) × テンポ」であって、移植元と同じ数ではない。
+            int speed = entry.GetProperty("speed").GetInt32() * Stats.Scale;
+            double tempo = entry.GetProperty("tempo").GetDouble();
+            int want = (int)System.Math.Floor((Battle.GaugeBase + speed) * tempo + 0.5);
+            int got = Battle.GaugeRate(speed, tempo);
+            Assert.Equal(want, got);
         }
     }
 

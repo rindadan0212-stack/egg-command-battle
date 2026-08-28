@@ -256,7 +256,7 @@ namespace EggCommand.Core
                     foe.Strong, foe.Weak, foe.Element,
                     Creatures.TraitIdFor(foe.SpeciesId), foe.Best, foe.Worst);
                 // ⭐ 育て切った状態で来る。⚠️ ここを飛ばすと、素質だけの案山子になる
-                Creatures.Grow(creature, Trained);
+                Creatures.GrowAuto(creature, Trained);
                 party.Add(creature);
             }
             return party;

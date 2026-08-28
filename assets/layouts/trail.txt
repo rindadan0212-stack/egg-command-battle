@@ -28,7 +28,7 @@ head       box     0    0     1080 214   dock=no bind=board
 # ⚠️ **1画面に収めない**（作者の指示）。⭐ 縦に巻いて、駒が見える所へ寄せる。
 #    ⭐ 高さはマスの段数で決まるので、盤自体は `host`。
 board      scroll  0    228   1080 1164
-  ground   host    0    0     1080 1164
+  ground   host    0    0     1080 1164   grow=yes
 
 foot       box     0    1396  1080 392   dock=no bind=board
   # ⚠️ **振れないときは灰で出す**（消さない）。

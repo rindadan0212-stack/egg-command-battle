@@ -742,7 +742,7 @@ namespace EggCommand.Core
                     strong[shape], weak[shape], null, Creatures.TraitIdFor(species));
                 // ⭐ 育てた分も持たせる。⚠️ 素の孵化直後で検査すると、想定より弱い相手で測ることになる
                 //    （段1 は速度合計 69 に対し必要 65 で、通る角度が 1度しか無かった）
-                Creatures.Grow(creature, Creatures.TrainMax);
+                Creatures.GrowAuto(creature, Creatures.TrainMax);
                 party.Add(creature);
             }
             return party;

@@ -146,6 +146,28 @@ namespace EggCommand.Core
         Steal,
         /// <summary>蘇生。⚠️ 倒れた味方を <see cref="Effect.Percent"/>% の HP で戻す。</summary>
         Revive,
+
+        // ── 2026-08-27 に足した5つ（参考作品との突き合わせで「本作に語彙が無い」と出たもの）──
+        // ⚠️ **技には落とし込んでいない**（作者の指示）。語彙として在るだけ。
+
+        /// <summary>⭐ **封印。**⚠️ 枠2・3 が押せなくなる（枠1 の通常攻撃だけ残る）。
+        /// ⭐ スタンとの違い: **手番は来る。**来るが、できることが1つに減る。
+        /// ⚠️ だから「動けない」ではなく「**選べない**」── 手番を奪う札より軽い。</summary>
+        Seal,
+        /// <summary>⭐ **固着（弱化解除無効）。**⚠️ 乗っている弱化が**落とせなくなる**。
+        /// ⭐ 仕込む側の札 ── 毒や弱化を置いたあとに固めると、回復役の解除が効かない。</summary>
+        Anchor,
+        /// <summary>⭐ **無敵。**⚠️ ダメージを**一切受けない**（シールドと違って枚数で減らない）。
+        /// ⚠️ 毒は通る（`DealDamage` を通らないため）── 「殴られない」であって「無傷」ではない。</summary>
+        Invincible,
+        /// <summary>⭐ **弱化延長。**⚠️ 持続を持たない**即時**の効果。
+        /// 相手に乗っている弱化の残りを <see cref="Effect.Turns"/> ぶん伸ばす。
+        /// ⭐ 何も乗っていなければ何も起きない ── 単体では成立しない、仕込みの回収札。</summary>
+        Extend,
+        /// <summary>⭐ **反撃。**⚠️ 受けたダメージの一部を返す状態（<see cref="Effect.Turns"/> 回ぶん）。
+        /// ⚠️ 特性の「返し身」と**同じ働き**だが、層が違う ──
+        /// あちらは生まれつき常時、こちらは**札で買って数手だけ**。</summary>
+        Counter,
     }
 
     /// <summary>効果のプリミティブ。
@@ -196,6 +218,18 @@ namespace EggCommand.Core
         /// （「防御無視の攻撃」であって「防御無視」という別の効果ではない）。
         /// ⚠️ 盾は無視しない ── 盾を抜くのは手数の仕事。</summary>
         public readonly bool Pierce;
+
+        /// <summary>damage。⭐ **相手に乗っている強化を、この一撃にだけ無かったことにする**
+        /// （2026-08-27・作者の指示「強化効果無視攻撃」）。
+        ///
+        /// ⚠️ <see cref="Pierce"/>（防御無視）と**別物**:
+        /// あちらは**素の防御ステ**を踏み倒し、こちらは**買った守り**を踏み倒す。
+        /// ⭐ 消えるのは 防御力UP・シールド・無敵・ガッツ の4つ ── どれも「強化」だから。
+        /// ⚠️ **毒やリジェネは消えない**（守りではない）。
+        ///
+        /// ⭐ **無敵に答えがあるべき**なので、無敵も無視する対象に入れてある。
+        /// 無効化できない札を1枚も作らない、というのがこの取り合いの前提。</summary>
+        public readonly bool Bare;
 
         /// <summary>効果が通る率（%）。⭐ 100 なら必ず通る（乱数を1度も引かない）。
         ///
@@ -256,8 +290,9 @@ namespace EggCommand.Core
         private Effect(EffectKind kind, PowerTier power, DamageScale scale, StatKey stat, int sign,
             int turns, int stacks, int percent, int count, int delta, int hits, int repeat = 1,
             int chance = 100, bool pierce = false, Target? own = null, bool innate = false,
-            SkillWhen? when = null, Tally per = Tally.None)
+            SkillWhen? when = null, Tally per = Tally.None, bool bare = false)
         {
+            Bare = bare;
             When = when;
             Per = per;
             Innate = innate;
@@ -280,9 +315,9 @@ namespace EggCommand.Core
 
         /// <summary>scale が Def のものは「防御が高いほど強い一撃」になる。</summary>
         public static Effect Damage(PowerTier power, DamageScale scale, int repeat = 1,
-            bool pierce = false) =>
+            bool pierce = false, bool bare = false) =>
             new Effect(EffectKind.Damage, power, scale, default, 0, 0, 0, 0, 0, 0, 0, repeat,
-                100, pierce);
+                100, pierce, null, false, null, Tally.None, bare);
 
         /// <summary>攻撃力/防御力/スピードの UP・DOWN。⚠️ 効き目は一律 <see cref="Skills.BuffPercent"/>。段位は使わない。</summary>
         public static Effect Buff(StatKey stat, int sign, int turns, int chance = 100)
@@ -317,6 +352,33 @@ namespace EggCommand.Core
         public static Effect HealRatio(int percent, int chance = 100) =>
             new Effect(EffectKind.HealRatio, default, default, default, 0, 0, 0, percent, 0, 0, 0,
                 1, chance);
+
+        // ── 2026-08-27 に足した5つ ─────────────────────────
+
+        /// <summary>封印。⭐ 枠2・3 が押せなくなる（枠1 だけ残る）。</summary>
+        public static Effect Seal(int turns, int chance = 100) =>
+            new Effect(EffectKind.Seal, default, default, default, 0, turns, 0, 0, 0, 0, 0,
+                1, chance);
+
+        /// <summary>固着。⭐ 乗っている弱化を落とせなくする。</summary>
+        public static Effect Anchor(int turns, int chance = 100) =>
+            new Effect(EffectKind.Anchor, default, default, default, 0, turns, 0, 0, 0, 0, 0,
+                1, chance);
+
+        /// <summary>無敵。⭐ ダメージを受けない。⚠️ 味方に配る札なので率は付けない。</summary>
+        public static Effect Invincible(int turns) =>
+            new Effect(EffectKind.Invincible, default, default, default, 0, turns, 0, 0, 0, 0, 0,
+                1, 100);
+
+        /// <summary>弱化延長。⭐ 相手に乗っている弱化の残りを伸ばす（即時）。</summary>
+        public static Effect Extend(int turns, int chance = 100) =>
+            new Effect(EffectKind.Extend, default, default, default, 0, turns, 0, 0, 0, 0, 0,
+                1, chance);
+
+        /// <summary>反撃。⭐ 受けたダメージの一部を返す（味方に配る札）。</summary>
+        public static Effect Counter(int turns) =>
+            new Effect(EffectKind.Counter, default, default, default, 0, turns, 0, 0, 0, 0, 0,
+                1, 100);
 
         /// <summary>シールド。1回の攻撃につき1枚消費し、その攻撃を威力に関係なく完全に無効化する。
         /// ⭐ つまり「大きな一撃」に強く、「手数」に弱い。</summary>
@@ -409,7 +471,7 @@ namespace EggCommand.Core
         /// <summary>欄を1つだけ差し替えた写し。⚠️ 元は書き換えない。</summary>
         private Effect Copy(Target? own = null, SkillWhen? when = null, Tally? per = null) =>
             new Effect(Kind, Power, Scale, Stat, Sign, Turns, Stacks, Percent, Count, Delta, Hits,
-                Repeat, Chance, Pierce, own ?? Own, Innate, when ?? When, per ?? Per);
+                Repeat, Chance, Pierce, own ?? Own, Innate, when ?? When, per ?? Per, Bare);
 
         /// <summary>⭐ **生まれつきのステ上昇・下降。**パッシブ技だけが持てる。
         ///
@@ -667,9 +729,40 @@ namespace EggCommand.Core
             }
         }
 
-        /// <summary>ステータス系が動かす割合（%）。⭐ ステータスの数値そのものに掛かる。
-        /// ⚠️ 段位を使わない。威力とは別の軸なので揃えない。UP も DOWN も一律この値。</summary>
-        public const int BuffPercent = 30;
+        /// <summary>攻撃・防御の強化／弱化が動かす割合（%）。⭐ **作者の指示 2026-08-27 で 30 → 50。**
+        ///
+        /// ⚠️ **30 では手番の元が取れなかった。**`sim turnvalue` の実測で
+        /// 攻撃力UP が 0.63手ぶん（枠1 で殴るのが 1.0）── 掛けるより殴ったほうが得だった。
+        /// ⭐ 50% × 3ターン × 後効きの割引 0.7 ＝ 約 1.05手ぶんで、ようやく釣り合う。</summary>
+        public const int BuffStatPercent = 50;
+
+        /// <summary>速度の強化／弱化が動かす割合（%）。⚠️ **攻撃・防御より小さい**（作者の指示）。
+        ///
+        /// ⭐ 速度は「行動回数」も「潜入の飛距離」も持っていて**二重に効く**ので、
+        /// 同じ 50% にすると1つの札で2つの軸を動かせてしまう。</summary>
+        public const int BuffSpdPercent = 30;
+
+        /// <summary>その軸の強化／弱化が動かす割合（%）。⭐ **唯一の出所。**
+        /// ⚠️ 呼ぶ側で <c>stat == Spd ? 30 : 50</c> と書かないこと ──
+        /// 軸を足した日に、書き写した側だけが古い値のまま残る。</summary>
+        public static int BuffPercentOf(StatKey stat) =>
+            stat == StatKey.Spd ? BuffSpdPercent : BuffStatPercent;
+
+        /// <summary>⭐ **防御の強化／弱化は、ステではなく「被ダメージ」に掛かる**（2026-08-27）。
+        ///
+        /// ⚠️ **ステに掛けると、言った割合が実際には出ない。**ダメージ式の軽減は
+        /// <c>(DefSoften ÷ (DefSoften ＋ 防御))²</c> で、DefSoften が防御そのものより
+        /// ずっと大きい。実測では **防御 +30% が被ダメ −3%** にしかならず、
+        /// 防御力UP・DOWN は 0.06手ぶん ＝ ゲーム内で最も無意味な2技だった。
+        ///
+        /// ⚠️ **ステ側で 50% を出すことはできない。**式を解くと DefSoften を
+        /// 防御の 0.2倍（1700 → 約40）まで落とす必要があり、そのときの軽減率は 97% になる。
+        /// ⭐ だから**掛ける先を変える** ── 防御力UP ＝ 被ダメ ×0.5、DOWN ＝ ×1.5。
+        ///
+        /// ⚠️ **副作用**: 防御依存攻撃（<see cref="DamageScale.Def"/>）は
+        /// **素の防御**で伸びる。防御力UP を掛けても火力は上がらない
+        /// （硬さの源と、被ダメの割引を、別のものとして分けた）。</summary>
+        public static bool GuardsDamage(StatKey stat) => stat == StatKey.Def;
 
         /// <summary>⭐ **切れない持続。**<see cref="Effect.Buff"/> の残り回数にこれを渡すと、
         /// 戦闘が終わるまで残る強化／弱化になる。
@@ -731,35 +824,94 @@ namespace EggCommand.Core
                 return slot == 0 ? WithoutCt(skill, written) : written;
             }
 
-            // ⭐ その技が実際に持っている軸だけを並べ、最後に CT を足して順繰りに割り当てる
-            var axes = new List<SkillGain>();
-            if (HasDamage(skill)) axes.Add(SkillGain.Power);
-            if (HasRepeat(skill)) axes.Add(SkillGain.Repeat);
-            if (HasChance(skill)) axes.Add(SkillGain.Chance);
-            if (HasTurns(skill)) axes.Add(SkillGain.Turns);
-            // ⚠️ 回復の割合と盾の枚数は Turns でも Power でも表せない。
-            //    これが無いと、それらの技は伸びる軸が CT しか無くなり、
-            //    4段とも CT ＝ 途中で下限 0 に当たって**死に段**になる（導出して初めて見えた）
-            if (HasPercent(skill)) axes.Add(SkillGain.Percent);
-            if (HasCount(skill)) axes.Add(SkillGain.Count);
-            if (HasAmount(skill)) axes.Add(SkillGain.Amount);
-            // ⚠️ パッシブは CT が無いので、これが無いと**伸ばす軸が1つも無くなる**
-            if (HasInnate(skill)) axes.Add(SkillGain.Innate);
-            if (skill.Ct > 0) axes.Add(SkillGain.Ct);
+            // 🔴 **味方に配る持続もの「だけ」を持つ技は、専用式で育てる**（2026-08-27・作者の指示）。
+            //    ⭐ 基礎CTを「持続＋1＋段数」まで伸ばして置き、CT を段数ぶん縮めて
+            //    ちょうど下限（持続＋1）に着地させる ── 唯一の出所は AllyPersistentSteps
+            //    （PriceOf の床・CapFor の天井もここを見る）。
+            //    ⚠️ 他に軸がある技（tailwind・dash・harden・warcry 等）はここを通らない
+            //    （下の一般式が、今までどおり Turns だけ外した軸で育てる）。
+            if (IsPureAllyPersistent(skill))
+            {
+                int pureSteps = slot == 0 ? 0 : AllyPersistentSteps(LongestAllyTurns(skill));
+                var pure = new SkillGain[pureSteps];
+                for (int i = 0; i < pureSteps; i++) pure[i] = SkillGain.Ct;
+                return pure;
+            }
+
+            // ⚠️ 🔴 **味方に配る持続効果（免疫・リジェネ・ガッツ・強化）を持つ技は、
+            //    「持続」を成長軸へ入れない**（2026-08-27）。
+            //    ⚠️ 持続を伸ばすと、CT をどれだけ縮めても「CT ≧ 持続＋1」がいつか壊れる
+            //    （縮む CT と伸びる持続が別の歩幅で動くため）。
+            bool guardsAllies = GuardsAllies(skill);
+            var axes = NaturalAxesOf(skill, guardsAllies);
+
+            // 🔴 **guardsAllies が Turns・CT を外した結果、軸が1つしか残らない技がある**
+            //    （早駆け＝Amount・硬化＝Count・追い風＝Percent・鬨の声＝Chance。2026-08-27 監査で発覚）。
+            //    ⚠️ 判定は <see cref="IsSingleAxisFromGuard"/> **1つに寄せる**（ここで
+            //    `axes.Count==1` を独自に書くと、Audit 側の判定式と2つに割れる）。
 
             // ⚠️ 枠1 では CT が効かないので、軸から外してから割り当てる
             if (slot == 0) axes.Remove(SkillGain.Ct);
             if (axes.Count == 0)
             {
                 // ⚠️ 伸ばせる軸が1つも無い技。⭐ Audit が読める形で報告できるよう、
-                //    ここでは落とさずに空を返す（0除算で落ちると原因が読めない）
+                //    ここでは落とさずに空を返す（0除算で落ちると原因が読めない）。
+                // ⚠️ **`IsPureAllyPersistent` の技はここへ来ない**（関数の先頭で先に抜けている）。
+                //    ここに来るのは、それ以外の理由で軸が無い技 ── 今のところ無いはずの防衛線。
                 return new SkillGain[0];
             }
 
-            var growth = new SkillGain[MaxLevel - 1];
+            // 🔴 **軸が1本しか無い技は、4段を無理に埋めない**（作者の指示 2026-08-27）。
+            //    ⭐ 段数は `AllyPersistentGrowthSteps` と同じ 2（＝上限 Lv3）に揃える ──
+            //    「持続を持つ技は、伸びる軸の広さを問わず CT だけを2段縮めて着地する」という
+            //    今日の設計判断と歩調を合わせるための数字で、他に根拠はない。
+            //    ⚠️ 1本のまま4段（早駆け＝CT短縮 2→6、硬化＝盾 1→5枚、追い風＝ゲージ 25→45%）は
+            //    どれも「単機能の技」の上位互換を専門技より安く踏み倒す（例: 硬化Lv5の盾5枚は
+            //    シールド・大の固定4枚＝★5を超える）── 2段（Lv3）なら踏み倒さない。
+            int steps = ExpectedGrowthStepsOf(skill);
+            var growth = new SkillGain[steps];
             for (int i = 0; i < growth.Length; i++) growth[i] = axes[i % axes.Count];
             return growth;
         }
+
+        /// <summary>その技の成長表が（枠を問わない一般形で）本来何段であるべきか。
+        /// ⭐ **唯一の出所** ── <see cref="GrowthOf(Skill, int)"/> 本体・Audit（<see cref="Faults"/>）・
+        /// xUnit（未配布でも成長表と採点は揃っている）の3か所が、同じ式を別々に書くと
+        /// いつかどれか1つだけ古くなる（②で踏んだのと同じ形の罠を先回りで防ぐ）。
+        /// ⚠️ この関数を呼ぶ時点で <see cref="IsPureAllyPersistent"/> 分岐は
+        /// 素通りしている想定（<see cref="GrowthOf(Skill, int)"/> はその分岐を先に抜けているので
+        /// ここへ来ない。Audit・xUnit 側は素通しでよい ── 内側でもう一度確かめるだけ）。</summary>
+        public static int ExpectedGrowthStepsOf(Skill skill)
+        {
+            if (IsPureAllyPersistent(skill)) return AllyPersistentSteps(LongestAllyTurns(skill));
+            // 🔴 **軸が1本しか無い技は、4段を無理に埋めない**（作者の指示 2026-08-27）。
+            //    ⭐ 段数は `AllyPersistentGrowthSteps` と同じ 2（＝上限 Lv3）に揃える ──
+            //    「持続を持つ技は、伸びる軸の広さを問わず CT だけを2段縮めて着地する」という
+            //    今日の設計判断と歩調を合わせるための数字で、他に根拠はない。
+            //    ⚠️ 1本のまま4段（早駆け＝CT短縮 2→6、硬化＝盾 1→5枚、追い風＝ゲージ 25→45%）は
+            //    どれも「単機能の技」の上位互換を専門技より安く踏み倒す（例: 硬化Lv5の盾5枚は
+            //    シールド・大の固定4枚＝★5を超える）── 2段（Lv3）なら踏み倒さない。
+            if (IsSingleAxisFromGuard(skill)) return SingleAxisGrowthSteps;
+            return MaxLevel - 1;
+        }
+
+        /// <summary>guardsAllies で軸が1本に削れた技が育つ段数。
+        /// ⚠️ <see cref="AllyPersistentGrowthSteps"/>（味方持続もの専用の2段）と値は同じだが、
+        /// **意味が違うので定数を分けてある**（あちらは「持続＋CT」専用の式、こちらは
+        /// 「軸が1本しか無い」を汎用に検出した結果）── 値が同じだけで出所が同じではない。</summary>
+        public const int SingleAxisGrowthSteps = 2;
+
+        /// <summary>⭐ **その技の上限レベル。唯一の出所** ── 技表に手で書かない。
+        ///
+        /// 1 ＋ その技の成長の段数（<see cref="GrowthOf(Skill, int)"/> の長さ）。
+        /// ⭐ ほとんどの技は 1+4=5（<see cref="MaxLevel"/> と同じ）。
+        /// ⚠️ 味方に配る持続もの「だけ」の技（<see cref="IsPureAllyPersistent"/>）は、
+        /// 段数が最大2段（<see cref="AllyPersistentSteps"/>）に縮むぶん、
+        /// 上限も Lv3 以下（0段なら Lv1 のまま＝育たない）に縮む。
+        /// ⭐ <see cref="MaxLevel"/> は「どの技もこれを超えない」**全体の天井**として残る
+        /// （<see cref="GrowthOf(Skill, int)"/> が MaxLevel-1 段より多くは返さないため、
+        /// ここが超えることは無い）。</summary>
+        public static int MaxLevelOf(Skill skill) => 1 + GrowthOf(skill).Count;
 
         /// <summary>手で書いた成長表から CT を抜いて詰め直す。⚠️ 枠1 用。</summary>
         private static SkillGain[] WithoutCt(Skill skill, SkillGain[] written)
@@ -933,6 +1085,10 @@ namespace EggCommand.Core
         /// <summary>味方全体をここまで戻す回復は「盤面をひっくり返す」扱い。</summary>
         public const int HeavyHealPercent = 50;
 
+        /// <summary>敵全体からここまでゲージを奪うものは「盤面をひっくり返す」扱い（2026-08-26）。
+        /// ⚠️ 手番を丸ごと飛ばすのと同じ重さ ── 短い CT で回すと相手が一度も動けない。</summary>
+        public const int HeavyGaugePercent = 50;
+
         /// <summary>1つの袋に入れてよい技の数。
         /// ⭐ **狙える確率はここで決まる。**枠2×枠3 で 1/(a×b)。
         /// ⚠️ 技が増えても**ここを動かさない**。増えた技は種族と枠を足して受ける
@@ -998,38 +1154,222 @@ namespace EggCommand.Core
             // ⭐ 盤面をひっくり返す級は式の外（1回きりが持ち味・既存の規則のまま）
             if (IsHeavyCt(skill)) return CtHeavy;
 
-            int price = 1;
-            int longest = 0;   // ⭐ 味方に配る持続もの ── 張りっぱなしのガードに使う
-            foreach (var effect in skill.Effects)
-            {
-                // ⚠️ **自分への弱化は代償。**重さに数えず、逆に値引く（捨て身の突きの型）
-                bool cost = effect.Own == Target.Self && IsHarmful(effect);
-                if (cost) { price -= 1; continue; }
-
-                price += WeightOf(effect);
-                // ⚠️ 条件つきは「作りに行く手間」を値段から引く
-                if (effect.When != null) price -= 1;
-
-                if (effect.Turns > longest && !AtFoe(effect.Own ?? skill.Target))
-                    longest = effect.Turns;
-            }
-
-            // ⭐ 面で当たるものは高い。⚠️ 敵全体は挑発の縛りも受けない
-            var at = skill.Target;
-            if (at == Target.EnemyAll) price += 2;
-            else if (at == Target.AllyAll) price += 1;
-            // ⚠️ 狙えないことは値段。⭐ 単体と同じ効き目を安く買える取引（既存の設計意図）
-            else if (at == Target.EnemyRandom) price -= 1;
+            int longest;
+            int price = LoadOf(skill, out longest);
 
             // ⚠️ **張りっぱなしを止める。**免疫3T を CT2 で回すと永久免疫になる。
             //    ⭐ 味方に配る持続ものだけ「持続＋1」を下限にする。
             //    ⚠️ 近似 ── 持続は**受け手**の行動で減り、CT は**掛け手**の行動で減る。
-            if (longest > 0 && price < longest + 1) price = longest + 1;
+            //    🔴 2026-08-27 追記: 「持続もの**だけ**」の技（他に伸ばせる軸が無い）は、
+            //    床を「持続＋1＋段数」まで上げる ── 段数ぶんは CT の成長として使い切り、
+            //    最大まで育てるとちょうど元の床（持続＋1）に着地する。
+            //    ⚠️ 唯一の出所は AllyPersistentSteps（GrowthOf の段数と同じ数字を返す）。
+            if (longest > 0)
+            {
+                int floor = IsPureAllyPersistent(skill)
+                    ? longest + 1 + AllyPersistentSteps(longest)
+                    : longest + 1;
+                if (price < floor) price = floor;
+            }
 
             if (price < CtFloor) price = CtFloor;
-            if (price > CtCap) price = CtCap;
+            int cap = CapFor(skill, longest);
+            if (price > cap) price = cap;
             return price;
         }
+
+        /// <summary>⭐ その技に許される CT の天井。**唯一の出所**（<see cref="PriceOf"/> 自身と、
+        /// `Faults` の CT上限チェックの両方がここを呼ぶ ── 別々に
+        /// <c>IsHeavyCt(skill) ? CtHeavy : CtCap</c> と書いていた頃は、`Faults` 側だけ
+        /// 更新を忘れて `guts-deep`/`immune-long` を「盤面をひっくり返す技でもないのに
+        /// 天井超え」と誤って落としていた。2026-08-27 発見）。
+        ///
+        /// ⚠️ 盤面をひっくり返す級（<see cref="IsHeavyCt"/>）は既存の規則のまま
+        /// <see cref="CtHeavy"/>。
+        /// ⭐ 🔴 2026-08-27 追記: 味方に配る持続ものの下限（`longest+1+段数`）が通常の天井
+        /// （<see cref="CtCap"/>）を超える技（当時の `guts-deep`/`immune-long`＝持続6T→下限7。
+        /// 同日中に持続4T＋回復・弱化解除の複合へ作り直したが、床は 4+1+2＝7 のまま同じなので
+        /// この例は今も成り立つ ── 判定は id ではなく `longest` で見ているので、今後 id が
+        /// 増減しても崩れない）も、ここで <see cref="CtHeavy"/> まで許す ── 許さないと天井で
+        /// 刈られて「CT ≧ 持続＋1」が Lv1 から破れる（免疫がずっと乗ったままになりうる）。
+        /// ⚠️ **`longest` が原因のときだけ**。`LoadOf` の生の重さ（`price`）が
+        /// 単に大きいだけの技（毒牙の乱打＝生10・崩落＝生7）まで緩めると、
+        /// 「盛れば CT7 まで伸びる」抜け道になる ── そちらは今までどおり
+        /// <see cref="CtCap"/> で刈る（`LoadOf` の doc が挙げる実例のとおり CT5 のまま）。</summary>
+        private static int CapFor(Skill skill, int longest)
+        {
+            if (IsHeavyCt(skill)) return CtHeavy;
+            // 🔴 2026-08-27 追記: PriceOf の床と同じ式（IsPureAllyPersistent 用に伸ばした
+            //    「持続＋1＋段数」）で天井を見る ── 床だけ伸ばして天井を昔のままにすると、
+            //    伸ばした床そのものが天井に刈られてしまう（regen/regen-heavy が実際にこれで壊れた）。
+            int floor = IsPureAllyPersistent(skill)
+                ? longest + 1 + AllyPersistentSteps(longest)
+                : longest + 1;
+            return floor > CtCap ? CtHeavy : CtCap;
+        }
+
+        /// <summary>⭐ **その技が1回で起こすことの量**（床・天井・例外を掛ける**前**の生の値段）。
+        ///
+        /// ⭐ これがある理由（2026-08-27）: <see cref="PriceOf"/> は最後に
+        /// <see cref="CtCap"/> で刈るので、**上に振り切れた技がそこで見えなくなる**。
+        /// 実際に「毒牙の乱打」は 10、「崩落」は 7 を出しているのに、画面ではどちらも
+        /// CT5 ── ただの「乱打」（6）や「毒・全体」（5）と同じ値段に見えていた。
+        /// ⚠️ **技の格が天井に吸われて消えていた**のがこれ。
+        ///
+        /// ⭐ 刈る前の数は捨てずに取り出せるようにして、**格の物差し**に使う
+        /// （<see cref="GradeOf"/>）。⚠️ CT の式そのものは何も変えていない。</summary>
+        public static int LoadOf(Skill skill) => LoadOf(skill, out _);
+
+        private static int LoadOf(Skill skill, out int longest)
+        {
+            int load = 1;
+            foreach (var effect in skill.Effects)
+            {
+                // ⚠️ **自分への弱化は代償。**重さに数えず、逆に値引く（捨て身の突きの型）
+                bool cost = IsSelfCost(effect);
+                if (cost) { load -= 1; continue; }
+
+                load += WeightOf(effect);
+                // ⚠️ 条件つきは「作りに行く手間」を値段から引く
+                if (effect.When != null) load -= 1;
+            }
+            // ⚠️ **判断は `LongestAllyTurns`（＝`IsAllyPersistent`）1つに寄せる**
+            //    （`GrowthOf`/`Faults`/`PriceOf` の床がすべて同じ出所を見る）。
+            longest = LongestAllyTurns(skill);
+
+            // ⭐ 面で当たるものは高い。⚠️ 敵全体は挑発の縛りも受けない
+            var at = skill.Target;
+            if (at == Target.EnemyAll) load += 2;
+            else if (at == Target.AllyAll) load += 1;
+            // ⚠️ 狙えないことは値段。⭐ 単体と同じ効き目を安く買える取引（既存の設計意図）
+            else if (at == Target.EnemyRandom) load -= 1;
+
+            return load;
+        }
+
+        /// <summary>味方に配る持続効果のうち、いちばん長い持続。⚠️ 無ければ 0。
+        /// ⭐ **唯一の出所**（<see cref="LoadOf(Skill, out int)"/> の床・<see cref="GrowthOf(Skill, int)"/>
+        /// の段数・<see cref="Faults()"/> の検査がすべてここを見る。2026-08-27）。</summary>
+        private static int LongestAllyTurns(Skill skill)
+        {
+            int longest = 0;
+            foreach (var effect in skill.Effects)
+            {
+                if (effect.Turns > longest && IsAllyPersistent(skill, effect)) longest = effect.Turns;
+            }
+            return longest;
+        }
+
+        /// <summary>味方に配る持続効果を1つでも持つか。⭐ **唯一の出所**
+        /// （<see cref="GrowthOf(Skill, int)"/> と <see cref="Faults()"/> が別々に同じ
+        /// foreach を書いていたのを1つに寄せた。2026-08-27）。</summary>
+        private static bool GuardsAllies(Skill skill)
+        {
+            foreach (var effect in skill.Effects) if (IsAllyPersistent(skill, effect)) return true;
+            return false;
+        }
+
+        /// <summary>その技が実際に持っている成長軸（枠は問わない・guardsAllies を反映済み）。
+        /// ⭐ **唯一の出所**（<see cref="GrowthOf(Skill, int)"/> 本体と、
+        /// <see cref="IsSingleAxisFromGuard"/> 経由で Audit の両方がここを読む）。
+        /// ⚠️ 同じ「軸を集める」計算を2か所に書くと、いつかどちらかだけ古くなる
+        /// （②の xUnit 並列と同じ形の罠 ── 直した本人の目の前でもう1つ増やしていた、では
+        /// 洒落にならないので先に1本化した）。</summary>
+        private static List<SkillGain> NaturalAxesOf(Skill skill, bool guardsAllies)
+        {
+            var axes = new List<SkillGain>();
+            if (HasDamage(skill)) axes.Add(SkillGain.Power);
+            if (HasRepeat(skill)) axes.Add(SkillGain.Repeat);
+            if (HasChance(skill)) axes.Add(SkillGain.Chance);
+            if (!guardsAllies && HasTurns(skill)) axes.Add(SkillGain.Turns);
+            // ⚠️ 回復の割合と盾の枚数は Turns でも Power でも表せない。
+            //    これが無いと、それらの技は伸びる軸が CT しか無くなり、
+            //    4段とも CT ＝ 途中で下限 0 に当たって**死に段**になる（導出して初めて見えた）
+            if (HasPercent(skill)) axes.Add(SkillGain.Percent);
+            if (HasCount(skill)) axes.Add(SkillGain.Count);
+            if (HasAmount(skill)) axes.Add(SkillGain.Amount);
+            // ⚠️ パッシブは CT が無いので、これが無いと**伸ばす軸が1つも無くなる**
+            if (HasInnate(skill)) axes.Add(SkillGain.Innate);
+            if (!guardsAllies && skill.Ct > 0) axes.Add(SkillGain.Ct);
+            return axes;
+        }
+
+        /// <summary>guardsAllies が Turns・CT を外した結果、軸が1本しか残らなかった技か。
+        /// ⭐ <see cref="GrowthOf(Skill, int)"/> の段数を <see cref="SingleAxisGrowthSteps"/> に
+        /// 縮める対象と、Audit（<see cref="Faults"/>）が「成長表は4段のはず」の例外にする対象は
+        /// **必ず同じ技の集合**でなければならない ── ここが唯一の判定。
+        /// ⚠️ パッシブ3件（生命力・頑丈・身軽）は軸が Innate の1本だけだが guardsAllies が
+        /// 掛かっていない（CT を最初から持たないので削られてもいない）ので対象外のまま
+        /// （4段で育つのが元の姿）。</summary>
+        private static bool IsSingleAxisFromGuard(Skill skill)
+        {
+            bool guardsAllies = GuardsAllies(skill);
+            return guardsAllies && NaturalAxesOf(skill, guardsAllies).Count == 1;
+        }
+
+        /// <summary>味方に配る持続効果**だけ**を持ち、他に伸ばせる軸が無い技か。
+        ///
+        /// ⭐ この形の技（攻撃力UP・防御力UP・スピードUP・ガッツ・免疫・リジェネ・リジェネ大・
+        /// 踏ん張り・厄払いの9本）だけが、<see cref="AllyPersistentSteps"/> の
+        /// 専用式で育つ（作者の指示 2026-08-27）。
+        /// ⚠️ 他に軸がある技（tailwind・dash・harden・warcry 等）は対象外 ──
+        /// そちらは今までどおり Turns だけ外した軸（Percent・Amount・Count・Chance）で育つ。
+        ///
+        /// ⚠️ 🔴 **例外は1つだけ許す**（2026-08-27 追記）: <see cref="IsFixedAllyAssist"/>
+        /// に当てはまる「その場で効くだけの、固定の手当て」（HP割合回復の正／弱化解除）。
+        /// ⭐ 踏ん張り（ガッツ＋HP割合回復）・厄払い（弱化解除＋免疫）がこれ ── 添えた手当ては
+        /// レベルを問わず一定でよく、伸びるのは CT だけという作者の指示（基礎CT=持続+1+段数）に
+        /// 合わせるための例外。⚠️ **ゲージ・盾・強奪までは許さない**（`IsFixedAllyAssist` が
+        /// HealRatio の正と Dispel の負の2種類だけに絞っているのはそのため）── ここを広げると
+        /// tailwind（Gauge）・harden（Shield）まで「pure」に化けて、いま Percent/Count 軸で
+        /// 育っている挙動が変わってしまう。</summary>
+        private static bool IsPureAllyPersistent(Skill skill)
+        {
+            if (!GuardsAllies(skill)) return false;
+            if (HasDamage(skill) || HasRepeat(skill) || HasChance(skill) || HasAmount(skill)
+                || HasInnate(skill)) return false;
+            foreach (var effect in skill.Effects)
+            {
+                if (IsAllyPersistent(skill, effect)) continue;
+                if (IsFixedAllyAssist(effect)) continue;
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>⭐ **持続ものに添える、その場限りの固定の手当てか。**
+        /// ⚠️ **唯一の出所**（<see cref="IsPureAllyPersistent"/> だけが呼ぶ）。
+        ///
+        /// ⚠️ HP割合回復の**正**（味方を戻す）と弱化解除（<see cref="EffectKind.Dispel"/> の負）
+        /// の2種類**だけ**を許す。⭐ どちらも「レベルで伸ばす意味が薄い、添え物」という共通点がある
+        /// （回復は致命傷の穴埋め・解除は免疫を張る前の掃除で、量そのものが主役ではない）。
+        /// ⚠️ ゲージ・盾・強奪はここに入れない ── 「伸ばすほど嬉しい」軸なので、
+        /// tailwind・harden のように Percent/Count 軸で育てたほうが技として筋が通る。</summary>
+        private static bool IsFixedAllyAssist(Effect effect) =>
+            effect.Turns == 0 &&
+            ((effect.Kind == EffectKind.HealRatio && effect.Percent > 0)
+                || (effect.Kind == EffectKind.Dispel && effect.Count < 0));
+
+        /// <summary>味方に配る持続もの「だけ」の技が CT を伸ばす段数。既定
+        /// <see cref="AllyPersistentGrowthSteps"/>。
+        ///
+        /// ⭐ 基礎CT（Lv1）＝ <paramref name="longest"/>＋1＋段数、最大まで育てると
+        /// ちょうど下限（<paramref name="longest"/>＋1）に着地する（作者の指示 2026-08-27）。
+        /// ⚠️ 基礎CTが <see cref="CtHeavy"/> を超えてしまう技は、超えなくなるまで
+        /// 段数を 2→1→0 と減らして収める。**0 になったら「育たない技」**
+        /// （他に安全な軸が無いので、安全装置を壊すより上げられないほうを選ぶ）。
+        /// ⭐ 唯一の出所 ── <see cref="PriceOf"/> の床・<see cref="CapFor"/> の天井・
+        /// <see cref="GrowthOf(Skill, int)"/> の成長本数がすべてここを呼ぶ。</summary>
+        private static int AllyPersistentSteps(int longest)
+        {
+            int steps = AllyPersistentGrowthSteps;
+            while (steps > 0 && longest + 1 + steps > CtHeavy) steps--;
+            return steps;
+        }
+
+        /// <summary>味方に配る持続ものが CT を伸ばす段数の既定値。⭐ 定数にして名前を付ける
+        /// （作者の指示 2026-08-27・「段数は既定2」）。</summary>
+        public const int AllyPersistentGrowthSteps = 2;
 
         /// <summary>効果1つぶんの重さ。⭐ **ゲーム全体でこの1枚**（技ごとに数を書かない）。</summary>
         private static int WeightOf(Effect effect)
@@ -1042,6 +1382,9 @@ namespace EggCommand.Core
                     int weight = (int)effect.Power + 1 + (effect.Repeat - 1) * 2;
                     // ⭐ 相手の守りを踏み倒すぶん
                     if (effect.Pierce) weight += 1;
+                    // ⚠️ **強化無視は防御無視より高い。**踏み倒すのが4つ（防御力UP・
+                    //    シールド・無敵・ガッツ）あり、どれも相手が1手payして買った札だから。
+                    if (effect.Bare) weight += 2;
                     // ⚠️ **数えるぶんにも値段が要る。**付け忘れていた頃、
                     //    「小の一撃 ＋ 数え」が CT2（一番安い帯）に落ちていた ──
                     //    満載なら大の一撃を超えるのに、弱化の単品と同じ値段だった。
@@ -1072,6 +1415,18 @@ namespace EggCommand.Core
                 case EffectKind.Guts:
                 case EffectKind.Immune: return (effect.Turns + 2) / 3;
                 case EffectKind.Block: return (effect.Turns + 1) / 2;
+                // ── 2026-08-27 に足した5つ ─────────────────────────
+                // ⭐ **封印は手番を奪わない。**⚠️ できることが1つに減るだけなので、
+                //    スタン（1ターンにつき3）より軽く、ブロックと同じ帯に置く
+                case EffectKind.Seal: return effect.Turns;
+                // ⭐ 固着は「相手の解除を無駄にする」── 免疫の裏返しなので同じ数え方
+                case EffectKind.Anchor: return (effect.Turns + 2) / 3;
+                // ⚠️ **無敵は一番高い。**受ける一撃をまるごと消すので、1ターンが盾1枚より重い
+                case EffectKind.Invincible: return effect.Turns * 2;
+                // ⭐ 延長は「既に乗っている弱化を伸ばす」── 単体では何も起きない仕込みの回収札
+                case EffectKind.Extend: return effect.Turns;
+                // ⭐ 反撃は返すぶんだけ。⚠️ 殴られないと働かないので、無敵の半分に置く
+                case EffectKind.Counter: return effect.Turns;
                 case EffectKind.Dispel:
                 case EffectKind.Steal:
                     return effect.Count < 0 ? -effect.Count : effect.Count;
@@ -1106,6 +1461,12 @@ namespace EggCommand.Core
                 //    「蘇生を1つ混ぜないと重くできない」という妙な形になっていた（2026-08-19 の監査）。
                 if (e.Kind == EffectKind.HealRatio && skill.Target == Target.AllyAll
                     && e.Percent >= HeavyHealPercent) return true;
+                // 🔴 **敵全体の手番をまとめて奪うのも、盤面をひっくり返す**（2026-08-26）。
+                //    ⚠️ 実測で `stagnate`（全体ゲージ-60%＋スタン）が **98.7%** を出した
+                //    ── CT5 では2体が交互に撃つだけで相手が一度も動けなくなる。
+                //    ⭐ 蘇生・全体全快と同じ「1回きりだから許される」級として CT7 に置く。
+                if (e.Kind == EffectKind.Gauge && skill.Target == Target.EnemyAll
+                    && e.Percent <= -HeavyGaugePercent) return true;
                 if (e.Kind != EffectKind.Damage || skill.Target != Target.EnemyAll) continue;
                 // ⭐ 全体に「深く」当たるもの ── 一撃が大きいか、多段で盾を広く剥がすか
                 if (e.Power >= PowerTier.Large || e.Repeat > 1) return true;
@@ -1133,19 +1494,19 @@ namespace EggCommand.Core
             new Skill("atk-up", "攻撃力UP", "味方1体の攻撃力を上げる", SkillType.Support, Target.AllyOne,
                 Effect.Buff(StatKey.Atk, 1, 3)),
             new Skill("atk-down", "攻撃力DOWN", "敵1体の攻撃力を下げる", SkillType.Debuff, Target.EnemyOne,
-                Effect.Buff(StatKey.Atk, -1, 3)),
+                Effect.Buff(StatKey.Atk, -1, 3, chance: 90)),
             new Skill("def-up", "防御力UP", "味方1体の防御力を上げる", SkillType.Support, Target.AllyOne,
                 Effect.Buff(StatKey.Def, 1, 3)),
             new Skill("def-down", "防御力DOWN", "敵1体の防御力を下げる", SkillType.Debuff, Target.EnemyOne,
-                Effect.Buff(StatKey.Def, -1, 3)),
+                Effect.Buff(StatKey.Def, -1, 3, chance: 85)),
             new Skill("spd-up", "スピードUP", "味方1体のスピードを上げる", SkillType.Support, Target.AllyOne,
                 Effect.Buff(StatKey.Spd, 1, 3)),
             new Skill("spd-down", "スピードDOWN", "敵1体のスピードを下げる", SkillType.Debuff, Target.EnemyOne,
-                Effect.Buff(StatKey.Spd, -1, 3)),
+                Effect.Buff(StatKey.Spd, -1, 3, chance: 85)),
 
             // ── HP系 ──────────────────────────────
             new Skill("poison", "毒", "敵1体が行動するたびに削れる", SkillType.Debuff, Target.EnemyOne,
-                Effect.Poison(1, 4)),
+                Effect.Poison(1, 4, chance: 75)),
             new Skill("regen", "リジェネ", "味方1体が行動するたびに回復する", SkillType.Heal, Target.AllyOne,
                 Effect.Regen(1, 4)),
             new Skill("heal-ratio", "HP割合回復", "味方1体の HP を最大値の割合ぶん回復", SkillType.Heal, Target.AllyOne,
@@ -1155,11 +1516,11 @@ namespace EggCommand.Core
 
             // ── 行動系 ────────────────────────────
             new Skill("stun", "スタン", "敵1体の手番を飛ばす", SkillType.Debuff, Target.EnemyOne,
-                Effect.Stun(1)),
+                Effect.Stun(1, chance: 60)),
             new Skill("ct-short", "CT短縮", "自分の技の待ちを縮める", SkillType.Support, Target.Self,
                 Effect.Ct(-2)),
             new Skill("ct-long", "CT延長", "敵1体の技の待ちを延ばす", SkillType.Debuff, Target.EnemyOne,
-                Effect.Ct(2)),
+                Effect.Ct(2, chance: 80)),
             // ⚠️ **2026-08-18 まで Target.Self だったため、一度も発動していなかった。**
             //    効果は「相手に付ける弱化」に作り替えたのに技の狙い先を直し忘れていた。
             //    自分に掛かると TauntBy が自分になり、敵側から探す縛りが一致しない。
@@ -1237,10 +1598,35 @@ namespace EggCommand.Core
                 Effect.HealRatio(100)),
             new Skill("shield-wall", "シールド・大", "味方1体に盾を4枚張る", SkillType.Support, Target.AllyOne,
                 Effect.Shield(4)),
-            new Skill("guts-deep", "ガッツ・長", "味方1体が長く粘れる", SkillType.Support, Target.AllyOne,
-                Effect.Guts(6)),
-            new Skill("immune-long", "免疫・長", "味方1体に長く効く免疫", SkillType.Support, Target.AllyOne,
-                Effect.Immune(6)),
+            // ⚠️ 🔴 **2026-08-27 作り直し（作者の指示）。**元は上の2本と同じ「・長＝濃い側」
+            //    （持続だけを伸ばした版）だったが、持続6T→下限7（=持続+1）が
+            //    ちょうど天井（CtHeavy）に乗ってしまい、縮める余地が無く**Lv1のまま育たない技**
+            //    になっていた。実測（`sim guess`・各300戦）でも、持続を3T→6Tへ倍にして
+            //    実際に働いた回数は 0.09回/掛 → 0.08回/掛 と**増えていない**
+            //    ── 縛っているのは持続ではなく「4体のうちその1体が狙われるか」だった。
+            // ⭐ 持続を4Tへ落として `Skills.AllyPersistentSteps` の型（基礎CT＝持続+1+段数＝7、
+            //    Lv3で下限CT5）にちゃんと乗せ、代わりに回復・弱化解除を足して
+            //    「やることが増える」形に作り直した。
+            // ⚠️ **id は変えていない。**`guts-deep`/`immune-long` という字面はもう中身と合わないが、
+            //    種族の技袋（<see cref="SpeciesTable"/>）・試練の敵編成（Trial.cs）・
+            //    実測ツール（GuessProbe.cs 等）が id を直に指しており、変えるとそちら全部の
+            //    書き換えが要る。⭐ 画面に出る名前の出所はここ1か所だけなので、
+            //    id はそのまま残し、字面と中身がずれた経緯をこのコメントに残す。
+            new Skill("guts-deep", "踏ん張り", "味方1体を致命傷から守り、HPも戻す",
+                SkillType.Support, Target.AllyOne,
+                // ⭐ ガッツは致命傷を HP1 で耐える札。**耐えた直後の1が回復で戻る**ので、
+                //    2つ揃って初めて「生き残る」になる。⚠️ 割合は heal-ratio と同じ30%
+                //    （既存の標準に合わせた ── CT は longest+1+段 の床が支配するので、
+                //    割合をいくつにしても CT は動かない）。
+                Effect.Guts(4),
+                Effect.HealRatio(30)),
+            new Skill("immune-long", "厄払い", "味方1体の弱化を落とし、免疫も張る",
+                SkillType.Support, Target.AllyOne,
+                // ⭐ 免疫は「これから来る弱化」を弾く札で、**既に付いている弱化は落とせない**。
+                //    落としてから張れば穴が無い ── だから Cleanse を先に置く。
+                //    ⚠️ 個数は既存の cleanse（弱化解除）と同じ2個（釣り合いを合わせた）。
+                Effect.Cleanse(2),
+                Effect.Immune(4)),
 
             // ⚠️ 相手に掛ける側は（命中 − 抵抗）÷2 ポイント動く。命中に振った個体が使うと通りやすい
             new Skill("stun-heavy", "スタン・大", "2回ぶん手番を飛ばす。よく外す", SkillType.Debuff, Target.EnemyOne,
@@ -1432,6 +1818,108 @@ namespace EggCommand.Core
                 SkillType.Heal, Target.AllyOne,
                 Effect.Cleanse(2),
                 Effect.HealRatio(20)),
+
+            // ── UR 級（2026-08-26・作者の指示「URキャラのスキルを持ってきて試す」）─────
+            //
+            // ⭐ `参考/まもダン_全キャラスキル.md` の UR デバッファーを読んで分かった設計:
+            //    ① ダメージと弱化を**同時に**載せる（当たれば必ず盤面が動く）
+            //    ② 多段ヒットで**毎回判定**（外れ続けない）
+            //    ③ 1発で**複数の弱化**（1手の重みが違う）
+            //    ④ **ゲージ操作**で手番そのものを奪う
+            // ⚠️ **名前も数値も持ってきていない。**⭐ 借りたのは上の4つの形だけ。
+            // ⚠️ 既存の弱化技は①〜④をどれも満たしていない（純粋弱化・1回判定・単体）。
+            //    実測でも「弱化役を攻撃役に替えると +22〜27pt」＝席を取れていなかった。
+            // 🚧 **まだ種族に配っていない**（`SkillPool` に載せていない）── 測ってから配る。
+
+            // ①② ダメージ3回 ＋ 毒2重。⭐ 毒は防御を無視するので高耐久への回答になる
+            new Skill("venom-barrage", "毒牙の乱打", "小さな一撃を3回。高い確率で毒を2つ入れる",
+                SkillType.Debuff, Target.EnemyOne,
+                Effect.Damage(PowerTier.Small, DamageScale.Atk, 3),
+                Effect.Poison(2, 4, chance: 70)),
+
+            // ①③ 全体攻撃 ＋ 防御と速度を同時に落とす
+            // ⚠️ 全体なので率は控えめ（単体の `crush` 85% に対して 60%）
+            new Skill("collapse", "崩落", "敵全体を攻撃し、防御力とスピードを同時に下げる",
+                SkillType.Debuff, Target.EnemyAll,
+                Effect.Damage(PowerTier.Small, DamageScale.Atk),
+                Effect.Buff(StatKey.Def, -1, 3, chance: 60),
+                Effect.Buff(StatKey.Spd, -1, 3, chance: 60)),
+
+            // ④ 手番そのものを奪う。⚠️ ダメージは無い ── 効き目は「相手が動けない」だけ
+            // ⚠️ 🔴 **スタンを重ねてはいけない**（2026-08-26 実測）。ゲージ剥ぎもスタンも
+            //    「手番を奪う」ので二重取りになり、CT7 にしても **96.7〜98.7%** で
+            //    ほぼ確定勝ちだった（2体が交互に撃つと相手が一度も動けない）。
+            //    ⭐ ゲージ剥ぎ1本に絞り、量も -60 → -50 に落としてある。
+            new Skill("stagnate", "停滞", "敵全体のゲージを大きく戻す",
+                SkillType.Debuff, Target.EnemyAll,
+                Effect.Gauge(-50, chance: 65)),
+
+            // ── 2026-08-27 に足した6効果を配る（作者の指示）─────────────
+            // ⭐ Seal / Anchor / Invincible / Extend / Counter / Effect.Bare は
+            //    エンジン・説明文・Audit まで通っていたが、どの技にも使っていなかった
+            //    （SkillTextTests.NotYetUsed に「まだ」の印）。ここで技に落とす。
+            // ⚠️ 効果の種類は増やしていない。組み合わせは brew の型（攻＋弱・強＋強 等）に倣う。
+
+            // ⭐ Seal。⚠️ 単体では0にならない（枠1は残る）ので、そのまま単発でも成立する。
+            //    小さな一撃で押しながら封じる ── venom-fang / stun-strike と同じ「攻＋弱」。
+            new Skill("seal-strike", "技封じ", "小さな一撃を与え、たまに枠2・3を封じる",
+                SkillType.Debuff, Target.EnemyOne,
+                Effect.Damage(PowerTier.Small, DamageScale.Atk),
+                Effect.Seal(3, chance: 55)),
+
+            // ⭐ Anchor。防御DOWNを自分で置いてから固着する ── 「落とせない弱化」を
+            //    1手で作る型。⚠️ curse（弱化2つ）と同じ「弱＋弱」。
+            new Skill("bind-down", "呪縛", "敵の防御力を下げ、高い確率でその弱化を落とせなくする",
+                SkillType.Debuff, Target.EnemyOne,
+                Effect.Buff(StatKey.Def, -1, 3, chance: 75),
+                Effect.Anchor(3, chance: 60)),
+
+            // ⭐ Invincible。⚠️ 味方に配る側は確率を付けない（既存の決まり）。
+            //    盾・ガッツ・免疫と並ぶ、単発の守り札。
+            // 🔴 **2ターンを1ターンに縮めた**（2026-08-27・`sim skillvalue` 実測）。
+            //    ⚠️ `Invincible` は「命中した回数」ではなく「自分の行動回数」で減る
+            //    （<see cref="Battle.TickStatus"/> 系と同じ数え方）── 相手の手番の間ずっと
+            //    無敵なので、2ターンぶんは**その間に受ける全ヒットを無制限に無効化**した。
+            //    実測 1体だけ+12.0pt は無敵2(★4見積り)にしては強すぎ、盾（+4.0pt・確実に
+            //    2発だけ防ぐ）の3倍を超えていた。⭐ 1ターンに縮め、盾と近い帯へ寄せた。
+            new Skill("invincible", "無敵", "味方1体がダメージを受けなくなる",
+                SkillType.Support, Target.AllyOne,
+                Effect.Invincible(1)),
+
+            // ⭐ Extend。⚠️ ダメージは弱化を作らないので、伸ばす先は
+            //    **味方の別の技が置いた弱化**に限る（「しかけて回収する層」と同じ、
+            //    自作自演にならない組み方）。
+            new Skill("extend-strike", "弱化延長", "小さな一撃を与え、敵に乗っている弱化を長引かせる",
+                SkillType.Debuff, Target.EnemyOne,
+                Effect.Damage(PowerTier.Small, DamageScale.Atk),
+                Effect.Extend(3, chance: 60)),
+
+            // ⭐ Counter。
+            // 🔴 **防御UPを外し、持続も3→1に縮めた**（2026-08-27・`sim skillvalue` 実測）。
+            //    ⚠️ 最初は harden（防御UP＋盾）と同じ「強＋強」で Buff(Def,+1,3)＋Counter(3) にしていたが、
+            //    `反撃（札）` は「殴られるたび、枠1 をノーコストで撃ち返す」── 多段技を受けると
+            //    1回の相手の手番で何度も発動する。実測 1体だけ+17.8pt は、
+            //    崩落（★5・+18.0pt）や全体強攻撃（★4・+16.5pt）と並ぶ強さで、
+            //    格4（3.15手ぶん）という見積りに対して**実戦は格5相当**だった。
+            //    ⭐ 防御UPを外す（被弾を増やして反撃の回数を稼ぐ副作用を消す）＋
+            //    持続を1回ぶんに削って、実測を他の格4帯（無敵 +12.0pt 等）に近づけた。
+            new Skill("counter-stance", "反撃の構え", "反撃を1回ぶん構える",
+                SkillType.Support, Target.Self,
+                Effect.Counter(1)),
+
+            // ⭐ Effect.Bare。⚠️ pierce-strike（防御無視）と対になる「守りの買い物を無視する」側。
+            //    盾・防御UP・無敵・ガッツを踏み倒す。単発でシンプルに。
+            new Skill("bare-strike", "強化無視攻撃", "相手の防御力UP・盾・無敵・ガッツを無視して斬る",
+                SkillType.Attack, Target.EnemyOne,
+                Effect.Damage(PowerTier.Medium, DamageScale.Atk, bare: true)),
+
+            // ⭐ Seal ＋ Anchor。⚠️ **新しい2効果だけの組**。枠を封じつつ、
+            //    今かかっている弱化も落とせなくする ── 支配の締めくくり。
+            new Skill("lockdown", "封鎖", "敵の枠2・3を封じ、弱化も落とせなくする",
+                SkillType.Debuff, Target.EnemyOne,
+                Effect.Seal(3, chance: 55),
+                Effect.Anchor(3, chance: 55)),
+
         };
 
         public static IReadOnlyList<Skill> All => List;
@@ -1501,8 +1989,42 @@ namespace EggCommand.Core
             return effect.Kind == EffectKind.Poison || effect.Kind == EffectKind.Stun
                 || effect.Kind == EffectKind.Sleep || effect.Kind == EffectKind.Block
                 || effect.Kind == EffectKind.Dispel || effect.Kind == EffectKind.Steal
-                || effect.Kind == EffectKind.Taunt;
+                || effect.Kind == EffectKind.Taunt
+                // ⭐ 2026-08-27 に足した3つ（無敵・反撃は味方に配る側なので入らない）
+                || effect.Kind == EffectKind.Seal || effect.Kind == EffectKind.Anchor
+                || effect.Kind == EffectKind.Extend;
         }
+
+        /// <summary>⭐ **味方・自分に配る「持続する強化」か。**⚠️ **唯一の出所**（2026-08-27）。
+        ///
+        /// `LoadOf` が「張りっぱなしを止める下限（`longest+1`）」を立てる相手、
+        /// `GrowthOf` が「持続と CT を同時に成長軸へ入れない」相手、`Faults` が
+        /// 「全レベルで CT ≧ 持続＋1」を確かめる相手 ── **この3つが同じ判断を
+        /// 別々に書くと、いつかどれか1つだけ古くなる**（実際に `GrowthOf` 側だけが
+        /// この判断を欠いていて、Lv3・Lv5 で下限が壊れていた。2026-08-27 発見）。
+        /// ⚠️ **敵に掛けるデバフ・自分への代償（`reckless` の防御DOWN 等）は含めない**
+        /// （作者の指示 2026-08-27・デバフに上限は設けない）── `!IsHarmful` で弾く。</summary>
+        private static bool IsAllyPersistent(Skill skill, Effect effect) =>
+            effect.Turns > 0 && !AtFoe(effect.Own ?? skill.Target) && !IsHarmful(effect);
+
+        /// <summary>⭐ **自分への弱化は代償か。**⚠️ **唯一の出所**（2026-08-27）。
+        ///
+        /// ⚠️ 値段（<see cref="LoadOf"/>）と AI の採点（<see cref="Ai.ScoreOf"/> 系）が
+        /// 同じ判断（「自分に配る弱化＝代償」）を別々の場所に書いていて、**AI 側だけ**
+        /// 符号を見ずに得点として足していた（`reckless`＝捨て身の突きの防御DOWNが
+        /// 加点されていた）。⭐ 判断を1か所に寄せて、両方がこれを呼ぶ。</summary>
+        public static bool IsSelfCost(Effect effect) => effect.Own == Target.Self && IsHarmful(effect);
+
+        /// <summary>その効果の値打ち（`magnitude` ＝ 大きさ・符号なし）を、代償なら向きを
+        /// 反転して返す。⭐ **「代償かどうかを見たあと何をするか」の唯一の出所**
+        /// （2026-08-27・`SkillValue.cs` が3か所目になったのを機に追加）。
+        ///
+        /// ⚠️ `IsSelfCost` は判定だけで、使いみち（「じゃあ値を引く」）は呼び側がそれぞれ
+        /// 書いていた（`Ai.ScoreOfSkill` は `IsSelfCost(effect) ? -gain * BuffValue : ...`、
+        /// `SkillValues.Of` は判定すら無く常に加点）。⭐ 同じ三項演算子を呼び側にまた書くと
+        /// 4か所目を生む ── ここへ寄せる。</summary>
+        public static double SignedByCost(Effect effect, double magnitude) =>
+            IsSelfCost(effect) ? -magnitude : magnitude;
 
         /// <summary>相手が受け取る「強化」か。⭐ ブロックが止める側。
         /// ⚠️ 自然に溜まるゲージ・自然に減る CT は含まない（あれは買った分ではない）。</summary>
@@ -1524,6 +2046,9 @@ namespace EggCommand.Core
                 case EffectKind.Guts:
                 case EffectKind.Immune:
                 case EffectKind.Revive:
+                // ⭐ 2026-08-27 に足した2つ（味方が受け取る側なのでブロックが止める）
+                case EffectKind.Invincible:
+                case EffectKind.Counter:
                     return true;
                 default: return false;
             }
@@ -1621,7 +2146,10 @@ namespace EggCommand.Core
                     }
                 }
                 // ⚠️ **上限は約束ごと。**注釈に書いてあるだけだと、次に技を足す人が踏む
-                int cap = IsHeavyCt(skill) ? CtHeavy : CtCap;
+                // ⚠️ 出所は `PriceOf` と同じ `CapFor`（2026-08-27）。
+                // ⚠️ 🔴 `LoadOf` の**戻り値**（load）でなく **out の `longest`** を渡す。
+                LoadOf(skill, out int skillLongest);
+                int cap = CapFor(skill, skillLongest);
                 if (skill.Ct > cap)
                 {
                     problems.Add($"{skill.Id}: CT {skill.Ct} は上限 {cap} を超えている"
@@ -1631,9 +2159,15 @@ namespace EggCommand.Core
                 // ⚠️ **上げても何も起きない段**を弾く。これが無いと
                 //    「Lv3 にしたのに何も変わらない」が黙って通る（画面には出るのに実体が無い）
                 var growth = GrowthOf(skill);
-                if (growth.Count != MaxLevel - 1)
+                // ⚠️ 🔴 **段数の「あるべき姿」は `ExpectedGrowthStepsOf` 1本に寄せる**（2026-08-27）。
+                //    ⚠️ 味方に配る持続もの「だけ」の技（`IsPureAllyPersistent`）は 0〜2 段、
+                //    guardsAllies で軸が1本に削れた技（早駆け・硬化・追い風・鬨の声）は2段、
+                //    それ以外は4段 ── この3つを検査側でも別々に書くと、②で踏んだ
+                //    「直した本人の目の前で片方だけ古くなる」がここでも起きる。
+                if (growth.Count != ExpectedGrowthStepsOf(skill))
                 {
-                    problems.Add($"{skill.Id}: 伸ばせる軸が1つも無い（成長表が {growth.Count} 段）");
+                    problems.Add($"{skill.Id}: 成長表が {growth.Count} 段"
+                        + $"（{ExpectedGrowthStepsOf(skill)} 段のはず）");
                 }
                 // ⚠️ 枠1（種族固定）に入る技は、CT の段が死ぬ。詰め替えが効いているか数える
                 foreach (var species in speciesTable)
@@ -1645,7 +2179,9 @@ namespace EggCommand.Core
                         if (gain == SkillGain.Ct)
                             problems.Add($"{skill.Id}: {species.Id} の枠1 なのに CT の段がある（効かない）");
                     }
-                    if (asSlot1.Count != MaxLevel - 1)
+                    // ⚠️ 🔴 天井は技ごと（MaxLevelOf）で見る ── グローバルな MaxLevel-1 を
+                    //    決め打ちすると、技ごとに上限が縮む世界（2026-08-27）で古くなる。
+                    if (asSlot1.Count != MaxLevelOf(skill) - 1)
                         problems.Add($"{skill.Id}: {species.Id} の枠1 で伸ばせる軸が無い");
                 }
                 int cuts = 0;
@@ -1654,9 +2190,47 @@ namespace EggCommand.Core
                     string? dead = DeadGain(skill, gain);
                     if (dead != null) problems.Add($"{skill.Id}: {gain} が効かない（{dead}）");
                     // ⚠️ CT は 0 が下限。技の CT より多く縮める段は**何も起きない**
-                    if (gain == SkillGain.Ct && ++cuts > skill.Ct)
+                    // ⚠️ 🔴 **境界は `>=`。**⭐ `cuts == skill.Ct` を見逃すと
+                    //    `EffectiveCt` がちょうど 0 になる段を検査が通してしまう
+                    //    （2026-08-27 発見）── CT0 は枠1（常に CT0 の通常攻撃）と
+                    //    区別が付かなくなる境目なので、縮めた先が「0 になる」ことも
+                    //    「0 を割り込む」ことと同じく落とす。
+                    if (gain == SkillGain.Ct && ++cuts >= skill.Ct)
                     {
                         problems.Add($"{skill.Id}: CT を {cuts} 回縮めるが、元の CT は {skill.Ct}");
+                    }
+                }
+
+                // ⚠️ 🔴 **「CT ≧ 持続＋1」は Lv1 限定だった**（2026-08-27 発見）。
+                //    ⭐ `PriceOf` が立てる下限（`longest + 1`）は**素の Turns**しか見ておらず、
+                //    育てて持続が伸び・CT が縮む技（成長表が `持続→CT→持続→CT` の形）では
+                //    Lv3・Lv5 で下限が壊れる ── 免疫・リジェネ・強化（攻撃力/防御力/
+                //    スピードUP）・ガッツがこれで永久バフに化けていた。
+                //    ⚠️ ここは**敵に掛けるデバフ・自分への代償（reckless 等）には
+                //    適用しない**（作者の指示 2026-08-27・デバフに上限は設けない）──
+                //    `LoadOf`/`GrowthOf` と**同じ判断**（`IsAllyPersistent`）をそのまま
+                //    使う（出所を1つに。ここだけ `!AtFoe` にすると reckless の自傷まで
+                //    誤って拾う）。
+                //    ⭐ 全レベル（Lv1〜MaxLevelOf）を直に確かめる ── 天井（CtCap）に当たって
+                //    Lv1 から破れる技（当時＝持続6T版の `guts-deep`/`immune-long`）も、
+                //    これで初めて見える。
+                //    ⚠️ 🔴 技ごとの上限（MaxLevelOf）までで確かめる（2026-08-27）── グローバルな
+                //    MaxLevel まで回しても誤りは出ないが（BoostOf は上限で頭打ちする）、
+                //    「この技が実際に届く範囲」を確かめる形に揃える。
+                foreach (var effect in skill.Effects)
+                {
+                    if (!IsAllyPersistent(skill, effect)) continue;
+                    for (int level = 1; level <= MaxLevelOf(skill); level++)
+                    {
+                        var boost = BoostOf(skill, level);   // ⚠️ 枠1 以外を見る（既定の slot=-1）
+                        int turnsNow = effect.Turns + boost.ExtraTurns;
+                        // ⭐ 枠1 でなければ何でもいい ── slot=1 は「枠1 でない」の代表値
+                        int ctNow = EffectiveCt(1, skill, boost);
+                        if (ctNow < turnsNow + 1)
+                        {
+                            problems.Add($"{skill.Id}: Lv{level} で CT{ctNow} が持続{turnsNow}+1 を下回る"
+                                + "（味方に配る持続が、育てた先で切れなくなりうる）");
+                        }
                     }
                 }
 

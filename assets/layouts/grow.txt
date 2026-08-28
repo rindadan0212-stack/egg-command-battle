@@ -1,0 +1,31 @@
+# 育てる ── ⭐ **点をどのステに振るか**（2026-08-26・ARK式の自由配分）
+#
+# ⭐ **振り直しはできない。**⚠️ 一度振った点は戻らないので、押す前に読める形にする
+#    （いまの実値・振った点・残りを1行に並べる）。
+# ⭐ 配合すれば子は 0 から ── そこが唯一の振り直しの機会。
+#
+# ⚠️ **行は 112 で切る。**押しどころの下限（28ドット＝112px）── 札の中の一覧を
+#    35〜40 の行で並べると、指では押せない（`panel.txt` の表がその高さなので、
+#    あの表に「＋」を足す形は採れなかった）。
+#
+#  名前    種類    左   上    幅   高    付け足し
+dim       veil    0    0     1080 1920
+panel     card    48   200   984  1520
+  title   label   24   24    936  56    size=40 anchor=upper-left text=育てる
+  who     label   24   86    936  40    size=26 ink=dim anchor=upper-left bind=who
+
+  # ⭐ EXP を1点に替える。⚠️ ここが「点の入口」── 振るのは下の6本
+  levelup button  24   140   936  112   size=30 tap=levelup lead=yes bind=levelup
+
+  # ⭐ 残りを大きく出す。⚠️ 0 のときに押しても何も起きない、を避けるため
+  left    label   24   268   936  44    size=30 ink=accent anchor=upper-left bind=left
+
+  # ⭐ 6本。⚠️ 押した瞬間に1点入る（戻せないので、確かめは「残り」の数で見せる）
+  grow    button  24   324   936  112   repeat=stats cols=1 rows=124 max=6 tap=spend bind=grow
+    gname label   24   0     360  112   size=30 anchor=left bind=gname
+    gnow  label   400  0     260  112   size=30 anchor=center bind=gnow
+    gpts  label   680  0     232  112   size=30 ink=accent anchor=right bind=gpts
+
+  hint    label   24   1084  936  120   size=22 ink=faint anchor=upper-left bind=hint
+
+  close   button  24   1384  936  112   size=34 tap=close text=閉じる

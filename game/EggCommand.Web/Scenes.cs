@@ -72,6 +72,7 @@ public static class Scenes
         S("breed", "breed", "配合"),
         S("fuse", "fuse", "分解"),
         S("skillegg", "skillegg", "技を鍛える"),
+        S("grow", "grow", "育てる（点をステへ振る）"),
         S("skillinfo", "skillinfo", "技の詳細"),
         S("species", "species", "種族の札"),
         S("book", "book", "図鑑"),
@@ -182,6 +183,15 @@ public static class Scenes
                 int want = Math.Clamp(3, 0, Math.Min(Games.PickAtOnce, pool.Count));
                 for (int i = 0; i < want; i++) s.Melts.Add(pool[i].Id);
                 return Sheets.Fuse(s);
+            }
+
+            case "grow":
+            {
+                // ⭐ 点が余っている状態で開く（`/edit` から振る前の形が見えるように）
+                var s = new Shell(Demo.Game(), Demo.Now);
+                var one = s.PickedOne();
+                if (one != null) Creatures.Grow(one, 12);
+                return Sheets.Grow(s);
             }
 
             case "skillegg":

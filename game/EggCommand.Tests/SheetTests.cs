@@ -133,6 +133,12 @@ namespace EggCommand.Tests
                 case EffectKind.Dispel: return Effect.Dispel(1);
                 case EffectKind.Steal: return Effect.Steal(1);
                 case EffectKind.Revive: return Effect.Revive(50);
+                // ⭐ 2026-08-27 に足した5つ
+                case EffectKind.Seal: return Effect.Seal(2);
+                case EffectKind.Anchor: return Effect.Anchor(3);
+                case EffectKind.Invincible: return Effect.Invincible(1);
+                case EffectKind.Extend: return Effect.Extend(2);
+                case EffectKind.Counter: return Effect.Counter(3);
                 // ⚠️ 既定に落とさない。効果を足したらここにも足す（足さなければ落ちる）
                 default: throw new ArgumentOutOfRangeException(
                     nameof(kind), kind, "帳面の検査に見本が無い効果");

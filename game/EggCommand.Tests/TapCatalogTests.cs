@@ -88,9 +88,10 @@ public class TapCatalogTests
     /// <summary>⚠️ 45個（Shell.cs 43 + out/in 例外2）── 実測値をそのまま固定する
     /// （増減したら、この数もどこかを直し忘れている合図）。</summary>
     [Fact]
-    public void 全部で45個()
+    public void 全部で47個()
     {
-        Assert.Equal(45, TapCatalog.Names.Length);
+        // ⭐ 2026-08-26 に `levelup` と `spend` を足した（ARK式の自由配分）
+        Assert.Equal(47, TapCatalog.Names.Length);
     }
 
     /// <summary>⭐ `out`/`in` の例外そのものが、いまも `AppPage.razor` にあるか

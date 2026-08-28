@@ -182,10 +182,10 @@ html, body {
 .n.bar-fill {
   position: absolute;
   background: var(--accent);
-  /* ⭐ **帯はじわっと動く。**⚠️ 差し替えは1秒に10回来るので、
+  /* ⭐ **帯はじわっと動く。**⚠️ 差し替えは1秒に16回来る（`Core.Beats.FrameSeconds`）ので、
      それより少し長く取ると刻みが見えなくなる（Unity は毎フレーム描いていた）。
      ⚠️ 色は変えない（孵化の橙→緑は「切り替わった」ことが伝わるべき瞬間）。 */
-  transition: width .14s linear;
+  transition: width .1s linear;
 }
 @media (prefers-reduced-motion: reduce) {
   .n.bar-fill { transition: none; }
@@ -206,10 +206,12 @@ html, body {
   line-height: 1.1;
   /* ⭐ 縁取りで、どんな地の上でも読める（絵の上に出るため） */
   text-shadow: 0 2px 0 var(--paper), 0 -2px 0 var(--paper), 2px 0 0 var(--paper), -2px 0 0 var(--paper);
-  animation: fx-rise .9s ease-out forwards;
+  /* ⭐ `both` ── ⚠️ **`forwards` では駄目**。順番に出すために `animation-delay` を掛けるので
+     （`fx.js`）、待っている間の姿を 0%（透明）に留めないと**先に全部見えてしまう**。 */
+  animation: fx-rise .9s ease-out both;
 }
 /* ⭐ 名乗りは**留まる**（読ませる時間が要る）。⚠️ 数字より長く、間より短く */
-.fx-shout { animation: fx-hold .72s ease-out forwards; }
+.fx-shout { animation: fx-hold .72s ease-out both; }
 
 @keyframes fx-rise {
   0%   { transform: translateY(10px) scale(.7); opacity: 0; }
@@ -228,7 +230,7 @@ html, body {
 .fx-ring {
   border-radius: 50%;
   box-shadow: inset 0 0 0 8px var(--fx-tint);
-  animation: fx-spread .5s ease-out forwards;
+  animation: fx-spread .5s ease-out both;
 }
 @keyframes fx-spread {
   0%   { transform: scale(.35); opacity: .9; }
@@ -239,7 +241,7 @@ html, body {
 .fx-hit {
   border-radius: 50%;
   background: radial-gradient(circle, var(--fx-tint) 0%, transparent 70%);
-  animation: fx-flash .3s ease-out forwards;
+  animation: fx-flash .3s ease-out both;
 }
 @keyframes fx-flash {
   0%   { transform: scale(.5); opacity: .85; }
@@ -263,29 +265,60 @@ html, body {
 /* ── さいころ ────────────────────────────────────────
    ⭐ **目が決まる瞬間だけを見せる。**⚠️ 出目は Core が先に決めている
    ── ここは回して、止めて、読ませるだけ。
-   ⭐ **段で送る**（`steps()`）。⚠️ なめらかに回すと、ドット絵の面がぶれて溶ける。 */
-#face-roll {
-  animation: die-spin .42s steps(8, end), die-land .12s .42s ease-out both;
-  transform-origin: center center;
+
+   🔴 **立体で転がす**（2026-08-28・作者の指示「さいころを3D表示に」）。
+   ⭐ 6面を `Sheets.DieCube` が作り、**出た目を必ず正面に置く**
+   ── だからここは出目を1つも知らない（止まる向きは常に「回転なし」）。
+
+   ⚠️ 🔴 **2つ目の動きに `both` を付けて、後ろに並べてはいけない。**
+   `animation: A .42s, B .12s .42s ease-out both` と書くと、B の**巻き戻し塗り**
+   （`backwards`）が待っている 0〜.42秒 のあいだも効き、しかも後ろに書いたほうが勝つので
+   **A（回転）が丸ごと見えなくなる**。⭐ だから1本の動きにまとめ、
+   区間ごとの緩急は**キーフレーム側**（`animation-timing-function`）で切り替える。 */
+/* ⭐ 立方体そのもの。⚠️ `preserve-3d` が無いと6面が同じ平面へ潰れる。
+   ⚠️ **奥行き（`perspective`）は器ではなく、動きの中で持つ** ── 器を `#face-roll` で
+   指すと、冠の付かない場面（`Scenes` の見取り図）で奥行きが消えて平べったく見える。 */
+.die3d {
+  position: absolute;
+  left: 0; top: 0; width: 100%; height: 100%;
+  transform-style: preserve-3d;
+  animation: die3d-roll .58s both;
 }
+/* ⭐ 1面。地は紙、絵は墨 ── ⚠️ `die-N.png` は「白い角丸に、目のところが穴」なので、
+   絵を墨で塗ると**穴から紙が覗いて目になる**。
+   ⚠️ 角丸 52px は絵の実測（128px の絵で半径 26px ＝ ちょうど倍）── ずらすと縁に紙の輪が出る。 */
+.die3d-face {
+  position: absolute;
+  inset: 0;
+  color: var(--ink);
+  background: var(--paper);
+  border-radius: 52px;
+  backface-visibility: hidden;
+}
+/* ⚠️ 128px は面の半分（256px の器）。⭐ ここを間違えると立方体が箱にならない */
+.die3d-front  { transform: translateZ(128px); }
+.die3d-back   { transform: rotateY(180deg) translateZ(128px); }
+.die3d-right  { transform: rotateY(90deg)  translateZ(128px); }
+.die3d-left   { transform: rotateY(-90deg) translateZ(128px); }
+.die3d-top    { transform: rotateX(90deg)  translateZ(128px); }
+.die3d-bottom { transform: rotateX(-90deg) translateZ(128px); }
+
+/* ⭐ **段で送る**（`steps()`）── ⚠️ なめらかに回すと、ドット絵の面がぶれて溶ける。
+   ⭐ 72%（＝ `Beats.Spin` の .42秒）で 720°/1080° ＝ **どちらも 360 の倍数**なので、
+   ちょうど正面（＝出た目）が来る。そこから先は着地の捻りだけ。 */
+@keyframes die3d-roll {
+  0%   { animation-timing-function: steps(9, end);
+         transform: perspective(900px) rotateX(0deg) rotateY(0deg) scale(.86); }
+  72%  { animation-timing-function: ease-out;
+         transform: perspective(900px) rotateX(720deg) rotateY(1080deg) scale(1.14); }
+  88%  { animation-timing-function: ease-in-out;
+         transform: perspective(900px) rotateX(734deg) rotateY(1066deg) scale(1.04); }
+  100% { transform: perspective(900px) rotateX(720deg) rotateY(1080deg) scale(1); }
+}
+
 /* ⚠️ 覆いは**溶かして入れる** ── いきなり暗くすると、さいころが出るより先に
    「画面が切り替わった」ように見えて、転がりの始まりが見えない。 */
 #dim-roll { animation: die-veil .18s ease-out both; }
-
-@keyframes die-spin {
-  /* ⭐ 割り切れない角度にしてあるので、同じ向きが続けて出ない */
-  0%   { transform: rotate(0deg)   scale(1);    }
-  25%  { transform: rotate(121deg) scale(1.16); }
-  50%  { transform: rotate(242deg) scale(.9);   }
-  75%  { transform: rotate(47deg)  scale(1.1);  }
-  100% { transform: rotate(168deg) scale(1);    }
-}
-/* ⭐ 止まったときの捻り。⚠️ 真正面だと**転がって止まった**ように見えない */
-@keyframes die-land {
-  0%   { transform: rotate(168deg) scale(1); }
-  60%  { transform: rotate(-8deg)  scale(1.12); }
-  100% { transform: rotate(0deg)   scale(1); }
-}
 /* ⚠️ 濃さは実物と同じ（濃いと盤が読めず、薄いと転がりが背景に紛れる） */
 @keyframes die-veil { from { background: rgba(0,0,0,0); } to { background: rgba(0,0,0,.34); } }
 
@@ -360,11 +393,26 @@ html, body {
 /* ── 放置の帯 ────────────────────────────────────────
    ⭐ 進んでいることは**地面が左へ流れる**ことで見せる。走者は歩幅だけ揺らす。
    ⚠️ 地面は画面幅の2倍あるので、1枚ぶん流れたら折り返す（`Core.Beats.Scroll`）。 */
-#ground { animation: idle-roll 12s linear infinite; }
+/* 🔴 **級で指す（id で指さない）。**
+   ⚠️ 前は `#ground` だった ── ところが**すごろくの盤の器も `ground`**
+   （`assets/layouts/trail.txt`）。id は画面で唯一でなければならないのに、
+   画面をまたいで同じ名前だったので、この動きが**潜入の盤にも掛かっていた**
+   ── 盤が12秒かけて左へ流れ続け、マスが指の下から逃げる
+   （実測 2026-08-26「画面が動き続けて、進むマスが押せない」の正体）。
+   ⭐ 別の画面の物に触れない書き方（級）に直す。⚠️ 草も同じ動き（一緒に流す
+   ── 地面だけ動くと、生えている物が滑って見える）。 */
+.idle-flow, .idle-tuft { animation: idle-roll 12s linear infinite; }
 @keyframes idle-roll { from { transform: translateX(0); } to { transform: translateX(-1080px); } }
 
-/* ⚠️ 草も一緒に流す ── 地面だけ動くと、生えている物が滑って見える */
-.idle-tuft { animation: idle-roll 12s linear infinite; }
+/* ⭐ **ホームの背景（空と山）を、ゆっくり左へ流す。**
+   ⚠️ 絵は「元＋左右反転」を横に並べた2枚幅（2160px）。1枚ぶん（1080px）流したら
+   先頭へ戻すので、途切れずに繋がる ── ⭐ 継ぎ目が鏡写しなので線が合って目立たない。
+   ⭐ **空のほうが遅い**（作者の指示 2026-08-27）── 遠いものほどゆっくり動いて見える。
+   ⚠️ 🔴 **級で掛ける。id では掛けない。**別の画面に同じ名前があると両方に効く
+   （2026-08-26 に `#ground` でそれを踏み、すごろくが遊べなくなった）。 */
+.roll-sky  { animation: bg-roll 180s linear infinite; }
+.roll-hill { animation: bg-roll  90s linear infinite; }
+@keyframes bg-roll { from { transform: translateX(0); } to { transform: translateX(-1080px); } }
 
 /* ⭐ 歩幅の揺れ。⚠️ 大きいと跳ねて見えて「進んでいる」から離れる（`Core.Beats.Bob`）。
    ⚠️ 一人ずつずらす ── 揃うと行進になり、めいめいが歩いている感じが消える。 */
@@ -381,13 +429,16 @@ html, body {
 /* ⚠️ **動きを望まない人には出さない。**⭐ 何が起きたかは字と数で残す
    （動きは読み取りやすさのためであって、情報の出所ではない）。 */
 @media (prefers-reduced-motion: reduce) {
-  .fx-say, .fx-shout { animation: fx-hold .9s linear forwards; }
+  .fx-say, .fx-shout { animation: fx-hold .9s linear both; }
   .fx-ring, .fx-hit { display: none; }
   .fx-step, .fx-stepf, .fx-shock { animation: none; }
-  #face-roll, #dim-roll, #strip-tell { animation: none; }
+  /* ⭐ 動きを望まない人には転がさない ── ⚠️ ただし**正面は出す**
+     （`.die3d` の動きを消すと `transform` が素になり、出た目の面がそのまま正面に来る）。 */
+  .die3d { animation: none; transform: perspective(900px); }
+  #dim-roll, #strip-tell { animation: none; }
   #dim-roll { background: rgba(0,0,0,.34); }
   #pop-fan, #burst-fan { animation: none; }
-  #ground, .idle-tuft, .idle-walk, .idle-come { animation: none; }
+  .roll-sky, .roll-hill, .idle-flow, .idle-tuft, .idle-walk, .idle-come { animation: none; }
 }
 
 /* icon ── ⭐ **絵を出して、その上から色を掛ける。**
@@ -446,6 +497,12 @@ html, body {
 /* host ── ⭐ **中は骨組みが知らないと宣言した枠。**
    ⚠️ 見た目は何も与えない ── 中を描く側が全部決める。 */
 .n.host { overflow: hidden; }
+/* 🔴 **巻物の中の器だけは切らない**（`grow=yes`）。
+   ⚠️ 切ると、外の巻物の `scrollHeight` が器の高さで頭打ちになり、
+   はみ出した中身は**見えないうえ押せない**（実測 2026-08-26・すごろくの盤）。
+   ⭐ 高さの指定はそのまま残す ── 器の高さは骨組みの検査が見る値であって、
+   実際に描かれる高さは中身（`#ground-in`）が名乗る。 */
+.n.host.grow { overflow: visible; }
 
 /* ⭐ **覆い。**地を暗くして、後ろを押させない。
    ⚠️ ここを押しても閉じない ── 聞いている最中に、触っただけで消えるのは危ない

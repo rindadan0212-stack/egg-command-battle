@@ -15,7 +15,7 @@ public class SnapshotTests
     /// 新しく育てた個体より弱い個体が保存に残り続ける。
     /// ⭐ 育てた分は Earned から一意に決まるので、読むときに作り直せる。</summary>
     [Fact]
-    public void 古い保存の育てた分は全ステへ揃う()
+    public void 古い保存は未使用ポイントとして戻る()
     {
         var game = Games.NewGame(1, T0);
         // ⚠️ 「得意1本にだけ乗った」古い形を手で作る
@@ -29,13 +29,23 @@ public class SnapshotTests
         Creature found = null;
         foreach (var c in back.Storage.Creatures) if (c.Id == "old") found = c;
         Assert.NotNull(found);
-        // ⭐ 読み直すと、いまの規則（素質の割合）で作り直される
-        var want = Creatures.TrainedFor(found.SpeciesId, found.Wild, found.Earned);
+        // 🔴 **古い保存は「未使用ポイント」として戻る**（2026-08-26・ARK式の自由配分）。
+        //    ⚠️ 古い個体は誰も振り先を選んでいないので、育てた分は復元できない。
+        //    ⭐ そのぶん **Earned がまるごと未使用**で返るので、開いた側が振り直せる
+        //    （`振り直し不可` の唯一の例外 ── 移行のときだけ）。
+        Assert.Equal(found.Earned, Creatures.UnspentOf(found));
+        var want = Creatures.TrainedFor(found.SpeciesId, found.Wild, found.Points);
         foreach (var key in Stats.Keys)
         {
+            // ⚠️ まだ1点も振っていないので、育てた分は 0 で揃う（伸びていないのが正）
             Assert.Equal(want[key], found.Trained[key]);
-            Assert.True(found.Trained[key] > 0, $"{Stats.LabelOf(key)} が伸びていない");
+            Assert.Equal(0, found.Trained[key]);
         }
+
+        // ⭐ 振れば伸びる ── 移行した個体がちゃんと使えることまで見る
+        Creatures.Spend(found, StatKey.Atk, found.Earned);
+        Assert.Equal(0, Creatures.UnspentOf(found));
+        Assert.True(found.Trained[StatKey.Atk] > 0, "振ったのに攻撃力が伸びていない");
     }
 
     /// <summary>ひととおり触った状態を作る。⭐ 空の状態だけ通しても検査にならない。</summary>
@@ -311,6 +321,41 @@ public class SnapshotTests
 
         var loop = new Dictionary<string, string> { { "a", "b" }, { "b", "a" } };
         Assert.Throws<System.InvalidOperationException>(() => Migrations.Apply(loop, "a"));
+    }
+
+    /// <summary>🔴 **孵化器の枠から溢れた卵は、棚へ戻る。**
+    ///
+    /// ⚠️ 枠の数（<see cref="Hatchery.Slots"/>）は減ることがある（2026-08-27: 6→5）。
+    /// そのとき古い保存には**今は無い番号**（5番）に入った卵が残っている。
+    /// ⭐ 画面は 0〜4 しか読まないので、置いたままだと**持っているのに一生取り出せない**
+    /// ── 黙って消さず、棚（`Eggs`）へ戻す。
+    ///
+    /// ⚠️ この検査は「今の枠数」に追従する（6 に戻しても通る）── 数を直に書かない。</summary>
+    [Fact]
+    public void 枠から溢れた卵は棚へ戻る()
+    {
+        var game = Games.NewGame(7, T0);
+        var save = Snapshots.Save(game);
+        int eggsBefore = save.Eggs.Count;
+
+        // ⚠️ 「今の枠数の外」に居る卵を手で作る（＝枠を減らす前に保存されたもの）
+        var stray = new EggSave
+        {
+            Id = "stray", SpeciesId = "tamaru", Rarity = 3, Element = (int)Element.Fire,
+        };
+        save.Incubating.Add(new IncubationSave
+        {
+            Egg = stray, StartUnix = T0, ReadyUnix = T0 + 600, Slot = Hatchery.Slots,
+        });
+
+        var back = Snapshots.Load(save);
+
+        // ⭐ 温めている側には入っていない（読めない番号なので）
+        Assert.Null(Hatchery.At(back, Hatchery.Slots));
+        Assert.Empty(back.Incubating);
+        // ⭐ そのぶん棚に1つ増えている（消えていない）
+        Assert.Equal(eggsBefore + 1, back.Eggs.Count);
+        Assert.Contains(back.Eggs, e => e.Id == "stray");
     }
 
     /// <summary>いま生きている id は、引っ越し表を通しても自分のまま。

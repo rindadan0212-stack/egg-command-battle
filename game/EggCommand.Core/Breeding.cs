@@ -135,6 +135,15 @@ namespace EggCommand.Core
         /// <summary>両親の4枠から、子の枠2・3を決める。
         /// ⚠️ 子の枠1（種族スキル）と重なるものは外す。同じ技が2枠を占めると片方が無駄になる。</summary>
         /// <summary>⚠️ <see cref="Fusion"/> からも呼ぶ。技の遺伝は両方で同じ規則にしておく。</summary>
+        /// <summary>🔴 **配合は「★N は格N 以下」の縛りを受けない**（作者の決定 2026-08-27）。
+        ///
+        /// ⚠️ 卵ガチャ（<see cref="Nests.RollSkills23"/>）は★で引ける格に上限を掛けるが、
+        /// ここは掛けない ── ⭐ **配合は「両親が持っている技を継ぐ」**という別の筋だから。
+        /// 親が持っていない技は出ないので、無から上位格が湧くことはない。
+        ///
+        /// ⚠️ **不具合ではない。**★の低い子が親ゆずりの上位格を持つのは、
+        /// 「血統を重ねて良い個体を作る」という配合の値打ちそのもの。
+        /// ⭐ 揃えたくなったら、それは**仕様の変更**であって修正ではない。</summary>
         internal static void InheritSkills(Rng rng, Creature a, Creature b, string childSkill1,
             string childSpeciesId, out string? skill2, out string? skill3)
         {

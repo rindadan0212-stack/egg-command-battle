@@ -158,6 +158,12 @@ namespace EggCommand.Web
                 style.Append(";font-size:")
                      .Append(Px(node.Number("size", 40)));
 
+            // ⭐ **流れる絵**（背景の空・山）。⚠️ ⭐ **`flow=` とも別**（あちらは「兄弟を上から詰める」）。色でもない
+            //    ── `ink=` は地の色まで塗るので、絵に使うと背景が潰れる。
+            //    速さは `stage.css` の `roll-<名前>` が持つ（骨組みは置き場所だけ）。
+            string roll = node.Option("roll");
+            if (roll != null) cls.Append(" roll-").Append(roll);
+
             if (node.Kind == "label")
             {
                 cls.Append(" a-").Append(node.Option("anchor") ?? "left");
@@ -188,6 +194,9 @@ namespace EggCommand.Web
             // ⭐ 自作の仮ドット絵など、補間せず出したい icon だけに効く
             //    （既存の Kenney 絵は滑らかな見た目のまま ── stage.css 参照）。
             if (node.Kind == "icon" && node.Option("crisp") == "yes") cls.Append(" crisp");
+            // 🔴 **巻物の中の `host` は切らない**（`grow=yes`）。⚠️ 切ると、巻ける高さが
+            //    器の高さで止まり、下は**見えないうえ押せない**（`Layouts.Options` の注記）。
+            if (node.Kind == "host" && node.Option("grow") == "yes") cls.Append(" grow");
 
             double? fade = has && fill?.Fade != null ? fill.Fade(bind) : null;
             if (fade.HasValue) style.Append(";opacity:")

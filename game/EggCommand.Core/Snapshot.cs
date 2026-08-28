@@ -27,6 +27,10 @@ namespace EggCommand.Core
     {
         public string Id = "", SpeciesId = "";
         public StatSave Wild = new StatSave(), Trained = new StatSave();
+        /// <summary>🔴 **どのステに何点振ったか**（2026-08-26・ARK式の自由配分）。
+        /// ⚠️ 古い保存には無い ── その場合は全部 0 ＝「未使用のまま」になり、
+        /// ⭐ next に開いたとき **1度だけ振り直せる**（移行時だけの例外・振り直し不可の唯一の穴）。</summary>
+        public StatSave Points = new StatSave();
         public int Earned, MutationCounter, PaletteIndex, Generation;
         public string? Skill2, Skill3, ParentA, ParentB;
         /// <summary>⚠️ -1 は「持たない」。enum を直に入れると 0 と区別が付かない。</summary>
@@ -236,7 +240,17 @@ namespace EggCommand.Core
             foreach (var e in save.Eggs) game.Eggs.Add(To(e, notes));
             foreach (var i in save.Incubating)
             {
-                game.Incubating.Add(new Incubation(To(i.Egg, notes), i.StartUnix, i.ReadyUnix, i.Slot));
+                var hatching = To(i.Egg, notes);
+                // 🔴 **枠の外に居る卵を黙って消さない。**⚠️ 孵化器の枠数（`Hatchery.Slots`）は
+                //    減ることがある（2026-08-27: 6→5）。⭐ 枠から溢れた卵は**棚へ戻す**
+                //    ── 画面が読まない番号に置いたままだと、持っているのに一生取り出せない。
+                if (i.Slot < 0 || i.Slot >= Hatchery.Slots)
+                {
+                    game.Eggs.Add(hatching);
+                    notes?.Add($"孵化器の {i.Slot} 番は今の枠数（{Hatchery.Slots}）の外なので、卵を棚へ戻した");
+                    continue;
+                }
+                game.Incubating.Add(new Incubation(hatching, i.StartUnix, i.ReadyUnix, i.Slot));
             }
             foreach (var e in save.Encounters)
             {
@@ -384,6 +398,7 @@ namespace EggCommand.Core
         {
             Id = c.Id, SpeciesId = c.SpeciesId,
             Wild = StatSave.Of(c.Wild), Trained = StatSave.Of(c.Trained),
+            Points = StatSave.Of(c.Points),
             Earned = c.Earned, MutationCounter = c.MutationCounter,
             Skill2 = c.Skill2, Skill3 = c.Skill3, PaletteIndex = c.PaletteIndex,
             ParentA = c.ParentA, ParentB = c.ParentB, Generation = c.Generation,
@@ -396,14 +411,26 @@ namespace EggCommand.Core
         private static Creature To(CreatureSave s, List<string>? notes) =>
             To(s, ResolveSpecies(s.SpeciesId, notes), notes);
 
-        private static Creature To(CreatureSave s, string speciesId, List<string>? notes) => new Creature(
-            s.Id, speciesId, s.Wild.To(),
-            Creatures.TrainedFor(speciesId, s.Wild.To(), s.Earned), s.Earned,
-            s.MutationCounter, ResolveSkill(s.Skill2, notes), ResolveSkill(s.Skill3, notes),
-            ClampPalette(speciesId, s.PaletteIndex, s.Id, notes),
-            s.ParentA, s.ParentB, s.Generation, Key(s.Strong), Key(s.Weak),
-            Elem(s.Element), ResolveTrait(speciesId, s.Trait, notes),
-            Key(s.Best), Key(s.Worst));
+        private static Creature To(CreatureSave s, string speciesId, List<string>? notes)
+        {
+            var points = s.Points.To();
+            // 🔴 **振った点も渡す**（2026-08-26 に構築後の手当てで踏んだ事故の再発防止）。
+            //    ⚠️ 2026-08-27（監査で発覚）: 以前は構築後に `made.Points = points;` と
+            //    手で補っていた（`Creature` のコンストラクタに `points` が無かったため）。
+            //    ⭐ コンストラクタが `points` を受けるようになったので、ここも構築の1回で
+            //    渡す ── 「作ってから直す」の2段構えをやめて、忘れようが無い形にした。
+            //    戻し忘れると `UnspentOf` が「まだ全部余っている」と答え、
+            //    **同じ点を二度振れる**（実際に踏んだ）。
+            var made = new Creature(
+                s.Id, speciesId, s.Wild.To(),
+                Creatures.TrainedFor(speciesId, s.Wild.To(), points), s.Earned,
+                s.MutationCounter, ResolveSkill(s.Skill2, notes), ResolveSkill(s.Skill3, notes),
+                ClampPalette(speciesId, s.PaletteIndex, s.Id, notes),
+                s.ParentA, s.ParentB, s.Generation, Key(s.Strong), Key(s.Weak),
+                Elem(s.Element), ResolveTrait(speciesId, s.Trait, notes),
+                Key(s.Best), Key(s.Worst), points);
+            return made;
+        }
 
         // 🔴 **色の添字を種族の実際の色数に収める。**⚠️ 種族を改名／削除したり色表を
         //    縮めたりすると、古い保存の `PaletteIndex` が範囲外のまま残る。読み込み

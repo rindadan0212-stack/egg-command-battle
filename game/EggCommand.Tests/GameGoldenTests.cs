@@ -225,7 +225,11 @@ public class GameGoldenTests
         Assert.Equal(3, golden.GetProperty("partySize").GetInt32());
         Assert.Equal(4, Games.PartySize);
         Assert.Equal(golden.GetProperty("storageSlots").GetInt32(), Storages.StorageSlots);
-        Assert.Equal(golden.GetProperty("trainMax").GetInt32(), Creatures.TrainMax);
+        // 🔴 **育成の上限は意図して変えた**（20 → 50・2026-08-26・作者の決定）。
+        //    ⭐ 6ステへ**自由に配る**形にしたので、1ステに寄せられるぶん総量を増やしてある。
+        //    ⚠️ 均等に散らすと 1ステあたり 8点 ＝ 旧来（全ステ20）より薄い ── 意図どおり。
+        Assert.Equal(20, golden.GetProperty("trainMax").GetInt32());
+        Assert.Equal(50, Creatures.TrainMax);
     }
 
     /// <summary>⭐ newGame から一連の操作までを丸ごと。

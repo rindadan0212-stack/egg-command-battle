@@ -176,20 +176,58 @@ namespace EggCommand.Core
         ///
         /// ⚠️ 同じプールから2つ取っていた頃は、狙った組み合わせが 2.8〜4.8% でしか出ず、
         /// 「この巣からは何が来るか」も読めなかった。
-        /// ⭐ 型を分けると、巣を選ぶ理由が「どの型が欲しいか」になる。</summary>
-        private static void RollSkills23(Rng rng, string speciesId, string skill1,
+        /// ⭐ 型を分けると、巣を選ぶ理由が「どの型が欲しいか」になる。
+        ///
+        /// ⭐ **★→技の格を繋ぐ唯一の場所**（2026-08-27）。<paramref name="maxGrade"/> を超える技は
+        /// 引かない（<see cref="SkillValues.GradeOf"/>）。⚠️ 呼び側ごとに意味が違う ──
+        /// 卵なら**その卵の★**、雑魚・親なら**巣の段階**（<see cref="Nest.Tier"/>）を渡す
+        /// （どちらも「★の代わり」）。
+        /// ⭐ 絞った結果が0本のときの落とし先は <see cref="CappedPool"/> を見る。</summary>
+        private static void RollSkills23(Rng rng, string speciesId, string skill1, int maxGrade,
             out string? skill2, out string? skill3)
         {
-            var pool2 = Skills.SlotPoolOf(speciesId, 1, skill1);
+            var pool2 = CappedPool(Skills.SlotPoolOf(speciesId, 1, skill1), maxGrade);
             skill2 = pool2.Count > 0 ? rng.Pick(pool2) : null;
 
             // ⚠️ 型が違えば重ならないが、同じ技が2枠を占めないことはここで担保する
-            var pool3 = new List<string>();
+            var pool3raw = new List<string>();
             foreach (var id in Skills.SlotPoolOf(speciesId, 2, skill1))
             {
-                if (id != skill2) pool3.Add(id);
+                if (id != skill2) pool3raw.Add(id);
             }
+            var pool3 = CappedPool(pool3raw, maxGrade);
             skill3 = pool3.Count > 0 ? rng.Pick(pool3) : null;
+        }
+
+        /// <summary>そのプールを格 <paramref name="maxGrade"/> 以下へ絞る。
+        ///
+        /// 🔴 **絞った結果が0本でも、黙って空き枠にしない。**
+        /// ⭐ そのプールの中で**一番格が低い技**（同格が複数あれば全部）へ落とす
+        /// ── 「★1の卵でも枠2・3が必ず埋まる」を保証する唯一の出所。
+        /// ⚠️ 落とし先も「そのプールの最低格」なので、上限（<paramref name="maxGrade"/>）を
+        /// 超える技が出ることは無い ── ★の低い卵が格上の技を引く事故は起きない。
+        /// ⚠️ 空のプールを渡されたら空のまま返す（呼び側が null に落とす）。</summary>
+        private static List<string> CappedPool(IReadOnlyList<string> pool, int maxGrade)
+        {
+            var fit = new List<string>();
+            foreach (var id in pool)
+            {
+                if (SkillValues.GradeOf(Skills.ById(id)) <= maxGrade) fit.Add(id);
+            }
+            if (fit.Count > 0 || pool.Count == 0) return fit;
+
+            int lowest = int.MaxValue;
+            foreach (var id in pool)
+            {
+                int grade = SkillValues.GradeOf(Skills.ById(id));
+                if (grade < lowest) lowest = grade;
+            }
+            var fallback = new List<string>();
+            foreach (var id in pool)
+            {
+                if (SkillValues.GradeOf(Skills.ById(id)) == lowest) fallback.Add(id);
+            }
+            return fallback;
         }
 
         /// <summary>巣を守るのは親1体だけ。
@@ -205,8 +243,13 @@ namespace EggCommand.Core
             var wild = SpreadWild(rng, WildTotalForTier(nest.Tier));
             // ⭐ **親と卵は同じ技を持つ。**「その親の卵」なのに技が無関係、という状態を直した
             //    （2026-08-19）。⚠️ 巣ごとに固定なので、挑み直しても顔ぶれが変わらない。
+            // ⚠️ 🔴 **親には★が無い。**代わりに巣の段階（nest.Tier）を格の上限に使う。
+            //    卵の実際の★は段階から ±1 ブレる（Rarities.Roll）ので、ブレた回（3回に2回）は
+            //    親が見せた技と、実際に手に入る卵の技が食い違いうる ── ★2の卵まで
+            //    段階3の技を持たせると「★N は格N以下」が破れるので、卵側は
+            //    MakeEggOfRarity で**その卵自身の★**を渡し直している（下記）。
             string? skill2, skill3;
-            SkillsOfNest(nest, out skill2, out skill3);
+            SkillsOfNest(nest, nest.Tier, out skill2, out skill3);
 
             return new List<Creature>
             {
@@ -248,8 +291,10 @@ namespace EggCommand.Core
                 string speciesId = rng.Pick(pool);
                 var species = SpeciesTable.ById(speciesId);
                 var wild = SpreadWild(rng, total);
+                // ⚠️ 雑魚には★が無いので、親と同じく巣の段階を格の上限にする
+                //    （雑魚が親より格上の技を持つのは変）。
                 string? skill2, skill3;
-                RollSkills23(rng, speciesId, species.Skill1, out skill2, out skill3);
+                RollSkills23(rng, speciesId, species.Skill1, nest.Tier, out skill2, out skill3);
                 party.Add(new Creature($"{nest.Id}-m{mob}-{i}", speciesId, wild,
                     new StatBlock(0, 0, 0, 0), 0, 0, skill2, skill3, 0, null, null, 1,
                     null, null, element, Creatures.TraitIdFor(speciesId)));
@@ -332,7 +377,12 @@ namespace EggCommand.Core
             //
             // ⭐ これで巣が**中身の読める箱**になる。⚠️ 確率は1ミリも動かしていない
             //    （同じ袋から同じように引いている）。動いたのは「いつ分かるか」だけ。
-            SkillsOfNest(nest, out string? skill2, out string? skill3);
+            //
+            // ⭐ 🔴 **ここで渡す rarity が「この卵自身の★」**（2026-08-27・★→技の格）。
+            //    ⚠️ 巣の段階（nest.Tier）ではない ── 段階を使うと、段階からブレて
+            //    低い★になった卵（Rarities.Roll の ±1）が、段階なりの格の技を引いてしまい
+            //    「★N は格N以下」が破れる。★を渡すことで、その卵の格上限は必ずその卵の★になる。
+            SkillsOfNest(nest, rarity, out string? skill2, out string? skill3);
 
             return new Egg(
                 $"e{serial.ToString().PadLeft(3, '0')}",
@@ -349,12 +399,17 @@ namespace EggCommand.Core
         /// ⚠️ 揃える前は、雑魚だけ固定で**親と卵は挑むたびに変わる**という非対称だった。
         ///
         /// ⚠️ 巣の id と、その巣を何回盗んだかは**混ぜない**。盗んでも中身は変わらない
-        /// （変わると「この巣を掘り切る」という判断が成り立たない）。</summary>
-        public static void SkillsOfNest(Nest nest, out string? skill2, out string? skill3)
+        /// （変わると「この巣を掘り切る」という判断が成り立たない）。
+        ///
+        /// <param name="rarity">⭐ 技の格の上限（★→格・2026-08-27）。「巣ごとに固定」なのは
+        /// 変わらない ── 同じ (巣, rarity) を渡せば何度呼んでも同じ技が返る。
+        /// ⚠️ 呼び側が変える値なのは <paramref name="rarity"/> だけ（<see cref="MakeDefenders"/>
+        /// は巣の段階、<see cref="MakeEggOfRarity"/> は卵自身の★）。</param></summary>
+        public static void SkillsOfNest(Nest nest, int rarity, out string? skill2, out string? skill3)
         {
             var species = SpeciesTable.ById(nest.SpeciesId);
             var rng = new Rng(0).Stream($"nest-skills:{nest.Id}");
-            RollSkills23(rng, nest.SpeciesId, species.Skill1, out skill2, out skill3);
+            RollSkills23(rng, nest.SpeciesId, species.Skill1, rarity, out skill2, out skill3);
         }
 
         /// <summary>孵す。⭐ 野生の卵はここでスキル2・3のガチャを引く。
@@ -375,7 +430,8 @@ namespace EggCommand.Core
             string? skill3 = egg.Skill3;
             if (!egg.HasSkills)
             {
-                RollSkills23(rng, egg.SpeciesId, species.Skill1, out skill2, out skill3);
+                // ⭐ 野生の卵（技が未確定）はここで初めて★→格が働く（egg.Rarity が上限）。
+                RollSkills23(rng, egg.SpeciesId, species.Skill1, egg.Rarity, out skill2, out skill3);
             }
 
             return new Creature(id, egg.SpeciesId, egg.Wild, new StatBlock(0, 0, 0, 0), 0,

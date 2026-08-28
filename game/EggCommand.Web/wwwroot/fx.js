@@ -21,7 +21,9 @@ window.eggFx = {
   /** 同じ体に重ねないための段（`Core.Beats.StackStep`）。 */
   STACK: 46,
 
-  /** @param {Array<{at:string,kind:string,text:string,tint:string,size:number,up:number}>} sparks */
+  /** ⭐ **1つ出すごとに置く間**は C# が決めて `wait`（秒）で渡してくる（`Core.Beats.PopStep`）。
+   * ⚠️ ここで数えない ── 数えると、待たせる秒（`Deeds.Beat` が伸ばす `Wait`）と出所が2つになる。
+   * @param {Array<{at:string,kind:string,text:string,tint:string,size:number,up:number,wait:number}>} sparks */
   play(sparks) {
     if (!sparks || !sparks.length) return
     const stage = document.getElementById('stage')
@@ -41,8 +43,10 @@ window.eggFx = {
       const y = (r.top + r.height / 2 - box.top) / scale
       const half = r.width / scale / 2
 
-      if (one.kind === 'step' || one.kind === 'stepf') { this._nudge(art, 'fx-step'); continue }
-      if (one.kind === 'shock') { this._nudge(art, 'fx-shock'); continue }
+      // ⚠️ 🔴 **名前は小文字**（camelCase）── `Wait` ではなく `wait`
+      const wait = one.wait > 0 ? one.wait : 0
+      if (one.kind === 'step' || one.kind === 'stepf') { this._nudge(art, 'fx-step', wait); continue }
+      if (one.kind === 'shock') { this._nudge(art, 'fx-shock', wait); continue }
 
       const el = document.createElement('div')
       el.className = LIVE + ' fx-' + one.kind
@@ -56,16 +60,30 @@ window.eggFx = {
         el.style.cssText = `left:${x - 60}px;top:${y - 60}px;width:120px;height:120px;`
           + `--fx-tint:${one.tint || 'var(--ink)'}`
       }
+      // ⭐ 順番に出す。⚠️ 出るまでは**見えていてはいけない**
+      //    ── `stage.css` が `animation-fill-mode: both` を持つので、
+      //    待っている間は 0% の姿（透明）のまま留まる。
+      // ⚠️ 🔴 **`cssText` より後に書く。**⭐ 上の2つの枝はどちらも `el.style.cssText = …` で
+      //    **inline style を丸ごと差し替える**ので、先に書いた `animation-delay` は消える
+      //    （2026-08-28 に実測。C# は正しい秒を送っていたのに、DOM に一つも残っていなかった
+      //    ── 送った値だけを見て「効いている」と判じてはいけない、の実例）。
+      if (wait > 0) el.style.animationDelay = wait + 's'
       yard.appendChild(el)
       el.addEventListener('animationend', () => el.remove(), { once: true })
       // ⚠️ **落ちても必ず消す。**⭐ `animationend` は画面が隠れていると来ないことがある
-      setTimeout(() => el.remove(), 2000)
+      //    ⚠️ 待ち（`wait`）のぶんを足さないと、遅れて出るものを**出る前に消す**
+      setTimeout(() => el.remove(), 2000 + wait * 1000)
     }
   },
 
   /** 体をひと突き。⭐ 踏み込み（横）と、当たった跳ね（下）。
-   * ⚠️ 向き（敵は裏返し）は CSS が `.foe` を見て選ぶ ── ここでは分けない。 */
-  _nudge(art, name) {
+   * ⚠️ 向き（敵は裏返し）は CSS が `.foe` を見て選ぶ ── ここでは分けない。
+   * ⭐ `wait` は「順番に出す」ぶんの遅れ（秒）── 数字と同じ拍で跳ねさせる。
+   * ⚠️ **級（class）は待てない**ので、付けるのを遅らせる（`animation-delay` だと
+   * 待っている間も級が付いていて、次の跳ねが「同じ級の付け直し」になって不発になる）。 */
+  _nudge(art, name, wait) {
+    // ⚠️ 待っている間に戦いが終わることがある ── ⭐ 居なくなった絵は突かない
+    if (wait > 0) { setTimeout(() => { if (art.isConnected) this._nudge(art, name, 0) }, wait * 1000); return }
     art.classList.remove('fx-step', 'fx-shock')
     // ⚠️ 同じ級を付け直しても animation は再生されない。⭐ 一度測らせて読み直す
     void art.offsetWidth

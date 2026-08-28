@@ -16,6 +16,18 @@ namespace EggCommand.Tests;
 /// </summary>
 public class SkillTextTests
 {
+    /// <summary>⭐ **語彙としては在るが、まだどの技も使っていない効果**（2026-08-27）。
+    ///
+    /// ⚠️ 作者の指示で「実装するが技に落とし込む必要はない」として足したもの。
+    /// 参考作品との突き合わせ（`sim mamo`）で「本作に語彙が無い」と出た5つ。
+    /// ⭐ 技に使い始めたら**ここから消す** ── 消し忘れると上の検査が落ちる。
+    ///
+    /// ⚠️ 2026-08-27・同日中に全部配った（seal-strike / bind-down / invincible /
+    /// extend-strike / counter-stance / lockdown）ので、いまは空。</summary>
+    private static readonly HashSet<EffectKind> NotYetUsed = new HashSet<EffectKind>
+    {
+    };
+
     /// <summary>⚠️ 47技すべてを通す。⭐ 効果を足した日にここが最初に落ちる。</summary>
     [Fact]
     public void 全ての技が説明文になる()
@@ -82,6 +94,14 @@ public class SkillTextTests
         // ⚠️ 在ると「遊べない機能」が残り、Wiki にも「まだ付いていません」と書き続けることになる
         foreach (EffectKind kind in System.Enum.GetValues(typeof(EffectKind)))
         {
+            // ⚠️ **例外は名前つきの表に書く**（`GoldenTests.CtRepriced` と同じ流儀）。
+            // ⭐ 表が腐らないよう**逆向きにも数える** ── 技が使い始めたのに表に残っていたら落とす。
+            if (NotYetUsed.Contains(kind))
+            {
+                Assert.False(seen.Contains(kind),
+                    $"{kind} は技が使い始めているのに「まだ使っていない」表に残っている");
+                continue;
+            }
             Assert.True(seen.Contains(kind), $"{kind} を持つ技が1本も無い");
         }
 

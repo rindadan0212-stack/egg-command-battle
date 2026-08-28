@@ -62,7 +62,7 @@ namespace EggCommand.Core
         }
 
         private static int EstimateDamage(Unit actor, Unit target, PowerTier tier, DamageScale scale,
-            bool pierce = false)
+            bool pierce = false, bool bare = false)
         {
             // ⚠️ **パッシブ込みの素のステを使う。**個体から引き直すと乗らず、
             //    AI から見た強さと実際の一撃がずれる
@@ -71,18 +71,24 @@ namespace EggCommand.Core
             int attackStat = Battle.AttackStatOf(a, actor.Status, scale);
             // ⚠️ 防御無視をここで数えないと、AI から見て「防御無視攻撃」が素の攻撃と同じ値になり、
             //    CT の短い技に必ず負けて**一度も選ばれない**（実測 0.00 だった）
-            int defenseStat = pierce ? 0 : Battle.EffectiveStat(t.Def, target.Status.Def);
+            // ⚠️ **素の防御を渡す。**防御の強化・弱化は被ダメ側に掛かる
+            //    （`Battle.Guarded`）── ここでステに掛けると AI だけ別の式を見る
+            int defenseStat = pierce ? 0 : t.Def;
             double mult = Battle.ElementMultiplier(
                 actor.Creature.Element,
                 target.Creature.Element);
-            return Battle.DamageOf(Skills.DamagePowerOf(tier), attackStat, defenseStat, mult);
+            int hit = Battle.DamageOf(Skills.DamagePowerOf(tier), attackStat, defenseStat, mult);
+            // ⚠️ 強化無視は「買った守り」を踏み倒す ── AI から見ても割引を掛けない
+            return bare && target.Status.Def.Percent > 0 ? hit
+                : Battle.Guarded(hit, target.Status.Def);
         }
 
         /// <summary>多段ぶんを見込んだ見積り。⚠️ 盾は1発ごとに剥がれるので、
         /// 盾持ちに対しては多段のほうが通る（そこまでは数えていない — 概算でよい）。</summary>
         private static int EstimateTotal(Unit actor, Unit target, Effect effect)
         {
-            int hit = EstimateDamage(actor, target, effect.Power, effect.Scale, effect.Pierce);
+            int hit = EstimateDamage(actor, target, effect.Power, effect.Scale, effect.Pierce,
+                effect.Bare);
             // ⚠️ **数えるぶんを見積りにも乗せる。**乗せないと AI から見て
             //    「弱化を撒いてから回収する技」が素の攻撃と同じ値になり、
             //    仕込み → 回収の2段が**AI 側では一生成立しない**。
@@ -95,9 +101,21 @@ namespace EggCommand.Core
             return hit * effect.Repeat;
         }
 
-        private static double ScoreOf(BattleState state, Unit actor, int slot)
+        /// <summary>⭐ **検査向けの入口。**AI がこの効果でこの相手に何点入ると見積もるかを
+        /// そのまま返す。⚠️ `EstimateTotal`（本体の判断）を横流しするだけ ── 検査側に
+        /// 見積りの計算式を写さない（写すと、式を直した日に検査だけ古いまま揃ってしまう）。</summary>
+        public static int EstimateHitFor(Unit actor, Unit target, Effect effect) =>
+            EstimateTotal(actor, target, effect);
+
+        private static double ScoreOf(BattleState state, Unit actor, int slot) =>
+            ScoreOfSkill(state, actor, Battle.ActionSkill(actor, slot));
+
+        /// <summary>⭐ **検査向けの入口。**技1つを、いま渡した相手に対して採点した値を
+        /// そのまま返す。⚠️ 枠（<see cref="Battle.ActionSkill"/> 経由）を持たない検査用の
+        /// 技も採点できるよう、<see cref="ScoreOf"/> から**技そのものを受け取る形**を切り出した
+        /// （判断はそのまま・入口を増やしただけ）。</summary>
+        public static double ScoreOfSkill(BattleState state, Unit actor, Skill skill)
         {
-            var skill = Battle.ActionSkill(actor, slot);
             // ⭐ 本体（技の狙い先へ飛ぶぶん）
             double total = ScoreGroup(state, actor, skill, skill.Target, null);
             // ⭐ **1手2役のぶんも足す。**⚠️ 足さないと AI から見て
@@ -194,6 +212,11 @@ namespace EggCommand.Core
                         case EffectKind.Guts: if (one.Status.Guts == 0) n++; break;
                         case EffectKind.Immune: if (one.Status.Immune == 0) n++; break;
                         case EffectKind.Block: if (one.Status.Block == 0) n++; break;
+                        // ⭐ 2026-08-27 に足した4つ（`Extend` は既定の default で数える）
+                        case EffectKind.Seal: if (one.Status.Seal == 0) n++; break;
+                        case EffectKind.Anchor: if (one.Status.Anchor == 0) n++; break;
+                        case EffectKind.Invincible: if (one.Status.Invincible == 0) n++; break;
+                        case EffectKind.Counter: if (one.Status.Counter == 0) n++; break;
                         case EffectKind.Stun: if (one.Status.Stun == 0) n++; break;
                         case EffectKind.Sleep: if (one.Status.Sleep == 0) n++; break;
                         default: n++; break;
@@ -249,8 +272,16 @@ namespace EggCommand.Core
                         // 既に同じ向きで掛かっているなら重ねる意味が薄い
                         var now = subject.Status.ModOf(effect.Stat);
                         int sign = now.Percent > 0 ? 1 : now.Percent < 0 ? -1 : 0;
-                        double gain = now.Turns > 0 && sign == effect.Sign ? 0 : Skills.BuffPercent;
-                        score += gain * BuffValue;
+                        double gain = now.Turns > 0 && sign == effect.Sign
+                            ? 0 : Skills.BuffPercentOf(effect.Stat);
+                        // ⚠️ **代償を得点に数えない**（2026-08-27）。⭐ 符号も相手の側も見ずに
+                        //    常に加点していたので、`reckless`（捨て身の突き＝自分に防御DOWN）の
+                        //    代償が得点になっていた。⚠️ `Skills.LoadOf` は同じ判断
+                        //    （`Skills.IsSelfCost`）を正しく値引きに使っている。
+                        // 🔴 「代償なら向きを反転する」実行そのものも `Skills.SignedByCost` に
+                        //    寄せた（2026-08-27・`SkillValue.cs` が同じ判断の3か所目になったのを機に、
+                        //    ここの三項演算子と重複させないよう1つへ統合）。
+                        score += Skills.SignedByCost(effect, gain * BuffValue);
                         break;
                     }
 
@@ -335,6 +366,32 @@ namespace EggCommand.Core
                         score += subject.Status.Block == 0 ? effect.Turns * GuardianValue * 0.8 : 0;
                         break;
 
+                    // ── 2026-08-27 に足した5つ ─────────────────────────
+                    case EffectKind.Seal:
+                        // ⭐ 相手の枠2・3 を潰す。⚠️ 手番は奪わないのでスタンより安い
+                        score += subject.Status.Seal == 0 ? effect.Turns * StunValue * 0.4 : 0;
+                        break;
+
+                    case EffectKind.Anchor:
+                        // ⚠️ **弱化が乗っていなければ意味が無い。**⭐ 乗っている数で見る
+                        score += subject.Status.Anchor == 0
+                            ? Battle.BanesOn(subject) * GuardianValue * 0.5 : 0;
+                        break;
+
+                    case EffectKind.Invincible:
+                        // ⭐ 一撃をまるごと消すので、盾より重く見る
+                        score += subject.Status.Invincible == 0 ? effect.Turns * GuardianValue * 1.5 : 0;
+                        break;
+
+                    case EffectKind.Counter:
+                        score += subject.Status.Counter == 0 ? effect.Turns * GuardianValue * 0.6 : 0;
+                        break;
+
+                    case EffectKind.Extend:
+                        // ⚠️ **乗っている弱化の数がそのまま価値。**0 なら撃つ意味が無い
+                        score += Battle.BanesOn(subject) * effect.Turns * GuardianValue * 0.4;
+                        break;
+
                     case EffectKind.Dispel:
                     case EffectKind.Steal:
                     {
@@ -409,6 +466,12 @@ namespace EggCommand.Core
                 case EffectKind.Dispel:
                 case EffectKind.Steal:
                 case EffectKind.Revive:
+                // ⭐ 2026-08-27 に足した5つ
+                case EffectKind.Seal:
+                case EffectKind.Anchor:
+                case EffectKind.Invincible:
+                case EffectKind.Extend:
+                case EffectKind.Counter:
                     return true;
                 default:
                     return false;

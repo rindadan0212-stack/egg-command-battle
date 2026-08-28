@@ -185,7 +185,9 @@ namespace EggCommand.Sim
             // ── 効果量 ────────────────────────────────
             md.Append("## 強化・弱化の効果量\n\n");
             md.Append("| 効果 | 量 |\n|---|---|\n");
-            md.Append($"| 攻撃力・防御力・スピードの UP / DOWN | **±{Skills.BuffPercent}%** |\n");
+            md.Append($"| 攻撃力の UP / DOWN | **±{Skills.BuffStatPercent}%**（攻撃力そのもの）|\n");
+            md.Append($"| 防御力の UP / DOWN | **±{Skills.BuffStatPercent}%**（⭐ **被ダメージ**に掛かる）|\n");
+            md.Append($"| スピードの UP / DOWN | **±{Skills.BuffSpdPercent}%**（⭐ 二重に効くので小さい）|\n");
             md.Append($"| 毒・リジェネ（1スタック・1ターンあたり）| 最大HP の **{Skills.TickPercent}%** |\n");
             md.Append($"| 執念（シールドが剥がれるたび）| ゲージ **+{100 * Battle.TraitGritGauge / Battle.GaugeMax}%** |\n");
             md.Append($"| 先駆け（開幕）| ゲージ **+{100 * Battle.TraitOpenerGauge / Battle.GaugeMax}%** |\n");
@@ -199,7 +201,7 @@ namespace EggCommand.Sim
             md.Append($"| 食らいつき（与えたダメージの）| **{Battle.TraitLeechPercent}%** を吸う |\n\n");
 
             md.Append("⚠️ **強化・弱化の持続は3ターン**（その個体の行動回数）。\n");
-            md.Append($"⭐ つまり見返りは {Skills.BuffPercent}% × 3 ＝ **{Skills.BuffPercent * 3 / 100.0:0.0}手ぶん**、");
+            md.Append($"⭐ つまり見返りは {Skills.BuffStatPercent}% × 3 ＝ **{Skills.BuffStatPercent * 3 / 100.0:0.0}手ぶん**（速度は {Skills.BuffSpdPercent}%）、");
             md.Append("撒くのに使うのは **1手**です。\n\n");
 
             // ── 手番 ──────────────────────────────────
@@ -227,14 +229,16 @@ namespace EggCommand.Sim
             md.Append("| **威力** | 1発ぶんの威力。⚠️ ダメージのある技だけ（他は空欄）|\n");
             md.Append("| **効果** | 何が起きるか。⭐ 狙い先・確率・持続をすべて書いています |\n");
             md.Append("| **T** | **その個体の行動回数**。⚠️ 実時間でも全体のターン数でもありません |\n");
-            md.Append("| **上昇量** | レベルが1つ上がるたびに伸びる軸（Lv2→Lv5 の順）|\n");
+            md.Append("| **上限** | ⚠️ **技ごとに違います。**多くは Lv5 ですが、味方に配る持続もの");
+            md.Append("（強化・ガッツ・免疫・リジェネの単発技）だけ Lv3 以下に縮みます |\n");
+            md.Append("| **上昇量** | レベルが1つ上がるたびに伸びる軸（Lv2から、上限まで順に）|\n");
             md.Append("| **CT** | 使ったあと、自分が何回行動するまで再使用できないか |\n");
             md.Append("| **⭐パッシブ** | ⚠️ **押せません。**枠は1つ使いますが、選ぶ対象に出てきません。");
             md.Append("戦闘が始まる前から効いています |\n\n");
 
             md.Append("## 一覧\n\n");
-            md.Append("| スキル名 | 型 | 威力 | 効果 | レベルごとの上昇量 | CT |\n");
-            md.Append("|---|---|---|---|---|---|\n");
+            md.Append("| スキル名 | 型 | 威力 | 効果 | 上限 | レベルごとの上昇量 | CT |\n");
+            md.Append("|---|---|---|---|---|---|---|\n");
             foreach (var skill in Skills.All)
             {
                 // ⚠️ ボス専用の技は、どの種族のプールにも入っていない＝プレイヤーは持てない
@@ -244,8 +248,12 @@ namespace EggCommand.Sim
                 // ⚠️ **パッシブは CT 欄に 0 が並ぶ。**印が無いと「いつでも押せる技」と読まれる
                 if (skill.Passive) only += " ⭐パッシブ";
                 string ct = skill.Passive ? "─" : skill.Ct.ToString();
+                // ⭐ 2026-08-27 追記: 上限は技ごと（Skills.MaxLevelOf）。⚠️ 味方に配る持続ものだけの
+                //    技は Lv3 以下に縮み、CT ≧ 持続＋1 が破れなくなるまで段数を削っている
+                //    （Lv1 のまま＝育たない技もある。「上昇量」欄が空なのはその印）。
                 md.Append($"| {skill.Name}{only} | {Skills.LabelOf(skill.Type)} | {SkillText.PowerOf(skill)} | ")
-                  .Append($"{SkillText.Describe(skill)} | {SkillText.GrowthOf(skill)} | {ct} |\n");
+                  .Append($"{SkillText.Describe(skill)} | Lv{Skills.MaxLevelOf(skill)} | ")
+                  .Append($"{SkillText.GrowthOf(skill)} | {ct} |\n");
             }
 
             md.Append("\n⚠️ **ボス専用の技は手に入りません。**どの種族の卵ガチャにも入っていません（相手が使うのを見るだけです）。\n");

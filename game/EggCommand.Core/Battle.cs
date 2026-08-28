@@ -36,6 +36,11 @@ namespace EggCommand.Core
         Immune,
         Sleep,
         Block,
+        // ── 2026-08-27 に足した4つ（`Extend` は即時なので状態を持たない）──
+        Seal,
+        Anchor,
+        Invincible,
+        Counter,
     }
 
     /// <summary>状態1つを絵で出すための最小限。
@@ -104,6 +109,14 @@ namespace EggCommand.Core
         public int Sleep;
         /// <summary>ブロックの残り。⭐ 外から受け取る回復と強化を弾く。</summary>
         public int Block;
+        /// <summary>封印の残り。⭐ 枠2・3 が押せない（枠1 だけ残る）。</summary>
+        public int Seal;
+        /// <summary>固着の残り。⭐ 乗っている弱化を落とせない。</summary>
+        public int Anchor;
+        /// <summary>無敵の残り。⭐ ダメージを受けない。⚠️ 毒は通る。</summary>
+        public int Invincible;
+        /// <summary>反撃の残り。⭐ 受けたダメージの一部を返す。</summary>
+        public int Counter;
 
         public ref Modifier ModOf(StatKey key)
         {
@@ -142,6 +155,17 @@ namespace EggCommand.Core
         public bool Opening;
         /// <summary>スキル枠3つぶん。0 なら使える。</summary>
         public readonly int[] Cooldowns = new int[3];
+        /// <summary>🔴 **持続するもの（毒・リジェネ・強化の残り）を最後に進めた手番。**
+        ///
+        /// ⚠️ <see cref="Battle.NextActor"/> は呼ぶたびに進めるので、
+        /// **同じ手番で2回呼ばれると毒が2回入る**。⭐ 画面を描く側・押した側が
+        /// 「いま誰が立っているか」を知りたくて呼んでいて、実際に起きていた
+        /// （2026-08-28 に発見。1手のあいだに3〜4回入り、3ターンの強化が1手で切れていた）。
+        ///
+        /// ⭐ 呼び手の作法だけで守ると、また誰かが呼ぶ ── **進める側で1回に釘づける**。
+        /// ⚠️ 初期値は -1（<see cref="BattleState.Actions"/> は 0 から始まるので、
+        /// 0 にすると**最初の1手だけ毒が入らない**）。</summary>
+        public int TickedAt = -1;
 
         /// <summary>⭐ **パッシブを畳み込んだ素のステ。唯一の出所。**
         ///
@@ -187,6 +211,15 @@ namespace EggCommand.Core
         Revived,
         /// <summary>弱化が外れた。⭐ 免疫で弾いた（Blocked）とは分ける。</summary>
         Missed,
+        /// <summary>⭐ **挑発で狙いが실際にずれた**（2026-08-27）。
+        ///
+        /// ⚠️ <see cref="Taunt"/>（掛かった）とは別。掛かっても、相手がもともと
+        /// 掛け手を狙っていたなら**何も起きていない** ── 挑発の値打ちは
+        /// 「狙いが**変わった**回数」でしか測れない。
+        /// ⭐ <see cref="SkillValues"/> の 🚧未測定な見積りを潰すために足した。</summary>
+        Pulled,
+        /// <summary>⭐ **反撃で返した**（2026-08-27）。⚠️ 特性の返し身とは分けて数える。</summary>
+        Counter,
     }
 
     public sealed class BattleEvent
@@ -258,7 +291,9 @@ namespace EggCommand.Core
     public static class Battle
     {
         /// <summary>ゲージが満ちる値。</summary>
-        public const int GaugeMax = 1000 * Stats.Scale;
+        /// ⚠️ 🔴 **`GaugeBase` と一緒に上げる**（2026-08-26）。⭐ 溜まる速さを上げたぶん
+        /// 満タンの量も上げないと、実時間で戦闘が3割速くなる（手番の数ではなく**体感**が変わる）。
+        public const int GaugeMax = 1500 * Stats.Scale;
 
         /// <summary>全員が持つ基礎テンポ。ゲージは GaugeBase + 速度 ずつ溜まる。
         ///
@@ -266,7 +301,11 @@ namespace EggCommand.Core
         /// 速度は「行動回数」という全出力への倍率なので、素で効かせると上限が無い。
         /// 一方ダメージは式で頭打ちになるので、攻撃はどれだけ振っても追いつけない。
         /// ⭐ 副産物として速度0でも止まらない。</summary>
-        public const int GaugeBase = 55 * Stats.Scale;
+        /// 🔴 **2026-08-26 に 55 → 115**（作者の指定「最速は最遅の 3〜3.5倍」）。
+        /// ⭐ 逆算: <c>(B+1720)/(B+130) = 3.25</c> を解いて B ≒ 577。
+        /// ⚠️ 275 のままだと 4.9倍で、速度が他のステを押しのけていた
+        ///    （2026-08-26 実測: 命中と速度を混ぜても速度単騎が単調に勝つ）。
+        public const int GaugeBase = 115 * Stats.Scale;
 
         /// <summary>⚠️ 決着しない戦闘を止める上限。
         /// ⚠️ 飛ばした手番もここに数える。全員がスタンし続ける形で止まらないように。</summary>
@@ -299,10 +338,22 @@ namespace EggCommand.Core
         /// ⭐ 値は2次元に掃引して決めた。防御側を大きく取ってあるのは、
         /// 集中攻撃のせいで防御が攻撃の約3倍の価値を持つため。</summary>
         public const int AtkSoften = 20 * Stats.Scale;
-        public const int DefSoften = 110 * Stats.Scale;
+        /// 🔴 **2026-08-26 に 110 → 340**（作者の指定「育て切った壁は被ダメの 70〜80% を止める」）。
+        /// ⭐ 逆算: 育て切った防御 1705 に対して <c>(S/(S+1705))² = 0.25</c> を解いて S ≒ 1705。
+        /// ⚠️ 550 のままだと **94% 止めて**しまい、攻撃が防御に食われて戦闘が98発かかっていた。
+        public const int DefSoften = 340 * Stats.Scale;
 
         private const int Parity = 40 * Stats.Scale;
-        public const double DamageNormalize = (double)(DefSoften + Parity) / (AtkSoften + Parity);
+
+        // 🔴 **移植照合（`DamageOfPorted`）専用の凍結値**（2026-08-26）。
+        // ⚠️ 遊びの定数（`DefSoften` など）を共有していたので、手触りを調整するたびに
+        //    「移植が正しい」の証明まで動いていた。⭐ 照合の基準は**動かしてはいけない**ので、
+        //    その日の数を литерал で固定する。⚠️ ここは二度と触らない。
+        private const int PortedAtkSoften = 100;    // = 20 × Stats.Scale(5)（2026-08-26 時点）
+        private const int PortedDefSoften = 550;    // = 110 × Stats.Scale(5)
+        private const int PortedParity = 200;       // = 40 × Stats.Scale(5)
+        public const double DamageNormalize =
+            (double)(PortedDefSoften + PortedParity) / (PortedAtkSoften + PortedParity);
 
         // ── 特性の効き目 ─────────────────────────────────
         // ⭐ **特性は技を強くしない。動きを強くする。**
@@ -327,13 +378,30 @@ namespace EggCommand.Core
         /// 常時働くものは、選んで働くものより効き目を小さくしておかないと一択になる。</summary>
         public const int TraitSpitePercent = 12;
 
+        /// <summary>⭐ **反撃（札）が返す割合。**⚠️ 特性の返し身（<see cref="TraitSpitePercent"/>）より
+        /// 大きい ── あちらは生まれつきずっと、こちらは**1手払って数回ぶん**なので。
+        /// 🚧 未測定（`sim guess` で実測できる形にはしてある）。</summary>
+        public const int CounterPercent = 30;
+
         /// <summary>食らいつき: 与えたダメージのうち吸う割合（%）。
         /// ⚠️ <see cref="TraitSpitePercent"/> と同じ理由で下げてある（25% で +24pt だった）。</summary>
         public const int TraitLeechPercent = 15;
 
-        /// <summary>スタンを重ねて増やせる上限。⚠️ スタンだけが**足す**効果なので、
-        /// 上限が無いと スタン・大 の重ねがけで手番が延々飛ぶ。</summary>
-        public const int StunStackMax = 2;
+        // 🔴 **スタン・睡眠の重ねがけ上限（`StunStackMax`）を撤去**（作者の決定 2026-08-27）。
+        // ⚠️ ここには「スタンを重ねて増やせる上限。スタンだけが**足す**効果なので、
+        //    上限が無いと スタン・大 の重ねがけで手番が延々飛ぶ」という定数（値 2）があった。
+        //    ⭐ その理屈は**決定によって覆った**: 「すべてのデバフは上限を設定しない。
+        //    そういう戦術にはまったことが詰みで、そこに救済措置は不要」。
+        //    ⚠️ うっかり外したのではない ── これが撤去の記録。
+        // ⭐ もともと**判断が2か所で食い違ってもいた**: 通常付与（`EffectKind.Stun`/`Sleep`）
+        //    は上限ありだったが、弱化延長（`ExtendBanes`）は最初から上限なしで足していた。
+        //    ⭐ さらに通常付与の上限自体にもバグがあった ── 上限を「いま撃った技の Turns」
+        //    だけから計算していたため、既に大きいスタンが乗っている相手により小さい
+        //    スタン技を当てると残りが**減る**ことがあった（スタン4 の相手に Turns1 の技を
+        //    当てると stunCap=1+2=3 で 4→3 に下がる。「スタンだけは足す」というコメントの
+        //    とおりにならない条件付き上書きになっていた）。
+        // ⭐ いまは毒・リジェネ・弱化延長と同じ「素直に足すだけ」に揃えてある
+        //    （下の `EffectKind.Stun` / `EffectKind.Sleep` を参照）。
 
         /// <summary>執念: 盾が1枚剥がれるたびに溜まるゲージ。⭐ <see cref="GaugeMax"/> の 1/4。
         /// ⚠️ **250 と直書きしていて、桁上げ（2026-08-19・Stats.Scale×5）に取り残されていた。**
@@ -530,6 +598,20 @@ namespace EggCommand.Core
         /// <summary>⚠️ JS の Math.round は「0.5 は上へ」。C# の既定は銀行丸めなので使わない。</summary>
         private static int JsRound(double value) => (int)Math.Floor(value + 0.5);
 
+        /// <summary>符号つきの欄（削り・CT・ゲージ・弱化解除の個数）に、成長ぶんを足す。
+        ///
+        /// ⭐ **唯一の出所**（2026-08-27）。⚠️ 元の値が負（削る／縮める側）なら「もっと負」へ、
+        /// 正なら「もっと正」へ動かす。そのまま `value + extra` すると、負の欄は Lv が
+        /// 上がるほど 0 に近づいて **育てるほど弱くなる**（命削りが `Effect.HealRatio(-30)` の
+        /// まま `-(effect.Percent + boost.ExtraPercent)` と書かれていて、Lv2→Lv3 で
+        /// 30%→25% に弱くなっていたのがこれ）。
+        /// ⚠️ CT（<see cref="EffectKind.Ct"/>）・ゲージ（<see cref="EffectKind.Gauge"/>）・
+        /// 弱化解除の個数（<see cref="EffectKind.Dispel"/>）は既にこの形の三項演算子を
+        /// それぞれ独立に書いていて（3か所）、命削り（HealRatio 負）だけ直っていなかった
+        /// ── **77行違いで片方だけ正しい**、という穴が実際に起きた。⭐ 4か所目を生まないよう、
+        /// この1つへ寄せる（呼び側は三項演算子を書かない）。</summary>
+        private static int SignedGrow(int value, int extra) => value < 0 ? value - extra : value + extra;
+
         // ── 唯一の出所となる計算 ──────────────────────────────
 
         /// <summary>条件を満たしているか。⭐ **唯一の出所。**
@@ -612,6 +694,57 @@ namespace EggCommand.Core
         private static bool Outlasts(Modifier mine, Modifier yours) =>
             mine.Turns < 0 || (yours.Turns >= 0 && mine.Turns > yours.Turns);
 
+        /// <summary>⭐ **防御の強化・弱化を、被ダメージに掛ける**（2026-08-27）。
+        ///
+        /// ⭐ 防御力UP（+50）は被ダメ ×0.5、防御力DOWN（−50）は ×1.5。
+        /// ⚠️ **ステに掛けない理由**は <see cref="Skills.GuardsDamage"/> に書いてある
+        /// （軽減が二乗で飽和するので、ステ経由では言った割合が出ない ── 実測 +30% で −3%）。
+        /// ⚠️ 1 未満に落とさない（0ダメージの技を作らない）。</summary>
+        public static int Guarded(int hit, Modifier mod)
+        {
+            if (!IsOn(mod) || mod.Percent == 0) return hit;
+            int value = (int)Math.Floor((double)hit * (100 - mod.Percent) / 100);
+            return value < 1 ? 1 : value;
+        }
+
+        /// <summary>⭐ **防御の強化・弱化を掛けるかどうかの唯一の出所**（通常の一撃と反撃で共有）。
+        ///
+        /// ⚠️ 強化無視は防御力UP を踏み倒すが、防御力DOWN（弱化）は残す ──
+        /// 無視するのは「強化」だから（弱化は<see cref="Effect.Bare"/> の対象外）。
+        /// ⭐ 前はこの条件が通常の一撃（<see cref="ApplyEffect"/>）にしか無く、反撃
+        /// （<see cref="CounterStrike"/>）は常に <see cref="Guarded"/> を通していた
+        /// ── 同じ判断が2か所にあって片方だけ条件が抜けていた（2026-08-27 監査で発覚）。
+        /// ここへまとめて出所を1つにする。</summary>
+        private static int GuardedHit(int hit, Effect effect, Modifier defenseMod)
+        {
+            if (!effect.Bare || defenseMod.Percent < 0) hit = Guarded(hit, defenseMod);
+            return hit;
+        }
+
+        /// <summary>⭐ **乗っている弱化の残りを伸ばす**（弱化延長）。返すのは伸ばした本数。
+        ///
+        /// ⚠️ **強化は伸ばさない。**⭐ 相手に掛ける札なので、伸ばしてよいのは弱化だけ
+        /// ── 強化まで伸びると「敵を強くする技」になる。
+        /// ⚠️ 切れない強化・弱化（<see cref="Skills.Lasting"/>＝負）は触らない。</summary>
+        private static int ExtendBanes(UnitStatus s, int added)
+        {
+            int touched = 0;
+            foreach (var key in new[] { StatKey.Atk, StatKey.Def, StatKey.Spd })
+            {
+                ref var mod = ref s.ModOf(key);
+                // ⭐ 弱化だけ（Percent が負）。⚠️ Turns が負＝切れないものは触らない
+                if (mod.Turns > 0 && mod.Percent < 0) { mod.Turns += added; touched++; }
+            }
+            if (s.Poison.Turns > 0) { s.Poison.Turns += added; touched++; }
+            if (s.Stun > 0) { s.Stun += added; touched++; }
+            if (s.Sleep > 0) { s.Sleep += added; touched++; }
+            if (s.Taunt > 0) { s.Taunt += added; touched++; }
+            if (s.Block > 0) { s.Block += added; touched++; }
+            if (s.Seal > 0) { s.Seal += added; touched++; }
+            if (s.Anchor > 0) { s.Anchor += added; touched++; }
+            return touched;
+        }
+
         /// <summary>修正を掛けた実効値。⚠️ 1 未満に落とさない（速度0は割り算で壊れる）。</summary>
         public static int EffectiveStat(int baseValue, Modifier mod)
         {
@@ -643,7 +776,10 @@ namespace EggCommand.Core
         /// どこかで橋を渡す数が要る。⭐ 技ごとに散らさず**1箇所**に置く
         /// （前は威力の段位4つに 2,100/3,500/5,250/7,350 と散っていた）。
         /// ⚠️ 14 は「組み替える前と同じダメージになる」ところ（攻撃300・防御300 で誤差1%）。</summary>
-        public const int DamageBase = 14;
+        /// 🔴 **2026-08-26 に 14 → 27**（作者の指定「育て切った同格どうしは12発くらい」）。
+        /// ⭐ 逆算して 23 を置き、`sim feel` で測って 14.2発 だったので 27 に詰めた（→ 12.1発）。
+        ///    ⚠️ HpScale(105) は「10万HP」の約束なので動かさず、こちらで合わせている。
+        public const int DamageBase = 27;
 
         /// <summary>ダメージ。⭐ **攻撃力 × 威力倍率 × 基準 × 防御による軽減 × 属性**。
         ///
@@ -658,10 +794,34 @@ namespace EggCommand.Core
         /// 「攻撃力の何倍」と言えなくなる ── 作者の狙いはそこなので、線形に戻す。
         /// ⚠️ そのぶん攻撃力1点の価値が上がるので、育成の割合は測り直すこと。</summary>
         /// <param name="power">威力（<see cref="Skills.PowerUnit"/> 分率）。1000 で攻撃力と等倍。</param>
+        /// <summary>⚠️ 🔴 **測定専用の差し替え口**（2026-08-26）。既定 null ＝ 本番の式。
+        ///
+        /// ⭐ ダメージ式の案を実戦で比べるためだけに在る（`sim damagemodel`）。
+        /// ⚠️ **遊びの道からは絶対に触らない。**画面も保存も潜入も、ここが null である前提。
+        /// ⚠️ 試した式を採用するときは、**この口ではなく <see cref="DamageOf"/> 本体を書き換える**
+        /// ── 差し替え口が残ったまま本番が動くと、式の出所が2つになる。</summary>
+        public static Func<int, int, int, double, int>? DamageOverride;
+
         public static int DamageOf(int power, int attackStat, int defenseStat, double elementMult)
         {
+            if (DamageOverride != null)
+                return DamageOverride(power, attackStat, defenseStat, elementMult);
+            // 🔴 **軽減は二乗で効く**（2026-08-26・作者の採用判断）。
+            //
+            // ⚠️ 以前は <c>DefSoften/(DefSoften+防御)</c> の1乗だった。⭐ それだと防御の
+            //    効きが飽和しすぎて、**紙装甲のアタッカー4枚が全条件で最適解**になっていた
+            //    （実測: 攻撃4枚が 86〜99% で勝つ・2026-08-26）。攻めが守りに約3倍有利で、
+            //    「速く殺す」が「耐える」に必ず勝つ形になっていた。
+            //
+            // ⭐ **二乗にした狙い**（`sim damagemodel` で6案を実測して選定）:
+            //    ・防御 0 のときは 1.0² = 1.0 ＝ **紙装甲へのダメージは1も変わらない**
+            //    ・防御が高いほど急に効く ＝ 高耐久にだけ通りにくくなる
+            //    ・実測: 普通の相手で4編成が 42〜53% に収まり（前は 47〜91%）、
+            //      高耐久相手には弱化入りが攻撃4枚を 27pt 上回る ＝ 対策が生まれた
+            // ⚠️ **`DamageOfPorted` は触らない** ── あれは移植の照合用で、遊びには使わない。
+            double soften = (double)DefSoften / (DefSoften + defenseStat);
             double raw = (double)attackStat * power / Skills.PowerUnit * DamageBase
-                * DefSoften / (DefSoften + defenseStat);
+                * soften * soften;
             int value = (int)Math.Floor(raw * elementMult);
             return value < 1 ? 1 : value;
         }
@@ -671,7 +831,8 @@ namespace EggCommand.Core
         /// <see cref="Breeding"/> と <see cref="Fusion"/> の関係と同じ扱い。</summary>
         public static int DamageOfPorted(int power, int attackStat, int defenseStat, double elementMult)
         {
-            double raw = power * DamageNormalize * (AtkSoften + attackStat) / (DefSoften + defenseStat);
+            double raw = power * DamageNormalize
+                * (PortedAtkSoften + attackStat) / (PortedDefSoften + defenseStat);
             int value = (int)Math.Floor(raw * elementMult);
             return value < 1 ? 1 : value;
         }
@@ -683,7 +844,10 @@ namespace EggCommand.Core
         {
             switch (scale)
             {
-                case DamageScale.Def: return EffectiveStat(stats.Def, status.Def);
+                // ⚠️ **素の防御で伸びる。**防御の強化・弱化は
+                //    被ダメに掛かるものになったので（2026-08-27）、火力には乗せない
+                //    ⭐ 硬さの源（育てて決める）と、被ダメの割引（札で買う）を別のものにしてある
+                case DamageScale.Def: return stats.Def;
                 case DamageScale.Spd: return EffectiveStat(stats.Spd, status.Spd);
                 default: return EffectiveStat(stats.Atk, status.Atk);
             }
@@ -960,6 +1124,9 @@ namespace EggCommand.Core
             if (skill == null) return false;
             // ⚠️ **パッシブは選べない。**効き目は戦闘が始まる前に済んでいる
             if (skill.Passive) return false;
+            // ⭐ **封印は枠2・3 だけを止める。**⚠️ 枠1 まで止めると「動けない」＝スタンと同じになり、
+            //    軽い札として置いた意味が消える。⭐ 手番は来るが、できることが1つに減る。
+            if (slot > 0 && unit.Status.Seal > 0) return false;
             return unit.Cooldowns[slot] == 0;
         }
 
@@ -995,10 +1162,25 @@ namespace EggCommand.Core
         /// ⚠️ 毒で倒れることがあるので、呼んだ側は生死を見直す。</summary>
         private static void TickStatus(BattleState state, Unit unit)
         {
+            // 🔴 **1つの手番では1回だけ**（<see cref="Unit.TickedAt"/>）。
+            //    ⚠️ 手番が進むのは <see cref="PerformAction"/> と <see cref="ConsumeTurn"/> だけなので、
+            //    「同じ <see cref="BattleState.Actions"/> で2度目」は必ず**呼び過ぎ**。
+            if (unit.TickedAt == state.Actions) return;
+            unit.TickedAt = state.Actions;
+
             var s = unit.Status;
 
+            // ⭐ **無敵は毒も止める**（作者の指示 2026-08-27）。
+            // ⚠️ 前は「殴られない」だけで毒は素通りしていた（`DealDamage` を通らないため）。
+            //    ⭐ いまは「無傷」── 持続だけは進むので、無敵で待てば毒が切れる、にはならない。
+            if (s.Poison.Turns > 0 && s.Invincible > 0)
+            {
+                state.Log.Add(new BattleEvent(BattleEventKind.Blocked, unit.Key));
+                s.Poison.Turns--;
+                if (s.Poison.Turns == 0) s.Poison.Stacks = 0;
+            }
             // ⭐ 重なっているぶんだけ強く効く
-            if (s.Poison.Turns > 0)
+            else if (s.Poison.Turns > 0)
             {
                 int amount = (int)Math.Floor((double)(unit.MaxHp * Skills.TickPercent * s.Poison.Stacks) / 100);
                 if (amount < 1) amount = 1;
@@ -1035,6 +1217,11 @@ namespace EggCommand.Core
             //    ここで減らしていた頃は「判定の前に減る」ので、睡眠2T が飛ばすのは1手番、
             //    睡眠1T に至っては一度も飛ばさなかった（スタンは分岐側で減らすので正しい）。
             if (s.Block > 0) s.Block--;
+            // ⭐ 2026-08-27 に足した4つ（`Extend` は即時なので減らない）
+            if (s.Seal > 0) s.Seal--;
+            if (s.Anchor > 0) s.Anchor--;
+            if (s.Invincible > 0) s.Invincible--;
+            if (s.Counter > 0) s.Counter--;
             // ⚠️ 挑発の掛け手が居なくなったら固定を解く（居ない相手を狙い続けない）
             if (s.Taunt <= 0) s.TauntBy = null;
         }
@@ -1148,6 +1335,51 @@ namespace EggCommand.Core
                 return best;
             }
             return null;
+        }
+
+        /// <summary>いま立っている者 ── ⭐ **聞くだけ。何も進めない。**
+        ///
+        /// 🔴 <see cref="NextActor"/> は名前に反して**進める**関数（毒が入り、強化の残りが減り、
+        /// スタンなら手番を捨てて次へ送る）。⚠️ **描く側がこれを呼ぶと、
+        /// 画面を組み直すたびに戦いが進む** ── 実際に起きていた（2026-08-28 に見つけた）:
+        /// `Sheets.Fight` と `Deeds.Strike` が描く／押すたびに呼んでいたので、
+        /// 1手のあいだに毒が3〜4回入り、3ターンの強化が1手で切れていた。
+        ///
+        /// ⭐ 「誰が立っているか」を知りたいだけの側は**こちら**を呼ぶ。
+        /// ⚠️ 満ちた者が居なければ null（誰も立っていない ── ゲージのレースの最中）。</summary>
+        public static Unit? Standing(BattleState state)
+        {
+            // ⚠️ <see cref="NextActor"/> の「満ちた者のうち内部ゲージが最も多い者」と
+            //    **同じ選び方**にすること（別の者を出すと、札と実際に動く者がずれる）。
+            Unit? best = null;
+            foreach (var unit in state.Units)
+            {
+                if (!IsAlive(unit) || unit.Gauge < GaugeMax) continue;
+                if (best == null || unit.Gauge > best.Gauge) best = unit;
+            }
+            return best;
+        }
+
+        /// <summary>次に立ちそうな味方 ── ⭐ **戦闘画面の手札は、これの技を出す。**
+        ///
+        /// 🔴 敵の手番のあいだ、手札に**敵の技**が出ていた（2026-08-28・作者の報告）。
+        /// ⚠️ 手札は「いま立っている者」の技を出していたので、立っているのが敵ならそのまま敵の技になる。
+        /// ⭐ 手札は**人が押す場所**なので、出すのは常に味方 ── 敵の番でも札は消さず、
+        /// 「次に自分が動かす体」の技を出したまま押せなくする（消すと画面が跳ねる）。
+        ///
+        /// ⚠️ ここも<b>何も進めない</b>（<see cref="Standing"/> と同じ約束）。</summary>
+        public static Unit? StandingAlly(BattleState state)
+        {
+            var now = Standing(state);
+            if (now != null && now.Side == Side.Ally) return now;
+            // ⭐ 誰も立っていない／立っているのが敵 ── 味方のうち**満ちるのに一番近い者**
+            Unit? best = null;
+            foreach (var unit in state.Units)
+            {
+                if (unit.Side != Side.Ally || !IsAlive(unit)) continue;
+                if (best == null || unit.Gauge > best.Gauge) best = unit;
+            }
+            return best;
         }
 
         /// <summary>効果を1つだけ打ち込む。⭐ **技を作らずに効果そのものを試すための入口。**
@@ -1276,6 +1508,10 @@ namespace EggCommand.Core
                             {
                                 actor.Status.Taunt--;
                                 if (actor.Status.Taunt <= 0) actor.Status.TauntBy = null;
+                                // ⭐ **狙いが変わったときだけ数える。**⚠️ もともと掛け手を
+                                //    狙っていたなら、挑発は何も起こしていない
+                                if (!ReferenceEquals(unit, picked))
+                                    state.Log.Add(new BattleEvent(BattleEventKind.Pulled, actor.Key));
                             }
                             return new List<Unit> { unit };
                         }
@@ -1342,10 +1578,30 @@ namespace EggCommand.Core
         /// 特性の「与えた／受けた」はここが居るときにしか働かない。</param>
         /// <param name="reflectable">返し身がここから更に跳ね返ってよいか。
         /// ⚠️ 返した一撃では false。返し身どうしが往復し続けるのを止める唯一の止め木。</param>
+        /// <param name="bare">⭐ 強化無視。**「買った守り」だけを踏み倒す**（`Effect.Bare`）──
+        /// 無敵・シールド・ガッツの3つ（防御力UP は <see cref="Guarded"/> 側で別に踏み倒す）。
+        /// ⚠️ 毒やリジェネは守りではないので残る。</param>
+        /// ⚠️ 🔴 **bare と通常は、ここから先ずっと同じ1本の道を通る**（2026-08-27・共通化）。
+        /// 分けるのは「無敵・シールド・ガッツを見るかどうか」（`!bare &&` の3か所）だけにしてある。
+        /// ⭐ 前は bare 専用の早期リターンが「ダメージ適用・撃破判定・Aftermath」を
+        /// 丸ごと複製していて、**出所が2つ**になっていた。そのせいで通常の道に足した直し
+        /// （殴られると目を覚ます）が bare 側へ写っておらず、強化無視で殴っても
+        /// 眠ったままになるバグが残っていた（2026-08-27 監査で発覚）。
         private static void DealDamage(BattleState state, Unit? source, Unit target, int amount,
-            bool reflectable = true)
+            bool reflectable = true, bool bare = false)
         {
-            if (target.Status.Shield > 0)
+            // ⭐ **無敵はシールドより前。**⚠️ 逆にすると盾が先に減って、
+            //    無敵中なのに盾を消費するという妙な形になる（盾は「1発ぶん」なので減らさない）
+            // ⚠️ 強化無視は無敵を踏み倒すので、bare のときはここを見ない。
+            if (!bare && target.Status.Invincible > 0)
+            {
+                state.Log.Add(new BattleEvent(BattleEventKind.Blocked, target.Key,
+                    amount: 0, hp: target.Hp, absorbed: amount));
+                return;
+            }
+
+            // ⚠️ 強化無視はシールドも踏み倒す。
+            if (!bare && target.Status.Shield > 0)
             {
                 target.Status.Shield--;
                 // ⭐ 執念: 盾を「守り」から「手数の元」に変える。
@@ -1357,6 +1613,8 @@ namespace EggCommand.Core
             }
 
             // ⭐ 殴られると目を覚ます。⚠️ 眠らせた相手を殴ると自分で起こしてしまう
+            // ⚠️ **bare でも起きる。**踏み倒すのは「買った守り」であって、殴られた事実は
+            //    強化無視でも変わらない。
             if (target.Status.Sleep > 0)
             {
                 target.Status.Sleep = 0;
@@ -1375,7 +1633,8 @@ namespace EggCommand.Core
             target.Hp = Math.Max(0, target.Hp - amount);
 
             // ⭐ ガッツ: 致命傷を HP1 で耐える。⚠️ 元から1以下なら効かない（無限に粘らせない）
-            if (target.Hp == 0 && target.Status.Guts > 0 && before > 1)
+            // ⚠️ 強化無視はガッツも踏み倒すので、bare のときはここを見ない。
+            if (!bare && target.Hp == 0 && target.Status.Guts > 0 && before > 1)
             {
                 target.Hp = 1;
                 target.Status.Guts = 0;
@@ -1395,7 +1654,16 @@ namespace EggCommand.Core
                 React(state, TraitWhen.OnDown, target, source);
             }
 
-            // ⚠️ ここから下は特性だけ。持たない個体では1つも動かない
+            Aftermath(state, source, target, dealt, reflectable);
+        }
+
+        /// <summary>⭐ **殴ったあとに起きること**（特性と反撃）。
+        /// ⚠️ 強化無視の一撃も同じ後始末を通す ── 通さないと「強化無視だと返し身が働かない」
+        /// という、どこにも書いていない例外ができる（2026-08-27 に切り出した）。</summary>
+        private static void Aftermath(BattleState state, Unit? source, Unit target, int dealt,
+            bool reflectable)
+        {
+            // ⚠️ ここから下は特性と札だけ。持たない個体では1つも動かない
             if (source == null || ReferenceEquals(source, target) || dealt <= 0) return;
 
             // ⭐ 食らいつき: 与えたぶんを吸う。攻撃役が回復役の枠を1つ空ける
@@ -1412,6 +1680,42 @@ namespace EggCommand.Core
             {
                 DealDamage(state, target, source, Ratio(dealt, TraitSpitePercent), reflectable: false);
             }
+
+            // ⭐ **反撃（札のほう）── 枠1 で殴り返す**（作者の指示 2026-08-27）。
+            //    ⚠️ 前は「受けたぶんの割合を返す」だった（＝特性の返し身と同じ働き）。
+            //    ⭐ 枠1 で返すと、**その個体の攻撃力・属性・依存ステがそのまま乗る**ので、
+            //    「誰に張るか」が判断になる（返し身とは別の札になった）。
+            // ⚠️ `reflectable: false` で返す ── 反撃どうしが往復し続けるのを止める唯一の止め木。
+            if (reflectable && target.Status.Counter > 0 && IsAlive(target) && IsAlive(source))
+            {
+                CounterStrike(state, target, source);
+            }
+        }
+
+        /// <summary>⭐ **反撃の一撃 ── 枠1 の技をそのまま撃つ。**
+        ///
+        /// ⚠️ 枠1 は必ず在って CT 0（`Skills` の約束）なので、待ちも消費も無い。
+        /// ⚠️ **技として撃たない**（`PerformAction` を通さない）── 通すと手番を1回使ったことになり、
+        /// ゲージも CT も動いてしまう。⭐ ここが撃つのは**ダメージだけ**。
+        /// ⚠️ 多段（枠1 が連撃の種族）もそのまま出る ── 枠1 の性能差がそのまま反撃の差になる。</summary>
+        private static void CounterStrike(BattleState state, Unit actor, Unit target)
+        {
+            var first = SkillAt(actor, 0);
+            if (first == null) return;
+            foreach (var effect in first.Effects)
+            {
+                if (effect.Kind != EffectKind.Damage) continue;   // ⚠️ 状態は付けない（殴り返すだけ）
+                int attackStat = AttackStatOf(actor.Innate, actor.Status, effect.Scale);
+                int defenseStat = effect.Pierce ? 0 : target.Innate.Def;
+                double mult = ElementMultiplier(actor.Creature.Element, target.Creature.Element);
+                int hit = GuardedHit(DamageOf(Skills.DamagePowerOf(effect.Power),
+                    attackStat, defenseStat, mult), effect, target.Status.Def);
+                for (int shot = 0; shot < effect.Repeat && IsAlive(target) && IsAlive(actor); shot++)
+                {
+                    DealDamage(state, actor, target, hit, reflectable: false, bare: effect.Bare);
+                }
+            }
+            state.Log.Add(new BattleEvent(BattleEventKind.Counter, actor.Key));
         }
 
         /// <summary>効果が実際に通る率（%）。
@@ -1433,6 +1737,12 @@ namespace EggCommand.Core
             //    「味方へのバフが外れる」の実体（<see cref="Skills.Faults"/> が付け直しを止める）
             if (!Skills.IsHarmful(effect)) return 100;
 
+            // 🔴 **自分に掛ける弱化は必ず通す**（2026-08-26）。⚠️ `reckless`（捨て身の突き）は
+            //    自分へ防御DOWNを掛ける ── 100%の早期リターンを外した結果、
+            //    **自分の弱化耐性で自分のデメリットを弾く**という珍事が起きうるようになった。
+            //    ⭐ 技の代償は「受ける」もので、抵抗する対象ではない。
+            if (ReferenceEquals(actor, target)) return 100;
+
             // ⭐ 特性は「弱化の通しやすさ」だけに触る。狙い澄まし＝通す / 意地＝通させない
             int shift = 0;
             // ⭐ 先駆け: **開幕の1手目だけ、弱化が外れない。**
@@ -1442,10 +1752,13 @@ namespace EggCommand.Core
             if (HasTrait(actor, Traits.Aim)) shift += TraitAim;
             if (HasTrait(target, Traits.Stubborn)) shift -= TraitStubborn;
 
-            // ⚠️ 率 100 のままなら乱数を引かない（移植した技の試合が1手も変わらないように）。
-            //    ⭐ 意地だけがこれを崩す — 崩さないと「必ず通る弱化」に意地が無力になり、
-            //    「弱化を受ける率が下がる」という説明が画面と食い違う
-            if (effect.Chance >= 100 && shift >= 0) return 100;
+            // 🔴 **2026-08-26 に撤去**（作者の指摘）。
+            //    ⚠️ ここには <c>if (effect.Chance >= 100 && shift >= 0) return 100;</c> が在り、
+            //    「移植した技の試合が1手も変わらないように」という**較正の都合**で、
+            //    基礎率100%の弱化がステ差を**計算する前に**素通りしていた。
+            //    ⭐ その結果 `poison`/`stun`/`atk-down` など**7本が弱化命中・耐性の軸の外**に居た
+            //    ── 最強戦術（毒積み）が命中0でも耐性150相手に必ず通る、という状態だった。
+            //    ⭐ いまは 100% も式を通る:「100 ＋ 命中20 − 耐性150 ＝ 0%」で弾ける。
 
             // ⭐ **命中と抵抗の差で決まる。**⚠️ 速度は関係しない（2026-08-18 に外した）。
             //
@@ -1479,7 +1792,12 @@ namespace EggCommand.Core
         ///
         /// ⭐ 差の**半分**が %ポイント。ステ差 30 で ±15pt ── 外した速度差の実測（±15）と揃えてある。
         /// ⚠️ そのまま足すと、ステ差 40 で ±40pt になり、床と天井の間（25〜95）を1本で埋めてしまう。</summary>
-        public const int LandStatDivisor = 2 * Stats.Scale;
+        /// ⚠️ 🔴 **2026-08-26 に const → static へ。**`sim landband` が帯と感度を
+        ///    振って測るため。⭐ 既定値は較正済みのまま ── 遊びの道からは書き換えない。
+        // 🔴 **2026-08-26 に 10 → 1。**⭐ 命中/耐性が人の読める桁（0〜150・`Stats.DebuffScale`）に
+        //    なったので、**割らずにそのまま引く**。式が「基礎率 ＋ 命中 − 耐性」と読める。
+        //    ⚠️ static なのは `sim` が振って測るため。遊びの道からは書き換えない。
+        public static int LandStatDivisor = 1;
 
         /// <summary>属性の有利・不利で動かす幅（%ポイント）。
         ///
@@ -1489,9 +1807,15 @@ namespace EggCommand.Core
         /// ⭐ 速度を主軸のまま残したいので、その半分から始めて `sim` で測る。</summary>
         public const int LandElementSwing = 15;
         /// <summary>⚠️ どれだけ速度で劣っても、ここまでは通る（弱化役が完全に死なないように）。</summary>
-        public const int LandFloor = 25;
+        // 🔴 **2026-08-26 に 25 → 0。**⭐ 耐性を極めれば**弾き切れる**ようにした（作者の指示・
+        //    じゃんけん型）。⚠️ 25 のままだと「いくら耐性を積んでも4回に1回は通る」ので、
+        //    耐性への投資が頭打ちになっていた。
+        public static int LandFloor = 0;
         /// <summary>⚠️ どれだけ速くても確実にはしない（免疫と盾の意味を残す）。</summary>
-        public const int LandCeil = 95;
+        // 🔴 **2026-08-26 に 95 → 100。**⭐ 命中を極めれば**通し切れる**ようにした
+        //    （下限0と対）。⚠️ 「確実にはしない」で 95 に留めていたが、
+        //    免疫（`Effect.Immune`）と盾は別の仕組みで弾くので、率で担保する必要が無い。
+        public static int LandCeil = 100;
 
         /// <returns>実際に当てた発数。⭐ 「手数」の特性だけがこれを見る。
         /// ⚠️ 盾で無効化された発も1発と数える（打ち込んだことに変わりはない）。</returns>
@@ -1513,6 +1837,14 @@ namespace EggCommand.Core
                 && target.Status.Immune > 0)
             {
                 state.Log.Add(new BattleEvent(BattleEventKind.Blocked, target.Key));
+                return 0;
+            }
+
+            // ⭐ **固着 ── 乗っている弱化が落とせない。**⚠️ 見るのは「弱化を落とす効果」だけ
+            //    （`Cleanse` ＝ 個数が負の `Dispel`）。強化を消すほうは素通りさせる。
+            if (effect.Kind == EffectKind.Dispel && effect.Count < 0 && target.Status.Anchor > 0)
+            {
+                state.Log.Add(new BattleEvent(BattleEventKind.Blunted, target.Key));
                 return 0;
             }
 
@@ -1555,14 +1887,21 @@ namespace EggCommand.Core
                     var targetStats = target.Innate;
                     int attackStat = AttackStatOf(actorStats, actor.Status, effect.Scale);
                     // ⭐ 防御無視。⚠️ 0 にせず「無いもの」として扱う（式の分母は定数が残る）
-                    int defenseStat = effect.Pierce
-                        ? 0 : EffectiveStat(targetStats.Def, target.Status.Def);
+                    // ⚠️ **素の防御を渡す。**防御の強化・弱化はステではなく被ダメに掛かる
+                    //    （<see cref="Skills.GuardsDamage"/>）── 下の `Guarded` が持つ
+                    int defenseStat = effect.Pierce ? 0 : targetStats.Def;
                     double mult = ElementMultiplier(
                         actor.Creature.Element,
                         target.Creature.Element);
                     // ⭐ 威力の段位は動かさない。レベルは % で乗せるだけ
                     int hit = DamageOf(Skills.BoostedPower(effect.Power, boost),
                         attackStat, defenseStat, mult);
+                    // ⭐ **防御の強化・弱化はここで効く。**⚠️ 防御無視でも割引は残る
+                    //    （踏み倒すのは「硬さ」であって、掛けた札ではない）。
+                    // ⚠️ **強化無視だけは別** ── あちらが踏み倒すのは掛けた札のほう。
+                    //    ⭐ 弱化（防御DOWN）は残す ── 無視するのは「強化」だから。
+                    //    判断そのものは <see cref="GuardedHit"/> に集約（反撃と共有）。
+                    hit = GuardedHit(hit, effect, target.Status.Def);
 
                     // ⭐ **盤面を数えて増える。**⚠️ 追い打ち（特性）とは働きが違う ──
                     //    特性は「弱化が有るか」だけを見て常時薄く乗り、こちらは**数**で太く乗る。
@@ -1592,7 +1931,7 @@ namespace EggCommand.Core
                     int shots = effect.Repeat + boost.ExtraRepeat;
                     for (int shot = 0; shot < shots && IsAlive(target) && IsAlive(actor); shot++)
                     {
-                        DealDamage(state, actor, target, hit);
+                        DealDamage(state, actor, target, hit, bare: effect.Bare);
                         hits++;
                     }
                     break;
@@ -1601,7 +1940,8 @@ namespace EggCommand.Core
                 case EffectKind.Buff:
                 {
                     // ⚠️ 掛け直しは上書き。積み上げにすると青天井になる
-                    int percent = Skills.BuffPercent * effect.Sign;
+                    // ⭐ 割合は**軸ごとに違う**（攻撃・防御 50% / 速度 30%）
+                    int percent = Skills.BuffPercentOf(effect.Stat) * effect.Sign;
                     ref var mod = ref target.Status.ModOf(effect.Stat);
                     mod.Percent = percent;
                     // ⚠️ 永続には持続の上乗せを足さない。足すと負が正に化けて**普通の強化に戻る**
@@ -1644,7 +1984,23 @@ namespace EggCommand.Core
                 {
                     // ⭐ **負の割合は「削る」。**防御も属性も見ない ── 通る率だけが防ぎ手。
                     // ⚠️ 盾は剥がさない（一撃ではないため）。⭐ 1 未満にはしない
-                    int cut = Math.Max(1, target.MaxHp * -(effect.Percent + boost.ExtraPercent) / 100);
+                    // 🔴 **無敵はこの削りも防ぐ**（`wiki/効果の種類.md`「無敵はダメージも毒も
+                    //    受けません」）。⚠️ ここは `DealDamage` を通らず直接 `target.Hp` を
+                    //    減らす経路なので、無敵の判定が漏れていた（2026-08-27 監査で発覚）。
+                    //    ⭐ 毒（`TickStatus`）と同じ流儀で `Blocked` を出す。
+                    //    ⚠️ ただし削りは即時（一撃）なので、毒のような「持続だけ進める」は無い
+                    //    ── 何も起こさずここで抜ける。
+                    if (target.Status.Invincible > 0)
+                    {
+                        state.Log.Add(new BattleEvent(BattleEventKind.Blocked, target.Key));
+                        break;
+                    }
+                    // 🔴 **ここが漏れていた1か所**（2026-08-27・作者報告で発覚）。
+                    //    ⚠️ 前は `-(effect.Percent + boost.ExtraPercent)` だった ── `Percent`
+                    //    は負なので、育てて増える `ExtraPercent`（常に正）を足すほど
+                    //    絶対値が小さくなり、Lv が上がるほど削りが弱くなっていた。
+                    //    ⭐ `SignedGrow` で「もっと負」へ動かしてから符号を反転する。
+                    int cut = Math.Max(1, target.MaxHp * -SignedGrow(effect.Percent, boost.ExtraPercent) / 100);
                     if (cut > target.Hp) cut = target.Hp;
                     target.Hp -= cut;
                     state.Log.Add(new BattleEvent(BattleEventKind.Damage, target.Key, amount: cut));
@@ -1679,11 +2035,10 @@ namespace EggCommand.Core
 
                 case EffectKind.Stun:
                 {
-                    // ⚠️ スタンだけは**足す**（他は上書き）。重ねると手番が延々飛ぶので、
-                    //    ⭐ 1回の技で入る量を上限にして青天井を止める
-                    int stun = target.Status.Stun + effect.Turns + boost.ExtraTurns;
-                    int stunCap = effect.Turns + boost.ExtraTurns + StunStackMax;
-                    target.Status.Stun = stun > stunCap ? stunCap : stun;
+                    // ⚠️ スタンだけは**足す**（他は上書き）。
+                    // 🔴 **上限を撤去**（作者の決定 2026-08-27・理由は `StunStackMax` を消した
+                    //    箇所のコメントを参照）。⭐ 毒・リジェネ・弱化延長と同じ、素直な加算。
+                    target.Status.Stun += effect.Turns + boost.ExtraTurns;
                     state.Log.Add(new BattleEvent(BattleEventKind.Stun, target.Key, turns: effect.Turns));
                     break;
                 }
@@ -1693,7 +2048,7 @@ namespace EggCommand.Core
                     // ⚠️ 枠1は触らない。「必ず打てる札」に CT を乗せると手が無くなる
                     for (int i = 1; i < target.Cooldowns.Length; i++)
                     {
-                        int delta = effect.Delta + (effect.Delta < 0 ? -boost.ExtraAmount : boost.ExtraAmount);
+                        int delta = SignedGrow(effect.Delta, boost.ExtraAmount);
                         target.Cooldowns[i] = Math.Max(0, target.Cooldowns[i] + delta);
                     }
                     state.Log.Add(new BattleEvent(BattleEventKind.Ct, target.Key, delta: effect.Delta));
@@ -1721,8 +2076,7 @@ namespace EggCommand.Core
                 case EffectKind.Gauge:
                 {
                     // ⭐ 満タンに対する割合で動かす。⚠️ 減らす側は超過分ごと削る
-                    int move = GaugeMax * (effect.Percent
-                        + (effect.Percent < 0 ? -boost.ExtraPercent : boost.ExtraPercent)) / 100;
+                    int move = GaugeMax * SignedGrow(effect.Percent, boost.ExtraPercent) / 100;
                     int before = target.Gauge;
                     target.Gauge = Math.Max(0, target.Gauge + move);
                     state.Log.Add(new BattleEvent(BattleEventKind.Gauge, target.Key,
@@ -1732,11 +2086,50 @@ namespace EggCommand.Core
 
                 case EffectKind.Sleep:
                 {
-                    // ⚠️ スタンと同じく足す（上限つき）。⭐ 違いは「殴ると起きる」ことだけ
-                    int sleep = target.Status.Sleep + effect.Turns + boost.ExtraTurns;
-                    int sleepCap = effect.Turns + boost.ExtraTurns + StunStackMax;
-                    target.Status.Sleep = sleep > sleepCap ? sleepCap : sleep;
+                    // ⚠️ スタンと同じく足す。⭐ 違いは「殴ると起きる」ことだけ
+                    // 🔴 **上限を撤去**（作者の決定 2026-08-27・理由はスタンと同じ ── 上の
+                    //    `EffectKind.Stun` と `StunStackMax` を消した箇所のコメントを参照）。
+                    target.Status.Sleep += effect.Turns + boost.ExtraTurns;
                     state.Log.Add(new BattleEvent(BattleEventKind.Sleep, target.Key, turns: effect.Turns));
+                    break;
+                }
+
+                // ── 2026-08-27 に足した5つ ─────────────────────────
+                case EffectKind.Seal:
+                    target.Status.Seal = effect.Turns + boost.ExtraTurns;
+                    state.Log.Add(new BattleEvent(BattleEventKind.Applied, target.Key, "封印",
+                        turns: target.Status.Seal));
+                    break;
+
+                case EffectKind.Anchor:
+                    target.Status.Anchor = effect.Turns + boost.ExtraTurns;
+                    state.Log.Add(new BattleEvent(BattleEventKind.Applied, target.Key, "固着",
+                        turns: target.Status.Anchor));
+                    break;
+
+                case EffectKind.Invincible:
+                    target.Status.Invincible = effect.Turns + boost.ExtraTurns;
+                    state.Log.Add(new BattleEvent(BattleEventKind.Applied, target.Key, "無敵",
+                        turns: target.Status.Invincible));
+                    break;
+
+                case EffectKind.Counter:
+                    target.Status.Counter = effect.Turns + boost.ExtraTurns;
+                    state.Log.Add(new BattleEvent(BattleEventKind.Applied, target.Key, "反撃",
+                        turns: target.Status.Counter));
+                    break;
+
+                // ⭐ **即時。**⚠️ 乗っている弱化の残りを伸ばすだけなので、
+                //    何も乗っていなければ**何も起きない**（単体では成立しない札）
+                case EffectKind.Extend:
+                {
+                    int added = effect.Turns + boost.ExtraTurns;
+                    int touched = ExtendBanes(target.Status, added);
+                    if (touched > 0)
+                    {
+                        state.Log.Add(new BattleEvent(BattleEventKind.Applied, target.Key,
+                            "弱化延長", amount: touched, turns: added));
+                    }
                     break;
                 }
 
@@ -1754,8 +2147,7 @@ namespace EggCommand.Core
                     // ⚠️ **符号のぶん向きが変わるので、そのまま足さない。**
                     //    足すと弱化解除（個数が負）は Lv が上がるほど **落とす数が減り**、
                     //    Lv5 で 2個 → 1個 になっていた（⭐ 育てるほど弱くなる技）。
-                    int extra = boost.ExtraCount;
-                    int want = effect.Count < 0 ? effect.Count - extra : effect.Count + extra;
+                    int want = SignedGrow(effect.Count, boost.ExtraCount);
                     int gone = want < 0
                         ? StripBanes(target, -want)
                         : StripBoons(target, want, null);
@@ -1812,6 +2204,29 @@ namespace EggCommand.Core
             // ⚠️ 対象ぶん足し込んではいけない。全体攻撃は3体に当たるので合計が3になり、
             //    多段でもないのに待ちが縮む。ハネルの枠1（全体攻撃・CT 0）だと
             //    毎行動 CT が3ずつ減って別のゲームになる
+            // ⭐ **前置き ── 自分に掛けてから撃つ**（2026-08-27・作者の指示
+            //    「攻撃する前に自分にバフとか」）。
+            //    ⚠️ 飛び先つきの効果を**全部あとに撃っていた**ので、
+            //    「自分に攻撃力UP → その一撃が伸びる」という札が**書けなかった**。
+            // ⭐ 決まりは「**書いた順**」── 普通の効果より前に書いた飛び先つきは先に撃つ。
+            //    ⚠️ 既にある3技（吸い上げ・捨て身の突き・鬨の声）はどれも後ろに書いてあるので、
+            //    **1ビットも変わらない**（照合の約束をそのまま守る）。
+            int firstMain = skill.Effects.Count;
+            for (int k = 0; k < skill.Effects.Count; k++)
+            {
+                if (skill.Effects[k].Own == null) { firstMain = k; break; }
+            }
+            for (int k = 0; k < firstMain; k++)
+            {
+                var ahead = skill.Effects[k];
+                if (!IsAlive(actor)) break;
+                foreach (var aside in TargetsOf(state, actor, ahead.Own!.Value, null, consume: true))
+                {
+                    if (!IsAlive(actor)) break;
+                    ApplyEffect(state, actor, aside, ahead, boost);
+                }
+            }
+
             int hits = 0;
             foreach (var target in TargetsOf(state, actor, skill, chosen, consume: true))
             {
@@ -1839,8 +2254,9 @@ namespace EggCommand.Core
             //    **技の狙い先**であって、付いてきた効果の飛び先ではない。
             // ⚠️ 手数（hits）に数えない。数えるのは「相手1体に何発当てたか」で、
             //    自分への回復や味方への配りは手数ではない。
-            foreach (var effect in skill.Effects)
+            for (int k = firstMain; k < skill.Effects.Count; k++)
             {
+                var effect = skill.Effects[k];
                 if (effect.Own == null) continue;
                 if (!IsAlive(actor)) break;
                 foreach (var aside in TargetsOf(state, actor, effect.Own.Value, null, consume: true))
@@ -1905,6 +2321,18 @@ namespace EggCommand.Core
             if (s.Immune > 0) output.Add($"免疫{s.Immune}");
             if (s.Sleep > 0) output.Add($"睡眠{s.Sleep}");
             if (s.Block > 0) output.Add($"ブロック{s.Block}");
+            // 🔴 **2026-08-27 に足した4つが漏れていた**（監査で発覚）。⚠️ すぐ下のコメント
+            //    「並び順は ActiveStatuses と揃えてある」が指すとおり、ActiveStatusBadges と
+            //    同じ並びで足す。単位は既存に倣う ── どれも「残りターン数」なので、
+            //    スタン・睡眠・ガッツ・免疫・ブロックと同じく**単位語を付けない**（ActiveStatusBadges
+            //    側もこの4つは bare な ToString()。「回」を付けるのは挑発（弱化を耐えた単体攻撃
+            //    の回数）、「枚」を付けるのはシールドだけ ── どちらも「ターン経過」ではなく
+            //    「起きた回数／残り枚数」を数えているので単位が要る。封印・固着・無敵・反撃は
+            //    どれも TickStatus で毎行動 -1 される**ターンの残数**なので、その並びに揃える）。
+            if (s.Seal > 0) output.Add($"封印{s.Seal}");
+            if (s.Anchor > 0) output.Add($"固着{s.Anchor}");
+            if (s.Invincible > 0) output.Add($"無敵{s.Invincible}");
+            if (s.Counter > 0) output.Add($"反撃{s.Counter}");
             return output;
         }
 
@@ -1941,6 +2369,12 @@ namespace EggCommand.Core
             if (s.Immune > 0) output.Add(new StatusBadge(StatusKind.Immune, s.Immune.ToString(), true));
             if (s.Sleep > 0) output.Add(new StatusBadge(StatusKind.Sleep, s.Sleep.ToString(), false));
             if (s.Block > 0) output.Add(new StatusBadge(StatusKind.Block, s.Block.ToString(), false));
+            // ⭐ 2026-08-27 に足した4つ。⚠️ 良い側（無敵・反撃）と悪い側（封印・固着）を取り違えない
+            if (s.Seal > 0) output.Add(new StatusBadge(StatusKind.Seal, s.Seal.ToString(), false));
+            if (s.Anchor > 0) output.Add(new StatusBadge(StatusKind.Anchor, s.Anchor.ToString(), false));
+            if (s.Invincible > 0)
+                output.Add(new StatusBadge(StatusKind.Invincible, s.Invincible.ToString(), true));
+            if (s.Counter > 0) output.Add(new StatusBadge(StatusKind.Counter, s.Counter.ToString(), true));
             return output;
         }
 

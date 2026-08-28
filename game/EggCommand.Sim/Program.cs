@@ -31,10 +31,13 @@ namespace EggCommand.Sim
     ///   dotnet run --project EggCommand.Sim -- slant     得意・不得意が素質と独立して引かれているか
     ///   dotnet run --project EggCommand.Sim -- statvalue ステ1点が勝率を何 pt 動かすか（ステごとの価値差）
     ///   dotnet run --project EggCommand.Sim -- skillvalue 技1つが勝率を何 pt 動かすか（特性と同じ物差し）
+    ///   dotnet run --project EggCommand.Sim -- grade      技を格（生の値段）の順に1枚へ並べる
     ///   dotnet run --project EggCommand.Sim -- turnvalue  1手で何手ぶんを生むか（算数。AI を通さない）
     ///   dotnet run --project EggCommand.Sim -- delivered  算数の見積もりが実戦で入っているか（食い違いを掘る）
     ///   dotnet run --project EggCommand.Sim -- import-sprite 手描きの原稿（art/handmade/sprite/*.png）を
     ///                                          Species.cs に貼れる C# へ落とす（⚠️ 貼るのは人の仕事）
+    ///   dotnet run --project EggCommand.Sim -- egg-art        種族ごとの卵を焼き直す（意匠は Core.EggSkins）
+    ///   dotnet run --project EggCommand.Sim -- egg-try [地 模様] 模様と色の見本を1枚に並べる（shots/）
     ///   dotnet run --project EggCommand.Sim -- paint-placeholder 骨組みが指す `paint` の絵で、
     ///                                          まだ無いものを仮置きで作る（ドット絵化計画 段取り4）
     /// </summary>
@@ -66,8 +69,36 @@ namespace EggCommand.Sim
             {
                 case "species": Species(seed); break;
                 case "skills": SkillCensus(seed); break;
+                // ⭐ 技を**格**の順に並べる（戦闘は回さない・一瞬で出る）
+                case "grade": SkillGrade.Run(); break;
+                // 🚧 勘で置いた見積り（挑発・免疫・ガッツ・蘇生）を実測で潰す
+                case "guess": GuessProbe.Run(seed); break;
+                // ⭐ 技を組み合わせで作り直す（候補を数える）
+                case "brew": Brew.Run(args[1..]); break;
+                // ⭐ 参考作品の技を本作の手ぶんで測る（物差しの検算）
+                case "mamo": MamoValue.Run(".."); break;
                 case "elements": Elements(seed); break;
                 case "roles": Roles(seed); break;
+                // ⭐ 4対4・弱化ビルドを実際に組んで測る（`roles` の4つの欠陥を直した版）
+                case "debuff": DebuffProbe(seed, levels); break;
+                // ⭐ ダメージ式の案を実戦で比べる（`Battle.DamageOverride` を差し替える）
+                case "damagemodel": DamageModelProbe(seed); break;
+                // ⭐ ARK式の自由配分が「判断」になるかを式ごとに見る
+                case "allocate": AllocateProbe(seed); break;
+                // ⭐ 弱化命中と弱化耐性を**両側同時に**動かして噛み合いを見る
+                case "resist": ResistProbe(seed); break;
+                // ⭐ 命中と速度を混ぜたときに相乗があるか（二者択一では見えない）
+                case "mix": MixProbe(seed); break;
+                // ⭐ ステが実際どこまで行くか（桁を動かす前に測る）
+                case "range": RangeProbe(seed); break;
+                // ⭐ 生の桁ではなく「効き目の幅」を見る（桁を決める根拠）
+                case "feel": FeelProbe(seed); break;
+                // ⭐ 通る率の帯[25,95]と感度を振って、弱化の投資価値が上がるか見る
+                case "landband": LandBandProbe(seed); break;
+                // ⭐ 通る率を実数で出す（式の単位を突き合わせるため）
+                case "landcalc": LandCalcProbe(seed); break;
+                // ⭐ 弱化技を UR 級の設計に組み替えると席が取れるか
+                case "urskill": UrSkillProbe(seed); break;
                 case "traits": TraitCensus(seed); break;
                 case "steal": Infiltrate(seed); break;
                 case "gencost": GenCost(); break;
@@ -97,6 +128,10 @@ namespace EggCommand.Sim
                 case "import-sprite": SpriteImport.Run(".."); break;
                 // ⭐ まだ無い paint の絵を仮置きで作る（ドット絵化計画 段取り4・第3部）
                 case "paint-placeholder": PaintPlaceholder.Run(".."); break;
+                // ⭐ 種族ごとの卵を焼く（意匠は `Core.EggSkins`）。⚠️ 上書きする道具
+                case "egg-art": EggSkinPng.Run(".."); break;
+                // ⭐ 模様と色を差し替えて見比べる見本（`shots/` へ・ゲームは読まない）
+                case "egg-try": EggTry.Run("..", args[1..]); break;
                 // ⭐ pixelizer で起こした画面を、絵と骨組みに落とす
                 //    （wiki/開発/画面をドット絵で組む.md）。⚠️ 既存の骨組みは上書きしない。
                 case "import-screen":
@@ -533,6 +568,994 @@ namespace EggCommand.Sim
             return party;
         }
 
+        // ── 弱化の役割（2026-08-26・作者の指示）──────────────────
+        //
+        // 🔴 **既にある `roles`/`statvalue` は弱化ビルドを一度も測っていない。**
+        //    4つの欠陥が重なっていた（2026-08-26 に判明）:
+        //    1. 役割が3体 ── 実物は `Games.PartySize = 4`
+        //    2. 弱化役の素質 Acc/Res が **0**（`new StatBlock(hp,atk,def,spd)` の既定）
+        //    3. 弱化技が `curse`/`slow-all` だけ ── スタンも毒も防御DOWNも入っていない
+        //    4. `Run` に `land` を渡していない ＝ **弱化の当たり外れが全戦闘で同じ列**
+        //       （種を変えるだけで貢献度の符号が反転していた実体がこれ）
+        //
+        // ⭐ ここは4つとも直してある。⚠️ 既存の記録を動かさないため**別の指定**にした。
+
+        /// <summary>役割ごとの推奨ステ（2026-08-26・作者の指示）。
+        /// ⭐ 先に書いたものほど優先度が高い。⚠️ どの役も全ステに下限を残す
+        /// （2ステを0にすると「役が弱い」ではなく「HPが無いから死ぬ」を測ってしまう）。
+        /// ⚠️ 合計は <see cref="Stats.WildTotalMax"/>(120)、1ステ上限は 40。</summary>
+        /// <param name="sharp">🔴 **尖らせるか**（2026-08-26・作者の指摘）。
+        ///
+        /// ⚠️ `false`（丸い）は全ステに下限 10〜12 を残す ── 既存 probe の流儀
+        /// （「2ステを0にすると『役が弱い』ではなく『HPが無いから死ぬ』を測る」）。
+        /// 🔴 **だがそれでは「限られた枠を配る犠牲」が一切発生しない。**
+        ///    アタッカーが防御も耐性も12持っている編成では、弱化が刺さる隙が無い。
+        ///
+        /// ⭐ `true`（尖った）は**優先ステを 40 で埋め、余りは HP へ、残りは 0**。
+        ///    ＝ アタッカーは**防御0・弱化耐性0**。これが作者の言う
+        ///    「おろそかにせざるを得ない状況」の実物。</param>
+        private static Role[] DebuffRoles(bool sharp)
+        {
+            //                        丸い: hp atk def spd acc res  / 尖った: 同順
+            var attacker = new Role("アタッカー",   // 攻撃 > 速度
+                sharp ? new StatBlock(40, 40, 0, 40, 0, 0)
+                      : new StatBlock(12, 40, 12, 32, 12, 12), "attack-heavy", "attack-twice");
+            var tank = new Role("タンク",           // HP > 防御 > 弱化耐性
+                sharp ? new StatBlock(40, 0, 40, 0, 0, 40)
+                      : new StatBlock(36, 10, 30, 10, 10, 24), "bulwark", "harden");
+            var support = new Role("サポート",       // 速度 > 弱化耐性
+                sharp ? new StatBlock(40, 0, 0, 40, 0, 40)
+                      : new StatBlock(12, 12, 12, 40, 12, 32), "atk-up", "spd-up");
+            var healer = new Role("ヒーラー",        // 防御 > 速度 > HP
+                sharp ? new StatBlock(40, 0, 40, 40, 0, 0)
+                      : new StatBlock(24, 12, 32, 28, 12, 12), "heal-ratio", "regen");
+            // ⭐ スタンと毒の両方を持たせる（作者の指示）。⚠️ **どちらも命中が効く札**
+            //    ── `stun`(100%) や `poison`(100%) は `LandChanceOf` が素通しするので、
+            //    命中に振った価値がそもそも出ない。`stun-heavy`(40%)・`venom-heavy`(65%)。
+            var debuffer = new Role("デバッファー",   // 弱化命中 > 速度
+                sharp ? new StatBlock(40, 0, 0, 40, 40, 0)
+                      : new StatBlock(12, 12, 12, 32, 40, 12), "stun-heavy", "venom-heavy");
+            return new[] { attacker, tank, support, healer, debuffer };
+        }
+
+        /// <summary>指定した席だけを N レベルぶん伸ばす。
+        /// ⚠️ <see cref="Leveled"/> は**編成全員**に乗せる ── 弱化技を持たない
+        /// アタッカーや壁役の命中まで上がって、投資の 3/4 が死んでいた。</summary>
+        private static List<Creature> LeveledAt(List<Creature> party, StatKey key, int levels,
+            Func<int, bool> who)
+        {
+            var made = new List<Creature>();
+            for (int i = 0; i < party.Count; i++)
+            {
+                var c = party[i];
+                if (!who(i)) { made.Add(c); continue; }
+                int grown = Creatures.TrainedFor(c.SpeciesId, c.Wild, levels)[key];
+                made.Add(Rebuilt(c, c.Trained.With(key, c.Trained[key] + grown)));
+            }
+            return made;
+        }
+
+        /// <summary>⚠️ 直前の <see cref="CompWinRate"/> の平均手数。
+        /// ⭐ **「試合が短すぎて支援役の出番が無い」を見抜くための欄**（2026-08-26）。
+        /// 弱化は3ターン・毒は4ターンで効くので、試合がそれより短ければ
+        /// 「弱化が弱い」ではなく「弱化が働く前に終わっている」ことになる。
+        /// ⚠️ probe は単スレッドなので、この持ち方で足りる。</summary>
+        private static double _lastActions;
+
+        /// <summary>編成どうしの勝率。⭐ **`land` を必ず渡す**（弱化の当たり外れを毎回引き直す）。</summary>
+        private static double CompWinRate(int seed, Role[] mine, Role[] theirs, int samples,
+            StatKey? key = null, int levels = 0, Func<int, bool>? who = null)
+        {
+            int won = 0;
+            long actions = 0;
+            for (int i = 0; i < samples; i++)
+            {
+                var rng = new Rng(seed + i).Stream("debuffprobe");
+                var land = new Rng(seed + i).Stream("land-debuffprobe");
+                int serial = 0;
+                var a = Shaped(rng, mine, ref serial);
+                if (key != null) a = LeveledAt(a, key.Value, levels, who ?? (_ => true));
+                var b = Shaped(rng, theirs, ref serial);
+                var fight = Run(a, b, land);
+                actions += fight.Actions;
+                if (fight.Result == Outcome.Ally) won++;
+            }
+            _lastActions = samples == 0 ? 0.0 : (double)actions / samples;
+            return samples == 0 ? 0.0 : 100.0 * won / samples;
+        }
+
+        private static void DebuffProbe(int seed, int levelsOverride)
+        {
+            // ⚠️ `roles` の 120回では種を変えるだけで符号が反転した（2026-08-26 実測）。
+            const int Samples = 400;
+            int Levels = levelsOverride > 0 ? levelsOverride : 20;
+
+            // ⭐ 丸い/尖った を並べて、**枠の奪い合いが起きる編成でも同じ結論か**を見る
+            //    （2026-08-26・作者の指摘「限られた枠で配るので、アタッカーは
+            //    弱化耐性や防御力をおろそかにせざるを得ない」）。
+            foreach (bool sharp in new[] { false, true })
+            {
+                var rr = DebuffRoles(sharp);
+                Role a2 = rr[0], t2 = rr[1], s2 = rr[2], h2 = rr[3], d2 = rr[4];
+                var foe = new[] { a2, t2, h2, d2 };
+                // 🔴 **硬い敵**: 尖ったタンク2枚。⚠️ 攻めを continue するだけでは落ちない相手
+                //    （作者の仮説「何の対策もなく挑めば倒せない耐久役が居れば話が変わる」）。
+                var foeWall = new[] { t2, t2, h2, a2 };
+                // 🔴 **不落**: 重装（HP/防御/攻撃を40）2枚＋癒2枚。
+                //    ⚠️ 上の `foeWall` は尖ったタンクの ATK が 0 なので「硬いだけで脅威が無い」
+                //    ── 攻撃4枚が無リスクで削り切れてしまい、作者の仮説を検証できていなかった
+                //    （2026-08-26 の自己反省）。⭐ **耐久・火力・回復の3つが揃った相手**で測る。
+                var heavy = new Role("重装", new StatBlock(40, 40, 40, 0, 0, 0),
+                    "attack-heavy", "harden");
+                var foeSustain = new[] { heavy, heavy, h2, h2 };
+
+                Console.WriteLine();
+                Console.WriteLine($"■ 編成の比較（4対4・各{Samples}回・{(sharp ? "🔴 尖った編成（優先ステ40・他0）" : "丸い編成（全ステに下限）")}）");
+
+                var comps = new (string Name, Role[] Party)[]
+                {
+                    ("攻 壁 癒 弱（標準）", new[] { a2, t2, h2, d2 }),
+                    ("攻 攻 壁 癒（弱化なし）", new[] { a2, a2, t2, h2 }),
+                    ("攻 攻 攻 攻（攻撃4枚）", new[] { a2, a2, a2, a2 }),
+                    ("攻 弱 弱 癒（弱化2枚）", new[] { a2, d2, d2, h2 }),
+                    ("攻 支 壁 弱（支援入り）", new[] { a2, s2, t2, d2 }),
+                };
+
+                Console.WriteLine($"  ── 相手: 標準（攻/壁/癒/弱）──");
+                double std = 0;
+                for (int i = 0; i < comps.Length; i++)
+                {
+                    double pct = CompWinRate(seed, comps[i].Party, foe, Samples);
+                    double act = _lastActions;
+                    if (i == 0) std = pct;
+                    Console.WriteLine($"    {comps[i].Name,-24} {pct,5:0.0}%"
+                        + (i == 0 ? "   （基準）" : $"   基準から {pct - std,5:0.0}pt")
+                        + $"   手数 {act,5:0.0}");
+                }
+
+                // 🔴 ここが作者の仮説の本体
+                Console.WriteLine($"  ── 相手: 🔴 硬い（壁/壁/癒/攻）── 攻めるだけでは落ちない相手 ──");
+                double stdWall = 0;
+                for (int i = 0; i < comps.Length; i++)
+                {
+                    double pct = CompWinRate(seed, comps[i].Party, foeWall, Samples);
+                    double act = _lastActions;
+                    if (i == 0) stdWall = pct;
+                    Console.WriteLine($"    {comps[i].Name,-24} {pct,5:0.0}%"
+                        + (i == 0 ? "   （基準）" : $"   基準から {pct - stdWall,5:0.0}pt")
+                        + $"   手数 {act,5:0.0}");
+                }
+
+                Console.WriteLine($"  ── 相手: 🔴 不落（重装/重装/癒/癒）── 耐久＋火力＋回復 ──");
+                double stdSus = 0;
+                for (int i = 0; i < comps.Length; i++)
+                {
+                    double pct = CompWinRate(seed, comps[i].Party, foeSustain, Samples);
+                    double act = _lastActions;
+                    if (i == 0) stdSus = pct;
+                    Console.WriteLine($"    {comps[i].Name,-24} {pct,5:0.0}%"
+                        + (i == 0 ? "   （基準）" : $"   基準から {pct - stdSus,5:0.0}pt")
+                        + $"   手数 {act,5:0.0}");
+                }
+            }
+            Console.WriteLine();
+            Console.WriteLine("  ⚠️ 「弱化なし」「攻撃4枚」が基準を上回り続けるなら、弱化役は席を取る価値が無い");
+            Console.WriteLine("  ⭐ 硬い相手で符号が反転するなら、弱化は**対耐久の札**として既に成立している");
+
+            // ── 弱化命中への投資 ──────────────────────────
+            var r = DebuffRoles(false);
+            Role attacker = r[0], tank = r[1], support = r[2], healer = r[3], debuffer = r[4];
+            var foeStd = new[] { attacker, tank, healer, debuffer };
+            var mine = new[] { attacker, tank, healer, debuffer };
+            double baseline = CompWinRate(seed, mine, foeStd, Samples);
+
+            Console.WriteLine();
+            Console.WriteLine($"■ 弱化命中への投資（{Levels}レベルぶん・**デバッファー1体だけ**）");
+            Console.WriteLine($"  振らない（基準）                  {baseline,5:0.0}%");
+            double accOnly = CompWinRate(seed, mine, foeStd, Samples,
+                StatKey.Acc, Levels, i => i == 3);
+            Console.WriteLine($"  デバッファーの命中 +{Levels}Lv        {accOnly,5:0.0}%"
+                + $"   基準から {accOnly - baseline,5:0.0}pt");
+            // ⚠️ 比較用: 同じ点を全員に配った場合（＝いままでの測り方）
+            double accAll = CompWinRate(seed, mine, foeStd, Samples,
+                StatKey.Acc, Levels, _ => true);
+            Console.WriteLine($"  （参考）全員の命中 +{Levels}Lv         {accAll,5:0.0}%"
+                + $"   基準から {accAll - baseline,5:0.0}pt");
+            // ⭐ 物差し: 同じ点をアタッカーの攻撃に入れたら
+            double atkOnly = CompWinRate(seed, mine, foeStd, Samples,
+                StatKey.Atk, Levels, i => i == 0);
+            Console.WriteLine($"  〈物差し〉アタッカーの攻撃 +{Levels}Lv {atkOnly,5:0.0}%"
+                + $"   基準から {atkOnly - baseline,5:0.0}pt");
+
+            // ── 弱化耐性への投資 ──────────────────────────
+            // ⭐ 相手を**弱化2枚**にして、耐性が働く場面を作る。
+            // ⚠️ 標準の相手（弱化1枚）だと、耐性に振っても受ける札が少なすぎて出ない。
+            var foeHeavy = new[] { attacker, debuffer, debuffer, healer };
+            double baseHeavy = CompWinRate(seed, mine, foeHeavy, Samples);
+
+            Console.WriteLine();
+            Console.WriteLine($"■ 弱化耐性への投資（{Levels}レベルぶん・相手は弱化2枚）");
+            Console.WriteLine($"  振らない（基準）                  {baseHeavy,5:0.0}%");
+            double resFront = CompWinRate(seed, mine, foeHeavy, Samples,
+                StatKey.Res, Levels, i => i == 1 || i == 2);
+            Console.WriteLine($"  壁とヒーラーの耐性 +{Levels}Lv       {resFront,5:0.0}%"
+                + $"   基準から {resFront - baseHeavy,5:0.0}pt");
+            double resAll = CompWinRate(seed, mine, foeHeavy, Samples,
+                StatKey.Res, Levels, _ => true);
+            Console.WriteLine($"  全員の耐性 +{Levels}Lv               {resAll,5:0.0}%"
+                + $"   基準から {resAll - baseHeavy,5:0.0}pt");
+            double hpAll = CompWinRate(seed, mine, foeHeavy, Samples,
+                StatKey.Hp, Levels, i => i == 1);
+            Console.WriteLine($"  〈物差し〉壁のHP +{Levels}Lv          {hpAll,5:0.0}%"
+                + $"   基準から {hpAll - baseHeavy,5:0.0}pt");
+            Console.WriteLine();
+            Console.WriteLine("  ⚠️ 〈物差し〉と比べて桁が違うなら、その軸は振り先として成立していない");
+        }
+
+        // ── ダメージ式の比べ合わせ（2026-08-26・作者の指示）────────────
+        //
+        // 🔴 **仮説（作者）**: 「高耐久に対してダメージが通りやすい」。
+        //    高耐久にただの火力押しが通らなければ、攻撃役だけの編成はジリ貧になり、
+        //    弱化で軟化させる・支援で手数を増やす、といった対策が生まれるはず。
+        //
+        // ⭐ 見るのは1点: **「攻撃4枚」が不落（重装2＋癒2）に勝てなくなるか。**
+        // ⚠️ 同時に「弱化2枚」が上回るかも見る ── 攻撃4枚を弱くしただけで
+        //    どの編成も勝てなくなったのでは、選択肢が増えたことにならない。
+
+        private sealed class DamageModel
+        {
+            public readonly string Name;
+            public readonly string How;
+            public readonly Func<int, int, int, double, int>? Fn;
+            public DamageModel(string name, string how, Func<int, int, int, double, int>? fn)
+            { Name = name; How = how; Fn = fn; }
+        }
+
+        /// <summary>試す式。⚠️ **威力・属性の扱いは全案で同じ**にしてある
+        /// （変えると「式の違い」ではなく「威力の違い」を測ってしまう）。</summary>
+        private static DamageModel[] DamageModels()
+        {
+            const int Unit = Skills.PowerUnit;
+            int B = Battle.DamageBase;
+            int S = Battle.DefSoften;
+
+            int Clamp(double raw, double mult)
+            {
+                int v = (int)Math.Floor(raw * mult);
+                return v < 1 ? 1 : v;
+            }
+            double Base(int power, int atk) => (double)atk * power / Unit * B;
+
+            return new[]
+            {
+                // 🔴 **index 0 が「いまの本番」**（`Battle.DamageOf` そのもの・null で素通し）。
+                //    ⚠️ 2026-08-26 に二乗飽和を本採用したので、ここの意味が入れ替わっている。
+                new DamageModel("現行 二乗飽和", $"({S}/({S}+防))^2", null),
+                // ⭐ 採用前の式。⚠️ **消さない** ── 「戻したらどうなるか」を測れなくなる。
+                new DamageModel("旧 線形飽和", $"{S}/({S}+防)",
+                    (p, a, d, m) => Clamp(Base(p, a) * (double)S / (S + d), m)),
+
+                // ⭐ 飽和の効き始めを早める。⚠️ 低防御へのダメージも一律で下がる
+                new DamageModel("軟化1/2", $"{S/2}/({S/2}+防)",
+                    (p, a, d, m) => Clamp(Base(p, a) * (S / 2.0) / (S / 2.0 + d), m)),
+                new DamageModel("軟化1/4", $"{S/4}/({S/4}+防)",
+                    (p, a, d, m) => Clamp(Base(p, a) * (S / 4.0) / (S / 4.0 + d), m)),
+
+                new DamageModel("三乗飽和", $"({S}/({S}+防))^3",
+                    (p, a, d, m) => Clamp(Base(p, a) * Math.Pow((double)S / (S + d), 3), m)),
+
+                // ⚠️ 減算式。⭐ 高耐久が**完全に無効化**しうる（下限で止める）。
+                //    ⚠️ 下限が無いと 0 ダメージの睨み合いになる ── 素の1割を残す。
+                new DamageModel("減算(下限1割)", "威力 − 防×8、下限は1割",
+                    (p, a, d, m) =>
+                    {
+                        double raw = Base(p, a);
+                        double cut = raw - d * 8.0;
+                        return Clamp(Math.Max(cut, raw * 0.10), m);
+                    }),
+            };
+        }
+
+        private static void DamageModelProbe(int seed)
+        {
+            const int Samples = 300;
+            var r = DebuffRoles(true);   // ⭐ 尖った編成で見る（枠の奪い合いが起きる側）
+            Role a = r[0], t = r[1], s2 = r[2], h = r[3], d = r[4];
+            var heavy = new Role("重装", new StatBlock(40, 40, 40, 0, 0, 0),
+                "attack-heavy", "harden");
+            var foeSustain = new[] { heavy, heavy, h, h };
+
+            var comps = new (string Name, Role[] Party)[]
+            {
+                ("攻撃4枚", new[] { a, a, a, a }),
+                ("弱化なし", new[] { a, a, t, h }),
+                ("標準", new[] { a, t, h, d }),
+                ("弱化2枚", new[] { a, d, d, h }),
+                ("支援入り", new[] { a, s2, t, d }),
+            };
+
+            // ⚠️ **2つの相手で見る。**⭐ 不落だけで良く見える式は、普通の相手を壊しているかもしれない
+            //    （「高耐久に効く」ではなく「ただの全体弱体化」だと選択肢は増えない）。
+            var foeStd = new[] { a, t, h, d };
+            var arenas = new (string Name, Role[] Foe)[]
+            {
+                ("不落〈重装2＋癒2〉", foeSustain),
+                ("標準〈攻/壁/癒/弱〉", foeStd),
+            };
+
+            foreach (var arena in arenas)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"■ ダメージ式の比べ合わせ（尖った編成・相手 {arena.Name}・各{Samples}回）");
+                Console.Write($"  {"式",-16}{"効き方",-22}");
+                foreach (var c in comps) Console.Write($"{c.Name,10}");
+                Console.WriteLine("   手数(攻4)");
+
+                foreach (var model in DamageModels())
+                {
+                    Battle.DamageOverride = model.Fn;
+                    try
+                    {
+                        Console.Write($"  {model.Name,-16}{model.How,-22}");
+                        double firstActions = 0;
+                        for (int i = 0; i < comps.Length; i++)
+                        {
+                            double pct = CompWinRate(seed, comps[i].Party, arena.Foe, Samples);
+                            if (i == 0) firstActions = _lastActions;
+                            Console.Write($"{pct,9:0.0}%");
+                        }
+                        Console.WriteLine($"   {firstActions,8:0.0}");
+                    }
+                    finally { Battle.DamageOverride = null; }   // ⚠️ 必ず戻す
+                }
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("  ⚠️ 攻撃4枚だけが下がって他も全部下がるなら、ただの弱体化で選択肢は増えていない");
+            Console.WriteLine("  ⭐ 攻撃4枚 < 弱化2枚 になる式が、作者の狙い（対策が生まれる）を満たす");
+        }
+
+        // ── ステ配分が「判断」になるか（2026-08-26・作者の指示）──────────
+        //
+        // 🔴 **ARK式の自由配分が成立する条件**は3つ:
+        //    ① 役割ごとに最適な振り先が**違う**（同じ答えなら役割が要らない）
+        //    ② 1位と2位の差が**小さい**（圧倒的なら判断ではなく作業）
+        //    ③ **罠のステが無い**（振ると損なステがあると選択肢が実質減る）
+        // ⚠️ 現行式(A)では弱化命中が攻撃の 1/10 ＝ ③に反していた（2026-08-26 実測）。
+        // ⭐ ここは「式を変えると③が直るか」を見る。
+
+        private static void AllocateProbe(int seed)
+        {
+            const int Samples = 250;
+            const int Levels = 20;
+
+            var r = DebuffRoles(true);   // ⭐ 尖った編成（枠の奪い合いが起きる側）
+            Role a = r[0], t = r[1], h = r[3], d = r[4];
+            var heavy = new Role("重装", new StatBlock(40, 40, 40, 0, 0, 0),
+                "attack-heavy", "harden");
+
+            var mine = new[] { a, t, h, d };
+            var arenas = new (string Name, Role[] Foe)[]
+            {
+                ("標準〈攻/壁/癒/弱〉", new[] { a, t, h, d }),
+                ("不落〈重装2＋癒2〉", new[] { heavy, heavy, h, h }),
+            };
+            // ⚠️ 席の番号は `mine` の並び順
+            var seats = new (string Name, int Index)[]
+            {
+                ("アタッカー", 0), ("タンク", 1), ("ヒーラー", 2), ("デバッファー", 3),
+            };
+
+            var models = DamageModels();
+            foreach (var model in new[] { models[1], models[0] })   // 旧 線形飽和 と 現行 二乗飽和
+            {
+                foreach (var arena in arenas)
+                {
+                    Battle.DamageOverride = model.Fn;
+                    try
+                    {
+                        double baseline = CompWinRate(seed, mine, arena.Foe, Samples);
+                        Console.WriteLine();
+                        Console.WriteLine($"■ どのステに {Levels}Lv 振ると何pt効くか"
+                            + $"（{model.Name}・相手 {arena.Name}・各{Samples}回・基準 {baseline:0.0}%）");
+                        Console.Write($"  {"振る席",-14}");
+                        foreach (var key in Stats.Keys) Console.Write($"{Stats.LabelOf(key),9}");
+                        Console.WriteLine("     1位/2位");
+
+                        foreach (var seat in seats)
+                        {
+                            Console.Write($"  {seat.Name,-14}");
+                            double best = 0, second = 0;
+                            foreach (var key in Stats.Keys)
+                            {
+                                double pct = CompWinRate(seed, mine, arena.Foe, Samples,
+                                    key, Levels, i => i == seat.Index);
+                                double gain = pct - baseline;
+                                Console.Write($"{gain,8:+0.0;-0.0;0.0}");
+                                if (gain > best) { second = best; best = gain; }
+                                else if (gain > second) second = gain;
+                            }
+                            // ⭐ 1位が2位の何倍か。⚠️ 大きいほど「判断」ではなく「作業」
+                            string ratio = second > 0.05 ? $"{best / second,7:0.0}倍" : "    ―";
+                            Console.WriteLine($"  {ratio}");
+                        }
+                    }
+                    finally { Battle.DamageOverride = null; }
+                }
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("  ⭐ ①役割ごとに1位が違う ②1位/2位が小さい ③負の値(罠)が無い ── 3つ揃えば配分は判断になる");
+        }
+
+        // ── 弱化命中 × 弱化耐性 の噛み合い（2026-08-26・作者の指示）────────
+        //
+        // 🔴 **この2本は互いに干渉するので、片側だけ動かしても価値が出ない。**
+        //    ⚠️ 2026-08-26 の私の測定は両方ともこれを外していた:
+        //    ・命中の価値 → 相手の耐性が 0 の編成で測った（通って当然）
+        //    ・耐性の価値 → 相手にデバッファーが居ない編成で測った（受けないので 0 で当然）
+        // ⭐ ここは**両側を同時に動かした表**で見る。
+        //    さらに**味方の手番数**も出す ── 「スタンや速度DOWNで動けない」は
+        //    勝率より先に**手番の数**に出るはずなので（作者の読み）。
+
+        /// <summary>直前の <see cref="DuelWinRate"/> の、味方側が取れた手番の平均。
+        /// ⭐ 「動けているか」を勝敗と切り離して見るための欄。</summary>
+        private static double _lastAllyActions;
+
+        /// <summary>両側に別々の育成を乗せて回す。⭐ `land` は必ず渡す。</summary>
+        private static double DuelWinRate(int seed, Role[] mine, Role[] theirs, int samples,
+            StatKey? myKey, int myLv, Func<int, bool>? myWho,
+            StatKey? foeKey, int foeLv, Func<int, bool>? foeWho)
+        {
+            int won = 0; long allyActs = 0;
+            for (int i = 0; i < samples; i++)
+            {
+                var rng = new Rng(seed + i).Stream("resistprobe");
+                var land = new Rng(seed + i).Stream("land-resistprobe");
+                int serial = 0;
+                var a = Shaped(rng, mine, ref serial);
+                if (myKey != null && myLv > 0)
+                    a = LeveledAt(a, myKey.Value, myLv, myWho ?? (_ => true));
+                var b = Shaped(rng, theirs, ref serial);
+                if (foeKey != null && foeLv > 0)
+                    b = LeveledAt(b, foeKey.Value, foeLv, foeWho ?? (_ => true));
+                var fight = Run(a, b, land);
+                allyActs += fight.AllyActions;
+                if (fight.Result == Outcome.Ally) won++;
+            }
+            _lastAllyActions = samples == 0 ? 0.0 : (double)allyActs / samples;
+            return samples == 0 ? 0.0 : 100.0 * won / samples;
+        }
+
+        private static void ResistProbe(int seed)
+        {
+            const int Samples = 250;
+            var steps = new[] { 0, 20, 40 };   // 育成レベルぶん
+
+            var r = DebuffRoles(true);
+            Role a = r[0], t = r[1], sup = r[2], h = r[3], d = r[4];
+            // 🔴 **足止め型**（作者の指摘「スタンで動けない・速度DOWNで動けない」）。
+            //    `curse` は攻撃力とスピードを同時に下げる 70% の札。
+            var jam = new Role("妨害役", new StatBlock(40, 0, 0, 40, 40, 0),
+                "stun-heavy", "curse");
+
+            // ⭐ 2026-08-26 に二乗飽和が本番になったので、差し替えは要らない
+            try
+            {
+                // ── ① 守る側: 味方の耐性 × 敵デバッファーの命中 ──────────
+                var mine = new[] { a, t, h, sup };            // 攻/壁/癒/支 ＝ 受ける側だけ
+                var foeJam = new[] { a, jam, jam, h };        // 相手は足止め2枚
+                Console.WriteLine();
+                Console.WriteLine($"■ ① 守る側（味方 攻/壁/癒/支 vs 相手 攻/妨/妨/癒・D式・各{Samples}回）");
+                Console.WriteLine("  ⭐ 縦＝味方の弱化耐性を育てた量／横＝相手デバッファーの弱化命中を育てた量");
+                Console.WriteLine("  ⚠️ 括弧内は**味方が取れた手番の数**（動けているか）");
+                Console.Write($"  {"味方の耐性",-12}");
+                foreach (int f in steps) Console.Write($"{"敵命中+" + f,18}");
+                Console.WriteLine();
+                foreach (int my in steps)
+                {
+                    Console.Write($"  {"+" + my + "Lv",-12}");
+                    foreach (int foe in steps)
+                    {
+                        double pct = DuelWinRate(seed, mine, foeJam, Samples,
+                            StatKey.Res, my, null,            // ⭐ 味方は全員が耐性を持つ
+                            StatKey.Acc, foe, i => i == 1 || i == 2);
+                        Console.Write($"{pct,10:0.0}%({_lastAllyActions,4:0})");
+                    }
+                    Console.WriteLine();
+                }
+
+                // ── ② 攻める側: 味方デバッファーの命中 × 敵の耐性 ──────────
+                var mineJam = new[] { a, jam, jam, h };
+                var foeStd = new[] { a, t, h, sup };
+                Console.WriteLine();
+                Console.WriteLine($"■ ② 攻める側（味方 攻/妨/妨/癒 vs 相手 攻/壁/癒/支・D式・各{Samples}回）");
+                Console.WriteLine("  ⭐ 縦＝味方デバッファーの弱化命中／横＝相手の弱化耐性");
+                Console.Write($"  {"味方の命中",-12}");
+                foreach (int f in steps) Console.Write($"{"敵耐性+" + f,18}");
+                Console.WriteLine();
+                foreach (int my in steps)
+                {
+                    Console.Write($"  {"+" + my + "Lv",-12}");
+                    foreach (int foe in steps)
+                    {
+                        double pct = DuelWinRate(seed, mineJam, foeStd, Samples,
+                            StatKey.Acc, my, i => i == 1 || i == 2,
+                            StatKey.Res, foe, null);
+                        Console.Write($"{pct,10:0.0}%({_lastAllyActions,4:0})");
+                    }
+                    Console.WriteLine();
+                }
+
+                // ── ③ 噛み合う場面で、命中は他のステに勝てるか ──────────
+                // 🔴 ここが最後の判定。⚠️ ①② は「命中を振るか振らないか」しか比べていない。
+                //    ⭐ **同じ20Lvを速度や防御に入れた場合**と並べて初めて、
+                //    「弱化命中は振り先として選ばれうるか」が言える。
+                Console.WriteLine();
+                Console.WriteLine($"■ ③ デバッファー席の振り先くらべ（相手は**耐性+40**・D式・各{Samples}回）");
+                double b3 = DuelWinRate(seed, mineJam, foeStd, Samples,
+                    null, 0, null, StatKey.Res, 40, null);
+                Console.WriteLine($"  振らない（基準）  {b3,5:0.0}%");
+                foreach (var key in Stats.Keys)
+                {
+                    double pct = DuelWinRate(seed, mineJam, foeStd, Samples,
+                        key, 20, i => i == 1 || i == 2,     // ⭐ デバッファー2体だけ
+                        StatKey.Res, 40, null);
+                    Console.WriteLine($"  {Stats.LabelOf(key),-8} +20Lv  {pct,5:0.0}%"
+                        + $"   基準から {pct - b3,5:0.0}pt   手番 {_lastAllyActions,4:0}");
+                }
+
+                // ── ④ 受ける側で、耐性は他のステに勝てるか ──────────
+                Console.WriteLine();
+                Console.WriteLine($"■ ④ 受ける側の振り先くらべ（相手は**命中+40**の妨害2枚・D式・各{Samples}回）");
+                double b4 = DuelWinRate(seed, mine, foeJam, Samples,
+                    null, 0, null, StatKey.Acc, 40, i => i == 1 || i == 2);
+                Console.WriteLine($"  振らない（基準）  {b4,5:0.0}%");
+                foreach (var key in Stats.Keys)
+                {
+                    double pct = DuelWinRate(seed, mine, foeJam, Samples,
+                        key, 20, null,                       // ⭐ 味方4体すべてに振る
+                        StatKey.Acc, 40, i => i == 1 || i == 2);
+                    Console.WriteLine($"  {Stats.LabelOf(key),-8} +20Lv  {pct,5:0.0}%"
+                        + $"   基準から {pct - b4,5:0.0}pt   手番 {_lastAllyActions,4:0}");
+                }
+            }
+            finally { Battle.DamageOverride = null; }
+
+            Console.WriteLine();
+            Console.WriteLine("  ⭐ 表の中で**縦に動く**なら、その投資は効いている");
+            Console.WriteLine("  ⭐ **右へ行くほど縦の効きが強まる**なら、2本は噛み合っている（片方が上がると片方が要る）");
+        }
+
+        // ── 通る率の帯と感度（2026-08-26・作者の指摘）──────────────────
+        //
+        // 🔴 **作者の読み**: 「耐性をいくら上げても 1/4 で当たるなら上げる価値は低い。
+        //    命中もいくら上げても 5% で外れるなら価値が下がる」。
+        //    ⭐ 投資の天井を決めているのは <see cref="Battle.LandFloor"/>(25) と
+        //    <see cref="Battle.LandCeil"/>(95)、そして感度 <see cref="Battle.LandStatDivisor"/>(10)。
+        // ⚠️ 帯を広げると**特性（狙い澄まし/意地 ±20）の効きも変わる**ので、
+        //    採用するならそちらも測り直しが要る。
+
+        private static void LandBandProbe(int seed)
+        {
+            const int Samples = 250;
+            int keepDiv = Battle.LandStatDivisor, keepLo = Battle.LandFloor, keepHi = Battle.LandCeil;
+
+            var r = DebuffRoles(true);
+            Role a = r[0], t = r[1], sup = r[2], h = r[3];
+            var jam = new Role("妨害役", new StatBlock(40, 0, 0, 40, 40, 0),
+                "stun-heavy", "curse");
+            var mineJam = new[] { a, jam, jam, h };     // こちらが弱化を撃つ側
+            var mineTake = new[] { a, t, h, sup };      // こちらが弱化を受ける側
+            var foeStd = new[] { a, t, h, sup };
+            var foeJam = new[] { a, jam, jam, h };
+
+            // (名前, 下限, 上限, 感度の割る数)
+            var configs = new (string Name, int Lo, int Hi, int Div)[]
+            {
+                ("現行 [25,95] ÷10", 25, 95, 2 * Stats.Scale),
+                ("帯広 [10,99] ÷10", 10, 99, 2 * Stats.Scale),
+                ("帯最大 [0,100] ÷10", 0, 100, 2 * Stats.Scale),
+                ("感度2倍 [25,95] ÷5", 25, 95, Stats.Scale),
+                ("帯最大+感度2倍 ÷5", 0, 100, Stats.Scale),
+            };
+
+            // ⭐ 2026-08-26 に二乗飽和が本番になったので、差し替えは要らない
+            try
+            {
+                Console.WriteLine();
+                Console.WriteLine($"■ 通る率の帯・感度を振ったときの「弱化に振る価値」（D式・各{Samples}回）");
+                Console.WriteLine("  ⭐ ③＝デバッファー席（相手 耐性+40）／④＝受ける側（相手 命中+40の妨害2枚）");
+                Console.WriteLine("  ⚠️ 弱化の数字が**速度に並べば**、6本での配分が成立する");
+                Console.WriteLine();
+                Console.WriteLine($"  {"設定",-22}{"③命中",8}{"③速度",8}{"③防御",8}   |{"④耐性",8}{"④速度",8}{"④防御",8}");
+
+                foreach (var cfg in configs)
+                {
+                    Battle.LandFloor = cfg.Lo; Battle.LandCeil = cfg.Hi;
+                    Battle.LandStatDivisor = cfg.Div;
+
+                    double b3 = DuelWinRate(seed, mineJam, foeStd, Samples,
+                        null, 0, null, StatKey.Res, 40, null);
+                    double Gain3(StatKey k) => DuelWinRate(seed, mineJam, foeStd, Samples,
+                        k, 20, i => i == 1 || i == 2, StatKey.Res, 40, null) - b3;
+
+                    double b4 = DuelWinRate(seed, mineTake, foeJam, Samples,
+                        null, 0, null, StatKey.Acc, 40, i => i == 1 || i == 2);
+                    double Gain4(StatKey k) => DuelWinRate(seed, mineTake, foeJam, Samples,
+                        k, 20, null, StatKey.Acc, 40, i => i == 1 || i == 2) - b4;
+
+                    Console.WriteLine($"  {cfg.Name,-22}"
+                        + $"{Gain3(StatKey.Acc),7:+0.0;-0.0;0.0}{Gain3(StatKey.Spd),8:+0.0;-0.0;0.0}"
+                        + $"{Gain3(StatKey.Def),8:+0.0;-0.0;0.0}   |"
+                        + $"{Gain4(StatKey.Res),7:+0.0;-0.0;0.0}{Gain4(StatKey.Spd),8:+0.0;-0.0;0.0}"
+                        + $"{Gain4(StatKey.Def),8:+0.0;-0.0;0.0}");
+                }
+            }
+            finally
+            {
+                Battle.DamageOverride = null;
+                Battle.LandStatDivisor = keepDiv;      // ⚠️ 必ず戻す
+                Battle.LandFloor = keepLo; Battle.LandCeil = keepHi;
+            }
+            Console.WriteLine();
+            Console.WriteLine("  ⭐ 帯を広げても弱化が速度に届かないなら、原因は帯ではなく「確率を買っていること」そのもの");
+        }
+
+        // ── 通る率を実数で出す（2026-08-26・作者の問い）────────────────
+        // ⭐ 「式がどうなっているか」を**実際に出る数**で示す。
+        //    ⚠️ 割る数の議論は単位が分からないと噛み合わない
+        //    （命中・抵抗は**実値**＝種族基礎＋野生レベル×Stats.Scale＋育成ぶん）。
+        private static void LandCalcProbe(int seed)
+        {
+            var rng = new Rng(seed).Stream("landcalc");
+            int serial = 0;
+            var ids = new List<string>();
+            foreach (var sp in SpeciesTable.All) ids.Add(sp.Id);
+
+            // ⭐ 同じ種族で、野生レベルだけ変えた3体を作って実値を見る
+            string speciesId = ids[0];
+            (string Name, StatBlock Wild)[] shapes =
+            {
+                ("命中40/耐性0", new StatBlock(40, 0, 0, 40, 40, 0)),
+                ("命中0/耐性0 ", new StatBlock(40, 0, 40, 40, 0, 0)),
+                ("命中0/耐性40", new StatBlock(40, 0, 40, 0, 0, 40)),
+            };
+
+            Console.WriteLine();
+            Console.WriteLine("■ 弱化命中・弱化耐性の**実値**（種族基礎 ＋ 野生レベル×Stats.DebuffScale）");
+            Console.WriteLine($"  ⚠️ 野生レベルは 0〜{Stats.WildStatMax}、DebuffScale = {Stats.DebuffScale}"
+                + $"、育成でさらに +{Creatures.GrowthFlatOf(StatKey.Acc)}/Lv");
+            var made = new List<(string Name, StatBlock S)>();
+            foreach (var sh in shapes)
+            {
+                var born = Born(rng, speciesId, 5, ref serial);
+                var c = new Creature(born.Id, speciesId, sh.Wild, new StatBlock(0, 0, 0, 0), 0,
+                    born.MutationCounter, null, null, born.PaletteIndex,
+                    null, null, 1, null, null, born.Element, born.TraitId);
+                var st = Creatures.StatsOf(c);
+                made.Add((sh.Name, st));
+                Console.WriteLine($"  {sh.Name}   命中 {st.Acc,5}   耐性 {st.Res,5}");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine($"  式: 技の基礎率 ＋ (命中 − 耐性) ÷ {Battle.LandStatDivisor}"
+                + $" ＋ 属性±{Battle.LandElementSwing} ＋ 特性±{Battle.TraitAim}"
+                + $"  → [{Battle.LandFloor}, {Battle.LandCeil}]");
+
+            // ⭐ 技の基礎率は**表から読む**（写すと第2の出所になる）
+            string[] watch = { "stun", "poison", "stun-heavy", "venom-heavy", "curse", "def-down" };
+            Console.WriteLine();
+            Console.WriteLine("■ 実際の通る率");
+            Console.WriteLine($"  {"技",-14}{"基礎率",7}{"命中98→耐性22",15}{"命中98→耐性102",16}{"命中18→耐性102",16}");
+            foreach (var id in watch)
+            {
+                var sk = Skills.ById(id);
+                int baseChance = 100;
+                foreach (var e in sk.Effects) if (Skills.IsHarmful(e)) { baseChance = e.Chance; break; }
+                int Rate(StatBlock at, StatBlock df) => Math.Clamp(
+                    baseChance + (at.Acc - df.Res) / Battle.LandStatDivisor,
+                    Battle.LandFloor, Battle.LandCeil);
+                Console.WriteLine($"  {sk.Name,-14}{baseChance,6}%"
+                    + $"{Rate(made[0].S, made[1].S),14}%{Rate(made[0].S, made[2].S),15}%"
+                    + $"{Rate(made[1].S, made[2].S),15}%");
+            }
+            Console.WriteLine();
+            Console.WriteLine("  ⭐ 一番右が 0% なら「振っていない相手の弱化を、耐性で弾き切れる」");
+        }
+
+        // ── 弱化技の格を上げると席が取れるか（2026-08-26・作者の指示）──────
+        //
+        // 🔴 **作者の診断**: 「現状の技はまもダンの R キャラのものばかりで控えめ。
+        //    戦闘への介入度が低い。UR のスキルを持ってきて試すのがいい」。
+        // ⭐ `参考/まもダン_全キャラスキル.md` の UR デバッファーを読むと、設計が違う:
+        //    ① ダメージと弱化を同時に載せる ② 多段で毎回判定 ③ 1発で複数の弱化
+        //    ④ ゲージ操作で手番そのものを奪う
+        // ⚠️ **名前も数値も持ってこない**（この作品の決めごと）。⭐ 借りるのは設計だけ。
+        // ⭐ 効果の種類（Gauge/Sleep/Block/Dispel/Steal）は**既に全部ある** ──
+        //    足りていないのは「それを使う技」だけなので、まず**既存技の組み替え**で測る。
+        private static void UrSkillProbe(int seed)
+        {
+            const int Samples = 300;
+            var r = DebuffRoles(true);
+            Role a = r[0], t = r[1], h = r[3];
+            var heavy = new Role("重装", new StatBlock(40, 40, 40, 0, 0, 0),
+                "attack-heavy", "harden");
+            var foeSustain = new[] { heavy, heavy, h, h };
+            var foeStd = new[] { a, t, h, r[4] };
+
+            // ⭐ 弱化役のステは固定。**技だけ**を替える（測っているのが技だと言い切れるように）
+            // 🔴 **毒を外した案は全滅した**（2026-08-26 実測 47.7% → 2.0〜5.3%）。
+            //    ⭐ 毒は「最大HPの割合・防御無視」なので、**硬い相手ほど効く**唯一の札だった。
+            //    ⚠️ つまり前の実験は「技の格」ではなく「毒の有無」を測っていた。
+            //    ここは**毒を固定**して、もう1枠だけを替える（測る対象を1つに絞る）。
+            var loadouts = new (string Name, string S2, string S3)[]
+            {
+                // ── R級（既存）──────────────────────────
+                ("R 毒 + スタン",       "venom-heavy",   "stun-heavy"),
+                ("R 毒 ×2",           "venom-heavy",   "poison-all"),
+                ("R 純粋弱化（毒なし）",  "stun-heavy",    "curse"),
+                // ── UR級（2026-08-26 に新設）─────────────
+                ("UR 乱打+毒",         "venom-barrage", "venom-heavy"),
+                ("UR 崩落（全体+2弱化）", "collapse",     "venom-heavy"),
+                ("UR 停滞（ゲージ+スタン）","stagnate",    "venom-heavy"),
+                ("UR 乱打+崩落",        "venom-barrage", "collapse"),
+                ("UR 3種盛り(乱打+停滞)", "venom-barrage", "stagnate"),
+            };
+
+            // ⭐ 2026-08-26 に二乗飽和が本番になったので、差し替えは要らない
+            try
+            {
+                foreach (var (arenaName, foe) in new[]
+                    { ("不落〈重装2＋癒2〉", foeSustain), ("標準〈攻/壁/癒/弱〉", foeStd) })
+                {
+                    // ⭐ 物差し ── 弱化を1枚も入れない編成
+                    double rush = CompWinRate(seed, new[] { a, a, a, a }, foe, Samples);
+                    Console.WriteLine();
+                    Console.WriteLine($"■ 弱化技の格くらべ（味方 攻/弱/弱/癒・相手 {arenaName}・D式・各{Samples}回）");
+                    Console.WriteLine($"  〈物差し〉攻撃4枚（弱化なし）   {rush,5:0.0}%");
+                    Console.WriteLine();
+                    foreach (var lo in loadouts)
+                    {
+                        var jam = new Role("弱化役", new StatBlock(40, 0, 0, 40, 40, 0), lo.S2, lo.S3);
+                        double pct = CompWinRate(seed, new[] { a, jam, jam, h }, foe, Samples);
+                        string verdict = pct > rush ? "  ⭐ 席を取れる" : "";
+                        Console.WriteLine($"  {lo.Name,-22}{pct,5:0.0}%"
+                            + $"   物差しから {pct - rush,5:0.0}pt   手数 {_lastActions,5:0}{verdict}");
+                    }
+                }
+            }
+            finally { Battle.DamageOverride = null; }
+            Console.WriteLine();
+            Console.WriteLine("  ⭐ 物差しを上回る技があれば、原因は「弱化の仕組み」ではなく**技の格**だったことになる");
+        }
+
+        // ── 命中と速度の組み合わせ（2026-08-26・作者の指摘）──────────────
+        //
+        // 🔴 **作者の指摘**: 「弱化命中は速度と組み合わせることでデバフを素早く撒ける
+        //    ので、一概に『速度に振ったほうがいい』とは言えないのでは」。
+        // ⚠️ **これまでの計測は二者択一しか見ていない**（Acc に20点 vs Spd に20点）。
+        //    ⭐ 実際の配分は「同じ予算をどう割るか」なので、**混ぜた場合**を測らないと
+        //    相乗効果（速く撒く × 通る）を見落とす。
+        // ⭐ ここは予算を固定して、Acc:Spd の割り振りだけを動かす。
+
+        /// <summary>席を選んで複数のステを同時に伸ばす。⭐ `land` は必ず渡す。</summary>
+        private static double MixWinRate(int seed, Role[] mine, Role[] theirs, int samples,
+            (StatKey Key, int Lv)[] mix, Func<int, bool> who,
+            StatKey? foeKey, int foeLv, Func<int, bool>? foeWho)
+        {
+            int won = 0; long acts = 0;
+            for (int i = 0; i < samples; i++)
+            {
+                var rng = new Rng(seed + i).Stream("mixprobe");
+                var land = new Rng(seed + i).Stream("land-mixprobe");
+                int serial = 0;
+                var a = Shaped(rng, mine, ref serial);
+                foreach (var (key, lv) in mix)
+                    if (lv > 0) a = LeveledAt(a, key, lv, who);
+                var b = Shaped(rng, theirs, ref serial);
+                if (foeKey != null && foeLv > 0)
+                    b = LeveledAt(b, foeKey.Value, foeLv, foeWho ?? (_ => true));
+                var fight = Run(a, b, land);
+                acts += fight.AllyActions;
+                if (fight.Result == Outcome.Ally) won++;
+            }
+            _lastAllyActions = samples == 0 ? 0.0 : (double)acts / samples;
+            return samples == 0 ? 0.0 : 100.0 * won / samples;
+        }
+
+        private static void MixProbe(int seed)
+        {
+            const int Samples = 300;
+            const int Budget = 40;   // ⭐ デバッファー1体に配る予算（点）
+
+            var r = DebuffRoles(true);
+            Role a = r[0], t = r[1], sup = r[2], h = r[3];
+            Func<int, bool> jamSeats = i => i == 1 || i == 2;
+
+            // 🔴 **技の格を変えて2通り測る**（2026-08-26）。
+            //    ⚠️ R級の弱化は効き目が小さいので、「通す価値」自体が小さい。
+            //    ⭐ UR級（毒2重＋崩落）なら1発の重みが違うので、命中の価値も変わるはず。
+            var kits = new (string Name, string S2, string S3)[]
+            {
+                ("R級 スタン+足止め", "stun-heavy", "curse"),
+                ("UR級 乱打+崩落",   "venom-barrage", "collapse"),
+            };
+            // ⚠️ **天井に張り付くと比べられない。**⭐ UR級は普通の相手だと 96〜100% で
+            //    差が潰れたので（2026-08-26 実測）、硬い相手（重装2＋癒2）を足してある。
+            var heavy = new Role("重装", new StatBlock(40, 40, 40, 0, 0, 0),
+                "attack-heavy", "harden");
+            var arenas = new (string Name, Role[] Foe, StatKey? Key, int Lv)[]
+            {
+                ("普通・耐性+40", new[] { a, t, h, sup }, StatKey.Res, 40),
+                ("不落・耐性+40", new[] { heavy, heavy, h, h }, StatKey.Res, 40),
+            };
+
+            foreach (var (kitName, s2, s3) in kits)
+            foreach (var arena in arenas)
+            {
+                var jam = new Role("妨害役", new StatBlock(40, 0, 0, 40, 40, 0), s2, s3);
+                var mine = new[] { a, jam, jam, h };
+                var foe = arena.Foe;
+                Console.WriteLine();
+                Console.WriteLine($"■ {kitName}／{arena.Name}／{Budget}点の割り振り（各{Samples}回）");
+                Console.WriteLine("  ⭐ 予算は固定。⚠️ 混ぜた列が両端より高ければ、組み合わせに意味がある");
+                Console.WriteLine($"  {"命中 : 速度",-14}{"勝率",8}{"味方の手番",12}");
+
+                double best = -1; string bestAt = "";
+                for (int acc = 0; acc <= Budget; acc += Budget / 4)
+                {
+                    int spd = Budget - acc;
+                    double pct = MixWinRate(seed, mine, foe, Samples,
+                        new[] { (StatKey.Acc, acc), (StatKey.Spd, spd) }, jamSeats,
+                        arena.Key, arena.Lv, null);
+                    if (pct > best) { best = pct; bestAt = $"{acc}:{spd}"; }
+                    Console.WriteLine($"  {acc,4} : {spd,-7}{pct,7:0.0}%{_lastAllyActions,11:0}");
+                }
+                Console.WriteLine($"  ⭐ 一番高いのは 命中:速度 = {bestAt}（{best:0.0}%）");
+            }
+            Console.WriteLine();
+            Console.WriteLine("  ⚠️ 両端（0:40 か 40:0）が最高なら、混ぜる意味は無い＝二者択一のまま");
+        }
+
+        // ── ステの実際の桁（2026-08-26・作者の指摘「速度の見かけが大きい」）────
+        // ⭐ **推測で桁を動かさない。**⚠️ `Stats.Scale` まわりは較正が連鎖しているので、
+        //    まず「実際にどこまで行くのか」を出す。
+        private static void RangeProbe(int seed)
+        {
+            var rng = new Rng(seed).Stream("range");
+            int serial = 0;
+            string best = "haneru";   // ⭐ 速度の種族基礎が最高（130）
+
+            (string Name, int Gen, int Wild, int Train, bool Slant)[] cases =
+            {
+                ("孵ったばかり（素質0・無育成）",      1,  0,  0, false),
+                ("素質MAX（野生40）・無育成",         1, 40,  0, false),
+                ("素質MAX＋育成MAX（50点）",          1, 40, 50, false),
+                ("21代・素質MAX（野生60）＋育成MAX",  21, 60, 50, false),
+                ("同上＋大得意（×1.30×1.15）",        21, 60, 50, true),
+            };
+
+            Console.WriteLine();
+            Console.WriteLine($"■ ステの実際の桁（種族 {best}・1本に全部寄せた場合）");
+            Console.WriteLine($"  ⚠️ 育成は**そのステ1本へ全部**振った場合（`TrainMax` = {Creatures.TrainMax}）");
+            Console.WriteLine();
+            Console.Write($"  {"条件",-34}");
+            foreach (var k in Stats.Keys) Console.Write($"{Stats.LabelOf(k),10}");
+            Console.WriteLine();
+
+            foreach (var (name, gen, wild, train, slant) in cases)
+            {
+                Console.Write($"  {name,-34}");
+                foreach (var key in Stats.Keys)
+                {
+                    var w = new StatBlock(0, 0, 0, 0);
+                    w = w.With(key, wild);
+                    var born = Born(rng, best, 5, ref serial);
+                    var c = new Creature(born.Id, best, w, new StatBlock(0, 0, 0, 0), train,
+                        born.MutationCounter, null, null, born.PaletteIndex, null, null, gen,
+                        slant ? (StatKey?)null : null, null, born.Element, born.TraitId,
+                        slant ? (StatKey?)key : null, slant ? Other(key) : null);
+                    if (train > 0) Creatures.Spend(c, key, train);
+                    Console.Write($"{Creatures.StatsOf(c)[key],10}");
+                }
+                Console.WriteLine();
+            }
+
+            Console.WriteLine();
+            Console.WriteLine($"  ⭐ ゲージは (GaugeBase {Battle.GaugeBase} ＋ 速度) ずつ溜まり、"
+                + $"{Battle.GaugeMax} で1手番");
+            Console.WriteLine("  ⚠️ 速度だけ桁を下げるなら GaugeBase と GaugeMax も一緒に割る必要がある");
+        }
+
+        /// <summary>大得意の相方（大不得意）。⚠️ 同じキーだと `Slanted` が両方捨てる。</summary>
+        private static StatKey Other(StatKey key) =>
+            key == StatKey.Hp ? StatKey.Res : StatKey.Hp;
+
+        // ── 数字ではなく「効き目の幅」を見る（2026-08-26・作者の問い）──────
+        //
+        // 🔴 **作者の問い**: 「この数字を決めるのってどうやるのが賢い？ダメージ計算から逆算する？」
+        // ⭐ **答え: そのとおり。**ステの生の桁は**任意**で、意味を持つのは
+        //    「その数が式に入ったとき何倍になるか」だけ。だから決める順は:
+        //      ① 遊びの言葉で目標を置く（例「最大まで育てた壁は被ダメを8割減らす」）
+        //      ② 式を解いて相棒の定数を出す（防御なら `DefSoften`）
+        //      ③ 生の桁は**読みやすさ**だけで決める（効き目は②が保証する）
+        // ⚠️ 生の桁だけ動かすと効き目まで動く ── だから `Stats.cs` に
+        //    「一緒に動かす定数の一覧」が書いてある。
+        private static void FeelProbe(int seed)
+        {
+            var rng = new Rng(seed).Stream("feel");
+            int serial = 0;
+
+            int Stat(string sp, StatKey key, int wild, int train, int gen)
+            {
+                var w = new StatBlock(0, 0, 0, 0).With(key, wild);
+                var born = Born(rng, sp, 5, ref serial);
+                var c = new Creature(born.Id, sp, w, new StatBlock(0, 0, 0, 0), train,
+                    born.MutationCounter, null, null, born.PaletteIndex, null, null, gen,
+                    null, null, born.Element, born.TraitId);
+                if (train > 0) Creatures.Spend(c, key, train);
+                return Creatures.StatsOf(c)[key];
+            }
+
+            (string Name, int Wild, int Train, int Gen)[] tiers =
+            {
+                ("孵ったばかり", 0, 0, 1),
+                ("素質MAX",     40, 0, 1),
+                ("素質＋育成MAX", 40, Creatures.TrainMax, 1),
+                ("21代＋育成MAX", 60, Creatures.TrainMax, 21),
+            };
+
+            Console.WriteLine();
+            Console.WriteLine("■ ① HP ── 生ステ × HpScale が戦闘のHP");
+            Console.WriteLine($"  ⭐ HpScale = {Battle.HpScale}（= 3 × HpBoost {Battle.HpBoost}）");
+            foreach (var (name, wild, train, gen) in tiers)
+            {
+                int raw = Stat("tamaru", StatKey.Hp, wild, train, gen);
+                Console.WriteLine($"  {name,-16}生 {raw,6}  →  戦闘 {raw * Battle.HpScale,9:#,0}");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("■ ② 防御 ── 何割の攻撃を止めるか");
+            Console.WriteLine($"  ⭐ 軽減 = (DefSoften {Battle.DefSoften} ÷ (DefSoften ＋ 防御))²");
+            foreach (var (name, wild, train, gen) in tiers)
+            {
+                int d = Stat("tamaru", StatKey.Def, wild, train, gen);
+                double soft = (double)Battle.DefSoften / (Battle.DefSoften + d);
+                Console.WriteLine($"  {name,-16}防御 {d,6}  →  通すのは {soft * soft * 100,5:0.0}%"
+                    + $"  （{(1 - soft * soft) * 100,5:0.0}% 止める）");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("■ ③ 速度 ── 手番がどれだけ速くなるか");
+            Console.WriteLine($"  ⭐ ゲージは (GaugeBase {Battle.GaugeBase} ＋ 速度) ずつ、{Battle.GaugeMax} で1手番");
+            int slowest = 0;
+            foreach (var (name, wild, train, gen) in tiers)
+            {
+                int sp = Stat("haneru", StatKey.Spd, wild, train, gen);
+                int rate = Battle.GaugeBase + sp;
+                if (slowest == 0) slowest = rate;
+                Console.WriteLine($"  {name,-16}速度 {sp,6}  →  ゲージ {rate,6}/刻"
+                    + $"  一番遅い者の {(double)rate / slowest,4:0.0}倍");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("■ ④ 何発で落ちるか（威力中・攻撃と防御を同じ段で当てる）");
+            Console.WriteLine("  🔴 **ここが遊びの手触りそのもの。**⚠️ 生の桁ではなくこの数を狙って決める");
+            foreach (var (name, wild, train, gen) in tiers)
+            {
+                int atk = Stat("tsunoga", StatKey.Atk, wild, train, gen);
+                int def = Stat("tamaru", StatKey.Def, wild, train, gen);
+                int hp = Stat("tamaru", StatKey.Hp, wild, train, gen) * Battle.HpScale;
+                int hit = Battle.DamageOf(1000, atk, def, 1.0);
+                Console.WriteLine($"  {name,-16}一撃 {hit,7:#,0}  HP {hp,9:#,0}"
+                    + $"  →  {(double)hp / Math.Max(1, hit),5:0.0} 発");
+            }
+            Console.WriteLine();
+            Console.WriteLine("  ⭐ 生の桁を1/5にしても、DefSoften・GaugeBase・HpScale を同じだけ動かせば");
+            Console.WriteLine("     ①〜④ は**1つも変わらない** ── 読みやすさだけを取れる");
+        }
+
         // ── 特性 ────────────────────────────────────────
 
         /// <summary>特性1つぶんの効き目。**「特性どうしの勝率」ではない。**
@@ -644,6 +1667,11 @@ namespace EggCommand.Sim
 
         /// <summary>同じ技と同じ特性を3体に持たせた編成。
         /// ⚠️ 属性は両側 Fire に揃える。倍率が 1.0 になるので、出る差が特性だけになる。</summary>
+        /// <summary>⭐ 枠2・3 を決め打ちにした4体を、外の道具からも作れるようにする入口
+        /// （`GuessProbe` が使う）。⚠️ 組み方を写さない ── 写すと測る相手が別物になる。</summary>
+        public static List<Creature> PartyWith(Rng rng, string skill2, string skill3,
+            int tier, ref int serial) => TraitParty(rng, skill2, skill3, null, tier, ref serial);
+
         private static List<Creature> TraitParty(Rng rng, string skill2, string skill3, string? traitId,
             int tier, ref int serial)
         {
@@ -2389,50 +3417,9 @@ namespace EggCommand.Sim
 
         // ══ 1手あたりの価値（算数）═══════════════════════════
         //
-        // ⭐ **AI もサイコロも通さない。**（作者の判断 2026-08-19）
-        // ⚠️ AI を通す測り方（sim skillvalue / traits / species）は、AI の腕を測ってしまう。
-        //    実際 2026-08-19 に AI の採点定数が古く、**23技を一度も選ばなかった**ことが判明した。
-        //    あのとき その23技は「弱い」と測れていた ── 順位付けには使えない。
-        // ⭐ ここは式だけで出すので、AI が賢くなっても愚かでも同じ数が出る。
-        //
-        // ⚠️ **勘で置いた見積もりには「見積」と印を付ける。**
-        //    文脈で価値が変わるもの（挑発・ガッツ・蘇生）は算数にならない。
-
-        /// <summary>挑発1回ぶんの見積もり。⚠️ 狙いを1回ずらす価値。🚧 未測定。</summary>
-        private const double GuessTauntPerHit = 0.3;
-
-        /// <summary>ガッツが致命傷を耐えたときの見積もり。⭐ およそ一撃ぶん。🚧 未測定。</summary>
-        private const double GuessGuts = 1.0;
-
-        /// <summary>免疫・ブロック1ターンぶんの見積もり。
-        /// ⚠️ 相手が弱化を撃ってこなければ 0。🚧 未測定。</summary>
-        private const double GuessWardPerTurn = 0.3;
-
-        /// <summary>CT を1縮める／延ばす見積もり。
-        /// ⭐ 枠2・3 が選ばれるのは全手番の 31%（`sim pace` 実測）なので、そのぶんだけ効く。</summary>
-        private const double GuessCtPerStep = 0.31;
-
-        /// <summary>蘇生で戻った個体が、その後動ける回数の見積もり。🚧 未測定。</summary>
-        private const double GuessReviveTurns = 3.0;
-
-        /// <summary>強化1つを消したときの見積もり。⭐ 相手が撒くのに使った1手ぶん。</summary>
-        private const double GuessBuffWorth = 0.9;
-
-        /// <summary>**後で効くものの割引**（毒・リジェネ・強化・弱化）。
-        ///
-        /// ⚠️ 表に書いてある持続を、そのまま足してはいけない。`sim delivered` の実測（2026-08-19）:
-        /// ・毒の持続は**4ターン**だが、実際に削れたのは**平均 2.1回**
-        ///   （残り 1,389ターンぶんが捨てられ、うち 580体は毒が乗ったまま倒れた）
-        /// ・量では一撃の **1.13倍** 入っているのに、勝率では **±0**
-        ///
-        /// ⭐ 理由は2つ:
-        /// 1. **使い切る前に決着する**（相手が先に倒れる／戦闘が終わる）
-        /// 2. **直接ダメージは相手の手番を奪うが、後から効くものは奪わない** ──
-        ///    同じ総量でも、遅れて入るぶん相手が動く回数が増える
-        ///
-        /// 🚧 **毒1件からの見積もり。**強化・弱化にも同じ係数を当てているが、測っていない。</summary>
-        private const double LateDiscount = 0.7;
-
+        // ⭐ **中身は `Core.SkillValues` へ移した**（2026-08-27）。
+        //    ⚠️ ★で技を引くにはゲーム本体が格を知る必要があり、Core から Sim は見えない。
+        // ⭐ ここに残すのは**並べて印字する側**だけ（`sim turnvalue`）。
         private sealed class TurnRow
         {
             public string Name = string.Empty;
@@ -2445,7 +3432,7 @@ namespace EggCommand.Sim
         /// <summary>1手を使って何手ぶんを生むか。⭐ 基準は「枠1 の一撃 ＝ 1.0」。</summary>
         private static void TurnValue()
         {
-            var mid = MiddleUnit();
+            var mid = SkillValues.Middle();
             int atk = mid.Atk, def = mid.Def;
             int maxHp = mid.Hp * Battle.HpScale;
             int one = Battle.DamageOf(Skills.DamagePowerOf(PowerTier.Medium), atk, def, 1.0);
@@ -2457,7 +3444,7 @@ namespace EggCommand.Sim
             Console.WriteLine();
             Console.WriteLine("  ⭐ 1.0 を超えれば「枠1 で殴るより得」、下回れば「殴ったほうが得」");
             Console.WriteLine("  ⚠️ 「見積」印は文脈で変わるもの ── 算数ではなく勘です");
-            Console.WriteLine($"  ⚠️ 後で効くもの（毒・回復・強化・弱化）は ×{LateDiscount} 割り引いています");
+            Console.WriteLine($"  ⚠️ 後で効くもの（毒・回復・強化・弱化）は ×{SkillValues.LateDiscount} 割り引いています");
             Console.WriteLine("     ── 使い切る前に決着し、相手の手番も奪えないため（`sim delivered` 実測）");
             Console.WriteLine();
 
@@ -2466,7 +3453,7 @@ namespace EggCommand.Sim
             var rows = new List<TurnRow>();
             foreach (var skill in Skills.All)
             {
-                double total = TurnValueOf(skill, out string why);
+                double total = SkillValues.Of(skill, out string why);
                 rows.Add(new TurnRow
                 {
                     Name = skill.Name,
@@ -2486,182 +3473,11 @@ namespace EggCommand.Sim
             }
             Console.WriteLine();
             Console.WriteLine("  ⚠️ CT は「1戦闘に何回撃てるか」を決めるだけで、1回ぶんの価値には効きません");
-            Console.WriteLine($"  ⭐ 1体が動けるのはおよそ 5.6手（`sim pace`）。CT5 なら1戦闘に1回");
+            Console.WriteLine($"  ⭐ 1体が動けるのはおよそ {SkillValues.PaceTurns}手（`sim pace`）。CT5 なら1戦闘に1回");
         }
 
         /// <summary>代表の個体。⭐ **種族の基礎値の平均 ＋ 野生を均等に配ったぶん**（育成なし）。
         /// ⚠️ ここを1つに保たないと、`turnvalue` と帳面の検査が別の相手を測ることになる。</summary>
-        private static StatBlock MiddleUnit()
-        {
-            var baseSum = new int[Stats.Keys.Length];
-            int count = 0;
-            foreach (var sp in SpeciesTable.All)
-            {
-                if (sp.Id == Encounters.BossSpeciesId) continue;
-                for (int i = 0; i < Stats.Keys.Length; i++) baseSum[i] += sp.Base[Stats.Keys[i]];
-                count++;
-            }
-            int wildEach = Stats.WildTotalMax / Stats.Keys.Length;
-            var mid = new StatBlock(0, 0, 0, 0);
-            for (int i = 0; i < Stats.Keys.Length; i++)
-                mid = mid.With(Stats.Keys[i], baseSum[i] / count + wildEach * Stats.Scale);
-            return mid;
-        }
-
-        /// <summary>技1つの手ぶん。⭐ **帳面の検査から呼ぶ入口。**
-        /// ⚠️ 表に載っていない技（まだ実装していないもの）も測れる。</summary>
-        public static double TurnValueOf(Skill skill, out string why)
-        {
-            var mid = MiddleUnit();
-            int atk = mid.Atk, def = mid.Def;
-            int maxHp = mid.Hp * Battle.HpScale;
-            int one = Battle.DamageOf(Skills.DamagePowerOf(PowerTier.Medium), atk, def, 1.0);
-
-            double total = 0;
-            bool guessed = false;
-            var reasons = new List<string>();
-            foreach (var e in skill.Effects)
-                total += ValueOf(e, skill, mid, maxHp, one, ref guessed, reasons) * e.Chance / 100.0;
-            // ⚠️ **味方全体も対象数ぶん。**敵全体だけ掛けていたので、
-            //    全体回復が単体回復と同じ値で並んでいた（2026-08-19・帳面を広げたときに発覚）。
-            // ⭐ ダメージは ValueOf の中で自分で数えているので、ここでは掛けない。
-            if (!HasDamage(skill)
-                && (skill.Target == Target.EnemyAll || skill.Target == Target.AllyAll))
-            {
-                total *= Games.PartySize;
-            }
-
-            why = (guessed ? "見積 " : "") + string.Join(" ＋ ", reasons);
-            return total;
-        }
-
-        private static bool HasDamage(Skill skill)
-        {
-            foreach (var e in skill.Effects)
-            {
-                if (e.Kind == EffectKind.Damage) return true;
-            }
-            return false;
-        }
-
-        /// <summary>効果1つの手ぶん。⚠️ 確率は呼び側で掛ける。</summary>
-        private static double ValueOf(Effect e, Skill skill, StatBlock mid, int maxHp, int one,
-            ref bool guessed, List<string> why)
-        {
-            int atk = mid.Atk, def = mid.Def;
-            switch (e.Kind)
-            {
-                case EffectKind.Damage:
-                {
-                    // ⚠️ **`== Atk ? atk : def` と書かない。**スピード依存を足した日に、
-                    //    Spd が黙って**防御**で測られていた（2026-08-19 の監査）。
-                    //    ⭐ 選び方は Core の1か所（Battle.AttackStatOf）に寄せる。
-                    int stat = Battle.AttackStatOf(mid, new UnitStatus(), e.Scale);
-                    int hit = Battle.DamageOf(Skills.DamagePowerOf(e.Power), stat,
-                        e.Pierce ? 0 : def, 1.0);
-                    // ⚠️ ランダムな1体は「1体」。全体と同じに数えない
-                    int targets = skill.Target == Target.EnemyAll ? Games.PartySize : 1;
-                    double v = (double)hit * e.Repeat * targets / one;
-                    why.Add($"ダメージ {hit:N0}×{e.Repeat}×{targets}体");
-                    return v;
-                }
-                case EffectKind.HealRatio:
-                    // ⚠️ **満タンに近い相手へ撃つと、はみ出したぶんは捨てられる。**
-                    //    ここは「削られた相手に撃った」ときの上限値なので、実戦では下がる
-                    why.Add($"回復 最大HPの{e.Percent}%（削られた相手に撃ったとき）");
-                    return (double)maxHp * e.Percent / 100.0 / one;
-
-                case EffectKind.Poison:
-                case EffectKind.Regen:
-                {
-                    double amount = (double)maxHp * Skills.TickPercent / 100.0 * e.Stacks * e.Turns;
-                    why.Add($"{(e.Kind == EffectKind.Poison ? "毒" : "回復")} "
-                        + $"最大HPの{Skills.TickPercent * e.Stacks * e.Turns}%（後で効くので割引）");
-                    return amount / one * LateDiscount;
-                }
-                case EffectKind.Shield:
-                    why.Add($"盾{e.Count}枚＝相手の{e.Count}発を消す");
-                    return e.Count;
-
-                case EffectKind.Stun:
-                    why.Add($"相手の{e.Turns}手を消す");
-                    return e.Turns;
-
-                case EffectKind.Sleep:
-                    why.Add($"相手の{e.Turns}手を消す（殴ると解ける→半分）");
-                    return e.Turns * 0.5;
-
-                case EffectKind.Buff:
-                {
-                    double pct = Skills.BuffPercent / 100.0;
-                    if (e.Stat == StatKey.Def)
-                    {
-                        // ⭐ 防御は被ダメの増減。⚠️ 攻撃・速度と違って**線形ではない**
-                        //    （軟化定数 550 が防御そのものより大きいので、±30% がほとんど動かない）
-                        // ⚠️ 上げると下げるで式が違う。同じ式で並べて **どちらも 0.22** になっていた（道具の不備）
-                        double now = (double)Battle.DefSoften / (Battle.DefSoften + def);
-                        double moved = (double)Battle.DefSoften
-                            / (Battle.DefSoften + def * (1 + pct * e.Sign));
-                        double gap = Math.Abs(1 - moved / now);
-                        why.Add(e.Sign > 0
-                            ? $"被ダメ −{gap * 100:0}% × {e.Turns}ターン（後で効くので割引）"
-                            : $"与ダメ +{gap * 100:0}% × {e.Turns}ターン（後で効くので割引）");
-                        return gap * e.Turns * LateDiscount;
-                    }
-                    why.Add($"{Stats.LabelOf(e.Stat)} {(e.Sign > 0 ? "+" : "−")}{Skills.BuffPercent}%"
-                        + $" × {e.Turns}ターン（後で効くので割引）");
-                    return pct * e.Turns * LateDiscount;
-                }
-                case EffectKind.Gauge:
-                    // ⚠️ 減らす側は Percent が負。そのまま返して **−0.26 で並んでいた**（道具の不備）。
-                    //    ⭐ 相手のゲージを減らすのも「相手の手番を削る」ぶんの価値がある
-                    why.Add($"ゲージ {e.Percent:+0;-0}%");
-                    return Math.Abs(e.Percent) / 100.0;
-
-                case EffectKind.Ct:
-                    guessed = true;
-                    why.Add($"CT {e.Delta:+0;-0}");
-                    return Math.Abs(e.Delta) * GuessCtPerStep;
-
-                case EffectKind.Taunt:
-                    // ⚠️ 挑発は Hits に入っている。Count を読んで **0.00 で並んでいた**（道具の不備）
-                    guessed = true;
-                    why.Add($"狙いを{e.Hits}回ずらす");
-                    return e.Hits * GuessTauntPerHit;
-
-                case EffectKind.Guts:
-                    guessed = true;
-                    why.Add("致命傷を1回耐える");
-                    return GuessGuts;
-
-                case EffectKind.Immune:
-                case EffectKind.Block:
-                    guessed = true;
-                    why.Add($"相手の弱化を{e.Turns}ターン無駄にする");
-                    return e.Turns * GuessWardPerTurn;
-
-                case EffectKind.Dispel:
-                    guessed = true;
-                    why.Add($"強化を{e.Count}つ消す");
-                    return e.Count * GuessBuffWorth;
-
-                case EffectKind.Steal:
-                    guessed = true;
-                    why.Add($"強化を{e.Count}つ奪う（消す＋得る）");
-                    return e.Count * GuessBuffWorth * 2;
-
-                case EffectKind.Revive:
-                    guessed = true;
-                    why.Add($"HP{e.Percent}%で復帰");
-                    return GuessReviveTurns;
-
-                default:
-                    guessed = true;
-                    why.Add(e.Kind.ToString());
-                    return 0;
-            }
-        }
-
         /// <summary>算数の見積もりが、実戦で本当に入っているか。
         ///
         /// ⭐ **算数とシミュレーションが食い違ったところを掘る道具**（2026-08-19）。

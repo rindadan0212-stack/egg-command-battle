@@ -408,8 +408,13 @@ namespace EggCommand.Core
             if (slot < 0 || slot >= creature.SkillPoints.Length)
                 throw new ArgumentException($"枠 {slot} は無い");
             // ⚠️ 空き枠には注げない（技が無いのにレベルだけ上がる状態を作らない）
-            if (Creatures.SkillsOf(creature)[slot] == null) return 0;
-            if (SkillCosts.IsMaxed(creature.SkillPoints[slot])) return 0;
+            var skill = Creatures.SkillsOf(creature)[slot];
+            if (skill == null) return 0;
+            // ⚠️ 🔴 上限は**技ごと**（Skills.MaxLevelOf）。2026-08-27 まではどの技も
+            //    グローバルな Skills.MaxLevel（5）で判定していたため、上限が縮んだ技
+            //    （味方に配る持続もの・後述）へも Lv5 まで卵が入ってしまっていた。
+            int maxLevel = Skills.MaxLevelOf(skill);
+            if (SkillCosts.IsMaxed(creature.SkillPoints[slot], maxLevel)) return 0;
 
             int index = -1;
             for (int i = 0; i < game.Eggs.Count; i++)
@@ -422,7 +427,7 @@ namespace EggCommand.Core
             //    上限の1つ手前に★5（81pt）を入れたとき 80pt が黙って消えて、
             //    画面には「+81」と出る（2時間待った卵が蒸発する）。
             int points = Rarities.PointsOf(game.Eggs[index].Rarity);
-            int room = SkillCosts.TotalFor(Skills.MaxLevel) - creature.SkillPoints[slot];
+            int room = SkillCosts.TotalFor(maxLevel) - creature.SkillPoints[slot];
             if (points > room) return 0;
 
             game.Eggs.RemoveAt(index);

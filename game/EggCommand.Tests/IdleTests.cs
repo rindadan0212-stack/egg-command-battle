@@ -61,7 +61,12 @@ public class IdleTests
         // ⚠️ 1レベルの値段は**その個体の Lv**で変わるので、割り算では出ない。
         //    ⭐ 実物の1体で「この EXP なら何段上がるか」を数える
         int levels = Levels.LevelsFor(real[0], run.Exp);
-        Assert.True(levels >= Levels.GrowMax * 0.7 && levels <= Levels.GrowMax * 1.6,
+        // 🔴 **育成の上限が 20 → 50 になった**（2026-08-26）ので、「10分で MAX」は
+        //    もう成り立たない（EXP が約2.5倍要る）。⚠️ ここは**放置の配り方の較正**を
+        //    見る検査なので、基準は旧上限の 20 段のまま置く。
+        //    🚧 「何分で振り切れるべきか」は未決 ── 決まったら放置の量ごと直す。
+        const int Pace = 20;
+        Assert.True(levels >= Pace * 0.7 && levels <= Pace * 1.6,
             $"10分で {run.Exp} EXP = {levels}Lv（狙いは {Levels.GrowMax}Lv 前後）");
     }
 

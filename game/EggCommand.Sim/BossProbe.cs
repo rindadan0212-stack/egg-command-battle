@@ -39,7 +39,7 @@ namespace EggCommand.Sim
                 // ⭐ **親も育ててみる。**⚠️ 遊びでは親は素のまま（trained = 0）なので、
                 //    ここは「育てたら関門になるか」を見るためだけの手
                 if (trainPercent > 0)
-                    Creatures.Grow(boss[0], Creatures.TrainMax * trainPercent / 100);
+                    Creatures.GrowAuto(boss[0], Creatures.TrainMax * trainPercent / 100);
 
                 var state = Battle.CreateBattle(party, boss, land);
                 int acts = 0;

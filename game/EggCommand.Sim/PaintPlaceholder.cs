@@ -53,8 +53,10 @@ namespace EggCommand.Sim
             }
 
             WriteManifest(outDir);
+            int icons = FillArtTable(root);
 
             Console.WriteLine();
+            if (icons > 0) Console.WriteLine($"■ 仮置きの絵札（`Art` の表）を作った: {icons} 枚");
             Console.WriteLine($"■ 仮置きの paint を作った: {made} 枚 → {Dir}/");
             foreach (var line in madeList) Console.WriteLine("  " + line);
             if (skipped.Count > 0)
@@ -110,6 +112,29 @@ namespace EggCommand.Sim
 
         /// <summary>枠線1ドット＋薄い塗り＋隅の小さな印。⚠️ 斜線で埋め尽くさない
         /// （画面の見え方を判断できる程度には整える・段取り4・第3部）。</summary>
+        /// <summary>⭐ **`Art` の表が指していて、まだ無い絵を仮置きで埋める**（2026-08-27）。
+        ///
+        /// ⚠️ この道具は `paint/` しか見ていなかったので、状態異常の札（`icon/`）を足した日に
+        /// `ArtTests.表が指す絵は全部ある` が落ち、**手で PNG を置くしか無かった**。
+        /// ⭐ 表を出所にして埋めれば、絵札を足しても走らせるだけで済む。
+        /// ⚠️ **既にあるものは上書きしない**（この道具の約束）。</summary>
+        private static int FillArtTable(string root)
+        {
+            const int Side = 32;      // ⚠️ 札は 128px 四方だが、ドットは 32 で足りる（×4 で出す）
+            int made = 0;
+            foreach (var art in Art.All())
+            {
+                var dir = Path.Combine(root, "assets/ui", art.Folder);
+                Directory.CreateDirectory(dir);
+                var path = Path.Combine(dir, art.Name + ".png");
+                if (File.Exists(path)) continue;
+                File.WriteAllBytes(path,
+                    SpritePng.Encode(BuildPlaceholder(Side, Side), PlaceholderPalette));
+                made++;
+            }
+            return made;
+        }
+
         private static PixelSprite BuildPlaceholder(int w, int h)
         {
             w = Math.Max(1, w);
@@ -134,6 +159,10 @@ namespace EggCommand.Sim
         /// <summary>paint フォルダの実物を読み直して、大きさ入りの一覧を書く。
         /// ⚠️ **実物の PNG（IHDR）から読む**── 仮置きだけでなく、いつか作者が描いた
         /// 本物に差し替わったときも、このコマンドを走らせ直すだけで一覧が追随する。</summary>
+        /// <summary>⭐ 一覧を書き直すだけの入口（`EggSkinPng` が焼いたあとに呼ぶ）。
+        /// ⚠️ 仮置きを作らずに一覧だけ直したい場面があるので、外から呼べるようにしてある。</summary>
+        public static void WriteManifestFor(string outDir) => WriteManifest(outDir);
+
         private static void WriteManifest(string outDir)
         {
             var lines = new List<string>();

@@ -51,10 +51,18 @@ public class FusionTests
     {
         var c = Make("x", 10, 10, 10, 10, StatKey.Spd, StatKey.Hp);
         Creatures.Grow(c, 4);
-        // ⭐ **6本すべてが伸びる。**⚠️ 得意1本だけに乗せていた頃は、
-        //    要らないステが得意の個体は育てても救えなかった（2026-08-19 に変更）。
+        // 🔴 **点を得ただけでは1つも伸びない**（2026-08-26・ARK式の自由配分）。
+        //    ⚠️ 2026-08-19〜08-26 は「6本すべてが自動で伸びる」だった。
+        //    ⭐ いまは振り先を選ぶのが遊びなので、得た点は未使用のまま置く。
+        Assert.Equal(4, Creatures.UnspentOf(c));
         foreach (var key in Stats.Keys)
-            Assert.True(c.Trained[key] > 0, $"{Stats.LabelOf(key)} が伸びていない");
+            Assert.Equal(0, c.Trained[key]);
+
+        // ⭐ 振った先**だけ**が伸びる
+        Creatures.Spend(c, StatKey.Atk, 4);
+        Assert.Equal(0, Creatures.UnspentOf(c));
+        Assert.True(c.Trained[StatKey.Atk] > 0, "振った攻撃力が伸びていない");
+        Assert.Equal(0, c.Trained[StatKey.Def]);
     }
 
     /// <summary>⭐ **伸びる量は素質の割合。**⚠️ 平らな ＋1 に戻ると、
@@ -62,14 +70,17 @@ public class FusionTests
     [Fact]
     public void 育てた分は素質の割合で決まる()
     {
-        var c = Make("x", 10, 10, 10, 10);
-        Creatures.Grow(c, Levels.GrowMax);
-        var born = Creatures.BornStatsOf(c.SpeciesId, c.Wild);
+        // ⚠️ 6本すべてに同じ点を振って、伸び方の式だけを見る（合計上限に触れない量で）
+        const int Each = 5;
+        var born = Creatures.BornStatsOf("tamaru", new StatBlock(10, 10, 10, 10));
         foreach (var key in Stats.Keys)
         {
+            var c = Make("x", 10, 10, 10, 10);
+            Creatures.Grow(c, Each);
+            Creatures.Spend(c, key, Each);
             int want = (int)System.Math.Floor(
-                (double)born[key] * Creatures.GrowthPermilOf(key) * Levels.GrowMax / 1000.0
-                + Creatures.GrowthFlatOf(key) * Levels.GrowMax + 0.5);
+                (double)born[key] * Creatures.GrowthPermilOf(key) * Each / 1000.0
+                + Creatures.GrowthFlatOf(key) * Each + 0.5);
             Assert.Equal(want, c.Trained[key]);
         }
     }
@@ -83,6 +94,9 @@ public class FusionTests
         var high = Make("high", 40, 0, 0, 0);
         Creatures.Grow(low, Levels.GrowMax);
         Creatures.Grow(high, Levels.GrowMax);
+        // ⭐ **同じ点を同じステへ**振って比べる（2026-08-26・自由配分になったので明示する）
+        Creatures.Spend(low, StatKey.Hp, Levels.GrowMax);
+        Creatures.Spend(high, StatKey.Hp, Levels.GrowMax);
         Assert.True(high.Trained[StatKey.Hp] > low.Trained[StatKey.Hp],
             $"素質の高い側の伸び {high.Trained[StatKey.Hp]} が "
             + $"低い側 {low.Trained[StatKey.Hp]} を上回っていない");
@@ -98,8 +112,13 @@ public class FusionTests
         var high = Make("high", 0, 0, 0, 0, StatKey.Hp, StatKey.Atk);
         Creatures.Grow(low, Levels.GrowMax);
         Creatures.Grow(high, Levels.GrowMax);
-        // ⚠️ 平らな伸びは**実値の単位**（野生レベル1点ぶん ＝ Stats.Scale）
-        int want = Levels.GrowMax * Creatures.GrowthFlatOf(StatKey.Acc);
+        // ⚠️ 命中と耐性の両方に振るので、上限の半分ずつにする
+        const int Half = 10;
+        Creatures.Spend(low, StatKey.Acc, Half);
+        Creatures.Spend(low, StatKey.Res, Half);
+        Creatures.Spend(high, StatKey.Acc, Half);
+        // ⚠️ 平らな伸びは**弱化2本の単位**（`Stats.DebuffScale` の目盛り・1点＝+1）
+        int want = Half * Creatures.GrowthFlatOf(StatKey.Acc);
         Assert.Equal(want, low.Trained[StatKey.Acc]);
         Assert.Equal(want, high.Trained[StatKey.Acc]);
         Assert.Equal(want, low.Trained[StatKey.Res]);
@@ -116,6 +135,8 @@ public class FusionTests
         int gainedSlanted = Creatures.StatsOf(slanted)[StatKey.Atk];
         Creatures.Grow(plain, Levels.GrowMax);
         Creatures.Grow(slanted, Levels.GrowMax);
+        Creatures.Spend(plain, StatKey.Atk, Levels.GrowMax);
+        Creatures.Spend(slanted, StatKey.Atk, Levels.GrowMax);
         int plainUp = Creatures.StatsOf(plain)[StatKey.Atk] - gainedPlain;
         int slantedUp = Creatures.StatsOf(slanted)[StatKey.Atk] - gainedSlanted;
         Assert.True(slantedUp > plainUp,

@@ -237,7 +237,18 @@ public class SkillsGoldenTests
     /// ⚠️ ゴールデンは作り直さない ── 作り直すと「移植元と一致している」証明が消える。</summary>
     private static readonly HashSet<string> CtLowered = new HashSet<string>
     {
-        "attack-heavy", "stun", "guts", "attack-thrice", "attack-def-twice", "venom-heavy",
+        // ⚠️ 🔴 2026-08-27: **`guts` をここから外した。**元々は `CtRepriced` にも載っていて
+        //    そちらが先に判定を奪うので死んでいた（動かない二重登録）。今回 `guts` を
+        //    `CtRepriced` から外したところ、この死んでいた登録が動き出し、
+        //    「下げた先は CtCap＝5」という誤った判定に落ちた（実際は6＝移植元と同値）。
+        //    ⭐ 表に無いのが正しい（guts はどちらの表にも属さない ── 移植元と同じ値）。
+        //
+        // ⚠️ 🔴 2026-08-27（監査で発覚）: **`attack-heavy`／`stun` も同じ二重登録だった。**
+        //    `CtRepriced` 側（下）に「6 → 4（CtLowered で 5 にしていた分）」という
+        //    コメント付きで既に載っており、判定も `CtRepriced` を先に見るので、
+        //    ここに残っていた2件は guts と同じく死にコードだった。⭐ `CtRepriced` の方が
+        //    新しい式（2026-08-20 の CT 式化）を反映しているので、そちらだけ残す。
+        "attack-thrice", "attack-def-twice", "venom-heavy",
         "heal-big", "slow-all", "heal-miracle", "shield-wall", "guts-deep", "immune-long",
         "stun-heavy", "ct-lock", "buff-steal", "sleep",
     };
@@ -266,8 +277,15 @@ public class SkillsGoldenTests
         "poison", "ct-long", "ct-short",        // 5/5/4 → 3
         "heal-ratio", "shield",                 // 4 → 3
         // ⭐ 効果1つぶんの重さが軽い単機能が下りた
-        "attack-heavy", "stun", "guts",         // 6 → 4（CtLowered で 5 にしていた分）
+        "attack-heavy", "stun",                 // 6 → 4（CtLowered で 5 にしていた分）
         "attack-all", "immune",                 // 5 → 4
+        // 🔴 2026-08-27: 味方に配る持続もの「だけ」の技は、基礎CTを「持続＋1＋段数」まで
+        //    伸ばして置き、レベルで縮めて下限に着地させる形に作り直した（Skills.AllyPersistentSteps）。
+        //    ⭐ atk-up/def-up/spd-up は 4 → 6（持続3T→床4に段2を足す）、regen は 5 → 7。
+        //    ⚠️ **guts はここに載せない。**新しい式（持続3T→床4に段2＝6）が、たまたま移植元と
+        //    同じ 6 に戻った ── 表に載せると「同じなのに repriced」と嘘をつくことになる
+        //    （表の趣旨どおり、同じなら外す）。
+        "atk-up", "def-up", "spd-up", "regen",
     };
 
     /// <summary>意図して移植元から**狙い先**を変えた技（2026-08-18）。
@@ -289,6 +307,20 @@ public class SkillsGoldenTests
         "taunt",                            // 自分 → 敵1体（不具合の修正）
     };
 
+    /// <summary>⚠️ 🔴 2026-08-27（監査で発覚・3件目の再発）: `guts`・`attack-heavy`・`stun` と、
+    /// 同じ二重登録を**4回目**踏まないための検査。⭐ `移植した技が1つも変わっていない()` は
+    /// `CtRepriced` を先に見るので、`CtLowered` 側に同じ id が紛れ込んでも**検査は落ちない**
+    /// （死にコードのまま見逃す）── だから表そのものの重なりを別に見張る。</summary>
+    [Fact]
+    public void CtRepricedとCtLoweredに二重登録が無い()
+    {
+        var overlap = new List<string>();
+        foreach (var id in CtRepriced)
+            if (CtLowered.Contains(id)) overlap.Add(id);
+        Assert.True(overlap.Count == 0,
+            $"CtRepriced と CtLowered の両方に載っている id: {string.Join(", ", overlap)}"
+            + "（判定は CtRepriced を先に見るため、CtLowered 側は死にコードになる ── どちらか一方だけに残す）");
+    }
 
     [Fact]
     public void 威力と割合の表が一致する()
@@ -307,7 +339,14 @@ public class SkillsGoldenTests
         Assert.True(Skills.DamagePowerOf(PowerTier.Large) < Skills.DamagePowerOf(PowerTier.Huge));
         // ⭐ 等倍（PowerUnit）より下の段位は作らない ── 「攻撃するより弱い技」は要らない
         Assert.True(Skills.DamagePowerOf(PowerTier.Small) >= Skills.PowerUnit);
-        Assert.Equal(golden.GetProperty("buffPercent").GetInt32(), Skills.BuffPercent);
+        // ⭐ **強化の効き目を移植元から変えた**（2026-08-27・作者の指示）。
+        //    ⚠️ 30% では手番の元が取れていなかった（`sim turnvalue` で攻撃力UP が 0.63手ぶん
+        //    ＝ 掛けるより殴ったほうが得）。攻撃・防御を 50%、速度だけ 30% に分けた。
+        //    ⚠️ ゴールデンは作り直さない ── 移植元の 30 はここに残り続ける。
+        //    ⭐ 見るのは「**移植元と違っていること**」と「速度だけが移植元のまま」。
+        int ported = golden.GetProperty("buffPercent").GetInt32();
+        Assert.NotEqual(ported, Skills.BuffStatPercent);
+        Assert.Equal(ported, Skills.BuffSpdPercent);
         Assert.Equal(golden.GetProperty("tickPercent").GetInt32(), Skills.TickPercent);
     }
 
@@ -620,8 +659,10 @@ public class SpeciesGoldenTests
         //    （+115% 対 +52〜63%）で効いていたため。
         // ⭐ 既存の4本は1つも触っていない ── 下の照合がそれを示す。
         Assert.Equal(80, golden.GetProperty("baseTotal").GetInt32());
-        // ⚠️ 合計 120 は「移植元の 80 ＋ 弱化2本ぶん 40」。さらに桁を Scale 倍してある
-        Assert.Equal(120 * Stats.Scale, SpeciesTable.BaseTotal);
+        // ⚠️ 合計は「移植元の 80×Scale（＝体の4本 400）＋ 弱化2本ぶん 40」。
+        //    🔴 **2026-08-26 に 600 → 440。**弱化2本を人の読める桁（0〜150）へ
+        //    引き直したため（`Stats.DebuffScale`）── 体の4本は1つも動かしていない。
+        Assert.Equal(80 * Stats.Scale + 40, SpeciesTable.BaseTotal);
 
         var list = golden.GetProperty("list");
 

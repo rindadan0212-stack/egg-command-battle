@@ -64,6 +64,12 @@ namespace EggCommand.Sim
             ("スタン", EffectKind.Stun),
             ("睡眠", EffectKind.Sleep),
             ("ブロック", EffectKind.Block),
+            // ⭐ 2026-08-27 に足した5つ
+            ("封印", EffectKind.Seal),
+            ("固着", EffectKind.Anchor),
+            ("無敵", EffectKind.Invincible),
+            ("弱化延長", EffectKind.Extend),
+            ("反撃", EffectKind.Counter),
             ("CT", EffectKind.Ct),
             ("ゲージ", EffectKind.Gauge),
             ("挑発", EffectKind.Taunt),
@@ -112,46 +118,54 @@ namespace EggCommand.Sim
 
         // ── 入口 ────────────────────────────────────────
 
-        public static void Run(string what)
+        /// <param name="log">言葉の出し先。⚠️ **`Console.SetOut` を使わない** ── xUnit は検査の組を
+        /// 並列で走らせるので、グローバルな出し先を差し替えると他の検査の出力まで奪う
+        /// （2026-08-25 に `ImportScreenTests` が実際に踏み、巻き添えで `SheetRoundTripTests` が
+        /// 落ちた）。⚠️ 🔴 **その後 `ImportScreen.Run` はこの形に直ったが、`Sheet.Run` は
+        /// 直っていなかった**（`SheetRoundTripTests.WriteAndCaptureBoth` がまだ `Console.SetOut` を
+        /// 使っていた ── 2026-08-27 の監査で発覚。加害側だけ直って被害側が直っていない、
+        /// を地で行っていた）。⭐ 既定は `Console.Out` なので、打つ側（`sim sheet`）の見た目は変わらない。</param>
+        public static void Run(string what, TextWriter? log = null)
         {
+            log ??= Console.Out;
             switch (what)
             {
-                case "write": Write(); break;
-                case "check": Check(); break;
-                case "code": Code(); break;
+                case "write": Write(log); break;
+                case "check": Check(log); break;
+                case "code": Code(log); break;
                 case "html":
-                    Console.WriteLine("書き出した: "
+                    log.WriteLine("書き出した: "
                         + SheetHtml.Write(Path.Combine(Dir, "エディタ.html")));
                     break;
                 default:
-                    Console.WriteLine("sim sheet <write|check|code>");
-                    Console.WriteLine("  write … いまの実装を帳面へ書き出す（⚠️ 上書き）");
-                    Console.WriteLine("  check … 帳面を検査する");
-                    Console.WriteLine("  code  … 貼れる C# を出す");
-                    Console.WriteLine("  html  … ⭐ クリックで書くための編集画面を作る");
+                    log.WriteLine("sim sheet <write|check|code>");
+                    log.WriteLine("  write … いまの実装を帳面へ書き出す（⚠️ 上書き）");
+                    log.WriteLine("  check … 帳面を検査する");
+                    log.WriteLine("  code  … 貼れる C# を出す");
+                    log.WriteLine("  html  … ⭐ クリックで書くための編集画面を作る");
                     break;
             }
         }
 
         // ══ 書き出し ═══════════════════════════════════
 
-        private static void Write()
+        private static void Write(TextWriter log)
         {
             Directory.CreateDirectory(Dir);
             var utf8 = new UTF8Encoding(false);
             var a = Put(SkillFile, "技", SkillSheet(), utf8);
             var b = Put(SpeciesFile, "種族", SpeciesSheet(), utf8);
             var c = Put(TraitFile, "特性", TraitSheet(), utf8);
-            Console.WriteLine($"帳面を書き出した: {Path.GetFullPath(Dir)}");
-            Console.WriteLine($"  {SkillFile}   … 技 {Skills.All.Count} 件"
+            log.WriteLine($"帳面を書き出した: {Path.GetFullPath(Dir)}");
+            log.WriteLine($"  {SkillFile}   … 技 {Skills.All.Count} 件"
                 + (a.Orphans > 0 ? $"（＋ 書きかけ {a.Orphans} 件を残した）" : ""));
-            WriteBackNote(a.WrittenBack, "Skills.cs");
-            Console.WriteLine($"  {SpeciesFile} … 種族 {SpeciesTable.All.Count} 件"
+            WriteBackNote(log, a.WrittenBack, "Skills.cs");
+            log.WriteLine($"  {SpeciesFile} … 種族 {SpeciesTable.All.Count} 件"
                 + (b.Orphans > 0 ? $"（＋ 書きかけ {b.Orphans} 件を残した）" : ""));
-            WriteBackNote(b.WrittenBack, "Species.cs");
-            Console.WriteLine($"  {TraitFile}   … 特性 {Traits.All.Count} 件"
+            WriteBackNote(log, b.WrittenBack, "Species.cs");
+            log.WriteLine($"  {TraitFile}   … 特性 {Traits.All.Count} 件"
                 + (c.Orphans > 0 ? $"（＋ 書きかけ {c.Orphans} 件を残した）" : ""));
-            WriteBackNote(c.WrittenBack, "Trait.cs");
+            WriteBackNote(log, c.WrittenBack, "Trait.cs");
         }
 
         /// <summary>「帳面に無かった id を実装から書き戻した」ことを言う。
@@ -159,10 +173,10 @@ namespace EggCommand.Sim
         /// ⚠️ 件数だけ出しても作り手は次に何をすればよいか分からないので、
         /// なぜそうなるか（実装が正）・どうすれば消えるか（どの表を直すか）まで添える
         /// （2026-08-23、「帳面から消したのに戻ってくる」と誤解された監査より）。</summary>
-        private static void WriteBackNote(int writtenBack, string implFile)
+        private static void WriteBackNote(TextWriter log, int writtenBack, string implFile)
         {
             if (writtenBack == 0) return;
-            Console.WriteLine($"    ⚠️ 帳面に無かった {writtenBack} 件を実装から書き戻しました"
+            log.WriteLine($"    ⚠️ 帳面に無かった {writtenBack} 件を実装から書き戻しました"
                 + $"（実装が正 ── 消すなら {implFile} から）");
         }
 
@@ -497,7 +511,7 @@ namespace EggCommand.Sim
             md.Append("//\n");
             md.Append("// 効果の書き方 ── 種類のあとに「札:値」を好きな順で:\n");
             md.Append($"//   {KindDamage}    威力:{Join<PowerTier>(Skills.LabelOf)}"
-                + $"  依存:{Join<DamageScale>(Skills.LabelOf)}  発数:N  防御無視\n");
+                + $"  依存:{Join<DamageScale>(Skills.LabelOf)}  発数:N  防御無視  強化無視\n");
             md.Append($"//   {KindBuffUp}/{KindBuffDown}  ステ:攻撃力|防御力|スピード  ターン:N  確率:N\n");
             md.Append("//   毒/リジェネ  スタック:N  ターン:N  確率:N\n");
             md.Append("//   HP割合/蘇生  割合:±N  確率:N"
@@ -653,6 +667,8 @@ namespace EggCommand.Sim
                       .Append(" 依存:").Append(Skills.LabelOf(e.Scale));
                     if (e.Repeat > 1) sb.Append(" 発数:").Append(e.Repeat);
                     if (e.Pierce) sb.Append(" 防御無視");
+                    // ⭐ 2026-08-27。⚠️ 防御無視と別の札（素の硬さ／掛けた札）
+                    if (e.Bare) sb.Append(" 強化無視");
                     // ⚠️ **ここで return しない。**していた頃、ダメージの行だけ
                     //    飛び先・条件・数えが書き落とされ、読み返すと別の技になっていた
                     break;
@@ -693,6 +709,11 @@ namespace EggCommand.Sim
                 case EffectKind.Stun:
                 case EffectKind.Sleep:
                 case EffectKind.Block:
+                case EffectKind.Seal:
+                case EffectKind.Anchor:
+                case EffectKind.Invincible:
+                case EffectKind.Extend:
+                case EffectKind.Counter:
                 case EffectKind.Guts:
                 case EffectKind.Immune:
                     sb.Append(WordOf(e.Kind)).Append(" ターン:").Append(e.Turns);
@@ -719,7 +740,7 @@ namespace EggCommand.Sim
 
         /// <summary>帳面での条件の語。⚠️ 画面の言い回し（<see cref="SkillText"/>）とは別 ──
         /// ⭐ 帳面は**短い札**で書く（1行に収める）。</summary>
-        private static string WordOfWhen(SkillWhen when)
+        public static string WordOfWhen(SkillWhen when)
         {
             switch (when)
             {
@@ -742,7 +763,7 @@ namespace EggCommand.Sim
             return false;
         }
 
-        private static string WordOfTally(Tally per)
+        public static string WordOfTally(Tally per)
         {
             switch (per)
             {
@@ -903,7 +924,7 @@ namespace EggCommand.Sim
         /// <summary>自由記述を含む技の id。⭐ 手ぶんに「数えていない」と添えるため。</summary>
         private static readonly HashSet<string> Freeform = new();
 
-        private static void Check()
+        private static void Check(TextWriter log)
         {
             Freeform.Clear();
             var n = new Notes();
@@ -911,27 +932,27 @@ namespace EggCommand.Sim
             var species = ReadSpecies(n, skills);
             var traits = ReadTraits(n);
 
-            Console.WriteLine();
-            Console.WriteLine($"■ 帳面の検査（技 {skills.Count} / 種族 {species.Count} / 特性 {traits} 件）");
+            log.WriteLine();
+            log.WriteLine($"■ 帳面の検査（技 {skills.Count} / 種族 {species.Count} / 特性 {traits} 件）");
 
             if (n.Stop.Count == 0 && n.Say.Count == 0 && n.Todo.Count == 0)
             {
-                Console.WriteLine("  ⭐ 問題なし");
+                log.WriteLine("  ⭐ 問題なし");
             }
             if (n.Stop.Count > 0)
             {
-                Console.WriteLine($"  🚧 そのままでは実装にできない（{n.Stop.Count} 件）");
-                foreach (var p in n.Stop) Console.WriteLine("    ⚠️ " + p);
+                log.WriteLine($"  🚧 そのままでは実装にできない（{n.Stop.Count} 件）");
+                foreach (var p in n.Stop) log.WriteLine("    ⚠️ " + p);
             }
             if (n.Todo.Count > 0)
             {
-                Console.WriteLine($"  ✍️ 実装が要る（{n.Todo.Count} 件）── **書いてよい。まだ動かないだけ**");
-                foreach (var p in n.Todo) Console.WriteLine("    ・" + p);
+                log.WriteLine($"  ✍️ 実装が要る（{n.Todo.Count} 件）── **書いてよい。まだ動かないだけ**");
+                foreach (var p in n.Todo) log.WriteLine("    ・" + p);
             }
             if (n.Say.Count > 0)
             {
-                Console.WriteLine($"  ⚠️ 気になること（{n.Say.Count} 件）── **止めはしない**");
-                foreach (var p in n.Say) Console.WriteLine("    ・" + p);
+                log.WriteLine($"  ⚠️ 気になること（{n.Say.Count} 件）── **止めはしない**");
+                foreach (var p in n.Say) log.WriteLine("    ・" + p);
             }
 
             // ⭐ **貼ったらどうなるかを、貼る前に言う。**
@@ -941,8 +962,8 @@ namespace EggCommand.Sim
             Preflight(skills, species, n);
             if (n.Fatal.Count > 0)
             {
-                Console.WriteLine($"  ⛔ このまま貼ると**起動時の検査が落ちます**（{n.Fatal.Count} 件）");
-                foreach (var p in n.Fatal) Console.WriteLine("    ・" + p);
+                log.WriteLine($"  ⛔ このまま貼ると**起動時の検査が落ちます**（{n.Fatal.Count} 件）");
+                foreach (var p in n.Fatal) log.WriteLine("    ・" + p);
             }
 
             // ⚠️ **消えた1件を言う。**帳面から消しても実装からは消えないので、
@@ -962,16 +983,16 @@ namespace EggCommand.Sim
             }
             if (gone.Count > 0)
             {
-                Console.WriteLine($"  🗑 帳面から消えているもの（{gone.Count} 件）"
+                log.WriteLine($"  🗑 帳面から消えているもの（{gone.Count} 件）"
                     + "── **実装からは消えません。**表から手で消してください");
-                foreach (var p in gone) Console.WriteLine("    ・" + p);
+                foreach (var p in gone) log.WriteLine("    ・" + p);
             }
 
             if (newSkills.Count > 0)
             {
                 // ⭐ **強すぎ・弱すぎは読んで分かるように数で出す**（作者方針 2026-08-19）。
                 //    ⚠️ 勝率ではなく算数。1.0 ＝ 枠1 で殴るのと同じ値打ち。
-                Console.WriteLine();
+                log.WriteLine();
                 // ⚠️ **固定のしきい値で叱らない。**「2.5 を超えたら強すぎ」と決め打ちしたら、
                 //    いま在る全体強攻撃（4.00）が毎回引っかかった。
                 // ⭐ 比べる相手は**いま在る技の帯**にする。外に出たときだけ言う。
@@ -979,23 +1000,23 @@ namespace EggCommand.Sim
                 string loName = "", hiName = "";
                 foreach (var m in Skills.All)
                 {
-                    double v = Program.TurnValueOf(m, out _);
+                    double v = SkillValues.Of(m, out _);
                     if (v < lo) { lo = v; loName = m.Name; }
                     if (v > hi) { hi = v; hiName = m.Name; }
                 }
-                Console.WriteLine("■ 実装に無い技の手ぶん（`sim turnvalue` と同じ算数）");
-                Console.WriteLine("  ⭐ 1.0 が「枠1 で殴るのと同じ」");
-                Console.WriteLine($"  ⭐ いま在る57技の帯: {lo:0.00}（{loName}）〜 {hi:0.00}（{hiName}）");
-                Console.WriteLine("  ⚠️ この帯の外に出たものだけ印を付けます");
+                log.WriteLine("■ 実装に無い技の手ぶん（`sim turnvalue` と同じ算数）");
+                log.WriteLine("  ⭐ 1.0 が「枠1 で殴るのと同じ」");
+                log.WriteLine($"  ⭐ いま在る57技の帯: {lo:0.00}（{loName}）〜 {hi:0.00}（{hiName}）");
+                log.WriteLine("  ⚠️ この帯の外に出たものだけ印を付けます");
                 foreach (var s in newSkills)
                 {
-                    double v = Program.TurnValueOf(s, out string why);
-                    string mark = v > hi ? $" 🚧 いまの最強（{hi:0.00}）より上" 
+                    double v = SkillValues.Of(s, out string why);
+                    string mark = v > hi ? $" 🚧 いまの最強（{hi:0.00}）より上"
                         : v < lo ? $" 🚧 いまの最弱（{lo:0.00}）より下" : "";
                     // ⚠️ **自由記述ぶんは数えていないと言う。**言わないと、
                     //    文章で足した強さが数字に出ていないことに気づけない。
                     if (Freeform.Contains(s.Id)) mark += " ✍️ 自由記述ぶんは数えていません";
-                    Console.WriteLine($"  {s.Name,-14}{v,6:0.00} 手ぶん  CT{s.Ct}  {why}{mark}");
+                    log.WriteLine($"  {s.Name,-14}{v,6:0.00} 手ぶん  CT{s.Ct}  {why}{mark}");
                 }
             }
         }
@@ -1309,10 +1330,11 @@ namespace EggCommand.Sim
 
             // 札を拾う
             var tags = new Dictionary<string, string>();
-            bool pierce = false;
+            bool pierce = false, bare = false;
             for (int i = 1; i < parts.Length; i++)
             {
                 if (parts[i] == "防御無視") { pierce = true; continue; }
+                if (parts[i] == "強化無視") { bare = true; continue; }
                 int c = parts[i].IndexOf(':');
                 if (c < 0) { problems.Add($"{at}: 「{parts[i]}」は「札:値」の形で書く"); return false; }
                 tags[parts[i].Substring(0, c)] = parts[i].Substring(c + 1);
@@ -1392,7 +1414,7 @@ namespace EggCommand.Sim
                     tags.TryGetValue("依存", out var d);
                     if (!Skills.TryScale(d ?? Skills.LabelOf(DamageScale.Atk), out var scale))
                     { problems.Add($"{at}: 依存は 攻撃/防御/スピード（{d}）"); return false; }
-                    made = Effect.Damage(tier, scale, Num("発数", 1), pierce);
+                    made = Effect.Damage(tier, scale, Num("発数", 1), pierce, bare);
                     return true;
                 }
                 case EffectKind.Buff when word == KindInnate:
@@ -1444,6 +1466,16 @@ namespace EggCommand.Sim
                     made = Effect.Sleep(Num("ターン", 2), chance); return true;
                 case EffectKind.Block:
                     made = Effect.Block(Num("ターン", 2), chance); return true;
+                case EffectKind.Seal:
+                    made = Effect.Seal(Num("ターン", 2), chance); return true;
+                case EffectKind.Anchor:
+                    made = Effect.Anchor(Num("ターン", 3), chance); return true;
+                case EffectKind.Invincible:
+                    made = Effect.Invincible(Num("ターン", 1)); return true;
+                case EffectKind.Extend:
+                    made = Effect.Extend(Num("ターン", 2), chance); return true;
+                case EffectKind.Counter:
+                    made = Effect.Counter(Num("ターン", 3)); return true;
                 case EffectKind.Guts:
                     made = Effect.Guts(Num("ターン", 3), chance); return true;
                 case EffectKind.Immune:
@@ -1765,7 +1797,7 @@ namespace EggCommand.Sim
 
         // ══ C# を出す ═══════════════════════════════════
 
-        private static void Code()
+        private static void Code(TextWriter log)
         {
             var n = new Notes();
             var skills = ReadSkills(n, out _);
@@ -1773,17 +1805,17 @@ namespace EggCommand.Sim
             ReadTraits(n);
             if (n.Stop.Count > 0)
             {
-                Console.WriteLine("🚧 そのままでは実装にできない書き方があるので C# は出しません。");
-                Console.WriteLine("   `sim sheet check` を見てください。");
+                log.WriteLine("🚧 そのままでは実装にできない書き方があるので C# は出しません。");
+                log.WriteLine("   `sim sheet check` を見てください。");
                 return;
             }
             // ⚠️ **「気になること」では止めない。**決めるのは作り手（作者の指示 2026-08-19）。
             if (n.Say.Count > 0)
-                Console.WriteLine($"// ⚠️ 気になることが {n.Say.Count} 件あります（check で読めます）");
+                log.WriteLine($"// ⚠️ 気になることが {n.Say.Count} 件あります（check で読めます）");
             if (n.Todo.Count > 0)
             {
-                Console.WriteLine($"// ✍️ 手で書く必要があるものが {n.Todo.Count} 件:");
-                foreach (var t in n.Todo) Console.WriteLine("//    ・" + t);
+                log.WriteLine($"// ✍️ 手で書く必要があるものが {n.Todo.Count} 件:");
+                foreach (var t in n.Todo) log.WriteLine("//    ・" + t);
             }
 
             var newSkills = new List<Skill>();
@@ -1793,24 +1825,24 @@ namespace EggCommand.Sim
 
             if (newSkills.Count == 0 && newSpecies.Count == 0)
             {
-                Console.WriteLine("⭐ 帳面と実装は同じです。貼るものはありません。");
+                log.WriteLine("⭐ 帳面と実装は同じです。貼るものはありません。");
                 return;
             }
 
             if (newSkills.Count > 0)
             {
-                Console.WriteLine();
-                Console.WriteLine($"// ══ Skills.cs の List に入れる（{newSkills.Count} 件）══");
-                foreach (var s in newSkills) Console.WriteLine(CodeOf(s));
+                log.WriteLine();
+                log.WriteLine($"// ══ Skills.cs の List に入れる（{newSkills.Count} 件）══");
+                foreach (var s in newSkills) log.WriteLine(CodeOf(s));
             }
             if (newSpecies.Count > 0)
             {
-                Console.WriteLine();
-                Console.WriteLine($"// ══ Species.cs に入れる（{newSpecies.Count} 件）══");
-                foreach (var sp in newSpecies) Console.WriteLine(CodeOf(sp));
+                log.WriteLine();
+                log.WriteLine($"// ══ Species.cs に入れる（{newSpecies.Count} 件）══");
+                foreach (var sp in newSpecies) log.WriteLine(CodeOf(sp));
             }
-            Console.WriteLine();
-            Console.WriteLine("// ⚠️ 貼ったら `dotnet test` を通し、`sim wiki` で一覧を作り直すこと。");
+            log.WriteLine();
+            log.WriteLine("// ⚠️ 貼ったら `dotnet test` を通し、`sim wiki` で一覧を作り直すこと。");
         }
 
         /// <summary>実装の同じ id と**一字一句同じか**。⭐ 違えば「貼るもの」。</summary>
@@ -1912,6 +1944,7 @@ namespace EggCommand.Sim
                     var sb = new StringBuilder($"Effect.Damage(PowerTier.{e.Power}, DamageScale.{e.Scale}");
                     if (e.Repeat > 1 || e.Pierce) sb.Append($", {e.Repeat}");
                     if (e.Pierce) sb.Append(", pierce: true");
+                    if (e.Bare) sb.Append(e.Pierce ? ", bare: true" : ", bare: true");
                     return sb.Append(')').ToString();
                 }
                 case EffectKind.Buff when e.Innate:
@@ -1928,6 +1961,11 @@ namespace EggCommand.Sim
                 case EffectKind.Stun: return $"Effect.Stun({e.Turns}{chance})";
                 case EffectKind.Sleep: return $"Effect.Sleep({e.Turns}{chance})";
                 case EffectKind.Block: return $"Effect.Block({e.Turns}{chance})";
+                case EffectKind.Seal: return $"Effect.Seal({e.Turns}{chance})";
+                case EffectKind.Anchor: return $"Effect.Anchor({e.Turns}{chance})";
+                case EffectKind.Invincible: return $"Effect.Invincible({e.Turns})";
+                case EffectKind.Extend: return $"Effect.Extend({e.Turns}{chance})";
+                case EffectKind.Counter: return $"Effect.Counter({e.Turns})";
                 case EffectKind.Guts: return $"Effect.Guts({e.Turns}{chance})";
                 case EffectKind.Immune: return $"Effect.Immune({e.Turns}{chance})";
                 case EffectKind.Ct: return $"Effect.Ct({e.Delta}{chance})";

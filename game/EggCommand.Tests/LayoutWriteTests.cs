@@ -48,10 +48,12 @@ public class LayoutWriteTests
         Assert.Equal(original, written);
     }
 
-    // ── #4 コメント・空行がそのまま残る（dice.txt: 19行中17行がコメント）──
+    // ── #4 コメント・空行がそのまま残る（dice.txt: 27行中24行がコメント）──
+    // ⚠️ 数は `assets/layouts/dice.txt` の実測 ── 骨組みに註を足したら**ここも直す**
+    //    （2026-08-28 にさいころを立体にしたとき 17 → 24 になった）。
 
     [Fact]
-    public void diceのコメントは17行とも1バイトも変わらない()
+    public void diceのコメントは24行とも1バイトも変わらない()
     {
         string path = Path.Combine(Dir, "dice.txt");
         string original = File.ReadAllText(path);
@@ -59,7 +61,7 @@ public class LayoutWriteTests
         string written = Layouts.Write(layout);
 
         // ⭐ 全体が戻ることは #1 で見ている。ここは「コメントである」ことを
-        //    明示的に数えて確かめる ── 17行という数そのものが、この検査の的。
+        //    明示的に数えて確かめる ── 24行という数そのものが、この検査の的。
         string[] originalLines = original.Replace("\r\n", "\n").Split('\n');
         string[] writtenLines = written.Replace("\r\n", "\n").Split('\n');
         Assert.Equal(originalLines.Length, writtenLines.Length);
@@ -73,7 +75,7 @@ public class LayoutWriteTests
                 Assert.Equal(originalLines[i], writtenLines[i]);
             }
         }
-        Assert.Equal(17, comments);
+        Assert.Equal(24, comments);
     }
 
     // ── #2 空回りしていないことの証明（節点の数を1つ変える）────

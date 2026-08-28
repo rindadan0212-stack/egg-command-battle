@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using EggCommand.Core;
 using Xunit;
@@ -50,7 +51,12 @@ public class StatAccuracyTests
     {
         var (_, me, foe) = Pair(acc, 0, 0, foeRes);
         var weak = Effect.Buff(StatKey.Atk, -1, 3, chance: 50);
-        Assert.Equal(50 + GapOf(me, foe), Battle.LandChanceOf(weak, me, foe));
+        // ⚠️ 🔴 **帯で丸めてから比べる**（2026-08-26）。命中/耐性を人の読める桁へ
+        //    引き直し（`Stats.DebuffScale`）、割る数を 1 にしたので、差がそのまま
+        //    %ポイントになる ── 30 も振れば 50+30 で天井、逆なら床に着く。
+        //    ⭐ 検査したい性質は「差が乗ること」なので、丸めた上で比べれば壊れない。
+        int want = Math.Clamp(50 + GapOf(me, foe), Battle.LandFloor, Battle.LandCeil);
+        Assert.Equal(want, Battle.LandChanceOf(weak, me, foe));
     }
 
     /// <summary>⭐ 素質を積んだぶんは、そのまま差に乗る（動かないと育てる意味が無い）。</summary>

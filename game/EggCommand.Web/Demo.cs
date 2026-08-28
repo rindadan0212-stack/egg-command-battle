@@ -30,7 +30,8 @@ public static class Demo
     /// | 4体の素質 | <see cref="Stats.WildStatMaxFor"/>(21) ＝ 60（<see cref="Stats.GenerationCapSteps"/>
     /// ＝20 を使い切る世代21が、素質の天井が動く最後の世代） |
     /// | 育成 | <see cref="Creatures.TrainMax"/> ＝ 20（満タン） |
-    /// | 技レベル | <see cref="SkillCosts.TotalFor"/>(<see cref="Skills.MaxLevel"/>) ＝ 120pt（Lv5） |
+    /// | 技レベル | <see cref="SkillCosts.TotalFor"/>(<see cref="Skills.MaxLevelOf"/>(技))。
+    /// ⚠️ 上限は技ごと（多くは Lv5＝120pt、味方に配る持続ものだけの技は Lv1〜3） |
     /// | 試練 | <see cref="Core.Trials"/>.All.Count ＝ 5（全段クリア済み） |
     /// | 溜まった EXP | ⚠️ **上限が規則から読めなかった**（<see cref="IdleRun.Exp"/> は放置と
     /// 分解で際限なく増える）。目安として「満タン個体50体を分解した額」
@@ -112,10 +113,16 @@ public static class Demo
         Creatures.Grow(creature, Creatures.TrainMax);
 
         // ⭐ 技レベル。⚠️ 枠0はわざと Lv4 止まり（SkillCosts.TotalFor(4)）にして、
-        //    「まだ鍛えられる」場面（/train の伸びしろ表示）も残す。枠1・2は Lv5満タン。
+        //    「まだ鍛えられる」場面（/train の伸びしろ表示）も残す。枠1・2はそれぞれの技の上限まで満タン。
+        // ⚠️ 🔴 上限は技ごと（Skills.MaxLevelOf）。2026-08-27 まではどの技もグローバルな
+        //    Skills.MaxLevel（5）を決め打ちしていたため、上限が縮んだ技（味方に配る持続もの）が
+        //    枠2・3 に来ると「Lv5満タン」のつもりが実際は Lv1〜3 止まりで出ていた
+        //    （例: hirabe の枠3＝immune-long は Lv3 止まり。⚠️ 具体的な段数は技の中身が
+        //    変わると動く数字なので id 名を頼りに読まない ── ここで見るべきは
+        //    「技ごとに違いうる」という構造そのもの）。
         creature.SkillPoints[0] = SkillCosts.TotalFor(Skills.MaxLevel - 1);
-        creature.SkillPoints[1] = SkillCosts.TotalFor(Skills.MaxLevel);
-        creature.SkillPoints[2] = SkillCosts.TotalFor(Skills.MaxLevel);
+        creature.SkillPoints[1] = SkillCosts.TotalFor(Skills.MaxLevelOf(Skills.ById(creature.Skill2!)));
+        creature.SkillPoints[2] = SkillCosts.TotalFor(Skills.MaxLevelOf(Skills.ById(creature.Skill3!)));
 
         return creature;
     }
@@ -172,14 +179,26 @@ public static class Demo
 
     /// <summary>卵をいくつか温めている状態を作る。
     /// ⚠️ 入れる前に**棚へ載せる** ── `Hatchery.Begin` は棚から取る作り。
-    /// ⭐ 始めた時刻をずらして、進み具合の違う枠を並べる（帯を見るため）。</summary>
+    /// ⭐ 始めた時刻をずらして、進み具合の違う枠を並べる（残り時間を見るため）。
+    ///
+    /// 🔴 **★は枠ごとに 1,2,3,4,5 と変える**（2026-08-27）。⚠️ 前は巣（shallow-scale）
+    /// 任せで、実際には**5枠とも★1**しか出ていなかった ── 巣の星はレア度の数だけ出る作りなので、
+    /// それだと**この画面は星の変化を一度も見せない**（検査でも目でも捕まらない）。
+    /// ⭐ 見るための画面なので、見るべきものが全部出る状態にする。</summary>
     public static void Incubate(Game game, long now, int howMany)
     {
-        var nest = Nests.ById("shallow-scale");
+        var home = Nests.ById("shallow-scale");
         int want = Math.Clamp(howMany, 0, Hatchery.Slots);
         for (int i = 0; i < want; i++)
         {
+            // 🔴 **種族も枠ごとに変える**（2026-08-27）。⚠️ 実在の巣は3種しか産まないので
+            //    （`Nests.All` は tamaru/tsunoga/haneru）、巣任せだと**5枠とも同じ柄**になり、
+            //    この画面は「たまごが種族ごとに違う」ことを一度も見せない。
+            //    ⭐ 見るための画面なので、種族表から順に借りて仮の巣を組む。
+            var species = SpeciesTable.All[i % SpeciesTable.All.Count];
+            var nest = new Nest(home.Id, home.Name, species.Id, home.Tier);
             var egg = Nests.MakeEgg(game.RngEgg, nest, EggOrigin.Defeated, ++game.Serial,
+                rarity: Rarities.Clamp(i + 1),
                 element: SpeciesTable.Roll(game.RngElement));
             game.Eggs.Add(egg);
             Hatchery.Begin(game, egg.Id, now - i * 1200);
@@ -229,20 +248,20 @@ public static class Demo
         if (ally != null)
         {
             // atk-up / def-up / spd-up ── 3本とも別ステなので同時に乗る
-            ally.Status.Atk = new Modifier { Percent = Skills.BuffPercent, Turns = 3 };
-            ally.Status.Def = new Modifier { Percent = Skills.BuffPercent, Turns = 3 };
-            ally.Status.Spd = new Modifier { Percent = Skills.BuffPercent, Turns = 3 };
+            ally.Status.Atk = new Modifier { Percent = Skills.BuffPercentOf(StatKey.Atk), Turns = 3 };
+            ally.Status.Def = new Modifier { Percent = Skills.BuffPercentOf(StatKey.Def), Turns = 3 };
+            ally.Status.Spd = new Modifier { Percent = Skills.BuffPercentOf(StatKey.Spd), Turns = 3 };
             ally.Status.Shield = 4;                                   // shield-wall
             ally.Status.Regen = new Stacking { Stacks = 2, Turns = 4 }; // regen-heavy
-            ally.Status.Guts = 6;                                     // guts-deep
-            ally.Status.Immune = 6;                                   // immune-long
+            ally.Status.Guts = 4;                                     // guts-deep（2026-08-27 作り直しで 6→4）
+            ally.Status.Immune = 4;                                   // immune-long（同上）
         }
         if (foe != null)
         {
             // atk-down 系 / crush / slow-all ── これも3本とも別ステ
-            foe.Status.Atk = new Modifier { Percent = -Skills.BuffPercent, Turns = 3 };
-            foe.Status.Def = new Modifier { Percent = -Skills.BuffPercent, Turns = 3 };
-            foe.Status.Spd = new Modifier { Percent = -Skills.BuffPercent, Turns = 3 };
+            foe.Status.Atk = new Modifier { Percent = -Skills.BuffPercentOf(StatKey.Atk), Turns = 3 };
+            foe.Status.Def = new Modifier { Percent = -Skills.BuffPercentOf(StatKey.Def), Turns = 3 };
+            foe.Status.Spd = new Modifier { Percent = -Skills.BuffPercentOf(StatKey.Spd), Turns = 3 };
             foe.Status.Poison = new Stacking { Stacks = 2, Turns = 4 }; // venom-heavy
             foe.Status.Stun = 2;                                      // stun-heavy
             foe.Status.Taunt = 5;                                     // taunt-long

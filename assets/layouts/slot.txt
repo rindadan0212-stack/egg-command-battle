@@ -1,19 +1,27 @@
-# 孵化器の1枠 ── ⭐ **部品**（器は 300x380）
+# 孵化器の1つの巣 ── ⭐ **部品**（器は 304x376 ＝ 76x94 ドット）
 #
-# ⚠️ 枠の絵（`paint`）は差し込む側（`home.txt` の `slot` 行・`pic=slot-frame`）が持つ
-#    ── slot.txt 自身には枠の絵は無い（唯一の出所が二重にならないように）。
-# ⭐ 2026-08-25 ドット絵化 段取り4: `art` を 168×168 → **256×256**（64ドット×4）にした。
-#    ⚠️ 「絵は拡大縮小しない」規則により、種族の絵（64×64ドット）は必ずこの大きさで置く
-#    （計画 §2/§5）。⚠️ 枠（300×380）に収めるため、下の字4つの高さを詰め直した
-#    （字は枠より高く描いても切れない ── `stage.css` の `.n.label` に overflow:hidden は無い）。
+# ⭐ **数は作者のドット絵「ホーム画面」の実測**（2026-08-27・`assets/ui/home-src/`）。
+#    巣は5つとも同じ絵で、位置だけが違ったので、絵は1枚に畳んである
+#    （`nest-back` / `nest-egg` / `nest-front` / `nest-empty` / `nest-star` / `nest-timer`）。
+#
+# ⚠️ **重ねる順がこの部品の肝。**⭐ 下から 巣の奥 → たまご → 巣の手前 で、
+#    たまごが巣の「中に座って」見える。⚠️ 順を入れ替えると、たまごが巣の上に
+#    乗っているように見える（作者のモックのレイヤー順そのまま）。
+#
+# ⚠️ **星はここに書けない。**⭐ 出す数がレア度で変わり、中央揃えなので
+#    左端が数ごとに動く（★1は112、★5は0）── 位置が実行時に決まるものは
+#    骨組みに書き出せないので、`Incubator.cs` が描く（`Board` のマスと同じ理由）。
 #
 #  名前   種類    左   上    幅   高    付け足し
-empty    label   0    168   300  44    size=40 ink=faint anchor=center when=!full text=からっぽ
-ready    round   44   16    212  212   when=ready bind=ready
-art      pixel   20   4     256  256   when=full bind=art
-stars    label   0    260   300  28    size=40 ink=accent anchor=upper-center when=full bind=stars
-track    bar     32   292   240  16    when=full bind=track
-clock    label   0    312   300  32    size=40 anchor=upper-center when=full bind=clock
-# ⭐ **何を温めているか。**⚠️ ★と時計は「どれくらい」しか言わないので、
-#    これが無いと**何が孵るのか**を言う字が画面に1つも無い（2026-08-22）。
-who      label   0    348   300  28    size=40 ink=dim anchor=center when=full bind=who
+back     paint   20   92    272  176   pic=nest-back
+# ⭐ 中身は「入っている」か「空」かのどちらか一方（`when=` で入れ替わる）
+# ⭐ **たまごの柄は種族ごと**（`egg-<種族>` ── 意匠は `Core.EggSkins`、焼くのは `sim egg-art`）。
+#    ⚠️ `pic=` は**取りこぼしたときの受け皿**として残す ── 描く側が名前を返せなかったとき、
+#    「？」ではなく原画のたまごが出る。
+egg      paint   64   4     176  220   when=full bind=egg pic=nest-egg
+empty    paint   60   0     184  228   when=!full pic=nest-empty
+front    paint   40   180   220  88    pic=nest-front
+# ⭐ 残り時間。⚠️ 帯（`bar`）はやめた ── 作者の絵が「時計＋文字」の形で、
+#    そこへ伸び縮みする帯を重ねると字が読めなくなる。数字が進み具合を言う。
+timer    paint   16   296   252  80    when=full pic=nest-timer
+clock    label   92   304   164  64    size=40 anchor=center when=full bind=clock

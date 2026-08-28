@@ -25,6 +25,15 @@ namespace EggCommand.Core
         /// <summary>戦闘で得た育成ポイントの総数（振った分 + 未使用）。</summary>
         public int Earned;
 
+        /// <summary>🔴 **どのステに何点振ったか**（2026-08-26・ARK式の自由配分）。
+        ///
+        /// ⭐ <see cref="Trained"/> は**ここから導出する**（第2の出所を作らない）。
+        /// ⚠️ **振り直しはできない**（作者の決定）── 一度振った点は戻せない。
+        /// ⭐ ただし**配合すると子は 0 から**なので、血統を進めれば振り直しの機会になる。
+        /// ⚠️ 合計は <see cref="Earned"/> を超えない。余りが「未使用ポイント」
+        /// （<see cref="Creatures.UnspentOf"/>）。</summary>
+        public StatBlock Points;
+
         /// <summary>変異カウンタ。⚠️ 両親とも20以上だと子に変異が出ない（無限強化のブレーキ）。</summary>
         public readonly int MutationCounter;
 
@@ -82,11 +91,24 @@ namespace EggCommand.Core
         /// ⚠️ 個体の中でここと <see cref="Trained"/>・<see cref="Earned"/> だけが書き換わる。</summary>
         public readonly int[] SkillPoints = new int[3];
 
+        /// <param name="points">⭐ 🔴 2026-08-27（監査で発覚）: 元は引数に無く、<see cref="Points"/> が
+        /// 既定値 <c>(0,0,0,0)</c> のまま残っていた ── <see cref="Snapshot"/> が構築後に
+        /// 手で補って回避していた（`made.Points = points;`）が、<see cref="Creatures.WithElement"/>
+        /// はそれを忘れて地雷のまま残っていた。⭐ この型自身が「第2の出所を作らない」と
+        /// 随所に書いているので、`Points` だけ例外にしない ── ここへ足すのが素直。
+        /// ⚠️ **既定値 <c>default</c>（＝全ステ0）にしてあるのは、他の頁を同時に書き換えている
+        /// 者がいて、その呼び出し（`new Creature(...)`）を編集できない制約があったため。**
+        /// 省略した呼び出しは今までどおり `Trained` も `(0,0,0,0)` で作っている箇所ばかりで、
+        /// その場合は既定値のままで挙動は変わらない。⚠️ **ただし「振った点を反映した
+        /// `Trained` を渡すのに `points` を省略する」呼び出しを新しく足さないこと** ──
+        /// それをやると `UnspentOf` が「まだ全部余っている」と嘘をつき、同じ点を
+        /// 二度振れる（<see cref="Snapshot"/> が一度踏んだのと同じ事故）。</param>
         public Creature(string id, string speciesId, StatBlock wild, StatBlock trained, int earned,
             int mutationCounter, string? skill2, string? skill3, int paletteIndex,
             string? parentA, string? parentB, int generation,
             StatKey? strong = null, StatKey? weak = null, Element? element = null,
-            string? traitId = null, StatKey? best = null, StatKey? worst = null)
+            string? traitId = null, StatKey? best = null, StatKey? worst = null,
+            StatBlock points = default)
         {
             TraitId = traitId;
             Strong = strong;
@@ -100,6 +122,7 @@ namespace EggCommand.Core
             SpeciesId = speciesId;
             Wild = wild;
             Trained = trained;
+            Points = points;
             Earned = earned;
             MutationCounter = mutationCounter;
             Skill2 = skill2;
@@ -119,7 +142,9 @@ namespace EggCommand.Core
         /// 「連れ出す」ことが育成に直結するので、強い個体を使うほど伸びる。
         /// ⚠️ 上限があるので「時間さえかければ素質差を埋められる」にはならない
         /// （素質＝厳選の成果が勝敗を決める、という軸を守るため）。</summary>
-        public const int TrainMax = 20;
+        /// 🔴 **2026-08-26 に 20 → 50**（作者の決定）。⭐ 6ステへ自由に配るので、
+        /// 1ステに寄せれば旧来（全ステに20Lv）より遥かに尖り、均等に散らせば薄くなる。
+        public const int TrainMax = 50;
 
         public static Species SpeciesOf(Creature creature) => SpeciesTable.ById(creature.SpeciesId);
 
@@ -178,8 +203,11 @@ namespace EggCommand.Core
             switch (key)
             {
                 // ⚠️ 実値の単位。野生レベル1点ぶん（＝ Stats.Scale）に揃える
+                // 🔴 **2026-08-26 に Stats.Scale(5) → 1。**⭐ 命中/耐性は `Stats.DebuffScale`
+                //    の目盛り（0〜150）なので、育成も1点=+1 でないと桁が合わない
+                //    （50点振って +50 ＝ 素質100 の個体が 150 に届く、という設計）。
                 case StatKey.Acc:
-                case StatKey.Res: return Stats.Scale;
+                case StatKey.Res: return 1;
                 default: return 0;
             }
         }
@@ -195,6 +223,96 @@ namespace EggCommand.Core
         /// ⚠️ 足し込みで持たない。1レベルぶんを毎回丸めて足すと誤差が積もり、
         /// 同じ素質・同じ Lv の個体でも数が食い違う。⭐ 毎回ゼロから作り直す。
         /// ⭐ 一意に決まるので、古い保存も読むときに作り直せる（<c>Snapshot</c>）。</summary>
+        /// <summary>🔴 **振った点から育成ぶんを作る**（2026-08-26・ARK式）。
+        /// ⭐ ステごとに**そのステへ振った点数**で伸びる。⚠️ 伸び方（割合／平ら）は
+        /// <see cref="GrowthPermilOf"/>・<see cref="GrowthFlatOf"/> のまま動かしていない
+        /// ── 変えるとステ間の1点の価値が揃わなくなる（2026-08-19 に実測で揃えた）。</summary>
+        public static StatBlock TrainedFor(string speciesId, StatBlock wild, StatBlock points)
+        {
+            var born = BornStatsOf(speciesId, wild);
+            var made = new StatBlock(0, 0, 0, 0);
+            foreach (var key in Stats.Keys)
+            {
+                int n = points[key];
+                if (n <= 0) continue;
+                double grown = (double)born[key] * GrowthPermilOf(key) * n / 1000.0
+                    + GrowthFlatOf(key) * n;
+                made = made.With(key, (int)Math.Floor(grown + 0.5));
+            }
+            return made;
+        }
+
+        /// <summary>未使用の点。⚠️ 振った合計が <see cref="Creature.Earned"/> を超えることは無い。</summary>
+        public static int UnspentOf(Creature creature) =>
+            creature.Earned - Stats.TotalOf(creature.Points);
+
+        /// <summary>🔴 **振る。**⭐ 振り直しはできない（作者の決定）。
+        /// ⚠️ 未使用より多くは振れない。実際に振れた点数を返す。</summary>
+        public static int Spend(Creature creature, StatKey key, int amount)
+        {
+            if (amount <= 0) return 0;
+            int room = UnspentOf(creature);
+            if (room <= 0) return 0;
+            int n = amount > room ? room : amount;
+            creature.Points = creature.Points.With(key, creature.Points[key] + n);
+            creature.Trained = TrainedFor(creature.SpeciesId, creature.Wild, creature.Points);
+            return n;
+        }
+
+        /// <summary>⭐ **自動で振る**（NPC 用 ── 巣の守り手・ヌシ・試練の相手）。
+        /// ⚠️ 遊ぶ側の個体には使わない（振り先を選ぶのが遊びなので）。
+        /// ⭐ 素質の高いステほど多く振る ＝「得意を伸ばす」── NPC の形が意図的に見える。</summary>
+        public static void AutoSpend(Creature creature)
+        {
+            int room = UnspentOf(creature);
+            if (room <= 0) return;
+            int total = Stats.TotalOf(creature.Wild);
+            var points = creature.Points;
+            if (total <= 0)
+            {
+                // ⚠️ 素質が全部 0 の個体（検査が作る形）。⭐ 均等に配る
+                int given = 0;
+                foreach (var key in Stats.Keys)
+                {
+                    int n = room / Stats.Keys.Length;
+                    points = points.With(key, points[key] + n);
+                    given += n;
+                }
+                // ⚠️ 🔴 2026-08-27（監査で発覚）: 割り算の余り（最大 Stats.Keys.Length-1＝5点）が
+                //    どこにも足されず捨てられていた ── 隣の分岐（下）は同じ余りを
+                //    「一番素質が高いステへ寄せる（捨てない）」と決めているのに、ここだけ
+                //    その規則を破っていた。⭐ ここは素質が全部同点（0）で「一番高い」が
+                //    定まらないので、`top` の初期値と同じ規則（同点なら先頭のキーを勝たせる）
+                //    で先頭へ寄せる。
+                int rest = room - given;
+                if (rest > 0) points = points.With(Stats.Keys[0], points[Stats.Keys[0]] + rest);
+            }
+            else
+            {
+                int given = 0;
+                foreach (var key in Stats.Keys)
+                {
+                    int n = room * creature.Wild[key] / total;
+                    points = points.With(key, points[key] + n);
+                    given += n;
+                }
+                // ⚠️ 割り算の余りは、一番素質が高いステへ寄せる（捨てない）
+                int rest = room - given;
+                if (rest > 0)
+                {
+                    var top = Stats.Keys[0];
+                    foreach (var key in Stats.Keys)
+                        if (creature.Wild[key] > creature.Wild[top]) top = key;
+                    points = points.With(top, points[top] + rest);
+                }
+            }
+            creature.Points = points;
+            creature.Trained = TrainedFor(creature.SpeciesId, creature.Wild, creature.Points);
+        }
+
+        /// <summary>⚠️ **N 点を全ステに振ったときの伸び。**⭐ 「1ステに N 点振ると
+        /// そのステがどれだけ伸びるか」を <c>[key]</c> で取るために残してある（`sim` が使う）。
+        /// ⚠️ 遊びの配分は <see cref="TrainedFor(string, StatBlock, StatBlock)"/> のほう。</summary>
         public static StatBlock TrainedFor(string speciesId, StatBlock wild, int earned)
         {
             if (earned <= 0) return new StatBlock(0, 0, 0, 0);
@@ -236,7 +354,17 @@ namespace EggCommand.Core
             Award(creature, amount);
             int gained = creature.Earned - before;
             if (gained <= 0) return 0;
-            creature.Trained = TrainedFor(creature.SpeciesId, creature.Wild, creature.Earned);
+            // 🔴 **ここでは振らない**（2026-08-26）。⭐ 振り先を選ぶのが遊びなので、
+            //    得た点は「未使用」のまま置く（`Creatures.Spend` で振る）。
+            return gained;
+        }
+
+        /// <summary>NPC の育成。⭐ 点を配って**その場で自動で振る**。
+        /// ⚠️ 巣の守り手・ヌシ・試練の相手など、**選ぶ人が居ない個体**にだけ使う。</summary>
+        public static int GrowAuto(Creature creature, int amount)
+        {
+            int gained = Grow(creature, amount);
+            AutoSpend(creature);
             return gained;
         }
 
@@ -312,17 +440,26 @@ namespace EggCommand.Core
         /// <summary>野生レベルの合計。厳選の目安として並べ替えに使う。</summary>
         public static int WildTotalOf(Creature creature) => Stats.TotalOf(creature.Wild);
 
-        /// <summary>属性だけ差し替えた同じ個体。⚠️ 個体は作り直す（欄は書き換えない）。</summary>
+        /// <summary>属性だけ差し替えた同じ個体。⚠️ 個体は作り直す（欄は書き換えない）。
+        /// ⭐ 🔴 2026-08-27: **`Points` も引き継ぐ。**忘れると、振った点を反映した
+        /// `Trained` はそのまま渡るのに `Points` だけ `(0,0,0,0)` に戻り、`UnspentOf` が
+        /// 「まだ全部余っている」と嘘をついて同じ点を二度振れるようになる
+        /// （`Snapshot` が一度踏んだのと同じ事故 ── 監査で地雷のまま残っているのが見つかった）。</summary>
         public static Creature WithElement(Creature c, Element element) => new Creature(
             c.Id, c.SpeciesId, c.Wild, c.Trained, c.Earned, c.MutationCounter,
             c.Skill2, c.Skill3, c.PaletteIndex, c.ParentA, c.ParentB, c.Generation,
-            c.Strong, c.Weak, element, c.TraitId, c.Best, c.Worst);
+            c.Strong, c.Weak, element, c.TraitId, c.Best, c.Worst, c.Points);
 
-        /// <summary>その枠のスキルレベル。⭐ ポイントから**導出**する（第2の出所を作らない）。</summary>
-        public static int SkillLevelOf(Creature creature, int slot) =>
-            slot < 0 || slot >= creature.SkillPoints.Length
-                ? 1
-                : SkillCosts.LevelOf(creature.SkillPoints[slot]);
+        /// <summary>その枠のスキルレベル。⭐ ポイントから**導出**する（第2の出所を作らない）。
+        /// ⚠️ 上限は**技ごと**（<see cref="Skills.MaxLevelOf"/>）。空き枠は技が無いので
+        /// 全体の天井（<see cref="Skills.MaxLevel"/>）のまま渡す（どのみち points は 0）。</summary>
+        public static int SkillLevelOf(Creature creature, int slot)
+        {
+            if (slot < 0 || slot >= creature.SkillPoints.Length) return 1;
+            var skill = SkillsOf(creature)[slot];
+            int maxLevel = skill == null ? Skills.MaxLevel : Skills.MaxLevelOf(skill);
+            return SkillCosts.LevelOf(creature.SkillPoints[slot], maxLevel);
+        }
 
         /// <summary>その枠の技に、レベルぶんの上乗せを載せたもの。⚠️ Lv1 なら素のまま。</summary>
         public static SkillBoost SkillBoostOf(Creature creature, int slot)

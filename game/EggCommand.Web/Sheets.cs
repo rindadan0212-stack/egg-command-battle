@@ -168,13 +168,16 @@ public static class Sheets
 
     public static string Home(Shell s)
     {
-        int at = 0;
         return LayoutDom.Render(LayoutStore.Of("home"), new DomFill
         {
-            // ⭐ 3つ目の `host`。⚠️ 何体並ぶかは編成しだい
-            Inside = key => key == "idle" ? EggCommand.Web.Idle.Draw(s.Game) : "",
-            Count = key => key == "slots" ? Hatchery.Slots : 0,
-            At = (key, i) => at = i,
+            // ⭐ `host` は2つ。⚠️ どちらも「格子で書けない置き場所」を持つ側が描く
+            //    ── 放置は何体並ぶかが編成しだい、巣は 2-1-2 の菱形。
+            Inside = key => key switch
+            {
+                "idle" => EggCommand.Web.Idle.Draw(s.Game),
+                "nests" => Incubator.Draw(s),
+                _ => "",
+            },
 
             Text = key => key switch
             {
@@ -184,46 +187,17 @@ public static class Sheets
                 // ⭐ 16進なら8桁に収まり、口で伝えられる長さになる
                 "world" => "#" + s.Game.Seed.ToString("X8"),
                 "trials" => $"試練　{Games.TrialsCleared(s.Game)}/{Core.Trials.All.Count}",
-                "slot-stars" => Slot(at) is Incubation e ? Rarities.StarsOf(e.Egg.Rarity) : "",
-                // ⭐ 孵ったら「孵った」と出す。⚠️ 帯の色（橙→緑）だけでは、
-                //    取り出せるようになったことに気づけなかった
-                "slot-clock" => Slot(at) is Incubation c
-                    ? (Hatchery.IsReady(c, s.Now) ? "孵った" : Rarities.Clock(Hatchery.LeftOf(c, s.Now)))
-                    : "",
-                "slot-who" => Slot(at) is Incubation w
-                    ? SpeciesTable.ById(w.Egg.SpeciesId).Name : "",
                 _ => "",
             },
-
-            Sprite = key => key == "slot-art" && Slot(at) != null ? EggArt.Sprite : null,
-            Palette = key => key == "slot-art" && Slot(at) != null ? EggArt.Shell : null,
-
-            Ratio = key => key == "slot-track" && Slot(at) is Incubation e
-                ? Hatchery.ProgressOf(e, s.Now) : 0,
 
             Tint = key => key switch
             {
                 "icon" => "#f59e0b",
-                // ⭐ 孵る合図はうっすらした緑の丸（Prefab の実測 `#2ea84a` α.35）
-                "slot-ready" => "rgba(46,168,74,.35)",
-                "slot-track" => Slot(at) is Incubation e && Hatchery.IsReady(e, s.Now)
-                    ? "#2fa84a" : "#f59e0b",
-                "slot-clock" => Slot(at) is Incubation c && Hatchery.IsReady(c, s.Now)
-                    ? "#1e7a38" : null,
                 _ => null,
-            },
-
-            When = key => key switch
-            {
-                "slot-full" => Slot(at) != null,
-                "slot-ready" => Slot(at) is Incubation e && Hatchery.IsReady(e, s.Now),
-                _ => false,
             },
 
             Tappable = key => true,
         });
-
-        Incubation? Slot(int i) => Hatchery.At(s.Game, i);
     }
 
     // ── すごろく ───────────────────────────────────
@@ -338,16 +312,26 @@ public static class Sheets
         var allies = new List<Unit>();
         var foes = new List<Unit>();
         foreach (var u in state.Units) (u.Side == Side.Ally ? allies : foes).Add(u);
-        var actor = EggCommand.Core.Battle.NextActor(state);
-        var skills = actor != null ? Creatures.SkillsOf(actor.Creature) : new Skill?[3];
+        // 🔴 **`NextActor` を呼ばない**（2026-08-28）。⚠️ あれは名前に反して**進める**関数で、
+        //    毒を入れ、強化の残りを減らし、スタンなら手番を捨てる。描くたびに呼んでいたので、
+        //    1手のあいだに毒が3〜4回入っていた（`Battle.Standing` の注記）。
+        var actor = EggCommand.Core.Battle.Standing(state);
+        // 🔴 **手札は必ず味方の技。**⚠️ 前は「いま立っている者」の技をそのまま出していたので、
+        //    敵の番になると**敵の技が手札に並んでいた**（2026-08-28・作者の報告）。
+        //    ⭐ 敵の番でも札は消さず、次に動かす味方の技を出したまま押せなくする
+        //    （消すと札の3枚が丸ごと消えて画面が跳ねる）。
+        var hand = EggCommand.Core.Battle.StandingAlly(state);
+        // ⭐ 押せるのは「味方が実際に立っていて、それが手札の主」のときだけ
+        bool mine = actor != null && actor.Side == Side.Ally && ReferenceEquals(actor, hand);
+        var skills = hand != null ? Creatures.SkillsOf(hand.Creature) : new Skill?[3];
         bool done = state.Result != null;
 
         return LayoutDom.Render(LayoutStore.Of("battle"), new DomFill
         {
             Inside = key => key switch
             {
-                "allies" => Column(allies, 540, 1278, false, actor),
-                "foes" => Column(foes, 540, 1278, true, actor),
+                "allies" => Column(s, allies, 540, 1278, false, actor),
+                "foes" => Column(s, foes, 540, 1278, true, actor),
                 _ => "",
             },
 
@@ -358,7 +342,7 @@ public static class Sheets
                 //    （Unity 版は字と色の両方で出している）。
                 "pick" => s.Auto ? "オート  ON" : "オート  OFF",
                 _ => Slot(key) is (int n, string what)
-                    ? SkillWord(skills, actor, n, what) : "",
+                    ? SkillWord(skills, hand, n, what) : "",
             },
 
             // ⭐ CT の丸薬は濃紺・字は白。⚠️ 同じ色を2か所に書かない
@@ -377,8 +361,8 @@ public static class Sheets
                 _ => false,
             },
 
-            // ⚠️ CT が残っている技は押せない
-            Tappable = key => Slot(key) is (int n, "") ? Ready(actor, n) : true,
+            // ⚠️ CT が残っている技は押せない。⭐ **敵の番も押せない**（`mine`）
+            Tappable = key => Slot(key) is (int n, "") ? mine && Ready(hand, n) : true,
         });
 
         static (int, string)? Slot(string? key)
@@ -408,7 +392,8 @@ public static class Sheets
     }
 
     /// <summary>片側の列。⭐ 1体ずつ `unit.txt` で描いて、計算した場所へ置く。</summary>
-    private static string Column(List<Unit> units, float wide, float room, bool foe, Unit? actor)
+    private static string Column(Shell s, List<Unit> units, float wide, float room, bool foe,
+        Unit? actor)
     {
         var spots = Stands.Lay(units.Count, wide, room);
         var sb = new System.Text.StringBuilder();
@@ -440,7 +425,8 @@ public static class Sheets
                 Ratio = key => key switch
                 {
                     "hp" => u.MaxHp > 0 ? Math.Clamp(u.Hp / (double)u.MaxHp, 0, 1) : 0,
-                    "gauge" => Math.Clamp(u.Gauge / (double)EggCommand.Core.Battle.GaugeMax, 0, 1),
+                    // ⭐ 刻みの端数まで出す（`Deeds.Bars` と同じ式 ── 出所を2つにしない）
+                    "gauge" => Deeds.GaugeAt(s, u),
                     _ => 0,
                 },
                 Tint = key => key switch
@@ -719,7 +705,9 @@ public static class Sheets
             {
                 "name" => skill.Name,
                 // ⭐ Lv・CT・威力を1行に。⚠️ 3行に割ると札より縦に長い覆いになる
-                "meta" => $"Lv {level} / {Skills.MaxLevel}"
+                // ⚠️ 上限は技ごと（Skills.MaxLevelOf）。グローバルな Skills.MaxLevel は
+                //    「どの技もこれを超えない」全体の天井であって、個々の技の上限ではない
+                "meta" => $"Lv {level} / {Skills.MaxLevelOf(skill)}"
                     + $"　CT {(slot == 0 ? 0 : skill.Ct)}"
                     + (power.Length > 0 ? $"　威力 {power}" : ""),
                 "body" => SkillText.Describe(skill),
@@ -772,14 +760,50 @@ public static class Sheets
 
     /// <summary>回っているさいころ。⭐ **目が決まる瞬間だけを見せる。**
     /// ⚠️ 出目は `Trails.Roll` が先に決めている ── ここは見せるだけ。
-    /// ⚠️ 回っている間の面は**乱数を引かない**（`fx.js` が順に送る）。</summary>
+    /// ⚠️ 回っている間の面は**乱数を引かない**（立体が転がるだけ）。</summary>
     public static string Dice(Shell s, string crown = "") =>
         LayoutDom.Render(LayoutStore.Of("dice"), new DomFill
         {
-            Pic = key => "die-" + Math.Clamp(s.Dice, 1, Trail.Pips),
-            Tint = key => key == "face" ? "var(--ink)" : null,
+            Inside = key => key == "face" ? DieCube(Math.Clamp(s.Dice, 1, Trail.Pips)) : "",
             Tappable = key => false,
         }, crown: crown);
+
+    /// <summary>立体のさいころ1個（2026-08-28・作者の指示「さいころを3D表示に」）。
+    ///
+    /// 🔴 **出た目は必ず正面**に置く。⭐ そうすると**止まる向きは常に「回転なし」**で済み、
+    /// 意匠（`stage.css`）は出目を1つも知らなくてよい ── 目ごとに着地の角度を用意して
+    /// 取り違える、という事故が起こりようがない。
+    /// ⚠️ 逆に「面の並びを固定して、出目に合わせて止める角度を変える」形にすると、
+    /// 6通りの角度が意匠側に散らばり、出所が2つ（C# と CSS）になる。
+    ///
+    /// ⭐ **向かい合う面の和は7**（本物のさいころと同じ）。⚠️ ここを守らないと、
+    /// 転がっている最中に 1 と 6 が隣り合って見え、さいころに見えなくなる。</summary>
+    private static string DieCube(int pips)
+    {
+        // ⭐ 3組（1-6・2-5・3-4）のうち、正面が使った組を除いた2組を側面と上下へ回す
+        int used = Math.Min(pips, Trail.Pips + 1 - pips);
+        var rest = new List<int>();
+        for (int n = 1; n <= 3; n++) if (n != used) rest.Add(n);
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append("<div class=\"die3d\">");
+        Face("front", pips);
+        Face("back", Trail.Pips + 1 - pips);
+        Face("right", rest[0]);
+        Face("left", Trail.Pips + 1 - rest[0]);
+        Face("top", rest[1]);
+        Face("bottom", Trail.Pips + 1 - rest[1]);
+        sb.Append("</div>");
+        return sb.ToString();
+
+        // ⚠️ 絵は既存の `die-N.png`（白い角丸に、目のところが穴）。
+        //    ⭐ 面の地を紙色にして絵を墨で塗ると、**穴から紙が覗いて目になる**
+        //    ── 目のための絵を別に作らなくてよい（角丸の丸みも絵と地で揃えてある）。
+        void Face(string where, int n) =>
+            sb.Append("<div class=\"die3d-face die3d-").Append(where)
+              .Append("\"><div class=\"n icon-art\" style=\"left:0;top:0;width:100%;height:100%")
+              .Append(";--pic:url(icon/die-").Append(n).Append(".png)\"></div></div>");
+    }
 
     // ── 告知 ────────────────────────────────────────
 
@@ -935,6 +959,53 @@ public static class Sheets
 
     /// <summary>⭐ **孵さない卵の唯一の出口。**
     /// ⚠️ 選んでから、最後に「強化する」を押す ── 1個ずつ入ると取り消せない。</summary>
+    /// <summary>🔴 **育てる札**（2026-08-26・ARK式の自由配分）。
+    ///
+    /// ⭐ **点の入口と出口を1枚にまとめてある** ── EXP を点に替える（`levelup`）のと、
+    /// 点をステへ振る（`spend`）のが同じ札にある。⚠️ 別々の場所に置くと
+    /// 「点は増えたのに何も強くならない」で手が止まる。
+    /// ⚠️ **振り直しはできない**ので、押す前に「いまの実値」と「振った点」を並べて出す。</summary>
+    public static string Grow(Shell s, string crown = "")
+    {
+        var one = s.PickedOne();
+        if (one == null) return "";
+        var now = Creatures.StatsOf(one);
+        int left = Creatures.UnspentOf(one);
+        int row = 0;
+
+        return LayoutDom.Render(LayoutStore.Of("grow"), new DomFill
+        {
+            Count = key => key == "stats" ? Stats.Keys.Length : 0,
+            At = (key, i) => row = i,
+            Text = key => key switch
+            {
+                "who" => $"{Creatures.SpeciesOf(one).Name}　Lv {Levels.Of(one)}/{Levels.MaxOf(one)}",
+                // ⭐ 上限に達していたら値段ではなく理由を出す
+                "levelup" => Levels.IsMaxed(one)
+                    ? "これ以上は点が増えない"
+                    : $"EXP {Face.Digits(Levels.ExpToNext(one))} → 1点",
+                "left" => left > 0 ? $"振れる点  {left}" : "振れる点がありません",
+                "gname" => Stats.LabelOf(Stats.Keys[row]),
+                "gnow" => Face.Digits(now[Stats.Keys[row]]),
+                // ⚠️ 0 を「0」と書かない（`panel.txt` の「強化」列と同じ約束）
+                "gpts" => one.Points[Stats.Keys[row]] > 0
+                    ? $"振った {one.Points[Stats.Keys[row]]}" : "−",
+                "hint" => "⚠️ 振った点は戻せません。"
+                    + "配合すると子は 0 から振り直せます。",
+                _ => "",
+            },
+            // ⭐ 点が無いときは押せない（押しても何も起きない釦を出さない）
+            Tappable = key => key switch
+            {
+                "spend" => left > 0,
+                "levelup" => !Levels.IsMaxed(one) && s.Game.Idle.Exp >= Levels.ExpToNext(one),
+                _ => true,
+            },
+            // ⚠️ 🔴 **`crown:` で渡す。**位置引数だと `suffix` に入り、
+            //    押しどころの番号が `card#0` になって `Shell.Index` が読めなくなる（実際に踏んだ）。
+        }, crown: crown);
+    }
+
     public static string Train(Shell s, string crown = "")
     {
         var game = s.Game;
@@ -943,7 +1014,7 @@ public static class Sheets
         var eggs = game.Eggs;
         int slot = Math.Clamp(s.Slot_, 0, skills.Length - 1);
         bool usable = one != null && skills[slot] != null
-            && !SkillCosts.IsMaxed(one.SkillPoints[slot]);
+            && !SkillCosts.IsMaxed(one.SkillPoints[slot], Skills.MaxLevelOf(skills[slot]!));
         int points = usable ? one!.SkillPoints[slot] : 0;
         int gain = 0;
         foreach (var e in eggs) if (s.Feeds.Contains(e.Id)) gain += Rarities.PointsOf(e.Rarity);
@@ -963,16 +1034,21 @@ public static class Sheets
             {
                 "who" => one == null ? "" : Creatures.SpeciesOf(one).Name,
                 "rname" => skills[row]?.Name ?? "—",
-                "rlv" => one == null ? "" : $"Lv{SkillCosts.LevelOf(one.SkillPoints[row])}",
+                // ⚠️ 上限は技ごと（Skills.MaxLevelOf）。空き枠（skills[row]==null）は
+                //    今までどおり全体の天井のまま（points は常に 0 なので Lv1 のまま出る）
+                "rlv" => one == null ? "" : skills[row] == null
+                    ? $"Lv{SkillCosts.LevelOf(one.SkillPoints[row])}"
+                    : $"Lv{SkillCosts.LevelOf(one.SkillPoints[row], Skills.MaxLevelOf(skills[row]!))}",
                 // ⭐ あと何ポイントで次かを出す。⚠️ 上限は「上限」と書く（0 と出さない）
                 "rneed" => one == null || skills[row] == null ? ""
-                    : SkillCosts.IsMaxed(one.SkillPoints[row]) ? "上限"
-                    : $"あと {SkillCosts.ToNext(one.SkillPoints[row])}",
+                    : SkillCosts.IsMaxed(one.SkillPoints[row], Skills.MaxLevelOf(skills[row]!)) ? "上限"
+                    : $"あと {SkillCosts.ToNext(one.SkillPoints[row], Skills.MaxLevelOf(skills[row]!))}",
                 // ⭐ **入れたあとのレベルまで出す。**⚠️ ポイントだけだと人が計算することになる
                 "head" => !usable ? "この枠はもう鍛えられません"
                     : gain > 0
                         ? $"選んだ {s.Feeds.Count}/{Games.PickAtOnce} 個で ＋{gain}　"
-                            + $"Lv{SkillCosts.LevelOf(points)} → Lv{SkillCosts.LevelOf(points + gain)}"
+                            + $"Lv{SkillCosts.LevelOf(points, Skills.MaxLevelOf(skills[slot]!))}"
+                            + $" → Lv{SkillCosts.LevelOf(points + gain, Skills.MaxLevelOf(skills[slot]!))}"
                         : $"棚の卵 {eggs.Count}　（{Games.PickAtOnce} 個まで選べます）",
                 "chip-who" => SpeciesTable.ById(eggs[at].SpeciesId).Name,
                 "chip-stars" => Rarities.StarsOf(eggs[at].Rarity),
@@ -993,7 +1069,7 @@ public static class Sheets
             Tappable = key => key switch
             {
                 "row" => one != null && skills[row] != null
-                    && !SkillCosts.IsMaxed(one.SkillPoints[row]),
+                    && !SkillCosts.IsMaxed(one.SkillPoints[row], Skills.MaxLevelOf(skills[row]!)),
                 "feed" => s.Feeds.Count > 0,
                 _ => true,
             },

@@ -53,6 +53,16 @@ window.eggTap = {
     for (const [type, fn] of this._bound) document.addEventListener(type, fn, true)
   },
 
+  /** 頁を離れるときの後片付け（`AppPage.Dispose`）。⚠️ `listen()` は document の**捕捉段階**
+   * に直付けする（冒頭コメント参照）ので、DOM がこの頁のものでなくなっても listener
+   * 自体は自然には外れない ── 外さないと、捨てられた `DotNetObjectReference` へ向けて
+   * 古い購読が `invokeMethodAsync` を呼び続け、押すたびに例外（uncaught promise
+   * rejection）になる（`edit.js` の `stop()` と同じ理由・同じ流儀に揃えた）。 */
+  stop() {
+    for (const [type, fn] of this._bound || []) document.removeEventListener(type, fn, true)
+    this._bound = null
+  },
+
   /** 帯だけ差し替える。
    *
    * ⚠️ 🔴 **画面を組み直さないために在る。**
@@ -63,7 +73,15 @@ window.eggTap = {
   bars(bars) {
     for (const id in bars) {
       const el = document.getElementById(id)
-      if (el) el.style.width = (bars[id] * 100) + '%'
+      if (!el) continue
+      // ⚠️ 🔴 **伸ばすのは「伸びた分」であって、器ではない**（2026-08-28 に実測して判明）。
+      //    ⭐ 帯は2枚（`LayoutDom` の `bar`）── 名前（id）を持つのは**器**のほうで、
+      //    伸びる子（`.bar-fill`）は名無し。ここで器へ幅を書いていたので、
+      //    **帯の地（レール）そのものが伸び縮みして**いた（実測: 器 100% ＝ 340px
+      //    なのに、中の伸びた分は前回の組み直しのまま 86% で止まっていた）。
+      //    ⚠️ 遠目には「何かが伸びている」ので気づきにくい ── 数で見ないと分からない類。
+      const fill = el.classList.contains('bar') ? el.querySelector('.bar-fill') : el
+      if (fill) fill.style.width = (bars[id] * 100) + '%'
     }
   },
 }

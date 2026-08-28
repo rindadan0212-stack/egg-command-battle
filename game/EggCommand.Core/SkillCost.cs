@@ -34,24 +34,31 @@ namespace EggCommand.Core
             return total;
         }
 
-        /// <summary>そのポイントで到達しているレベル。⭐ **導出。**レベルは保存しない。</summary>
-        public static int LevelOf(int points)
+        /// <summary>そのポイントで到達しているレベル。⭐ **導出。**レベルは保存しない。
+        /// ⚠️ 🔴 2026-08-27 追記: **上限は技ごと**（<see cref="Skills.MaxLevelOf"/>）。
+        /// 呼ぶ側が技を知っているなら渡すこと ── 省くと「どの技も5まで育つ」という
+        /// 古い前提のまま計算する（<see cref="Skills.MaxLevel"/> は全体の天井であって、
+        /// 個々の技の上限ではない）。</summary>
+        public static int LevelOf(int points, int maxLevel = Skills.MaxLevel)
         {
             int level = 1;
-            while (level < Skills.MaxLevel && points >= TotalFor(level + 1)) level++;
+            while (level < maxLevel && points >= TotalFor(level + 1)) level++;
             return level;
         }
 
-        /// <summary>次の段までに、あと何ポイント要るか。⚠️ 上限なら 0。</summary>
-        public static int ToNext(int points)
+        /// <summary>次の段までに、あと何ポイント要るか。⚠️ 上限なら 0。
+        /// ⚠️ <paramref name="maxLevel"/> は <see cref="LevelOf"/> と同じ注意。</summary>
+        public static int ToNext(int points, int maxLevel = Skills.MaxLevel)
         {
-            int level = LevelOf(points);
-            if (level >= Skills.MaxLevel) return 0;
+            int level = LevelOf(points, maxLevel);
+            if (level >= maxLevel) return 0;
             int need = TotalFor(level + 1) - points;
             return need < 0 ? 0 : need;
         }
 
-        public static bool IsMaxed(int points) => LevelOf(points) >= Skills.MaxLevel;
+        /// <summary>⚠️ <paramref name="maxLevel"/> は <see cref="LevelOf"/> と同じ注意。</summary>
+        public static bool IsMaxed(int points, int maxLevel = Skills.MaxLevel) =>
+            LevelOf(points, maxLevel) >= maxLevel;
 
         /// <summary>⚠️ 値段と卵のポイントが食い違っていないか。
         /// ⭐ 守りたい約束は「★N の卵1個で Lv(N−1)→LvN がちょうど埋まる」。</summary>

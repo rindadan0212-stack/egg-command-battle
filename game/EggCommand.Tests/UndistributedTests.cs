@@ -28,14 +28,19 @@ public class UndistributedTests
         }
     }
 
-    /// <summary>⚠️ Audit も同じことを見るが、落ちたときにどの技のどこかが読める形でここでも数える。</summary>
+    /// <summary>⚠️ Audit も同じことを見るが、落ちたときにどの技のどこかが読める形でここでも数える。
+    ///
+    /// ⚠️ 🔴 期待値は `Skills.MaxLevel - 1`（4）決め打ちにしない ── `鬨の声`（warcry）は
+    /// 未配布のまま guardsAllies で軸が1本に削れる技（<see cref="Skills.SingleAxisGrowthSteps"/>
+    /// ＝2段）なので、4段決め打ちだと 2026-08-27 の①修正でここが落ちる。
+    /// ⭐ 出所は `Skills.ExpectedGrowthStepsOf`（Audit と同じ1本）。</summary>
     [Fact]
     public void 未配布でも成長表と採点は揃っている()
     {
         foreach (var id in Skills.Undistributed)
         {
             var skill = Skills.ById(id);
-            Assert.Equal(Skills.MaxLevel - 1, Skills.GrowthOf(skill).Count);
+            Assert.Equal(Skills.ExpectedGrowthStepsOf(skill), Skills.GrowthOf(skill).Count);
             foreach (var effect in skill.Effects)
             {
                 Assert.True(Ai.Knows(effect.Kind), $"{id}: {effect.Kind} を AI が採点しない");

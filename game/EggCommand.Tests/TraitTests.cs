@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using EggCommand.Core;
 using Xunit;
@@ -117,8 +118,12 @@ public class TraitTests
         //    配った日（2026-08-19）に落ちた。⭐ 差から出す。
         int gap = StatAccuracyTests.GapOf(actor, target);
         Assert.Equal(60 + gap, Battle.LandChanceOf(Effect.Poison(1, 3, 60), actor, target));
-        // ⚠️ 率 100 の弱化は乱数を1度も引かない（移植した試合が1手も変わらない条件）
-        Assert.Equal(100, Battle.LandChanceOf(Effect.Poison(1, 3), actor, target));
+        // 🔴 **基礎率 100% も式を通る**（2026-08-26 に早期リターンを撤去）。
+        //    ⚠️ 以前は「率100 の弱化は乱数を引かない」という**移植の都合**の分岐があり、
+        //    `poison`/`stun` など7本が弱化命中・耐性の軸の外に居た。
+        //    ⭐ いまは 100 も「100 ＋ 命中 − 耐性」で弾かれうる。
+        Assert.Equal(Math.Clamp(100 + gap, Battle.LandFloor, Battle.LandCeil),
+            Battle.LandChanceOf(Effect.Poison(1, 3), actor, target));
     }
 
     [Fact]
