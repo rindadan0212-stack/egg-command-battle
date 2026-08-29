@@ -588,6 +588,14 @@ window.eggEdit = {
     return window.confirm('保存していない直しがあります。捨てて切り替えますか？')
   },
 
+  /** ⭐ 確認で「やめる」を選んだとき、select の見た目を C# 側の値へ戻す。
+   * ⚠️ Blazor は render tree に差分が無いと DOM を触らない（value 属性は変わっていない）
+   * ので、C# から StateHasChanged しても戻らない ── ここで実 DOM の value を書き戻す。 */
+  revert(id, value) {
+    const el = document.getElementById(id)
+    if (el) el.value = value
+  },
+
   /** ⭐ Ctrl+Z / Ctrl+Shift+Z（取り消し／やり直し）と、⭐② 矢印キー（ナッジ）、
    * ⭐ 段階3: Delete キー（選択を消す）。
    * ⚠️ **document 全体**で聞く（数値欄にフォーカスがあっても Ctrl+Z が効くように）

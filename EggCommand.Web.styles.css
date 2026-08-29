@@ -286,6 +286,17 @@
   border: 2px solid rgba(224, 79, 95, .55);
   box-sizing: border-box;
 }
+/* ⭐ 予約帯（下の帯 1556〜。目安 ── 検査 DockFaults と同じ数字。EditPage.ZoneHtml が出す）。
+   ⚠️ ::deep が要る（.edfault-box と同じ理由 ── MarkupString の中身）。
+   塗り潰さない約束 → 極薄の斜線＋上端の破線のみ。色は既存の警告色 #e04f5f 系。 */
+.edfaults[b-lc27aevk28]  .edzone-dock {
+  position: absolute;
+  left: 0;
+  width: 1080px;
+  pointer-events: none;
+  border-top: 2px dashed rgba(224, 79, 95, .45);
+  background: repeating-linear-gradient(45deg, rgba(224, 79, 95, .06) 0 14px, transparent 14px 28px);
+}
 /* ⭐ 「ここが悪い」の形。⚠️ 面で塗らず、薄い斜線だけ（輪郭は少し濃くして目立たせる）。
    `pointer-events:auto` はここだけ ── 実体の外（画面の外・親の外・足りない高さの帯）
    にはみ出すことがあり、下の本体だけでは拾えないため（`eggEdit.faultsListen` が受ける）。 */
