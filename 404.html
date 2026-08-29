@@ -72,6 +72,25 @@
       //
       // 升目は 270x480 ドット（1ドット = 設計4px）。実ピクセルから
       // 「1ドットが実際に何pxか」= P を整数で決め、CSS 倍率 k = P / (4 * DPR) を掛ける。
+      //
+      // 🔴 **少しはみ出させる**（2026-08-29・作者の指示「画面いっぱいに表示」）。
+      // ⚠️ 「必ず全部収める」だけだと、**実高 959px と 960px の境で盤が4倍変わる**
+      //    （P=1 ⇄ 2）。1080p のモニタはブラウザの枠込みで実高 936〜955px に落ちるので、
+      //    表示倍率 100%/125%/150% のどれでも下側に落ち、盤が縦半分（270x480）になる
+      //    ── 実測 1920x950 で縦の埋まり **51%**・面積 7.1%。作者の言う「余白が多い」
+      //    の正体はこれで、倍率が半端だったからではない。
+      // ⭐ **切ってよい量は骨組みの空白から決める**（実測）:
+      // 🔴 **上は切れない（0）**（2026-08-29 の見直し）。⚠️ 前は「`frame.txt` の
+      //    `back`/`extra` 釦が y=12 から」を根拠に 12px 切っていたが、その上のバーを
+      //    丸ごと外した（作者の指示「この帯は不要」）ので前提が消えた。
+      //    ⭐ いま画面のてっぺんに来るのは**各画面の中身そのもの** ── ホームは
+      //    `home.txt` の `count`（EXP の字）が **y=0 から**始まるので、1px でも切ると字が欠ける。
+      // ⭐ 下 40px（タブ下端 1880）は変わらない ── 4px 残して 36px まで。
+      // ⚠️ **左右は切らない。**横は縦横比の問題（9:16 を 16:9 の窓に置く）で、
+      //    倍率をどういじっても余る ── 作者の判断で黒のままにしてある。
+      const CUT_TOP = 0;                  // 上のバーを外したので、てっぺんは画面の中身
+      const CUT_BOT = 36;                 // frame.txt: タブ下端 1880（40 空くが 4 残す）
+      const CUT_Y = CUT_TOP + CUT_BOT;    // = 36
       function fit() {
         const s = document.getElementById('stage');
         if (!s) return;
@@ -84,12 +103,27 @@
         //    ⭐ 0.1% 以内のズレは「実は整数」とみなす ── 逆に本当に 3.999 なら
         //    4 にしても実ピクセルで 0.1% 溢れるだけで、目には見えない。
         const nearInt = (v) => Math.abs(v - Math.round(v)) < 1e-3 ? Math.round(v) : Math.floor(v);
+        // ⚠️ 270 = 1080/4・480 = 1920/4。⭐ 縦だけ「切ってよい量」を引いた丈で割る。
         const p = Math.max(1, nearInt(Math.min(
-          innerWidth  * dpr / 270,
-          innerHeight * dpr / 480)));
+          innerWidth  * dpr * 4 / 1080,
+          innerHeight * dpr * 4 / (1920 - CUT_Y))));
         const k = p / (4 * dpr);
-        s.style.transform = 'translate(-50%, -50%) scale(' + k + ')';
-        document.documentElement.style.setProperty('--u', k + 'px');
+        // はみ出す設計px（0〜CUT_Y）。⚠️ 横で決まったときは負になるので 0 で止める。
+        const overY = Math.max(0, (1920 * p / 4 - innerHeight * dpr) * 4 / p);
+        // 🔴 **切るのは下だけ**（`CUT_TOP` が 0 になったため）。⚠️ 真ん中に置くと上下へ
+        //    等分に食い込むので、盤を `overY/2` ぶん下げて食い込みを全部下へ寄せる。
+        //    ⚠️ ずらし量は4の倍数（＝整数ドット）に丸める ── 半端だと実ピクセルの
+        //    格子から外れて、せっかくの整数倍が濁る。
+        // ⭐ **切り上げる**（前は切り捨てだった）── 切り捨てると最大3px が上に残り、
+        //    ホームの EXP の字（`home.txt` の `count` が y=0）を削る。多めに下げても
+        //    下の食い込みは overY（≤ CUT_BOT）を超えないので、タブには届かない。
+        const shift = Math.min(CUT_BOT, Math.ceil(overY / 2 / 4) * 4);
+        // 🔴 **左上を実ピクセルの整数へ載せる。**⚠️ 窓の幅・高さが奇数だと中央が
+        //    半ピクセル位置になり、整数倍なのにドットが濁る（実測 1921x951 で 825.5px）。
+        s.style.transformOrigin = '0 0';
+        s.style.left = Math.round((innerWidth  - 1080 * k) / 2 * dpr) / dpr + 'px';
+        s.style.top  = (Math.round((innerHeight - 1920 * k) / 2 * dpr) / dpr + shift * k) + 'px';
+        s.style.transform = 'scale(' + k + ')';
       }
       addEventListener('resize', fit);
       new MutationObserver(fit).observe(document.documentElement, {childList: true, subtree: true});
