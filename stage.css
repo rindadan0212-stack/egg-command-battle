@@ -405,7 +405,10 @@ html, body {
    パッと切り替わっていた** ── 「継ぎ目が鏡だから目立たない」のは**帯の中の継ぎ目**の話で、
    **輪（流し終わり→先頭）は別物**。実測: 旧・山は戻り際に 1080x252 の全画素が入れ替わる。
    ⭐ **手前ほど速い**（作者の指示 2026-08-29「地面は奥の山より早く動く」）──
-   空12 → 山24 → 遠くの地面48 px/秒。⚠️ 流す幅が層ごとに違うので、動きも層ごとに持つ。
+   空12 → 山24 → 遠くの地面40 px/秒。⚠️ 流す幅が層ごとに違うので、動きも層ごとに持つ。
+   ⚠️ 「遠くの地面」の px/秒 は絵を差し替えるたび変わりうる（1周秒数 `secs` は固定、
+   流す距離＝絵の大きさで決まるため）── 数字を見るなら `stage.css` でなく `tools/bg-band.mjs`
+   の出力を信じること。
    ⚠️ 🔴 **級で掛ける。id では掛けない。**別の画面に同じ名前があると両方に効く
    （2026-08-26 に `#ground` でそれを踏み、すごろくが遊べなくなった）。 */
 .roll-sky  { animation: bg-roll-sky  180s linear infinite; }
@@ -413,7 +416,7 @@ html, body {
 .roll-far  { animation: bg-roll-far   32s linear infinite; }
 @keyframes bg-roll-sky  { from { transform: translateX(0); } to { transform: translateX(-2160px); } }
 @keyframes bg-roll-hill { from { transform: translateX(0); } to { transform: translateX(-2160px); } }
-@keyframes bg-roll-far  { from { transform: translateX(0); } to { transform: translateX(-1536px); } }
+@keyframes bg-roll-far  { from { transform: translateX(0); } to { transform: translateX(-1280px); } }
 
 /* ⭐ 放置の相手の残り。
    🔴 **.3s に縮めた**（2026-08-28）。⚠️ 旧 .95s は差し替えが1秒に1回だった頃の
