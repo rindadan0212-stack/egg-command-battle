@@ -397,15 +397,23 @@ html, body {
    確認済み。⚠️ **`Core.Beats.Scroll`（旧・流れる速さ）はもう使っていない**
    （`Core/Beats.cs` は担当外なので消さず残してある）。 */
 
-/* ⭐ **ホームの背景（空と山）を、ゆっくり左へ流す。**
-   ⚠️ 絵は「元＋左右反転」を横に並べた2枚幅（2160px）。1枚ぶん（1080px）流したら
-   先頭へ戻すので、途切れずに繋がる ── ⭐ 継ぎ目が鏡写しなので線が合って目立たない。
-   ⭐ **空のほうが遅い**（作者の指示 2026-08-27）── 遠いものほどゆっくり動いて見える。
+/* ⭐ **ホームの背景（空・山・遠くの地面）を、左へ流す。**
+   ⚠️ 絵は「元・鏡・元・鏡」の**4枚**を横に並べたもの（`tools/bg-band.mjs` が作る）。
+   ⭐ **2枚ぶん**流したら先頭へ戻す ── 模様の周期が「元＋鏡」＝2枚ぶんなので、
+   流し終わりの画面が流し始めと1画素も違わない（`tools/bg-band.mjs` の doc に理由）。
+   🔴 **2枚幅で1枚ぶん流していた頃（〜2026-08-29）は、戻る瞬間に絵が左右反転して
+   パッと切り替わっていた** ── 「継ぎ目が鏡だから目立たない」のは**帯の中の継ぎ目**の話で、
+   **輪（流し終わり→先頭）は別物**。実測: 旧・山は戻り際に 1080x252 の全画素が入れ替わる。
+   ⭐ **手前ほど速い**（作者の指示 2026-08-29「地面は奥の山より早く動く」）──
+   空12 → 山24 → 遠くの地面48 px/秒。⚠️ 流す幅が層ごとに違うので、動きも層ごとに持つ。
    ⚠️ 🔴 **級で掛ける。id では掛けない。**別の画面に同じ名前があると両方に効く
    （2026-08-26 に `#ground` でそれを踏み、すごろくが遊べなくなった）。 */
-.roll-sky  { animation: bg-roll 180s linear infinite; }
-.roll-hill { animation: bg-roll  90s linear infinite; }
-@keyframes bg-roll { from { transform: translateX(0); } to { transform: translateX(-1080px); } }
+.roll-sky  { animation: bg-roll-sky  180s linear infinite; }
+.roll-hill { animation: bg-roll-hill  90s linear infinite; }
+.roll-far  { animation: bg-roll-far   32s linear infinite; }
+@keyframes bg-roll-sky  { from { transform: translateX(0); } to { transform: translateX(-2160px); } }
+@keyframes bg-roll-hill { from { transform: translateX(0); } to { transform: translateX(-2160px); } }
+@keyframes bg-roll-far  { from { transform: translateX(0); } to { transform: translateX(-1536px); } }
 
 /* ⭐ 放置の相手の残り。
    🔴 **.3s に縮めた**（2026-08-28）。⚠️ 旧 .95s は差し替えが1秒に1回だった頃の
@@ -478,7 +486,7 @@ html, body {
   #dim-roll, #strip-tell { animation: none; }
   #dim-roll { background: rgba(0,0,0,.34); }
   #pop-fan, #burst-fan { animation: none; }
-  .roll-sky, .roll-hill, .idle-walk, .idle-come { animation: none; }
+  .roll-sky, .roll-hill, .roll-far, .idle-walk, .idle-come { animation: none; }
   /* ⭐ `.idle-down` の見た目（倒れた姿勢）自体は残す ── 情報はここにある。
      ⚠️ 消すのは**移り変わる動き**（`transition`）だけ ── 級を2つ重ねた選び手で書く
      （`.idle-walk`（1つ）より強く掛ける必要がある。`.idle-walk.idle-down` の doc 参照）。 */
