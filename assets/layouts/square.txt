@@ -10,11 +10,23 @@
 #    2つを `when=gate` / `when=!gate` で入れ替える ── 1つの名前で言わないと、
 #    検査は「同時に出る2つが重なっている」としか読めない。
 #
+# ⚠️ **枠は絵の実寸ぴったりにする**（2026-08-29・作者の指示「①PNGを枠の大きさに描き直す」）。
+#    ⭐ 絵は `tools/icon-fit.mjs` が原画（`assets/ui/icon-src/`）から焼き直したもので、
+#    `plain`/`stat`/`gstat` は 13ドット=52px、`mob` は 24ドット=96px、`arrow` は 9ドット=36px。
+#    🔴 以前は全部 128px（32ドット）の絵が枠を無視して置かれ、隣の数字に被っていた。
+#
 #  名前   種類    左   上    幅   高    付け足し
-plain    icon    92   64    64   64    when=plain pic=plain
+plain    icon    98   70    52   52    when=plain pic=plain
 mob      icon    76   48    96   96    when=mob pic=mob
 # ⭐ 矢印＋ステの絵＋数。⚠️ 「▲防+60%」の記号を字で書かない
-arrow    icon    10   70    52   52    when=arrow bind=arrow
+# ⭐ **矢印は上下で向きが変わる**（2026-08-29 ── `Board.cs` に「▲は上、▼は下」と
+#    書いてあったのに、絵は常に同じ向きで出ていた）。⚠️ 絵を2枚に増やさず `turn=` で回す
+#    ── 同じ1枚の絵から向きを作るほうが出所が割れない。
+# 🔴 **原画は右向き（→）**（実測 2026-08-29）。だから上は -90、下は +90。
+#    ⚠️ 180 では左向きになるだけで「下がる」に読めない。
+#    ⚠️ 2つは `when=arrow` / `when=arrowd` で必ず片方だけ出る（重なり検査に掛からない）。
+arrow    icon    14   78    36   36    when=arrow bind=arrow turn=-90
+arrowd   icon    14   78    36   36    when=arrowd bind=arrowd turn=90
 stat     icon    66   70    52   52    when=stat bind=stat
 num      label   124  0     116  192   size=44 anchor=left when=!gate bind=num
 # ⭐ 関門は「払う量」を出す（払わなくても入れる ── 払うと有利になる）

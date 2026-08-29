@@ -120,26 +120,32 @@ public static class Board
             },
             Pic = key => key switch
             {
-                "arrow" => "arrow",
+                // ⭐ 上向き・下向きとも**同じ1枚**（下は骨組みが `turn=180` で回す）
+                "arrow" or "arrowd" => "arrow",
                 "stat" => gift != null ? IconOf(gift.Stat) : "plain",
                 "gstat" => sq.Toll is Toll t ? IconOf(Trails.StatOf(t.Kind)) : "plain",
                 _ => null,
             },
             Tint = key => key switch
             {
-                "arrow" or "stat" or "num" => ink,
+                "arrow" or "arrowd" or "stat" or "num" => ink,
                 "gstat" or "gnum" => behind ? "#636980" : "#2b3350",
                 "mob" => beaten ? "rgba(255,255,255,.30)" : "#ffffff",
                 "plain" => behind ? "rgba(0,0,0,.12)" : "rgba(0,0,0,.26)",
                 _ => null,
             },
-            // ⭐ 矢印は上下で向きが変わる（▲は上、▼は下）
+            // ⭐ **矢印は上下で向きが変わる**（▲は上、▼は下）── 2026-08-29 まで、この註が
+            //    ありながら向きは実装されておらず、変わるのは色だけだった。
+            //    ⚠️ 上げ下げは `up`（＝色を決めているのと同じ判じ方）を使い回す ── 色と向きが
+            //    別々の物差しになると、緑なのに下向きのような食い違いが生まれる。
             When = key => key switch
             {
                 "plain" => sq.Kind == SquareKind.Plain,
                 "mob" => sq.Kind == SquareKind.Mob,
                 "gate" => sq.IsGate,
-                "arrow" or "stat" => !sq.IsGate && gift != null && gift.Kind == GiftKind.Stat,
+                "stat" => !sq.IsGate && gift != null && gift.Kind == GiftKind.Stat,
+                "arrow" => !sq.IsGate && gift != null && gift.Kind == GiftKind.Stat && up,
+                "arrowd" => !sq.IsGate && gift != null && gift.Kind == GiftKind.Stat && !up,
                 _ => false,
             },
         }, "#" + index, "", "square"));

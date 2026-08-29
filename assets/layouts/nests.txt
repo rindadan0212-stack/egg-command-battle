@@ -17,9 +17,17 @@
 #    `LayoutAssetTests` に落ちる。
 #
 #  名前    種類    左   上    幅   高    付け足し
+# ⭐ **パーティ編成はここ**（2026-08-29・上のバーを外したので右肩から降りてきた）。
+#    ⚠️ 前は「本体には置けない ── 巣の札が縦を埋めていて、どこに置いても重なる」と
+#    書いてあったが、上のバーが消えて本体が 1556 → 1688 に伸び、巻物の下に 132px 空いた。
+# ⭐ **巣を選ぶ前に編成を決める。**⚠️ 潜ってから「違った」と気づいても戻れない
+#    ── だからこの画面に置く（`Shell` の `party` が、押した画面で巣／放置を切り分ける）。
+party     button  48   1564  984  112   size=34 tap=party text=パーティ編成
 list      scroll  48   24    984  1532
   stack   box     0    0     984  2800  flow=down
     card  card    0    0     984  380   repeat=nests cols=1 rows=400 max=6 tap=nest use=encounter
     boss  card    0    20    984  380   lead=yes tap=boss
-      bart  pixel  40  76    228  228   foe=yes bind=bart
+      # 🔴 **枠は 64 の倍数**（2026-08-29）── ヌシの札は普通の巣の札
+      #    （`encounter.txt`）と同じ一覧に並ぶので、同じ 256 に揃える。
+      bart  pixel  24  60    256  256   foe=yes bind=bart
       bname label  320 148   600  90    size=56 anchor=upper-left bind=bname

@@ -267,6 +267,11 @@ public static class Deeds
         s.CastAim = null;
         // ⚠️ 渡した印も前の戦いの体を指している（`Cast` と同じ理由）
         s.Handed = null;
+        // 🔴 **狙い先も必ず捨てる。**⚠️ `Unit.Key` は `ally-0`/`enemy-2` という
+        //    **席の名前**なので、次の戦いにも同じ鍵が居る ── 捨てないと、
+        //    選び直していないのに前の戦いの席がそのまま狙われる（別人が的になる）。
+        s.AimFoe = null;
+        s.AimAlly = null;
         s.Sparks.Clear();
         s.Banner = null;
     }
@@ -333,6 +338,10 @@ public static class Deeds
         // ⚠️ **確かめている間は時が止まる。**⭐ 「あきらめますか」を読んでいるあいだに
         //    決着したら、答えた先が既に無い（それに、読む時間は考える時間でもある）。
         if (s.Open != Panel.None) return Tick.Stopped;
+
+        // ⭐ 倒れた相手への狙いはここで外す（`PerformAction` でも毒でも体は倒れるので、
+        //    倒れうる道を全部通ったあとの**この1か所**で見るのが確か）
+        ForgetDeadAims(s, state);
 
         // ⭐ 拍の途中。⚠️ ここで組み直さない（演出が最初からやり直しになる）
         if (s.Wait > 0) { s.Wait -= seconds; return Tick.Filling; }
@@ -698,6 +707,55 @@ public static class Deeds
         return bars;
     }
 
+    /// <summary>狙い先を選ぶ／外す（`unit.txt` の `hit` を押した）。
+    ///
+    /// ⭐ **敵と味方を別々に覚える**（<see cref="Shell.AimFoe"/> / <see cref="Shell.AimAlly"/>）
+    /// ── 1つで兼ねると、敵を選んだまま強化を押したときに黙って別の相手へ飛ぶ。
+    /// ⚠️ **同じ体をもう一度押したら外す。**外せないと、一度選んだが最後、
+    /// 自動の狙い（残 HP の低い相手・一番弱った味方）へ戻す手立てが無くなる。
+    /// ⚠️ 倒れている体は選べない（狙っても <see cref="Battle.TargetsOf"/> が弾く）。</summary>
+    public static void Aim(Shell s, string at)
+    {
+        var state = s.Fight_;
+        if (state == null || state.Result != null) return;
+        var unit = At(state, at);
+        if (unit == null || !EggCommand.Core.Battle.IsAlive(unit)) return;
+        if (unit.Side == Side.Ally) s.AimAlly = s.AimAlly == unit.Key ? null : unit.Key;
+        else s.AimFoe = s.AimFoe == unit.Key ? null : unit.Key;
+    }
+
+    /// <summary>`a0`/`f2` から体を引く。⭐ <see cref="Where"/> のちょうど逆。
+    /// ⚠️ 数え方を2つに割らないこと ── 割れると、印の付いた体と実際に飛ぶ先が別人になる。</summary>
+    private static Unit? At(BattleState state, string at)
+    {
+        int a = 0, f = 0;
+        foreach (var u in state.Units)
+        {
+            string key = u.Side == Side.Ally ? "a" + a++ : "f" + f++;
+            if (key == at) return u;
+        }
+        return null;
+    }
+
+    /// <summary>倒れた体への狙いを外す。
+    ///
+    /// ⭐ **拍ごとに1度だけ見る。**⚠️ 倒れた相手の鍵を持ち続けると、
+    /// 蘇生した拍で狙いが**黙って復活**する（選び直していないのに선택が戻る）。
+    /// ⚠️ 印そのものは `Sheets.Column` が「生きている体だけ」に出すので、
+    /// 見た目は倒れたその拍で消える ── ここは覚えている中身の後始末。</summary>
+    private static void ForgetDeadAims(Shell s, BattleState state)
+    {
+        if (s.AimFoe != null && !Alive(s.AimFoe)) s.AimFoe = null;
+        if (s.AimAlly != null && !Alive(s.AimAlly)) s.AimAlly = null;
+
+        bool Alive(string key)
+        {
+            foreach (var u in state.Units)
+                if (u.Key == key) return EggCommand.Core.Battle.IsAlive(u);
+            return false;
+        }
+    }
+
     private static Unit? Pick(BattleState state, Side side, string? key)
     {
         Unit? first = null;
@@ -800,8 +858,11 @@ public static class Deeds
     /// <summary>在庫から卵を選んだ。⚠️ 枠が無ければ入れない（黙って捨てない）。</summary>
     public static void Warm(Shell s, int at)
     {
-        if (at < 0 || at >= s.Game.Eggs.Count) return;
-        var egg = s.Game.Eggs[at];
+        // 🔴 **並べ替えた順で数える**（2026-08-29）。⚠️ `Game.Eggs` の添字で引くと、
+        //    ★順に並べ替えたとき**押した卵と違う卵が孵る**（絵と押しどころの出所が割れる）。
+        var eggs = s.SortedEggs();
+        if (at < 0 || at >= eggs.Count) return;
+        var egg = eggs[at];
         try { Hatchery.Begin(s.Game, egg.Id, s.Now, slot: s.Aim); }
         catch (Exception e) { s.Say = e.Message; }
         s.Open = Panel.None;

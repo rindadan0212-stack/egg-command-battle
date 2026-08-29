@@ -11,5 +11,10 @@
 mark     card    0    0     224  200   lead=yes when=picked
 star     label   34   2     156  26    size=20 ink=accent anchor=center bind=star
 elem     round   14   14    30   30    bind=elem
-art      pixel   53   28    118  118   bind=art
+# 🔴 **ここは意図的に見切れさせる**（2026-08-29・作者の指示「BOX一覧の升はイラストの
+#    一部だけを表示し意図的に見切れさせる。見せたいところだけを見せる」）。
+# ⭐ `crop=256` ＝ 絵を 256px で描き、118px の窓から覗かせる（顔まわりが大きく見える）。
+#    ⚠️ どこを覗かせるかは種族ごとに違う（`SpeciesArt.FocusOf` が持つ）。
+# ⚠️ 枠（118）は変えていない ── 升の他の欄（★・属性・一言）の位置が動かないように。
+art      pixel   53   28    118  118   bind=art crop=256
 note     label   8    150   208  40    size=22 anchor=center bind=note when=note

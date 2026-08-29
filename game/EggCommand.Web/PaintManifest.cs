@@ -7,7 +7,8 @@ namespace EggCommand.Web
     /// <summary>「`Resources/UI/paint/` に実際に在る絵」の一覧と、その大きさ（ドット数）。
     ///
     /// ⭐ **`IconManifest` を手本にした作り。**⚠️ 違うのは「名前だけでなく大きさも持つ」こと
-    /// ── `LayoutDom` の「引き伸ばさない」規則（ドット絵化計画 段取り4・第1部）は、
+    /// ── `LayoutDom` の「引き伸ばさない」規則（⭐ 2026-08-29 以降は
+    /// `paint`/`icon` だけの規則 ── `pixel` は枠に合わせて整数倍で伸びる）は、
     /// 節点の外から「この絵は何ドット四方か」を知る必要があるため。
     ///
     /// ⚠️ **唯一の出所は `assets/ui/paint/paint-manifest.txt`**

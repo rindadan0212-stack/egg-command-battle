@@ -102,6 +102,8 @@ public static class Scenes
         S("species", "species", "種族の札"),
         S("book", "book", "図鑑"),
         S("save", "save", "保存の控え"),
+        // ⭐ ホーム右上の「そのほか」で開く小窓（2026-08-29・上のバーを外して寄せた4つ）
+        S("menu", "menu", "そのほか（図鑑・試練・編成・控え）"),
         S("ask", "ask", "確かめる（あきらめますか）"),
         S("eggpicker", "eggpicker", "卵を選ぶ"),
         // ⚠️ `battle` は `Sheets.Fight` の一択（曖昧さなし）。`Sheets.Raid` が描くのは
@@ -278,6 +280,9 @@ public static class Scenes
                     SaveSize = 11024,
                     SavePast = new[] { 12, 300, 3600, 86400, 604800 },
                 });
+
+            case "menu":
+                return Sheets.Menu(new Shell(Demo.Game(), Demo.Now));
 
             case "ask":
             {

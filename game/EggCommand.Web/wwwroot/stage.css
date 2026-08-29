@@ -21,10 +21,13 @@
   --sky-nest:   #bdebff;
   --sky-battle: #a7dcf0;
   --sky-breed:  #ffdfe8;
-
-  /* ⭐ 設計の1px。器の幅を 1080 に写す倍率。JS が入れる */
-  --u: 1px;
 }
+/* ⚠️ **`--u`（設計の1px の CSS px 数）は 2026-08-29 に消した。**
+   ⭐ 定義（ここ）と書き込み（`index.html`）はあったが、**読む側が1つも無かった**
+   （css/js/cs/razor を総当たりして確認）── `LayoutDom.cs` の
+   「⚠️ `--u` を掛けない ── 外枠を丸ごと拡大縮小するので」が理由で、
+   設計 px はそのまま CSS px として書き出す作りになっている。
+   ⚠️ 生き残っていると「掛けるのが正しいのでは」と読めてしまうので消した。 */
 
 /* ⚠️ 作者の決定（2026-08-22）: 絶対座標のまま。
    ⭐ 1080x1920 を、外枠の拡大縮小だけで実機へ写す。
@@ -54,13 +57,17 @@ html, body {
 /* ⭐ **設計上の画面。**中身は全部この中の絶対座標。 */
 #stage {
   position: absolute;
-  left: 50%;
-  top: 50%;
+  /* 🔴 **置き場所は `index.html` の `fit()` が実ピクセルの整数に丸めて入れる。**
+     ⚠️ 中央寄せ（`left:50%` ＋ `translate(-50%,-50%)`）に戻さない ── 窓の幅・高さが
+     奇数だと盤の左上が半ピクセル位置に載り、**整数倍なのにドットが濁る**
+     （実測 2026-08-29・1921x951 で left=825.5px）。
+     ⚠️ ここの 0 は `fit()` が走る前の一瞬だけの値。 */
+  left: 0;
+  top: 0;
   width: 1080px;
   height: 1920px;
-  /* ⭐ 中心を合わせてから縮める。⚠️ JS が scale を足す（translate は残す） */
-  transform-origin: center center;
-  transform: translate(-50%, -50%);
+  /* ⭐ 左上を基準に縮める（`fit()` が left/top を自分で計算する前提）。 */
+  transform-origin: 0 0;
   background: var(--sky-nest);
   overflow: hidden;
   /* ⚠️ 端末の縁（ノッチ・ホームバー）に潜らせない */

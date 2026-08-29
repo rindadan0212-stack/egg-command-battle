@@ -19,6 +19,10 @@ namespace EggCommand.Web
         public Func<string, PixelSprite> Sprite;
         /// <summary>`bind=` → その絵の色。</summary>
         public Func<string, Palette> Palette;
+        /// <summary>⭐ `bind=` → **その絵のどこを見せるか**（0〜1 の割合。左上が 0,0）。
+        /// ⚠️ 効くのは `crop=` を持つ節点だけ（BOX一覧の升）。null なら顔の高さを既定にする。
+        /// ⭐ 種族ごとに違う（作者の指示 2026-08-29「キャラごとにズームアップ箇所を変えたい」）。</summary>
+        public Func<string, (double X, double Y)?> Focus;
         /// <summary>`bind=` → 掛ける色（CSS）。⚠️ null なら骨組みの `ink=` のまま。</summary>
         public Func<string, string> Tint;
         /// <summary>`bind=` → 薄くするか（0〜1）。⚠️ 伏せてあるものを沈めるのに使う。</summary>
@@ -188,6 +192,13 @@ namespace EggCommand.Web
                  .Append(";top:").Append(Px(top))
                  .Append(";width:").Append(Px(node.Width))
                  .Append(";height:").Append(Px(node.Height));
+
+            // ⭐ **枠で切る**（`crop=`・2026-08-29）。⚠️ 切るのは意匠であって事故ではない
+            //    ── 中の絵は枠より大きく描かれ、見せたいところだけが窓から見える
+            //    （作者の指示「イラストの一部だけを表示し意図的に見切れさせる」）。
+            // ⚠️ 級（css）でなくここで直に書く ── `stage.css` に持つと
+            //    「切る／切らない」の出所が骨組みと css に割れる。
+            if (node.Number("crop", 0) > 0) style.Append(";overflow:hidden");
 
             var cls = new StringBuilder("n ").Append(node.Kind);
             // ⚠️ **差し口が無ければ一度も呼ばない。**⭐ 値を差す側は
@@ -394,7 +405,10 @@ namespace EggCommand.Web
             {
                 var sprite = has && fill?.Sprite != null ? fill.Sprite(bind) : null;
                 var palette = has && fill?.Palette != null ? fill.Palette(bind) : null;
-                if (sprite != null && palette != null) Dots(sb, sprite, palette, node);
+                // ⭐ 「絵のどこを見せるか」は描く側だけが知っている（種族ごとに違う）。
+                //    ⚠️ `crop=` を持たない節点では読まれないので、渡すだけなら無害。
+                var focus = has && fill?.Focus != null ? fill.Focus(bind) : null;
+                if (sprite != null && palette != null) Dots(sb, sprite, palette, node, focus);
             }
             else if (node.Kind == "label" || node.Kind == "button")
             {
@@ -428,11 +442,16 @@ namespace EggCommand.Web
         /// `SpritePng.Run` のコメント参照）。<see cref="SpriteManifest.StemOf"/> が
         /// 種族表に無いと判じたら、今までどおり SVG で描く ── 焼いていない絵まで
         /// `&lt;img&gt;` にすると、静かに空白へ落ちる。</summary>
-        private static void Dots(StringBuilder sb, PixelSprite sprite, Palette palette, LayoutNode node)
+        private static void Dots(StringBuilder sb, PixelSprite sprite, Palette palette, LayoutNode node,
+            (double X, double Y)? focus = null)
         {
-            // 🔴 **引き伸ばさない**（段取り4・第1部）── 「短い辺で正方形」に縮めていたのをやめ、
-            //    `sprite.Width * 4` × `sprite.Height * 4` で中央に置く（合わなければ警告）。
-            string style = FitDotsStyle(node, "pixel", sprite.Width, sprite.Height);
+            // 🔴 **枠に合わせて整数倍で伸ばす**（2026-08-29・作者の指示）。
+            //    ⚠️ 2026-08-23 からここは「引き伸ばさない」（実ドット×4 で置くだけ）だった。
+            //    その規則の下では、64ドットの絵は必ず 256px・16ドットの絵は必ず 64px で描かれ、
+            //    **同じ枠に並べても4倍違う**（実測: 放置帯 160px の枠に 256px と 64px）。
+            //    作者の指摘「表示する場所によって64×で作ったものもサイズが不揃い」の正体はこれ。
+            // ⭐ 伸ばすのは <see cref="FitArtStyle"/> ── 詳しい理屈はそちらに書いてある。
+            string style = FitArtStyle(node, sprite.Width, sprite.Height, focus);
             string foeClass = node.Option("foe") == "yes" ? " foe" : "";
 
             string? stem = SpriteManifest.StemOf(sprite, palette);
@@ -480,7 +499,8 @@ namespace EggCommand.Web
 
         /// <summary>絵をそのまま出す（色を掛け合わせない・ドット絵化計画 決定10）。
         /// ⚠️ icon と違い、色の抱き合わせ層（`::after` の mask）を持たない。
-        /// ⭐ 「引き伸ばさない」規則は icon/pixel と同じ（<see cref="FitDotsStyle"/>）、
+        /// ⭐ 「引き伸ばさない」規則は icon と同じ（<see cref="FitDotsStyle"/>）。
+        /// ⚠️ pixel は 2026-08-29 にここから外れた（<see cref="FitArtStyle"/>）、
         /// 絵の実ドット数は <see cref="PaintManifest"/> から引く。</summary>
         private static void Paint(StringBuilder sb, string pic, LayoutNode node)
         {
@@ -521,10 +541,84 @@ namespace EggCommand.Web
               .Append(".png\" alt=\"\" style=\"").Append(ok).Append("\" />");
         }
 
+        /// <summary>⭐ **種族・卵の絵（`pixel`）を枠に合わせて整数倍で置く**（2026-08-29・作者の指示
+        /// 「引き伸ばしていいのはほかの比較対象がないとき。それ以外は枠のサイズを固定し共通化させる。
+        /// BOX一覧の升はイラストの一部だけを表示し意図的に見切れさせる」）。
+        ///
+        /// 🔴 **`icon`/`paint` の <see cref="FitDotsStyle"/> とは別の物差し。**
+        /// あちらは「1枚の絵に1つの正しい大きさがある」もの（枠と食い違えば骨組みの不備）。
+        /// こちらは**同じ絵が 48〜480px の枠へ次々に出る**もので、実寸に固執すると
+        /// 小さい枠では切れ（BOX一覧は 256px のうち 29.5px しか見えなかった）、
+        /// 大きい枠では余る（誕生演出は 480px の枠に 256px）。
+        ///
+        /// ⭐ **升目は <see cref="SpeciesTable.ArtDots"/>(64) で数える。**16ドットの絵も
+        /// 64ドットの絵も「64升の絵」として同じ辺の長さに伸ばす（16 のほうが4倍粗いだけ）。
+        /// ⚠️ 16 も 64 も 64 の約数なので、1ドットあたりの画素数は**必ず整数**
+        /// ── 半端倍率は使わない（明示的な過去決定）ので、`pixelated` が効いたまま濁らない。
+        ///
+        /// ⚠️ 枠が 64 升に足りないとき（卵の升 `eggchip` の 48px）だけは、その絵自身のドット数で
+        /// 整数倍を数え直す ── 16ドットなら 3px/ドットで 48px にぴたり収まる。
+        /// 🔴 これは救済ではなく**修正**でもある: 旧規則ではここに 64px の絵が出て
+        /// **48px の枠から食み出していた**。
+        ///
+        /// <param name="focus">⭐ `crop=` のとき「絵のどこを見せるか」（0〜1・null なら顔の高さ）。
+        /// ⚠️ 種族ごとに違う（作者の指示「キャラごとにズームアップ箇所を変えたい」）。</param>
+        /// </summary>
+        private static string FitArtStyle(LayoutNode node, int dotsW, int dotsH,
+            (double X, double Y)? focus)
+        {
+            float frame = Math.Min(node.Width, node.Height);
+            int canvas = SpeciesTable.ArtDots;
+
+            // ⭐ `crop=<設計px>` なら、枠より**大きく**描いて枠で切る（意図的な見切れ）。
+            //    ⚠️ 骨組みが数を持つ（この作品の流儀 ── 座標も大きさも骨組みにしか無い）。
+            int crop = node.Number("crop", 0);
+            float want = crop > 0 ? crop : frame;
+
+            // ⭐ 64升で数えた1升ぶんの画素数。⚠️ 1未満に落とさない（0 だと絵が消える）。
+            int unit = Math.Max(1, (int)Math.Floor(want / canvas));
+            float w = canvas * unit;
+            float h = w;
+
+            // ⚠️ 64升が枠に入らない小さな枠（卵の升）は、その絵自身のドット数で数え直す。
+            //    ⭐ こうしないと 48px の枠に 64px が出て食み出す（旧規則の実害）。
+            if (w > want + 0.5f)
+            {
+                int perDot = Math.Max(1, (int)Math.Floor(want / Math.Max(dotsW, dotsH)));
+                w = dotsW * perDot;
+                h = dotsH * perDot;
+            }
+            else if (dotsW != dotsH)
+            {
+                // ⚠️ 正方形でない絵は縦横の比を保つ（種族の絵は正方形だが、卵などの例外に備える）
+                h = w * dotsH / Math.Max(1, dotsW);
+            }
+
+            // ⭐ 置き場所。切らないなら中央、切るなら「見せたいところ」を枠の真ん中へ。
+            float left, top;
+            if (crop > 0)
+            {
+                double fx = focus?.X ?? 0.5, fy = focus?.Y ?? 0.38;
+                left = node.Width / 2f - (float)(w * fx);
+                top = node.Height / 2f - (float)(h * fy);
+                // ⚠️ 枠の中に絵が無い（＝地が見える）状態を作らない ── 端で止める。
+                left = Math.Min(0f, Math.Max(node.Width - w, left));
+                top = Math.Min(0f, Math.Max(node.Height - h, top));
+            }
+            else
+            {
+                left = (node.Width - w) / 2f;
+                top = (node.Height - h) / 2f;
+            }
+            return "left:" + Px(left) + ";top:" + Px(top) + ";width:" + Px(w) + ";height:" + Px(h);
+        }
+
         /// <summary>絵を「ドット数×4px」で節点の中央に置くスタイル文字列を作る。
         /// 🔴 **引き伸ばさない**（段取り4・第1部）── 枠に合わなければ位置だけ中央寄せし、
         /// 大きさはそのまま（縮めない・はみ出しても隠さない）。
-        /// ⭐ 合っていなければ console に1回だけ警告する（<see cref="WarnMismatch"/>）。</summary>
+        /// ⭐ 合っていなければ console に1回だけ警告する（<see cref="WarnMismatch"/>）。
+        /// ⚠️ **`icon`/`paint` 専用**（2026-08-29 に `pixel` を <see cref="FitArtStyle"/> へ移した）
+        /// ── あちらは「同じ絵が色々な枠に出る」ので、実寸に固執すると切れるか余る。</summary>
         private static string FitDotsStyle(LayoutNode node, string kind, int dotsW, int dotsH)
         {
             float w = dotsW * 4f;

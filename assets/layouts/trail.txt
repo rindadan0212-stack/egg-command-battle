@@ -11,18 +11,25 @@
 #  名前     種類    左   上    幅   高    付け足し
 # ⚠️ **帯は暗い板**（実物の `Board` 色）。⭐ 上に白い字と白い絵を置くので、
 #    白い札にすると**中身が丸ごと見えなくなる**（実測 2026-08-22）。
+# ⚠️ **枠は絵の実寸ぴったりにする**（2026-08-29・作者の指示「①PNGを枠の大きさに描き直す」）。
+#    🔴 以前はどの絵も 128px（32ドット）で焼かれており、46px の枠に12個並べたさいころは
+#    互いに 82px ずつ食い込んで**白い塊**にしか見えなかった（実測 2026-08-29）。
+#    ⭐ いまは `tools/icon-fit.mjs` が原画から枠の大きさで焼く ── さいころ 11ドット=44px、
+#    卵の印 10ドット=40px、財布の絵 13ドット=52px。
 head       box     0    0     1080 214   dock=no bind=board
-  die      icon    48   20    46   46    repeat=dice cols=12 gap=8 max=12 bind=die
+  # ⚠️ 隔たりは 54（絵 44 ＋ 隔し 10）── 12個で 48+54*12-10 = 686、`more` の 696 に触れない
+  die      icon    48   20    44   44    repeat=dice cols=12 gap=10 max=12 bind=die
   more     label   696  20    44   46    size=26 ink=faint anchor=left when=more bind=more
   # ⭐ 卵までの残りは**最短マス数**（%は「たぶん届く」で当てにならなかった）
-  goalpic  icon    990  20    42   42    pic=goal ink=faint
+  goalpic  icon    992  20    40   40    pic=goal ink=faint
   unit     label   748  22    232  34    size=26 ink=faint anchor=upper-right text=マス
   # ⚠️ **56 だと字が触れる。**⭐ 枠は接していなくても、
   #    実際に乗っている範囲で見ると重なる（実測 2026-08-22）。
   num      label   748  64    232  62    size=50 anchor=upper-right bind=num
   # ⭐ いくら払えるか。⚠️ 手持ちが見えないと「払うか見送るか」を選びようがない
-  purse    icon    48   140   48   48    repeat=purse cols=3 gap=280 max=3 bind=purse
-  # ⚠️ 隔たりは 328（絵 48 ＋ 隔し 8 ＋ 数 240 ＋ 余白）。⭐ 絵と同じ歩幅にする
+  # ⚠️ 絵が 13ドット=52px になったので枠も 52 へ。⭐ 歩幅 328 は変えない（隔しで吸収）
+  purse    icon    48   138   52   52    repeat=purse cols=3 gap=276 max=3 bind=purse
+  # ⚠️ 隔たりは 328（絵 52 ＋ 隔し 276 ＝ 数 240 ＋ 隔し 88）。⭐ 絵と同じ歩幅にする
   pursen   label   104  132   240  64    size=36 anchor=left repeat=purse cols=3 gap=88 max=3 bind=pursen
 
 # ⚠️ **1画面に収めない**（作者の指示）。⭐ 縦に巻いて、駒が見える所へ寄せる。
@@ -34,7 +41,9 @@ foot       box     0    1396  1080 392   dock=no bind=board
   # ⚠️ **振れないときは灰で出す**（消さない）。
   #    ⭐ 消えると「この先はどうするのか」が画面から失せる。
   roll     button  48   108   984  150   tap=roll lead=yes when=!offer
-    rollpic icon   448  31    88   88    pic=die ink=on-lead
+    # ⚠️ ここだけ大きい（88px）ので**別の絵**を焼いてある（`die-big`）── 引き伸ばさない
+    #    規則の下では、1枚の絵は1つの大きさしか持てない（`tools/icon-fit.mjs` 参照）。
+    rollpic icon   448  31    88   88    pic=die-big ink=on-lead
 
   # ⭐ **払うか、払わないか。**⚠️ 字で説明しない ──
   #    左が「払う量」、右が「もらえる物」。矢印が交換の合図。
@@ -46,4 +55,5 @@ foot       box     0    1396  1080 392   dock=no bind=board
     payarr icon    280  57    36   36    pic=arrow ink=on-lead
     paygot label   330  0     140  150   size=32 anchor=left bind=paygot
   skip     button  546  108   486  150   tap=skip when=offer
-    skippic icon   213  45    60   60    pic=arrow ink=dim
+    # ⚠️ 矢印もここだけ大きい（60px）ので別の絵（`arrow-big`）── 上の `rollpic` と同じ理由
+    skippic icon   213  45    60   60    pic=arrow-big ink=dim

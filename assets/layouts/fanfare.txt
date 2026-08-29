@@ -25,7 +25,12 @@
 dim      veil    0    0     1080 1920  tap=cheer
 burst    round   140  420   800  800   bind=burst
 pop      box     140  420   800  800
-  art    pixel   160  120   480  480   bind=art
+  # 🔴 **ここだけは大きく見せてよい**（2026-08-29・作者の指示「引き伸ばしていいのは
+  #    ほかの比較対象がないとき（孵化後の演出の時とか）」）── 画面には生まれた1体しか
+  #    居ないので、隣と見比べて「大きい種族だ」と誤解される心配が無い。
+  # ⭐ 512 は 64x8 ── 64ドットの種族は 8px/ドット、16ドットの種族は 32px/ドット。
+  #    ⚠️ 以前は 480 の枠に 256px（64ドット）／64px（16ドット）しか出ていなかった。
+  art    pixel   144  88    512  512   bind=art
   stars  label   0    620   800  80    size=56 anchor=center bind=stars when=stars
 line     label   40   1330  1000 200   size=54 anchor=upper-center wrap=yes bind=line
 

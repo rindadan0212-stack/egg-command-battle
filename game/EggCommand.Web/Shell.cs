@@ -11,7 +11,7 @@ public enum Sheet { Home, Nests, Breed, Box, Book, Fight, Raid, Trial }
 /// キャラクターの家系図を見られるように」）。⚠️ 末尾に足す ── 途中に挿すと
 /// 既存の値の並びが1つずつずれる（値そのものを保存には書いていないが、
 /// 並びに依存した比較を疑う手間を増やさないため）。</summary>
-public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train, Ask, Keep, Grow, Tree }
+public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train, Ask, Keep, Grow, Tree, Menu }
 
 /// <summary>すごろくの演出がどこまで進んだか。</summary>
 public enum Roam
@@ -278,6 +278,34 @@ public sealed class Shell
         return Storages.Sorted(new Storage(Game.Storage.Slots, pool), Sort, Basis);
     }
 
+    /// <summary>卵の棚の並び順。⭐ `"star"`（★の多い順）か `"new"`（入手順）
+    /// （2026-08-29・作者の指示「並び替え機能追加 ── 星、入手順」）。
+    /// ⚠️ 2つしか無いので、BOX の絞り込み／並べ替え／何の数で（`sortchips`）は持ち込まない
+    /// ── あれは3段の仕掛けで、2択のためには重すぎる。</summary>
+    public string EggSort = "star";
+
+    /// <summary>棚の卵を <see cref="EggSort"/> の順に並べたもの。
+    ///
+    /// 🔴 **画面も押しどころも必ずこれを通す。**⚠️ 絵だけ並べ替えて
+    /// `Game.Eggs` の添字で温めると、**押した卵と違う卵が孵る**
+    /// （<see cref="Sorted"/> と `Choose` が creature 側で守っているのと同じ約束）。
+    /// ⭐ 入手順は `Game.Eggs` の並びそのもの ── 足すときは末尾に足されるため。</summary>
+    public IReadOnlyList<Egg> SortedEggs()
+    {
+        var list = new List<Egg>(Game.Eggs);
+        if (EggSort != "star") return list;
+        // ⚠️ **同じ★の中は入手順のまま**にしたいので、添字を第2の鍵にした安定な並べ替え。
+        //    ⭐ `List.Sort` は安定でないので、元の位置を覚えてから比べる。
+        var order = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (int i = 0; i < list.Count; i++) order[list[i].Id] = i;
+        list.Sort((x, y) =>
+        {
+            int d = y.Rarity.CompareTo(x.Rarity);
+            return d != 0 ? d : order[x.Id].CompareTo(order[y.Id]);
+        });
+        return list;
+    }
+
     public Creature? PickedOne()
     {
         foreach (var c in Game.Storage.Creatures) if (c.Id == Picked) return c;
@@ -311,7 +339,10 @@ public sealed class Shell
                 };
                 break;
 
-            case "back": Open = Under = Panel.None; Now_Sheet = Sheet.Home; break;
+            // 🔴 **`back`（‹）と `extra`（右肩）は消した**（2026-08-29・上のバーを外した）。
+            //    ⚠️ `back` を出していたのは図鑑と試練の2画面だけで、どちらも下の帯の
+            //    「ホーム」タブが同じ行き先を持っていた＝重複した道。
+            //    ⭐ `extra` の行き先はここに来た（ホームの図鑑 → `menu`／探索の編成 → `party`）。
             // ⚠️ **閉じたら選びかけも捨てる。**⭐ 残すと、次に開いたとき
             //    身に覚えのない個体が選ばれていて、そのまま分解できてしまう
             case "close": Open = Under; Under = Panel.None; Melts.Clear(); Feeds.Clear(); break;
@@ -320,11 +351,14 @@ public sealed class Shell
             //    （`Fanfare.prefab` の `Dim` が Image と Button を兼ねている）── 同じ形。
             case "cheer": Cheer_ = null; break;
 
-            // ⭐ **右肩は画面ごとに中身が変わる**（Unity 版 `App.ShowExtra`）
-            case "extra":
-                if (Now_Sheet == Sheet.Home) { Now_Sheet = Sheet.Book; SortOpen = false; }
-                else if (Now_Sheet == Sheet.Nests) { IdleParty = false; Open = Panel.Party; }
-                break;
+            // ⭐ **輪の外のものを1つにまとめた入口**（2026-08-29・作者の指示
+            //    「図鑑や保存などのボタンにしか使わないものを一か所にまとめ、右上に」）。
+            //    ⚠️ ホームの右上にしか置いていない ── 遊びの輪（探索→潜入→戦闘→帰還）は
+            //    下の帯が持つので、そこへ混ぜない。
+            case "menu": Open = Panel.Menu; break;
+            // ⭐ メニューの4つ。⚠️ どれも**先にメニューを閉じてから**行き先を決める
+            //    （閉じないと、行った先の上にメニューが残って被る）。
+            case "book": Open = Under = Panel.None; Now_Sheet = Sheet.Book; SortOpen = false; break;
 
             case "bar-toggle": SortOpen = !SortOpen; break;
             case "chips-filter": Filter = Filters.Keys[i]; break;
@@ -343,6 +377,9 @@ public sealed class Shell
             case "s0": Deeds.Strike(this, 0); break;
             case "s1": Deeds.Strike(this, 1); break;
             case "s2": Deeds.Strike(this, 2); break;
+            // ⭐ 体を押して狙い先にする（敵味方とも）。もう一度押すと外れる。
+            //    ⚠️ 番号ではなく `a0`/`f2` の形で来るので `at` をそのまま渡す。
+            case "aim": Deeds.Aim(this, at); break;
             case "pick": Auto = !Auto; break;
             // ⭐ **取り返しがつかないので一度だけ確かめる**（押し間違いで負けにしない）
             case "give": if (Fight_ != null) Open = Panel.Ask; break;
@@ -352,6 +389,10 @@ public sealed class Shell
             // ⭐ 空き枠を押したら、そのとき初めて卵の在庫が開く（棚を常に出しておかない）
             case "slot": Deeds.Slot(this, i); break;
             case "egg": Deeds.Warm(this, i); break;
+            // ⭐ 棚の並べ替え（2026-08-29・作者の指示「星、入手順」）。
+            //    ⚠️ 押しどころは2つに分けてある ── 繰り返しでない節点は添字を持たない。
+            case "eggstar": EggSort = "star"; break;
+            case "eggnew": EggSort = "new"; break;
 
             // ── 育てる ──────────────────────────────
             // ⚠️ 分解は**開くだけ**。⭐ 減るのは札の中の「分解する」を押したとき
@@ -408,8 +449,12 @@ public sealed class Shell
             case "breed": Deeds.Breed(this); break;
 
             // ── 編成 ────────────────────────────────
-            // ⭐ ホームからは放置の編成・探索の右肩からは巣の編成
-            case "party": IdleParty = true; Open = Panel.Party; break;
+            // ⭐ **どちらの編成かは、押した画面が決める。**探索から押したときだけ巣の編成、
+            //    それ以外（ホームのメニュー）は放置の編成。
+            //    ⚠️ 2026-08-29 まで探索は右肩の `extra` から入っていたが、上のバーを
+            //    外したので `nests.txt` の下端の釦から同じ `party` に入る ── 行き先が
+            //    2つに割れないよう、`IdleParty` の決め方をここ1か所に集めた。
+            case "party": IdleParty = Now_Sheet != Sheet.Nests; Open = Panel.Party; break;
             case "set": Deeds.Team(this, i); break;
             case "seat": Deeds.Drop(this, i); break;
             case "done": Open = Under = Panel.None; break;
@@ -420,7 +465,8 @@ public sealed class Shell
             case "keep": Open = Panel.Keep; break;
 
             // ── 図鑑・試練 ──────────────────────────
-            case "trials": Now_Sheet = Sheet.Trial; SortOpen = false; break;
+            // ⚠️ 画面を移るので、開いているメニューを畳んでから行く
+            case "trials": Open = Under = Panel.None; Now_Sheet = Sheet.Trial; SortOpen = false; break;
             case "trial": Deeds.Trial(this, i); break;
             case "species": SpeciesAt = i; Open = Panel.Species; break;
         }
@@ -585,68 +631,26 @@ public sealed class Shell
             At = (key, i) => tab = i,
             Text = key => key switch
             {
-                "title" => Title(),
-                "badge" => Badge(),
-                "extra" => Extra() ?? "",
                 "tname" => names[tab],
                 "tcount" => counts[tab],
                 _ => "",
             },
             // ⭐ いま居るタブだけ塗る
             Tint = key => key == "tab" && tab == here ? "#f59e0b" : null,
-            // ⚠️ タブのある画面に ‹ を出さない ── タブが行き先を全部持っている
             When = key => key switch
             {
                 // ⚠️ **戦闘中と潜入中は戻れない** ── 抜けられると、
                 //    不利な盤面をいつでも無かったことにできてしまう。
                 "dock" => Now_Sheet is not (Sheet.Fight or Sheet.Raid),
-                // ⭐ タブに乗っていない画面（図鑑・試練）だけ ‹ を出す
-                "back" => Now_Sheet is Sheet.Book or Sheet.Trial,
-                "extra" => Extra() != null,
                 _ => false,
             },
             Tappable = key => true,
         });
     }
 
-    private string Title() => Now_Sheet switch
-    {
-        Sheet.Home => "EGG COMMAND",
-        Sheet.Nests => "探索",
-        Sheet.Breed => "配合",
-        Sheet.Box => "BOX",
-        Sheet.Book => "図鑑",
-        Sheet.Trial => "試練",
-        Sheet.Fight => Boss ? Nests.BossName : "戦闘",
-        Sheet.Raid => Nest_ != null ? Nest_.Name : "強奪",
-        _ => "",
-    };
-
-    /// <summary>右肩に出す入口。⚠️ **本体に置けなかったものだけ**が来る
-    /// （Unity 版 `App.ShowExtra` と同じ役目）。⭐ 無ければ右肩は字に戻る。</summary>
-    private string? Extra() => Now_Sheet switch
-    {
-        Sheet.Home => "図鑑",
-        // ⭐ **巣を選ぶ前に編成を決める。**⚠️ 潜ってから「違った」と気づいても戻れない。
-        //    ⚠️ 本体には置けない ── 巣の札が縦を埋めていて、どこに置いても重なる。
-        Sheet.Nests => "パーティ編成",
-        _ => null,
-    };
-
-    /// <summary>右肩の字。
-    ///
-    /// ⭐ **溜まっている EXP を BOX と配合に出す**（2026-08-21・作者の指示）。
-    /// ⚠️ ホームにしか出ていなかったので、BOX で「Lv ＋1 EXP 122」を見ても
-    /// 足りているのかが分からなかった。
-    ///
-    /// ⚠️ **ホームには出さない。**⭐ 画面の中の帯が既に同じ数を出していて、
-    /// 並べると同じ字が2つ見える（実測 2026-08-22）。
-    /// ⚠️ **体数もここに出さない。**⭐ 下のタブが既に出している
-    /// （「BOX 44/50」「配合 44体」）── 両方出すと枠に入らない
-    /// （実測「EXP 19,475　44/50」は 315 要るのに枠は 252）。</summary>
-    private string Badge() => Now_Sheet switch
-    {
-        Sheet.Box or Sheet.Breed => $"EXP {Face.Digits(Game.Idle.Exp)}",
-        _ => "",
-    };
+    // 🔴 **`Title()` / `Extra()` / `Badge()` は消した**（2026-08-29・上のバーを外したため）。
+    //    ⚠️ 3つとも `frame.txt` の `top` の中の節点にしか繋がっていなかったので、
+    //    残すと**誰も読まない枝**になる。行き先は `frame.txt` の頭に書いてある:
+    //    題名とボス名は捨て・‹ はタブが持ち・EXP は BOX と配合の画面の中へ・
+    //    右肩の入口はホームのメニューと探索の下端へ移した。
 }

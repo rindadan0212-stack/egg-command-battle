@@ -540,10 +540,14 @@ namespace EggCommand.Core
         /// <summary>指で押せる最小の高さ。⚠️ View の <c>Ui.Tap</c> と同じ数。</summary>
         public const float TapHeight = 112f;
 
-        /// <summary>上のバー（`frame.txt` の `top` ── 0,0,1080,132）。⚠️ 画面（シート）の骨組みは
-        /// この高さぶん下がった器（`AppPage` の `#app-body` top:132）に描かれるので、
-        /// シートの床は ScreenHeight − TopBarHeight − DockHeight ＝ 1556。</summary>
-        public const float TopBarHeight = 132f;
+        /// <summary>上のバーの高さ。🔴 **2026-08-29 に 132 → 0**（作者の指示「この帯は不要」）。
+        /// ⚠️ `frame.txt` の `top` を丸ごと外したので、画面（シート）の骨組みは
+        /// 画面のてっぺんから描かれる（`AppPage` の `#app-body` top:0）── シートの床は
+        /// ScreenHeight − TopBarHeight − DockHeight ＝ **1688**。
+        /// ⭐ 0 になった今も定数として残す ── 床の式（<see cref="DockFaults"/>）が
+        /// 「上のバーぶんを引く」という意味を持ったままなので、数を式から消すと
+        /// 上のバーが戻ったときに直す場所が分からなくなる。</summary>
+        public const float TopBarHeight = 0f;
         /// <summary>下の帯（`frame.txt` の `dock` ── 0,1688,1080,232）。
         /// ⭐ 実物との一致は `LayoutAssetTests.外枠の実物と定数が一致する` が固定する。</summary>
         public const float DockHeight = 232f;
@@ -619,6 +623,12 @@ namespace EggCommand.Core
             //    下half分が**見えないうえ押せない**（実測 2026-08-26・すごろくの盤
             //    ── 中身 4566 が器 1164 で切られ、`scrollHeight == clientHeight` だった）。
             "grow",     // ⭐ 中身の高さに任せる（`host` を切らない）
+            // ⭐ **絵を枠より大きく描いて枠で切る**（`crop=256`・`pixel` だけ）。
+            // ⚠️ 数は「絵を何設計pxで描くか」── 枠の大きさではない（枠は 左上幅高 が持つ）。
+            // 🔴 見切れは**事故ではなく意匠**（2026-08-29・作者の指示「BOX一覧の升はイラストの
+            //    一部だけを表示し意図的に見切れさせる。見せたいところだけを見せる」）。
+            //    ⭐ どこを見せるかは種族ごとに違う（`LayoutDom.FitArtStyle` の focus）。
+            "crop",
         };
 
         /// <summary>⭐ **兄弟を上から詰めるか。**

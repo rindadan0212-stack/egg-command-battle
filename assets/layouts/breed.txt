@@ -25,3 +25,7 @@ gridA     scroll  48   818    984  738   when=!open
   cellA   card    26   0      224  200   repeat=box cols=4 gap=12 rows=212 tap=one use=cell
 gridB     scroll  48   1250   984  306   when=open
   cellB   card    26   0      224  200   repeat=box cols=4 gap=12 rows=212 tap=one use=cell
+
+# ⭐ **持っている EXP**（2026-08-29・上のバーの右肩から降りてきた ── `box.txt` と同じ理由）。
+#    ⚠️ 上のバーを外して本体が 1556 → 1688 に伸びたぶんへ置く。
+exp       label   48   1580   984  80    size=30 ink=faint anchor=right bind=exp

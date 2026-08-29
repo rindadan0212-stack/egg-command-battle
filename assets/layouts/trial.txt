@@ -11,5 +11,7 @@ list      scroll  48   80   984  1376
     name  label   130  20   600  50    size=40 anchor=left bind=name
     gist  label   130  74   820  36    size=26 ink=dim anchor=left bind=gist
     won   label   730  20   230  40    size=28 ink=good anchor=right bind=won when=beaten
-    face  pixel   24   118  116  116   repeat=party cols=4 gap=16 rows=116 max=4 foe=yes bind=face
+    # 🔴 **枠は 64 の倍数**（2026-08-29）── 顔ぶれ4体を横に並べて見比べる。⭐ 128 は 64x2。
+    #    ⚠️ 4体ぶんの幅は 4x128 + 3x16 = 560（`go` 釦の 680 に届かない）。
+    face  pixel   24   118  128  128   repeat=party cols=4 gap=16 rows=128 max=4 foe=yes bind=face
     go    button  680  164  280  112   bind=go

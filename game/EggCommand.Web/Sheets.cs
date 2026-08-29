@@ -63,6 +63,9 @@ public static class Sheets
             {
                 // ⭐ 押しどころは3つ。⚠️ 主役（塗る）は「Lv ＋1」だけ
                 "grow" => $"Lv ＋1　EXP {Face.Digits(Levels.ExpToNext(picked))}",
+                // ⭐ **持っている EXP**（旧 上のバーの右肩 ── 2026-08-29 に画面の中へ）。
+                //    ⚠️ すぐ上の "grow" は**要る量**、こちらは**持っている量**。両方要る。
+                "exp" => $"持っている EXP {Face.Digits(s.Game.Idle.Exp)}",
                 "cellA-star" or "cellB-star" => Face.Star(sorted[one]),
                 _ => key.StartsWith("detail-") ? face.Text(key[7..], face.Row)
                     : SortText(s, key, chip),
@@ -72,6 +75,8 @@ public static class Sheets
                 : key is "cellA-art" or "cellB-art" ? Cell(one).Sprite : null,
             Palette = key => key == "detail-art" ? face.Palette
                 : key is "cellA-art" or "cellB-art" ? Cell(one).Palette : null,
+            // ⭐ 升は絵を切って見せる（`cell.txt` の `crop=`）── その「見せどころ」。
+            Focus = key => key is "cellA-art" or "cellB-art" ? Cell(one).Focus : null,
 
             Tint = key => key is "cellA-elem" or "cellB-elem"
                 ? Face.ElementCss(sorted[one].Element)
@@ -130,12 +135,16 @@ public static class Sheets
 
             Text = key => Which(key) is (Face f, string what) ? f.Text(what, f.Row)
                 : key is "cellA-star" or "cellB-star" ? Face.Star(sorted[one])
+                // ⭐ **持っている EXP**（旧 上のバーの右肩 ── 2026-08-29 に画面の中へ）
+                : key == "exp" ? $"持っている EXP {Face.Digits(s.Game.Idle.Exp)}"
                 : SortText(s, key, chip),
 
             Sprite = key => key is "cellA-art" or "cellB-art" ? Cell(one).Sprite
                 : Which(key) is (Face f, "art") ? f.Sprite : null,
             Palette = key => key is "cellA-art" or "cellB-art" ? Cell(one).Palette
                 : Which(key) is (Face f, "art") ? f.Palette : null,
+            // ⭐ 升は絵を切って見せる（`cell.txt` の `crop=`）── その「見せどころ」。
+            Focus = key => key is "cellA-art" or "cellB-art" ? Cell(one).Focus : null,
 
             Tint = key => key is "cellA-elem" or "cellB-elem"
                 ? Face.ElementCss(sorted[one].Element)
@@ -354,13 +363,18 @@ public static class Sheets
             },
 
             // ⭐ CT の丸薬は濃紺・字は白。⚠️ 同じ色を2か所に書かない
+            // 🔴 **技の札の地そのものを属性の色に**（2026-08-29・作者の指示「属性の色に」）。
+            //    ⭐ BOX の札（`panel.txt` の s0/s1/s2）が既にそうしている ──
+            //    出所は `Face.Tint` の "s0"/"s1"/"s2" と同じ `ElementCss` で、
+            //    「属性の丸と技の札の地は同じ色」という約束の**戦闘側だけが抜けていた**。
             // ⭐ 技のラベルは手札の主（その個体）の属性の色（作者の指示 2026-08-29）。
-            //    ⚠️ 白い札の上で薄い属性色は読みにくいので `Face.ElementInk`
-            //    （読める濃さ）を使う ── 濃さの計算の出所は Face 側の1つだけ
-            //    （BOX の札 `panel.txt` の s0name/s1name/s2name と同じ関数）。
+            //    ⚠️ 地が薄い属性色で塗られたので、字まで同じ薄さだと沈む ──
+            //    読める濃さの `Face.ElementInk` を使う（濃さの計算の出所は Face 側の1つだけ・
+            //    BOX の札 `panel.txt` の s0name/s1name/s2name と同じ関数）。
             Tint = key => key.EndsWith("pill") ? "#2b3350"
                 : key.EndsWith("ct") ? "#ffffff"
                 : key.EndsWith("name") && hand != null ? Face.ElementInk(hand.Creature.Element)
+                : Slot(key) is (int, "") && hand != null ? Face.ElementCss(hand.Creature.Element)
                 : null,
 
             // ⭐ 入っているあいだは主役に立てる（字だけだと遠目に読めない）
@@ -416,6 +430,9 @@ public static class Sheets
         {
             var u = units[i];
             bool alive = EggCommand.Core.Battle.IsAlive(u);
+            // ⭐ **狙い先の印**（2026-08-29）。⚠️ 倒れた体には出さない ── 鍵の後始末は
+            //    `Deeds.ForgetDeadAims` が次の拍でやるが、印は倒れたその拍で消したい。
+            bool aimed = alive && u.Key == (foe ? s.AimFoe : s.AimAlly);
             // ⭐ 絵の並び用（構造化）。⚠️ 字を返す `ActiveStatuses` は Unity の
             //    `UnitStand` がまだ読むので、そちらは触らない（Battle.cs 参照）。
             var badges = EggCommand.Core.Battle.ActiveStatusBadges(u);
@@ -456,6 +473,9 @@ public static class Sheets
                     "elem" => Face.ElementCss(u.Creature.Element),
                     "beats" => Face.ElementCss(SpeciesTable.Beats(u.Creature.Element)),
                     "glow" => "rgba(255,217,77,.55)",
+                    // ⭐ 狙い先の棒は HP 帯と**同じ2色**（味方は緑・敵は赤）。
+                    //    ⚠️ 新しい色を作らない ── 増やすと「この色は何の色か」が増える
+                    "aim" => foe ? "#e04f5f" : "#2fa84a",
                     // ⚠️ 新しい色を作らない ── 既存の良い側／悪い側の字色（Ui.cs の12定数）そのまま
                     "sicon" or "snum" => cur >= 0 && cur < badges.Count
                         ? (badges[cur].Good ? "#1e7a38" : "#c0303f") : null,
@@ -463,11 +483,18 @@ public static class Sheets
                 },
                 Count = key => key == "status" ? Math.Min(badges.Count, shown) : 0,
                 At = (key, idx) => { if (key == "status") cur = idx; },
+                // 🔴 **これが無いと `tap=` は `data-tap` にならない**（`LayoutDom` の
+                //    `live` は `Tappable` が **null でないこと**まで見る）。
+                // ⭐ 狙えるのは生きている体だけ ── 倒れた体は押しどころごと消える
+                //    （押せるのに何も起きない、を作らない）。
+                Tappable = key => key != "aim" || alive,
                 When = key => key switch
                 {
                     "foe" => foe,
                     // ⭐ いま手番が回っている体を光らせる
                     "actor" => actor != null && actor.Key == u.Key,
+                    // ⭐ 狙い先の印（棒8本）── 出す・出さないはここ1か所で決める
+                    "aim" => aimed,
                     "smore" => badges.Count > shown,
                     _ => false,
                 },
@@ -527,6 +554,8 @@ public static class Sheets
             Palette = key => key == "part" ? (Member(pick) is Creature c
                     ? Creatures.PaletteOf(c) : null)
                 : key is "cellA-art" or "cellB-art" ? Cell(one).Palette : null,
+            // ⭐ 升は絵を切って見せる（`cell.txt` の `crop=`）── その「見せどころ」。
+            Focus = key => key is "cellA-art" or "cellB-art" ? Cell(one).Focus : null,
 
             Tint = key => key switch
             {
@@ -734,6 +763,12 @@ public static class Sheets
     /// <summary>⭐ **ブラウザの外へ出す唯一の口。**
     /// ⚠️ 中の棚（localStorage）は容量が足りなくなると**まとめて**消えるので、
     /// 世代を残しても一緒に消える ── 別の消え方をする場所は外にしかない。</summary>
+    /// <summary>輪の外のものをまとめた小窓（ホーム右上の入口から）。
+    /// ⭐ 字も条件も持たない ── 4つの行き先は骨組み（`menu.txt`）に書いてあるだけで、
+    /// ここで足す物が無い。⚠️ それでも `Sheets` を通す ── 描き方の出所を1つに保つため。</summary>
+    public static string Menu(Shell s, string crown = "") =>
+        LayoutDom.Render(LayoutStore.Of("menu"), new DomFill { Tappable = key => true }, crown: crown);
+
     public static string Keep(Shell s, string crown = "") =>
         LayoutDom.Render(LayoutStore.Of("save"), new DomFill
         {
@@ -889,7 +924,9 @@ public static class Sheets
     /// 明るいまま押せてしまう。</summary>
     public static string Eggs(Shell s, string crown = "")
     {
-        var eggs = s.Game.Eggs;
+        // 🔴 **並べ替えた順を使う**（2026-08-29）。⚠️ `Game.Eggs` をそのまま出して
+        //    `Deeds.Warm` だけ並べ替えると、絵と押しどころの出所が割れる。
+        var eggs = s.SortedEggs();
         int at = 0;
 
         return LayoutDom.Render(LayoutStore.Of("eggpicker"), new DomFill
@@ -901,6 +938,9 @@ public static class Sheets
             {
                 // ⚠️ 「卵がありません」と書かない。⭐ 数を言えば足りる
                 "count" => $"棚の卵 {eggs.Count}",
+                // ⭐ 並べ替えの2択（字は `bind` から ── 塗り分けが `bind` 持ちにしか掛からないため）
+                "sstar" => "★の多い順",
+                "snew" => "入手順",
                 "egg-stars" => Rarities.StarsOf(eggs[at].Rarity),
                 // ⭐ 素質は伏せない。手元にある卵なので、どれを先に温めるかの材料になる
                 "egg-wild" => Stats.TotalOf(eggs[at].Wild).ToString(),
@@ -909,9 +949,19 @@ public static class Sheets
                 _ => "",
             },
 
-            Sprite = key => key == "egg-art" ? EggArt.Sprite : null,
-            Palette = key => key == "egg-art" ? EggArt.Shell : null,
-            Tint = key => key == "egg-elem" ? Face.ElementCss(eggs[at].Element) : null,
+            // 🔴 **種族ごとの卵の絵**（2026-08-29・作者の指示「種族の卵の見た目で表示」）。
+            //    ⚠️ 孵化器の巣（`Incubator.cs`）は前からこの絵を出していて、棚だけが
+            //    どの卵も同じ汎用の絵（`EggArt.Sprite`）を出していた ── 出所を巣と揃えた。
+            //    ⭐ `EggSkins.NameOf` が返すのは焼いた PNG の名前（`sim egg-art` が作る）。
+            Pic = key => key == "egg-art" ? EggSkins.NameOf(eggs[at].SpeciesId) : null,
+            // 🔴 **属性の色付けは無い**（2026-08-29・作者の指示「属性表示不要」で
+            //    `eggcard.txt` の `elem` ごと外した）。⚠️ 節点が消えた側だけ直して
+            //    ここに `egg-elem` を残すと、誰も読まない枝になる。
+
+            // ⭐ いま効いている並び順だけ塗る（下の帯のタブと同じ約束・同じ色）。
+            //    ⚠️ 字で「（選択中）」と書き足さない ── 色だけで足りる。
+            Tint = key => (key == "sstar" && s.EggSort == "star")
+                || (key == "snew" && s.EggSort != "star") ? "#f59e0b" : null,
 
             Tappable = key => true,
         }, crown: crown);
@@ -955,6 +1005,8 @@ public static class Sheets
 
             Sprite = key => key == "cell-art" ? Cell(at).Sprite : null,
             Palette = key => key == "cell-art" ? Cell(at).Palette : null,
+            // ⭐ 升は絵を切って見せる（`cell.txt` の `crop=`）── その「見せどころ」。
+            Focus = key => key == "cell-art" ? Cell(at).Focus : null,
 
             Tint = key => key switch
             {

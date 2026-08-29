@@ -2,15 +2,28 @@
 #
 # ⚠️ 実物の Prefab は 268 だが、種族名（240 から 34）が**枠から 6px はみ出していた**
 #    ── Unity は枠の外へ字を描くので気づけない形。⭐ 器のほうを 280 にした。
+# 🔴 **2026-08-29 に 280 → 396。**⚠️ 卵の絵を種族ごとの焼いた絵（176x220）にしたため。
 #
 # ⭐ **何の卵か**を必ず出す（作者の指示 2026-08-22）。
 #    ⚠️ ★も素質も時計も「どれくらい」しか言わず、「何が」を言う字が1つも無かった。
 #
+# 🔴 **卵の絵を「種族ごとの焼いた絵」に差し替えた**（2026-08-29・作者の指示
+#    「種族の卵の見た目で表示」）。⚠️ 孵化器の巣（`slot.txt`）は前からこの絵を出していて、
+#    ここだけが**どの卵も同じ**汎用の絵（`EggArt.Sprite`）を出していた。
+# ⭐ `pixel`（式で描く）ではなく `paint`（焼いた PNG）にする ── `EggSkins` の註のとおり、
+#    式のまま描くと卵1つにつき 1762 個の矩形を並べることになる（棚に50個並べたら破綻する）。
+# ⚠️ **`paint` は引き伸ばさない**ので、枠は絵の実寸 44x55 ドット = 176x220 でなければ
+#    ならない（`PicFrameSizeTests` が見張る）── そのぶん札を 280 → 396 に伸ばした。
+#    ⭐ `pic=` は取りこぼしたときの受け皿（`slot.txt` と同じ扱い）。
+#
 #  名前   種類    左   上    幅   高    付け足し
-art      pixel   66   16    96   96    bind=art
-elem     round   190  14    24   24    bind=elem
-stars    label   0    116   228  34    size=22 ink=accent anchor=upper-center bind=stars
+art      paint   26   8     176  220   bind=art pic=nest-egg
+# 🔴 **属性の丸（`elem`）を外した**（2026-08-29・作者の指示「属性表示不要」）。
+#    ⚠️ 卵を選ぶのは「どれを先に温めるか」の判断で、その材料は ★・素質・待ち時間・種族名。
+#    属性は生まれてからの相性の話なので、この札では使わない（`Sheets.Eggs` の
+#    `egg-elem` の色付けも一緒に外した ── 出所を残すと死んだ枝になる）。
+stars    label   0    232   228  34    size=22 ink=accent anchor=upper-center bind=stars
 # ⭐ 素質は伏せない。手元にある卵なので、どれを先に温めるかの材料になる
-wild     label   0    150   228  48    size=34 anchor=upper-center bind=wild
-wait     label   0    202   228  34    size=22 ink=faint anchor=upper-center bind=wait
-who      label   0    240   228  34    size=24 anchor=center bind=who
+wild     label   0    266   228  48    size=34 anchor=upper-center bind=wild
+wait     label   0    318   228  34    size=22 ink=faint anchor=upper-center bind=wait
+who      label   0    356   228  34    size=24 anchor=center bind=who

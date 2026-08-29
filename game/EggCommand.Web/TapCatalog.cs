@@ -18,13 +18,15 @@ namespace EggCommand.Web
     {
         public static readonly string[] Names =
         {
-            // ── Shell.cs Tap() の switch（46個・出現順そのまま・2026-08-29 tree と
-            //    detail〔祝いの「くわしく見る」〕を追加） ──
-            "tab", "back", "close", "cheer", "extra", "bar-toggle",
+            // ── Shell.cs Tap() の switch（45個・出現順そのまま・2026-08-29 tree と
+            //    detail〔祝いの「くわしく見る」〕を追加。同日、上のバーを外して
+            //    `back`/`extra` を削り `menu`/`book` を足した） ──
+            "tab", "close", "cheer", "menu", "book", "bar-toggle",
             "chips-filter", "chips-sort", "chips-basis", "one",
             "nest", "boss", "roll", "square", "pay", "skip",
-            "s0", "s1", "s2", "pick", "give", "stop", "go",
-            "slot", "egg", "fuse", "melt", "train", "row", "chip", "feed", "grow",
+            "s0", "s1", "s2", "aim", "pick", "give", "stop", "go",
+            "slot", "egg", "eggstar", "eggnew",
+            "fuse", "melt", "train", "row", "chip", "feed", "grow",
             "detail", "tree", "spend",
             "pa", "pb", "breed",
             "party", "set", "seat", "done",

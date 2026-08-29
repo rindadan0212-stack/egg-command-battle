@@ -33,6 +33,9 @@ public sealed class Face
 
     public PixelSprite Sprite => _species.Sprite;
     public Palette Palette => Creatures.PaletteOf(_c);
+    /// <summary>⭐ 一覧の升で「絵のどこを見せるか」（`crop=` の節点だけが読む）。
+    /// ⚠️ 出所は <see cref="SpeciesArt"/> ひとつ ── ここで数を作らない。</summary>
+    public (double X, double Y) Focus => SpeciesArt.FocusOf(_species.Id, _species.Sprite);
 
     /// <param name="row">繰り返しの何段目か（ステの表）。</param>
     public string Text(string what, int row) => what switch

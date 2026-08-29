@@ -66,15 +66,19 @@ public class LayoutAssetTests
         Assert.Equal(new List<string>(), Layouts.DockFaults(Read(id)).ConvertAll(f => f.Text));
     }
 
-    /// <summary>⭐ 定数と実物（frame.txt）の一致を固定 ── 実物が動いたら定数側でも気づく形に。</summary>
+    /// <summary>⭐ 定数と実物（frame.txt）の一致を固定 ── 実物が動いたら定数側でも気づく形に。
+    ///
+    /// 🔴 **上のバー（`top`）は 2026-08-29 に外した**（作者の指示「この帯は不要」）。
+    /// ⚠️ だから `TopBarHeight` は 0 で、実物に `top` という節点が**無いこと**が正しい姿。
+    /// ⭐ 「無いこと」まで固定する ── 黙って戻ってくると、床（1688）が 132px ずれる。</summary>
     [Fact]
     public void 外枠の実物と定数が一致する()
     {
         LayoutNode? top = null, dock = null;
         foreach (var n in Read("frame").Roots) { if (n.Name == "top") top = n; if (n.Name == "dock") dock = n; }
-        Assert.NotNull(top);
+        Assert.Null(top);
+        Assert.Equal(0f, Layouts.TopBarHeight);
         Assert.NotNull(dock);
-        Assert.Equal(Layouts.TopBarHeight, top!.Height);
         Assert.Equal(Layouts.DockHeight, dock!.Height);
         Assert.Equal(Layouts.ScreenHeight - Layouts.DockHeight, dock!.Top);
     }
@@ -109,25 +113,28 @@ public class LayoutAssetTests
     /// + `cell`(5)×2（`cellA`/`cellB`）= 47。⭐ ここが崩れたら、
     /// 出所の付け方（`Rename`）のどこかが二重に数えたか、取りこぼしている。
     /// ⚠️ 自前が 11→12 になったのは 2026-08-29「家系図」釦（`btree`）を足したため
-    /// （差し込みは変わらない ── `btree` は `use=panel` の中身ではなく box.txt 自前の行）。</summary>
+    /// （差し込みは変わらない ── `btree` は `use=panel` の中身ではなく box.txt 自前の行）。
+    /// ⚠️ 同日 12→13 ── 上のバーを外したので、右肩に出ていた EXP を画面の中（`exp`）へ移した。</summary>
     [Fact]
     public void boxの自前と差し込みの数()
     {
         int own = 0, part = 0;
         foreach (var root in Read("box").Roots) CountOrigins(root, ref own, ref part);
-        Assert.Equal(12, own);
+        Assert.Equal(13, own);
         Assert.Equal(47, part);
     }
 
-    /// <summary>⭐ breed は自前15行・差し込み75行 ──
+    /// <summary>⭐ breed は自前16行・差し込み75行 ──
     /// `panelmini`(28)×2（`pfill`/`qfill`）+ `sortbar`(3) + `sortchips`(6)
-    /// + `cell`(5)×2（`cellA`/`cellB`）= 75。</summary>
+    /// + `cell`(5)×2（`cellA`/`cellB`）= 75。
+    /// ⚠️ 自前が 15→16 になったのは 2026-08-29 ── 上のバーを外したので、
+    /// 右肩に出ていた EXP を画面の中（`exp`）へ移した（`box.txt` と同じ）。</summary>
     [Fact]
     public void breedの自前と差し込みの数()
     {
         int own = 0, part = 0;
         foreach (var root in Read("breed").Roots) CountOrigins(root, ref own, ref part);
-        Assert.Equal(15, own);
+        Assert.Equal(16, own);
         Assert.Equal(75, part);
     }
 

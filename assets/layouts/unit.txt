@@ -7,12 +7,30 @@
 # ⚠️ **敵は絵だけ反転**（作者の指示 2026-08-21）。⭐ 器ごと反転させると字まで裏返る
 #    （実際に一度やった ── HP の数字が鏡文字になった）。だから絵を2つ書き分ける。
 #
-# 🔴 **狙い先の印（Target Mark）はまだ無い。**実物は細い棒8本で四隅を囲む。
+# ⭐ **狙い先の印は細い棒8本で四隅を囲む**（2026-08-29 実装・実物と同じ形）。
+#    ⚠️ 面で囲まない ── 絵そのものを隠さずに「選んである」とだけ言うため
+#    （囲みを塗ると、狙った体だけ絵の色が変わって見える）。
 #
 #  名前    種類    左   上    幅   高    付け足し
 glow      round   0    0     240  240   when=actor bind=glow
-art       pixel   20   20    200  200   when=!foe bind=art
-artf      pixel   20   20    200  200   when=foe foe=yes bind=art
+# 🔴 **枠は 64 の倍数**（2026-08-29・`walker.txt` と同じ理由）── 200 のままだと
+#    64ドットの種族と 16ドットの種族が 256px と 64px で並ぶ。⭐ 192 は 64x3。
+# ⚠️ 光の輪（`glow` 240）の真ん中に載るよう 24,24 に置いてある（(240-192)/2）。
+art       pixel   24   24    192  192   when=!foe bind=art
+artf      pixel   24   24    192  192   when=foe foe=yes bind=art
+# ⭐ **狙い先の印**（`when=aim`）── 絵の枠（24,24〜216,216）の四隅を、
+#    長さ44・太さ6 の棒2本ずつで囲む。⚠️ 色は `bind=aim`（味方は緑・敵は赤 ──
+#    `Sheets.Column` が HP 帯と**同じ2色**を渡す。新しい色を作らない）。
+# ⚠️ 絵の**あと**に書く（絵の上に出す）。⭐ 押しどころ（`hit`）より前 ── あれは
+#    透明で一番上に載るので、印を先に描いても隠れない。
+aimtl     line    24   24    44   6     when=aim bind=aim
+aimtlv    line    24   24    6    44    when=aim bind=aim
+aimtr     line    172  24    44   6     when=aim bind=aim
+aimtrv    line    210  24    6    44    when=aim bind=aim
+aimbl     line    24   210   44   6     when=aim bind=aim
+aimblv    line    24   172   6    44    when=aim bind=aim
+aimbr     line    172  210   44   6     when=aim bind=aim
+aimbrv    line    210  172   6    44    when=aim bind=aim
 hp        card    20   226   260  46
   hpfill  bar     52   9     198  28    bind=hp
 gauge     bar     72   278   208  12    bind=gauge
@@ -38,3 +56,12 @@ status    box     20   298   320  116
   sicon   icon    23   0     64   64    repeat=status cols=4 gap=6 max=4 bind=sicon crisp=yes
   snum    label   23   66    64   16    size=13 anchor=upper-center repeat=status cols=4 gap=6 max=4 bind=snum
   smore   label   0    86    320  28    size=24 ink=dim anchor=upper-center when=smore bind=smore
+
+# ⭐ **体そのものが押しどころ**（2026-08-29・作者の指示「ターゲットしていることが
+#    わかるように（敵味方両方）」）。押すと狙い先になり、もう一度押すと外れる。
+# ⚠️ **一番最後に書く** ── 何も描かない透明な枠を全体に被せて、絵でも HP 帯でも
+#    どこを押しても同じ1つの押しどころに当たるようにする（`tap.js` は押した先から
+#    祖先へ遡るが、絵と印は**兄弟**なので、被せないと拾えない）。
+# ⚠️ 中に押しどころが増えたらこの被せを外すこと（上に載っているので下は押せない）。
+# ⭐ `data-at` は `a0`/`f2`（`Stands.One` が渡す冠）── `Deeds.Aim` がここから体を引く。
+hit       box     0    0     340  350   tap=aim

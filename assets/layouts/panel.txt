@@ -10,7 +10,8 @@
 #
 #  名前    種類    左    上    幅   高    付け足し
 elem      round   24    18    62   62    bind=elem
-art       pixel   44    42    380  380   bind=art
+# 🔴 **枠は 64 の倍数**（2026-08-29）── 384 は 64x6。⚠️ 元の 380 の真ん中に載せてある。
+art       pixel   42    40    384  384   bind=art
 name      label   448   40    350  50    size=38 anchor=left bind=name
 lv        label   798   52    160  32    size=22 ink=dim anchor=right bind=lv
 sub       label   448   96    510  28    size=19 ink=faint anchor=left bind=sub

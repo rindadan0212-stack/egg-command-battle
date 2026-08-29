@@ -87,7 +87,7 @@ public class TapCatalogTests
 
     /// <summary>⚠️ 実測値をそのまま固定する（増減したら、この数もどこかを直し忘れている合図）。</summary>
     [Fact]
-    public void 全部で48個()
+    public void 全部で51個()
     {
         // ⭐ 2026-08-26 に `levelup` と `spend` を足した（ARK式の自由配分）
         // ⚠️ 2026-08-29 に `levelup` を外した（作者の指示「点を振る前に点を獲得するのが
@@ -96,7 +96,13 @@ public class TapCatalogTests
         //    キャラクターの家系図を見られるように」）── 46 → 47。
         // ⭐ 同日、祝いの「くわしく見る」の `detail` を足した（grow への誤着地を
         //    BOX 詳細へ付け替え）── 47 → 48。
-        Assert.Equal(48, TapCatalog.Names.Length);
+        // 🔴 同日、**上のバーを外した**（作者の指示「この帯は不要」）── `back` と `extra` が
+        //    消え、代わりに右上のメニュー `menu` と、その中の `book`（図鑑）が入った。48 → 48。
+        // ⭐ 同日、卵の棚に並べ替えを足した（作者の指示「星、入手順」）── `eggstar`/`eggnew`
+        //    の2つで 48 → 50。
+        // ⭐ 同日、戦闘の狙い先 `aim` を足した（作者の指示「ターゲットしていることが
+        //    わかるように（敵味方両方）」）── 体を押して狙い、もう一度押して外す。50 → 51。
+        Assert.Equal(51, TapCatalog.Names.Length);
     }
 
     /// <summary>⭐ `out`/`in` の例外そのものが、いまも `AppPage.razor` にあるか

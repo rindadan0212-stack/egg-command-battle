@@ -46,7 +46,9 @@ public class LineageWebTests
     [Fact]
     public void PanelにTreeがある()
     {
-        Assert.Contains("public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train, Ask, Keep, Grow, Tree }",
+        // ⚠️ 2026-08-29 に末尾へ `Menu`（ホーム右上のメニュー）が足された ── `Tree` が
+        //    在ることだけを見たいので、行を丸ごとではなく `Tree,` の並びで確かめる。
+        Assert.Contains("public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train, Ask, Keep, Grow, Tree,",
             ShellSource.Replace("\r\n", "\n"));
     }
 

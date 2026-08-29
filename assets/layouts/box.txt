@@ -28,3 +28,11 @@ gridA     scroll  48   1020   984  536   when=!open
   cellA   card    26   0      224  200   repeat=box cols=4 gap=12 rows=212 tap=one use=cell
 gridB     scroll  48   1352   984  204   when=open
   cellB   card    26   0      224  200   repeat=box cols=4 gap=12 rows=212 tap=one use=cell
+
+# ⭐ **持っている EXP**（2026-08-29・上のバーの右肩から降りてきた）。
+#    ⚠️ 上のバーを外したので、置き場所が要る ── 本体が 1556 → 1688 に伸びて
+#    一覧の下に 132px 空いたので、そこへ1行で置く。
+#    ⭐ ここに要る理由は右肩に置いたときと同じ:「Lv ＋1　EXP 122」を見ても、
+#    **足りているのか**が画面のどこにも書いていなかった（2026-08-21・作者の指示）。
+#    ⚠️ 体数は出さない ── 下のタブが既に「BOX 44/50」を出している。
+exp       label   48   1580   984  80    size=30 ink=faint anchor=right bind=exp

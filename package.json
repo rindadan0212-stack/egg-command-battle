@@ -13,6 +13,7 @@
     "shot": "node tools/shot.mjs",
     "icons": "node tools/gen-status-icons.mjs",
     "bg": "node tools/bg-band.mjs",
+    "icon-fit": "node tools/icon-fit.mjs",
     "goldens": "node tools/goldens.mjs",
     "goldens:check": "node tools/goldens.mjs --check",
     "old:dev": "vite --root old/ts",

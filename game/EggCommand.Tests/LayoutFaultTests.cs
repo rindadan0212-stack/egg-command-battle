@@ -119,7 +119,8 @@ public class LayoutFaultTests
                 produced.Add(f.Kind);
         produced.Add(Layouts.Inspect(null)[0].Kind);   // NoLayout は Cases の外（Parse を通らない）
         // ⭐ DockDip は Inspect でなく DockFaults の出（帯を出す画面かは骨組みから分からない）
-        foreach (var f in Layouts.DockFaults(Layouts.Parse("t", "a label 0 1500 100 100")))
+        //    ⚠️ 床は 1688（2026-08-29 に上のバーを外して 1556 から下がった）
+        foreach (var f in Layouts.DockFaults(Layouts.Parse("t", "a label 0 1650 100 100")))
             produced.Add(f.Kind);
 
         foreach (FaultKind kind in Enum.GetValues(typeof(FaultKind)))
@@ -131,16 +132,22 @@ public class LayoutFaultTests
     [Fact]
     public void 帯潜りの字と形()
     {
-        var faults = Layouts.DockFaults(Layouts.Parse("t", "a label 0 1500 100 100"));
+        // ⚠️ 床は 2026-08-29 に 1556 → **1688**（上のバーを外して `TopBarHeight` が 0 になった）。
+        //    ⭐ 数を直に書かず定数から組む ── 床が動いたときにここも一緒に動く。
+        float floor = Layouts.ScreenHeight - Layouts.TopBarHeight - Layouts.DockHeight;
+        Assert.Equal(1688f, floor);
+        var faults = Layouts.DockFaults(Layouts.Parse("t", "a label 0 1650 100 100"));
         Assert.Single(faults);
         Assert.Equal(FaultKind.DockDip, faults[0].Kind);
-        Assert.Equal("t/a が下の帯へ潜っている（下端 1600 / 帯の上端 1556）", faults[0].Text);
-        AssertBox(0, 1556, 100, 44, faults[0].Focus.Value);
+        Assert.Equal("t/a が下の帯へ潜っている（下端 1750 / 帯の上端 1688）", faults[0].Text);
+        AssertBox(0, 1688, 100, 62, faults[0].Focus.Value);
         // ⭐ 丸ごと床より下なら、帯は**節点の上端から**（何も無い床〜上端まで伸ばさない）
-        AssertBox(0, 1600, 100, 100,
-            Layouts.DockFaults(Layouts.Parse("t", "a label 0 1600 100 100"))[0].Focus.Value);
-        Assert.Empty(Layouts.DockFaults(Layouts.Parse("t", "a label 0 1500 100 100 dock=no")));
-        Assert.Empty(Layouts.DockFaults(Layouts.Parse("t", "v veil 0 0 1080 1920\na label 0 1500 100 100")));
+        AssertBox(0, 1700, 100, 100,
+            Layouts.DockFaults(Layouts.Parse("t", "a label 0 1700 100 100"))[0].Focus.Value);
+        Assert.Empty(Layouts.DockFaults(Layouts.Parse("t", "a label 0 1650 100 100 dock=no")));
+        Assert.Empty(Layouts.DockFaults(Layouts.Parse("t", "v veil 0 0 1080 1920\na label 0 1650 100 100")));
+        // ⭐ 床より上は不備でない（旧・床 1556 のすぐ下だった 1500 が、いまは正しい位置）
+        Assert.Empty(Layouts.DockFaults(Layouts.Parse("t", "a label 0 1500 100 100")));
     }
 
     // ── 3. Focus の数の検証（目分量でなく計算で）───────

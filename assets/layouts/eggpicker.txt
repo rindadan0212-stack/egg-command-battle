@@ -6,11 +6,25 @@
 #    閉じ方が画面のどこにも書いていなかった。
 #
 #  名前    種類    左   上    幅   高    付け足し
+# ⭐ **札を 240..1680 から 160..1780 へ広げた**（2026-08-29）。⚠️ 卵の絵を種族ごとの
+#    焼いた絵にして札が 280 → 396 に伸びたので、そのままだと見える段が 3.8 → 2.7 に減る。
+#    覆いは画面いっぱい（1920）に出るので、上下へ広げる余地があった。
 dim       veil    0    0     1080 1920
-panel     card    48   240   984  1440
+panel     card    48   160   984  1620
   title   label   24   24    936  56    size=40 anchor=upper-left text=どの卵を温めるか
   # ⚠️ 「卵がありません」と書かない。⭐ 数を言えば足りる
   count   label   24   86    936  40    size=26 ink=dim anchor=upper-left bind=count
-  eggs    scroll  24   140   936  1140
-    egg   card    0    0     228  280   repeat=eggs cols=4 gap=4 rows=300 tap=egg use=eggcard
-  close   button  24   1304  936  112   size=34 tap=close text=やめる
+  # ⭐ **並べ替えは2択**（2026-08-29・作者の指示「星、入手順」）。
+  #    ⚠️ BOX の `sortbar`/`sortchips` は流用しない ── あちらは
+  #    「絞る・並べる・何の数で」の3段の仕掛けで、2択のためには重すぎる
+  #    （畳んだ1行を押して開く、という手数も要らない）。
+  # ⭐ 2つを横に並べ、いま効いているほうを塗る（どちらが効いているかを字で言わずに示す）。
+  # ⚠️ 押しどころの名前を2つに分ける ── 繰り返しでない節点は添字を持たないので、
+  #    同じ `tap=` にすると押した側が区別できない。
+  # ⚠️ 塗り分け（`Tint`）は **`bind=` を持つ節点にしか掛からない**（`LayoutDom` の決まり）
+  #    ── だから字も `bind` から出す（`text=` と併せると字の出所が2つになる）。
+  sstar   button  24   136   456  112   size=30 tap=eggstar bind=sstar
+  snew    button  504  136   456  112   size=30 tap=eggnew bind=snew
+  eggs    scroll  24   260   936  1220
+    egg   card    0    0     228  396   repeat=eggs cols=4 gap=4 rows=416 tap=egg use=eggcard
+  close   button  24   1492  936  112   size=34 tap=close text=やめる

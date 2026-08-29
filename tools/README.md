@@ -24,6 +24,7 @@
 | `npm run goldens:check` | 🔴 C# が移植元の TS と同じ答えを出すか（`old/ts/` を読む） |
 | `node tools/gen-status-icons.mjs` | `assets/ui/icon/status-*.png` 12枚を作り直す（**唯一の出所**） |
 | `node tools/bg-band.mjs` | ホームの**流れる背景**（空・山・遠くの地面）を作り直す（**唯一の出所**） |
+| `node tools/icon-fit.mjs` | 盤・帯の**小物の絵**を枠の大きさに焼き直す（原画は `assets/ui/icon-src/`・**唯一の出所**） |
 
 ⚠️ `audit.mjs` は直接打ちません（`inspect.mjs` が読む検査の本体）。
 

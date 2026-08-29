@@ -10,7 +10,9 @@ elem      round   8     8     42   42    bind=elem
 # ⚠️ **絵は正方形にしか描かれない。**⭐ Prefab の枠は 172x276 だが、
 #    実際に出るのは 172 角を縦の真ん中に置いたもの（`preserveAspect`）。
 #    ⭐ 検査が指摘したので、**出るとおりの数**に直した（26 + (276−172)÷2 = 78）。
-art       pixel   22    78    172  172   bind=art
+# 🔴 **枠は 64 の倍数**（2026-08-29）── 配合は親を2体並べて見比べる場所。
+#    ⭐ 128 は 64x2。⚠️ 元の 172 の真ん中（108,164）に載るよう 44,100 に置いてある。
+art       pixel   44    100   128  128   bind=art
 name      label   212   26    226  36    size=23 anchor=left bind=name
 lv        label   212   62    226  24    size=15 ink=dim anchor=right bind=lv
 sub       label   212   86    226  22    size=13 ink=faint anchor=left bind=sub

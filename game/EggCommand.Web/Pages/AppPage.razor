@@ -9,8 +9,10 @@
   <div id="stage">
     @* ⚠️ **画面を先に、外枠を後に描く。**⭐ 後に描いたものが上に乗るので、
        下の帯が一覧の上に来る（Unity では外枠が親で、Body がその中だった）。
-       ⚠️ 戦闘と潜入は帯を出さないので、本体が 1788 まで使える。 *@
-    <div id="app-body" class="n" style="left:0;top:132px;width:1080px;overflow:hidden;height:@(_tall)px">
+       🔴 **上のバーを外したので `top:0` から始まる**（2026-08-29・作者の指示
+       「この帯は不要」）。⚠️ どの画面も 132px ぶん上へ詰まり、丈が 1556 → 1688 に伸びる。
+       ⚠️ 戦闘と潜入は帯を出さないので、本体が 1920 いっぱいまで使える。 *@
+    <div id="app-body" class="n" style="left:0;top:0;width:1080px;overflow:hidden;height:@(_tall)px">
       @((MarkupString)_body)
     </div>
     @((MarkupString)_frame)
@@ -72,7 +74,7 @@
     private System.Threading.Timer? _clock;
     private System.Threading.Timer? _idleClock;
     private string _body = "", _frame = "", _over = "", _say = "";
-    private int _tall = 1556;
+    private int _tall = 1688;
 
     protected override void OnInitialized()
     {
@@ -100,6 +102,7 @@
             "party" => Panel.Party, "fuse" => Panel.Fuse, "train" => Panel.Train,
             "eggs" => Panel.Eggs, "ask" => Panel.Ask, "species" => Panel.Species,
             "keep" => Panel.Keep, "grow" => Panel.Grow,
+            "menu" => Panel.Menu,
             "skill" => Panel.Skill, _ => Panel.None,
         };
         // ⭐ 技の詳細は**種族の札の上に出る**（そこが重なる形）
@@ -642,8 +645,10 @@
     private void Draw()
     {
         // ⚠️ 戦闘と潜入は下の帯を出さない ── そのぶん本体が縦に伸びる
+        // 🔴 上のバーを外したので両方 132px 伸びた（2026-08-29）。
+        //    ⭐ 帯あり 1920−232=1688 ／ 帯なし 1920 いっぱい。
         bool wide = _shell.Now_Sheet is Sheet.Fight or Sheet.Raid;
-        _tall = wide ? 1788 : 1556;
+        _tall = wide ? 1920 : 1688;
         _body = _shell.Now_Sheet switch
         {
             Sheet.Home => Sheets.Home(_shell),
@@ -691,6 +696,7 @@
         Panel.Eggs => Sheets.Eggs(_shell, suffix),
         Panel.Ask => Sheets.Ask(_shell, suffix),
         Panel.Keep => Sheets.Keep(_shell, suffix),
+        Panel.Menu => Sheets.Menu(_shell, suffix),
         Panel.Species => Sheets.Species(_shell, suffix),
         Panel.Skill => Sheets.SkillCard(_shell, suffix),
         _ => "",
