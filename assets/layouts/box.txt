@@ -12,9 +12,13 @@
 #
 #  名前    種類    左   上     幅   高    付け足し
 detail    card    48   12     984  860   use=panel
-  bfuse   button  26   722    302  112   size=20 tap=fuse text=分解
-  bgrow   button  341  722    302  112   size=20 tap=grow lead=yes bind=grow
-  btrain  button  656  722    302  112   size=20 tap=train text=技を鍛える
+  bfuse   button  26   722    224  112   size=16 tap=fuse text=分解
+  bgrow   button  262  722    224  112   size=16 tap=grow lead=yes bind=grow
+  btrain  button  498  722    224  112   size=16 tap=train text=技を鍛える
+  # ⭐ 家系図（2世代以降の個体だけが持つ ── 作者の指示「BOXで2世代以降の
+  #    キャラクターの家系図を見られるように」）。⚠️ 4つに割り直した（3本 302幅 →
+  #    4本 224幅・cellA/cellB の4列グリッドと同じ 左26・gap12・右余白26 の並び）。
+  btree   button  734  722    224  112   size=16 tap=tree text=家系図
 
 bar       box     48   896    984  112   use=sortbar
 open      scroll  48   1020   984  320   when=open

@@ -118,9 +118,29 @@ public class LayoutFaultTests
             foreach (var f in Layouts.Inspect(Layouts.Parse(c.Id, c.Src)))
                 produced.Add(f.Kind);
         produced.Add(Layouts.Inspect(null)[0].Kind);   // NoLayout は Cases の外（Parse を通らない）
+        // ⭐ DockDip は Inspect でなく DockFaults の出（帯を出す画面かは骨組みから分からない）
+        foreach (var f in Layouts.DockFaults(Layouts.Parse("t", "a label 0 1500 100 100")))
+            produced.Add(f.Kind);
 
         foreach (FaultKind kind in Enum.GetValues(typeof(FaultKind)))
             Assert.True(produced.Contains(kind), $"{kind} を出す骨組みが Cases に無い（作り忘れ）");
+    }
+
+    /// <summary>⭐ 帯潜り（<see cref="FaultKind.DockDip"/>）の字と形。
+    /// ⚠️ `dock=no` と覆い（veil）持ちの素通しもここで固定する。</summary>
+    [Fact]
+    public void 帯潜りの字と形()
+    {
+        var faults = Layouts.DockFaults(Layouts.Parse("t", "a label 0 1500 100 100"));
+        Assert.Single(faults);
+        Assert.Equal(FaultKind.DockDip, faults[0].Kind);
+        Assert.Equal("t/a が下の帯へ潜っている（下端 1600 / 帯の上端 1556）", faults[0].Text);
+        AssertBox(0, 1556, 100, 44, faults[0].Focus.Value);
+        // ⭐ 丸ごと床より下なら、帯は**節点の上端から**（何も無い床〜上端まで伸ばさない）
+        AssertBox(0, 1600, 100, 100,
+            Layouts.DockFaults(Layouts.Parse("t", "a label 0 1600 100 100"))[0].Focus.Value);
+        Assert.Empty(Layouts.DockFaults(Layouts.Parse("t", "a label 0 1500 100 100 dock=no")));
+        Assert.Empty(Layouts.DockFaults(Layouts.Parse("t", "v veil 0 0 1080 1920\na label 0 1500 100 100")));
     }
 
     // ── 3. Focus の数の検証（目分量でなく計算で）───────

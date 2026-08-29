@@ -85,13 +85,18 @@ public class TapCatalogTests
         Assert.Equal(TapCatalog.Names.Length, TapCatalog.Names.Distinct().Count());
     }
 
-    /// <summary>⚠️ 45個（Shell.cs 43 + out/in 例外2）── 実測値をそのまま固定する
-    /// （増減したら、この数もどこかを直し忘れている合図）。</summary>
+    /// <summary>⚠️ 実測値をそのまま固定する（増減したら、この数もどこかを直し忘れている合図）。</summary>
     [Fact]
-    public void 全部で47個()
+    public void 全部で48個()
     {
         // ⭐ 2026-08-26 に `levelup` と `spend` を足した（ARK式の自由配分）
-        Assert.Equal(47, TapCatalog.Names.Length);
+        // ⚠️ 2026-08-29 に `levelup` を外した（作者の指示「点を振る前に点を獲得するのが
+        //    二度手間」で釦が消え、`Shell.Tap` の分岐も死んだため）── 47 → 46。
+        // ⭐ 同日、家系図の `tree` を足した（作者の指示「BOXで2世代以降の
+        //    キャラクターの家系図を見られるように」）── 46 → 47。
+        // ⭐ 同日、祝いの「くわしく見る」の `detail` を足した（grow への誤着地を
+        //    BOX 詳細へ付け替え）── 47 → 48。
+        Assert.Equal(48, TapCatalog.Names.Length);
     }
 
     /// <summary>⭐ `out`/`in` の例外そのものが、いまも `AppPage.razor` にあるか

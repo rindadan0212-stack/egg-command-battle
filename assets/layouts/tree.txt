@@ -1,0 +1,57 @@
+# 家系図 ── ⭐ 2世代以降の個体だけが開ける、配合で消えた祖先を辿る3代ぶんの記録
+#   （作者の指示「BOXで2世代以降のキャラクターの家系図を見られるように」）
+#
+# 🔴 **配合すると両親は消える**（`Games.FusePair`）。⚠️ 遡れるのは「墓標」
+#    （`Core.Tomb`）が残っている分だけ ── 保管庫に居ればそちらを先に見る
+#    （`Core.Lineage.Of`）。
+#
+# ⭐ **並びは決め打ちの二分木**（自分=n0／親=n1,n2／祖父母=n3,n4,n5,n6）。
+#    `Lineage.Of` が返す配列の並びと**同じ**でなければ、画面の位置とデータが食い違う
+#    （親の下に祖父母が来ない）。
+# ⚠️ **絵は置かない**（字だけで組む）── 実寸×4の規則に縛られず、血統の字だけに絞る。
+# ⚠️ **「不明」の札も同じ大きさで出す**（並びが崩れないように）── `when=` で隠さない。
+# ⭐ 自分（n0）だけ地を白いまま（既定の card）にし、親・祖父母（n1〜n6）は
+#    `ink=faint`（沈んだ地・`stage.css` の既存の面）で一段引っ込める ──
+#    画面の中で「いま見ている個体」だけを主役にする。
+#
+#  名前     種類    左    上    幅    高    付け足し
+dim        veil    0    0     1080  1920
+panel      card    48   380   984   860
+  title    label   24   24    936   56    size=40 anchor=upper-left text=家系図
+
+  # ── 自分（1枚・全幅）─────────────────────────
+  n0       card    24   104   936   160
+    n0name label   20   14    896   52    size=30 anchor=upper-left bind=n0name
+    n0sub  label   20   70    896   36    size=22 ink=dim anchor=upper-left bind=n0sub
+    n0gen  label   20   108   896   36    size=22 ink=faint anchor=upper-left bind=n0gen
+
+  # ── 親（2枚）─────────────────────────────
+  n1       card    24   288   460   160   ink=faint
+    n1name label   18   14    424   48    size=26 anchor=upper-left bind=n1name
+    n1sub  label   18   68    424   36    size=20 ink=dim anchor=upper-left bind=n1sub
+    n1gen  label   18   106   424   36    size=20 ink=faint anchor=upper-left bind=n1gen
+  n2       card    500  288   460   160   ink=faint
+    n2name label   18   14    424   48    size=26 anchor=upper-left bind=n2name
+    n2sub  label   18   68    424   36    size=20 ink=dim anchor=upper-left bind=n2sub
+    n2gen  label   18   106   424   36    size=20 ink=faint anchor=upper-left bind=n2gen
+
+  # ── 祖父母（4枚）─────────────────────────────
+  n3       card    24   472   222   160   ink=faint
+    n3name label   14   14    194   44    size=22 anchor=upper-left bind=n3name
+    n3sub  label   14   62    194   32    size=17 ink=dim anchor=upper-left bind=n3sub
+    n3gen  label   14   96    194   32    size=17 ink=faint anchor=upper-left bind=n3gen
+  n4       card    262  472   222   160   ink=faint
+    n4name label   14   14    194   44    size=22 anchor=upper-left bind=n4name
+    n4sub  label   14   62    194   32    size=17 ink=dim anchor=upper-left bind=n4sub
+    n4gen  label   14   96    194   32    size=17 ink=faint anchor=upper-left bind=n4gen
+  n5       card    500  472   222   160   ink=faint
+    n5name label   14   14    194   44    size=22 anchor=upper-left bind=n5name
+    n5sub  label   14   62    194   32    size=17 ink=dim anchor=upper-left bind=n5sub
+    n5gen  label   14   96    194   32    size=17 ink=faint anchor=upper-left bind=n5gen
+  n6       card    738  472   222   160   ink=faint
+    n6name label   14   14    194   44    size=22 anchor=upper-left bind=n6name
+    n6sub  label   14   62    194   32    size=17 ink=dim anchor=upper-left bind=n6sub
+    n6gen  label   14   96    194   32    size=17 ink=faint anchor=upper-left bind=n6gen
+
+  hint     label   24   650   936   40    size=20 ink=faint anchor=upper-left text=不明は、配合で消えて墓標も残っていない先祖です
+  close    button  24   710   936   112   size=34 tap=close text=閉じる

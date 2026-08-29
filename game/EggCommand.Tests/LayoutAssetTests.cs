@@ -55,29 +55,28 @@ public class LayoutAssetTests
     /// <summary>⚠️ **下の帯（232）に潜っていないか。**
     ///
     /// ⭐ 今日 BOX で実際に起きた不具合がこれです（一覧が帯の下へ入り、重なり11件）。
-    /// ⚠️ 帯を出す画面かどうかは骨組みからは分からないので、
-    /// `dock=no` と書いてある画面だけ除きます。</summary>
+    /// 🔴 規則の本体は Core（<see cref="Layouts.DockFaults"/> ── 定数も
+    /// <see cref="Layouts.TopBarHeight"/> / <see cref="Layouts.DockHeight"/>）。
+    /// エディタの不備バンドも同じ物を呼ぶ ── 規則を2か所に書かない（2026-08-29。
+    /// テストだけが知る規則だと、エディタで直しても後からここで落ちる）。</summary>
     [Theory]
     [MemberData(nameof(All))]
     public void 下の帯へ潜っていない(string id)
     {
-        const float DockHeight = 232f;
-        const float TopBarHeight = 132f;
-        float floor = Layouts.ScreenHeight - TopBarHeight - DockHeight;
+        Assert.Equal(new List<string>(), Layouts.DockFaults(Read(id)).ConvertAll(f => f.Text));
+    }
 
-        var layout = Read(id);
-        // ⭐ **覆いは下の帯の上に出るのが正しい**（帯も押させないため）。
-        //    ⚠️ 覆いを持つ骨組みは、そもそも下の帯が関わらない札なので丸ごと外す。
-        foreach (var node in layout.Roots)
-            if (node.Kind == "veil") return;
-
-        foreach (var node in layout.Roots)
-        {
-            if (node.Option("dock") == "no") continue;
-            Assert.True(node.Top + node.Height <= floor + 0.5f,
-                $"{id}/{node.Name} が下の帯へ潜っている"
-                + $"（下端 {node.Top + node.Height} / 帯の上端 {floor}）");
-        }
+    /// <summary>⭐ 定数と実物（frame.txt）の一致を固定 ── 実物が動いたら定数側でも気づく形に。</summary>
+    [Fact]
+    public void 外枠の実物と定数が一致する()
+    {
+        LayoutNode? top = null, dock = null;
+        foreach (var n in Read("frame").Roots) { if (n.Name == "top") top = n; if (n.Name == "dock") dock = n; }
+        Assert.NotNull(top);
+        Assert.NotNull(dock);
+        Assert.Equal(Layouts.TopBarHeight, top!.Height);
+        Assert.Equal(Layouts.DockHeight, dock!.Height);
+        Assert.Equal(Layouts.ScreenHeight - Layouts.DockHeight, dock!.Top);
     }
 
     // ── PartId / PartLine ── ⭐ 「掴めるようにする」でなく「どこの行か言える」──
@@ -106,15 +105,17 @@ public class LayoutAssetTests
     }
 
     /// <summary>⭐ **数で桁を合わせる。**⚠️ 実測（コメント・空行を除く）:
-    /// box は自前11行・差し込み47行 ── `panel`(28) + `sortbar`(3) + `sortchips`(6)
+    /// box は自前12行・差し込み47行 ── `panel`(28) + `sortbar`(3) + `sortchips`(6)
     /// + `cell`(5)×2（`cellA`/`cellB`）= 47。⭐ ここが崩れたら、
-    /// 出所の付け方（`Rename`）のどこかが二重に数えたか、取りこぼしている。</summary>
+    /// 出所の付け方（`Rename`）のどこかが二重に数えたか、取りこぼしている。
+    /// ⚠️ 自前が 11→12 になったのは 2026-08-29「家系図」釦（`btree`）を足したため
+    /// （差し込みは変わらない ── `btree` は `use=panel` の中身ではなく box.txt 自前の行）。</summary>
     [Fact]
     public void boxの自前と差し込みの数()
     {
         int own = 0, part = 0;
         foreach (var root in Read("box").Roots) CountOrigins(root, ref own, ref part);
-        Assert.Equal(11, own);
+        Assert.Equal(12, own);
         Assert.Equal(47, part);
     }
 

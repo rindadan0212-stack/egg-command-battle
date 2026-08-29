@@ -23,5 +23,20 @@
 | `node tools/shot.mjs` | 画面を撮って `records/shots/` へ |
 | `npm run goldens:check` | 🔴 C# が移植元の TS と同じ答えを出すか（`old/ts/` を読む） |
 | `node tools/gen-status-icons.mjs` | `assets/ui/icon/status-*.png` 12枚を作り直す（**唯一の出所**） |
+| `node tools/bg-band.mjs` | ホームの**流れる背景**（空・山・遠くの地面）を作り直す（**唯一の出所**） |
 
 ⚠️ `audit.mjs` は直接打ちません（`inspect.mjs` が読む検査の本体）。
+
+## 流れる背景を足す・差し替える（`bg-band.mjs`）
+
+1. 作者の絵を `assets/ui/home-src/` へ置く（pixelizer の**画像**書き出しは4倍。回っていてもよい）
+2. `tools/bg-band.mjs` の `BANDS` に1行足す（`up`＝1ドットが何画素 / `turn`＝回す角度 /
+   `shrink`＝何分の1に間引くか / `key`＝抜く白地の色 / `top`＝置く高さ / `secs`＝1周の秒数）
+3. `node tools/bg-band.mjs` ── 出来上がった **`home.txt` の行と `stage.css` の動きを刷る**ので、そのまま写す
+4. `dotnet run --project game/EggCommand.Sim -- paint-placeholder`（大きさの目録を書き直す）
+5. `dotnet test` ── 幅・目録・流す距離が食い違っていればここで落ちる
+   （`StageCssTests.流れる背景は輪が閉じている` / `PicFrameSizeTests`）
+
+🔴 **帯は「元・鏡」を4枚並べ、2枚ぶん流して先頭へ戻す。**⚠️ 2枚幅で1枚ぶん流すと、
+戻る瞬間に**絵が左右反転してパッと切り替わる**（2026-08-29 まで実際にそうだった）。
+理由は `bg-band.mjs` の冒頭に書いてあります。

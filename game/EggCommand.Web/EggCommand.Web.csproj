@@ -77,20 +77,23 @@
     <Copy SourceFiles="@(Art)" DestinationFolder="%(Art.Into)" SkipUnchangedFiles="true" />
   </Target>
 
-  <!-- 🔴 **絵の一覧を埋め込む。**⚠️ `LayoutDom` の icon が「表や骨組みが指す名前
+  <!-- 🔴 **絵の一覧（名前＋大きさ）を埋め込む。**⚠️ `LayoutDom` の icon が「表や骨組みが指す名前
        ＝ 実在するファイル」と信じて `url(icon/<名前>.png)` を組み立てても、
        CSS は無いファイルを黙って空白にする（エラーにならない）── 打ち間違いに
        気づけない。⭐ ここで「本当に在る名前」を持たせ、`IconManifest.cs` が読む。
-       ⚠️ HTTP で取りに行かない（上と同じ「200 だが 0 バイト」の罠を避ける）。 -->
-  <Target Name="IconManifest" BeforeTargets="BeforeBuild">
+       ⚠️ HTTP で取りに行かない（上と同じ「200 だが 0 バイト」の罠を避ける）。
+       ⭐ 2026-08-29: 以前はここでディレクトリを見て**名前だけ**の一覧をビルドのたびに
+       作っていたが、大きさ（実ドット数）を持てなかった（`LayoutDom.IconDots` が
+       全アイコン共通の決め打ちだった穴）。`PaintManifest` ターゲットと同じ形に変更 ──
+       唯一の出所は `assets/ui/icon/icon-manifest.txt`（`EggCommand.Sim` の
+       `icon-manifest` コマンドが実物の PNG を読んで書く。チェックイン済み）。
+       ⚠️ 一度も `sim icon-manifest` を走らせていない新規クローンでは無いので、
+       無いままビルドが壊れないよう `Condition="Exists(...)"` で外す
+       （`PaintManifest.cs` と同じ「埋め込みが無ければ安全側へ倒す」造り）。 -->
+  <Target Name="IconManifest" BeforeTargets="BeforeBuild"
+          Condition="Exists('..\..\assets\ui\icon\icon-manifest.txt')">
     <ItemGroup>
-      <IconFile Include="..\..\assets\ui\icon\*.png" />
-    </ItemGroup>
-    <WriteLinesToFile File="$(IntermediateOutputPath)icon-manifest.txt"
-                       Lines="@(IconFile-&gt;'%(Filename)')"
-                       Overwrite="true" WriteOnlyWhenDifferent="true" />
-    <ItemGroup>
-      <EmbeddedResource Include="$(IntermediateOutputPath)icon-manifest.txt" Link="IconManifest.txt" />
+      <EmbeddedResource Include="..\..\assets\ui\icon\icon-manifest.txt" Link="IconManifest.txt" />
     </ItemGroup>
   </Target>
 

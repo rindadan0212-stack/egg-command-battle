@@ -181,6 +181,11 @@
   padding: 5px 10px;
   cursor: pointer;
   border-left: 3px solid transparent;
+  /* ⭐ 段階4b: 高さを揃える ── 上端・下端の帯（`.edzone`）が行ごとに違う割合に
+     ならないように。位置の基準にもなる。 */
+  height: 26px;
+  box-sizing: border-box;
+  position: relative;
 }
 .edrow:hover { background: rgba(255, 255, 255, .04); }
 /* ⚠️ 選んでいる行は「面」でなく「線」で示す ── 塗り潰さない約束をここでも守る */
@@ -190,6 +195,32 @@
 /* ⭐ Pass B 盤→木ホバー。⚠️ 選択（`.on`/`.sel`・アンバー系）と混ざらないよう、
    新しい色は増やさず無彩色の面だけ足す（`:hover` の既存の薄い背景と同じ考え方）。 */
 .edrow.hover { background: rgba(255, 255, 255, .08); }
+/* ── ⭐ 段階4b: 木の行を掴んで並べ替える・親を付け替える ──────────
+   ⚠️ `.on`/`.sel`/`.hover` より**後ろ**に置く（同じ強さなので、後に書いた方が勝つ）
+   ── 掴んでいる間だけは落とし先の印を最優先で見せたい。
+   ⭐ 兄弟として挿すときは**線**（上端・下端）、子にするときは**面**だけ ──
+   同じ場所で線と面を二重に使わない。色も増やさない（選択のアンバー #f59e0b と、
+   落とせないときは既存の警告色 #e04f5f）。線は `box-shadow` の内側 ──
+   border だと `border-left` の選択印と喧嘩し、行の高さも動く。 */
+.edtreebody.edtdragging .edname,
+.edtreebody.edtdragging .edkind,
+.edtreebody.edtdragging .edmismark { pointer-events: none; }
+/* 🔴 上端・下端の「兄弟として並べる」帯。⚠️ 普段は指を通す（行の押しどころを削らない）──
+   掴んでいる間だけ受け止める。⭐ 見た目は持たない（印は行の側が線・面で出す）。 */
+/* ⚠️ `left: 0` は padding box の基準なので、行の左の縁（`border-left: 3px`）の列だけ
+   帯が届かず、そこを指すと「子にする」に落ちる（2026-08-29 監査）。⭐ 縁のぶん外へ
+   引き出して、行の端から端まで受け止める。 */
+.edzone { position: absolute; left: -3px; right: 0; height: 8px; pointer-events: none; }
+.edzone-top { top: 0; }
+.edzone-bottom { bottom: 0; }
+.edtreebody.edtdragging .edzone { pointer-events: auto; }
+.edrow.dropbefore { box-shadow: inset 0 2px 0 #f59e0b; }
+.edrow.dropafter { box-shadow: inset 0 -2px 0 #f59e0b; }
+.edrow.dropinto { background: rgba(245, 158, 11, .16); }
+.edrow.dropno.dropbefore { box-shadow: inset 0 2px 0 #e04f5f; }
+.edrow.dropno.dropafter { box-shadow: inset 0 -2px 0 #e04f5f; }
+.edrow.dropno.dropinto { background: rgba(224, 79, 95, .16); }
+
 .edname { color: #d7dae6; }
 .edkind { color: #6d7390; font-size: 11px; }
 /* ⭐ E1-5: 木の印（枠と絵が合わない節点）。⚠️ 新しい色は増やさない ── 既存の警告色
@@ -210,10 +241,10 @@
    二重に効いてずれる。`#edwrap` 自身は今までどおりスクロールしない（この層
    `#edscroll` だけが `overflow:auto`）ので、`#edwrap` を基準にした差分計算は
    スクロール状態によらず常に正しい（詳細は EditPage.razor の註）。
-   ⭐ `display:flex` + 子（`.edstagewrap`）の `margin:auto` で中央寄せする ──
-   `justify-content:center`/`align-items:center` は使わない（器より子が大きいとき、
-   はみ出した先頭側がスクロールで届かなくなる既知の不具合があるため。`margin:auto`
-   は空きが無くなると素直に 0 へ落ちるので、その不具合が起きない）。 */
+   🔴 **中央寄せは CSS でやらない**（2026-08-29 監査 D-2）。⚠️ `fit()` が余白を
+   「器1つぶん」まで広げるようになったので、箱は**常に器より大きい** ── `margin:auto`
+   は空きが無ければ 0 に落ちるので、二度と効かない。⭐ 代わりに `eggEdit.center()` が
+   実 DOM を測って明示的に置く（場合分けが消えて、どの倍率でも同じ式で済む）。 */
 .edscroll {
   position: absolute;
   inset: 0;
@@ -222,9 +253,12 @@
 }
 .edstagewrap {
   position: relative;
-  margin: auto;   /* ⭐ 小さいときは中央、器より大きいときは左上起点でスクロール可能 */
+  margin: 0;   /* ⚠️ 中央寄せは `eggEdit.center()` の仕事（上の註） */
   flex: 0 0 auto;
-  /* ⭐ 初期値（edit.js の fit() が上書き）。#edstage の初期 scale(.3) と揃えておく。 */
+  /* ⭐ 初期値（edit.js の fit() が上書き）。#edstage の初期 scale(.3) と揃えておく。
+     ⚠️ 2026-08-29 から fit() は盤の周り（`eggEdit._pad`＝設計256px）ぶん大きく取り、
+     盤の層を同じだけ translate する ── 負の座標に置かれた節点（`home` の `idle` は
+     左 -72）を、拡大してもスクロールで見に行けるようにするため。 */
   width: 324px;
   height: 576px;
 }
@@ -267,9 +301,27 @@
   transform-origin: 0 0;
   transform: scale(.3);   /* ⭐ 初期値。edit.js の fit() が上書き */
   pointer-events: none;
+  /* ⭐ 2層。**主線**（8きざみ＝8ドットごと・濃いめ）を先に、細線（1きざみ）を後に。
+     ⚠️ CSS は先に書いた層が手前 ── 主線を手前にして、交点で細線に負けないようにする。
+     ⚠️ 塗り面は作らない（塗り潰さない約束）── どちらも1pxの線だけ。 */
   background-image:
-    repeating-linear-gradient(to right, rgba(255, 255, 255, .10) 0 1px, transparent 1px var(--edstep, 10px)),
-    repeating-linear-gradient(to bottom, rgba(255, 255, 255, .10) 0 1px, transparent 1px var(--edstep, 10px));
+    repeating-linear-gradient(to right, rgba(255, 255, 255, .16) 0 1px, transparent 1px var(--edmajor, 80px)),
+    repeating-linear-gradient(to bottom, rgba(255, 255, 255, .16) 0 1px, transparent 1px var(--edmajor, 80px)),
+    repeating-linear-gradient(to right, rgba(255, 255, 255, .07) 0 1px, transparent 1px var(--edstep, 10px)),
+    repeating-linear-gradient(to bottom, rgba(255, 255, 255, .07) 0 1px, transparent 1px var(--edstep, 10px));
+}
+/* ⚠️ 細線の間隔が画面上2px未満になるときは、細線を出さない ── 設計1pxの線どうしが
+   潰れ合って、格子でなく灰色の霞になる（数えられないので目印の役をしない）。
+   ⭐ 主線だけ残す。
+   🔴 **見るのは「きざみ×倍率」であって倍率だけではない**（2026-08-29 監査 G-3）。
+   ⚠️ 以前は `[data-dotpx="1"]` だけで判定していたので、**きざみを1〜2に細かくすると
+   高倍率でも霞んだ**（きざみは作者が変えられる ── 既定4に決め打ちできない）。
+   ⭐ 掛け算は `EditPage.razor` が済ませて `data-fine="0/1"` で渡す（CSS の属性選択子
+   では掛け算できない）── 倍率もきざみも出所は C# 側の1つのまま。 */
+.edgrid[data-fine="0"] {
+  background-image:
+    repeating-linear-gradient(to right, rgba(255, 255, 255, .16) 0 1px, transparent 1px var(--edmajor, 80px)),
+    repeating-linear-gradient(to bottom, rgba(255, 255, 255, .16) 0 1px, transparent 1px var(--edmajor, 80px));
 }
 /* ⚠️ 🔴 **`::deep` が要る。**`.edfault-box`/`.edfault-focus` は Razor の要素ではなく
    `(MarkupString)_faultHtml`（C# が組み立てた生の HTML 文字列）の中身 ── Blazor の
@@ -279,11 +331,51 @@
    が効かず縦積みになった）。⭐ `.n`（`_html` も同じ MarkupString）が `stage.css`
    という**別の・分離していない**シートで描かれているのも同じ理由 ── ただしこちらは
    `stage.css`（遊びの絵の意匠）を汚したくないので、`::deep` でこのファイルのまま守る。 */
+/* ⭐ 「部品を開く」（2026-08-29）。⚠️ 主役の釦ではない（移動するだけ）ので、
+   塗らず・字だけ・左に寄せる ── 下の欄（左/上/幅/高）より前に出さない。 */
+.edopenpart {
+  display: block;
+  margin: 0 0 6px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: #8fb7e8;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.edopenpart:hover { color: #b9d4f5; }
+
+/* ⭐ 2026-08-29: ドット表示で4の倍数でない値（＝半端）の印。⚠️ 直さない・止めない
+   ── 作者はドットで絵を作るので、半端は「見落とし」の印として**見えていれば足りる**。
+   ⭐ 新しい色を増やさず、既にある警告色（`.edwarn`）と同じ系で字だけ染める。
+   ⚠️ 🔴 **`::deep` が要る。**この欄（`.ednuminput`）は Razor の印ではなく
+   `RenderTreeBuilder`（`Field` の中）が組む ── CSS 分離はコンパイル時に「Razor が
+   知っている印」へだけ scope 属性（`b-xxxxx`）を振るので、組み上げた印には付かない
+   （実測 2026-08-29: 属性は `type`/`class` の2つだけで、素の `.ednumodd` は一致せず
+   字が黒のままだった）。⭐ `.edfault-box`（MarkupString の中身）と同じ手で、
+   親（`.edfieldrow` ── こちらは Razor の印）を足場にする。 */
+.edfieldrow ::deep .ednumodd { color: #f0a5ad; }
+/* ⭐ 「きざみ」の脇に出す単位の名（ド／px）。⚠️ 主役ではないので引っ込める。 */
+.edunitname { color: #6d7390; font-size: 11px; }
+
 .edfaults ::deep .edfault-box {
   position: absolute;
   pointer-events: none;
   border: 2px solid rgba(224, 79, 95, .55);
   box-sizing: border-box;
+}
+/* ⭐ 予約帯（下の帯 1556〜。目安 ── 検査 DockFaults と同じ数字。EditPage.ZoneHtml が出す）。
+   ⚠️ ::deep が要る（.edfault-box と同じ理由 ── MarkupString の中身）。
+   塗り潰さない約束 → 極薄の斜線＋上端の破線のみ。色は既存の警告色 #e04f5f 系。 */
+.edfaults ::deep .edzone-dock {
+  position: absolute;
+  left: 0;
+  width: 1080px;
+  pointer-events: none;
+  border-top: 2px dashed rgba(224, 79, 95, .45);
+  background: repeating-linear-gradient(45deg, rgba(224, 79, 95, .06) 0 14px, transparent 14px 28px);
 }
 /* ⭐ 「ここが悪い」の形。⚠️ 面で塗らず、薄い斜線だけ（輪郭は少し濃くして目立たせる）。
    `pointer-events:auto` はここだけ ── 実体の外（画面の外・親の外・足りない高さの帯）
@@ -370,6 +462,30 @@
   border-style: solid;
   background: rgba(245, 158, 11, .16);
 }
+
+/* ⭐ 2026-08-29: 掴んでいる最中の読み出し。⚠️ 一時的な道具（`.edband`/`.edguide`）と
+   同じ扱い ── 指を受けず、掴んでいる間だけ出る。⭐ 盤の右下の隅に固定する
+   （Tiled の下帯と同じ位置＝作業の邪魔にならない角）。等幅で桁を揃え、数が動いても
+   字の幅が揺れないようにする。 */
+.edstat {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: none;
+  pointer-events: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(5, 7, 12, .82);
+  color: #d7dae6;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  z-index: 3;   /* ⚠️ 輪・道しるべ（2）より上 ── 隅に出るので重なっても隠さない */
+}
+/* ⭐ Space を押している間は「掴める」形にする（`edit.js` の `_setSpace`）。
+   ⚠️ 見た目だけ ── 実際にパンを拾うのは `#edcap` の `pointerdown`。 */
+.edcap.edcap-pan { cursor: grab; }
 
 /* ── ⭐ E2: 層（レイヤ）── 薄くする／見えないものの見せ方 ──────────
    ⚠️ 「薄くする」（ここ）と「触れなくする」（`edit.js` の `_layerOk`）は別々の軸
@@ -879,3 +995,36 @@
 /* ⭐ E1-5: Inspector 内「枠と絵に合わせる」。⚠️ 区切りは面でなく余白＋既存の警告色の文字
    （新しい色は増やさない）。「絵に合わせる」釦の見た目は `.edalign-btn` を共有する。 */
 .edpicwarn { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+
+/* ⭐ P4（2026-08-29・案7の A）: 出す条件（when=）。「選ぶ」と「打つ」を1つの欄で
+   兼ねる（datalist）。⚠️ 新しい色は増やさない ── 地と枠は .edselect と同じ。 */
+.edwhenbody { display: flex; flex-direction: column; gap: 6px; }
+.edwheninput {
+  width: 100%;
+  height: 34px;
+  background: #0d1220;
+  color: #eef1fa;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 4px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+/* ⭐ P4（案7の B・C）: 「見せるだけ」の札。
+   🔴 押せないことが一目で分かる形にする ── 角丸は「押せる要素」だけの約束なので使わず、
+   地の明度差（面）だけで区切る。⚠️ 面と線を二重に使わない（作法どおり）。
+   ⚠️ 無彩色のまま ── アクセントは主役（保存）に取ってある。 */
+.edchips { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.edchip {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 8px;
+  background: #191d30;
+  font-size: 11px;
+  cursor: default;
+  user-select: none;
+}
+.edchipkey { color: #6d7390; }
+.edchipval { color: #9aa1b8; }
+.edchipwhy { color: #6d7390; margin-left: auto; text-align: right; }

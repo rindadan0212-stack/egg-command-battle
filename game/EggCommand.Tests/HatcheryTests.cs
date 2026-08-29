@@ -99,7 +99,7 @@ public class HatcheryTests
     }
 
     [Fact]
-    public void 探索は常に三件出ている()
+    public void 探索は常にShown件出ている()
     {
         var game = Fresh();
         Assert.Equal(Encounters.Shown, game.Encounters.Count);
@@ -108,6 +108,58 @@ public class HatcheryTests
         Encounters.Replace(game, first);
         Assert.Equal(Encounters.Shown, game.Encounters.Count);
         Assert.DoesNotContain(game.Encounters, e => e.Nest.Id == first.Id);
+    }
+
+    /// <summary>🔴 作者の指示（2026-08-29）で3→6。⚠️ 数そのものを直に固定する ──
+    /// 他のテストは軒並み <see cref="Encounters.Shown"/> を経由するので、
+    /// この値そのものが崩れても他では気づけない。</summary>
+    [Fact]
+    public void 同時に出す数は6()
+    {
+        Assert.Equal(6, Encounters.Shown);
+    }
+
+    /// <summary>⭐ 空から <see cref="Encounters.Refill"/> だけを呼んでも Shown 件まで埋まる
+    /// （`AppPage.razor` の `BeatIdle` が呼ぶのと同じ関数）。</summary>
+    [Fact]
+    public void Refillは空からShown件まで埋める()
+    {
+        var game = Games.NewGame(2026_08_29);
+        game.Encounters.Clear();
+        Assert.Empty(game.Encounters);
+
+        Encounters.Refill(game, T0);
+
+        Assert.Equal(Encounters.Shown, game.Encounters.Count);
+    }
+
+    /// <summary>🔴 `AppPage.razor` の `BeatIdle` と同じ並び（Expire → Refill）で呼んでも、
+    /// **全部同時に**切れて Shown 件まで埋まる。⚠️ `Encounters.Expire` は内部で
+    /// `Replace` を呼び差し替えた分だけ件数を保つが、`BeatIdle` はそれに頼りきらず
+    /// `Refill` も並べて呼ぶ設計 ── その形をそのまま検査する。</summary>
+    [Fact]
+    public void ExpireとRefillを続けて呼ぶと全部切れてもShown件に戻る()
+    {
+        var game = Games.NewGame(2026_08_29);
+        game.Encounters.Clear();
+        Encounters.Refill(game, T0);
+        Assert.Equal(Encounters.Shown, game.Encounters.Count);
+
+        var before = new System.Collections.Generic.List<string>();
+        foreach (var e in game.Encounters) before.Add(e.Nest.Id);
+
+        // ⭐ 段1（一番長く居座る）でも足りる時間を進める ── 全件が確実に切れる
+        long far = T0 + Encounters.SecondsFor(1) + 1;
+        int expired = Encounters.Expire(game, far);
+        Encounters.Refill(game, far);
+
+        Assert.True(expired > 0, "時間を進めても1件も切れない");
+        Assert.Equal(Encounters.Shown, game.Encounters.Count);
+        foreach (var e in game.Encounters)
+        {
+            Assert.DoesNotContain(e.Nest.Id, before);
+            Assert.False(Encounters.IsGone(e, far), "入れ替えた巣がもう切れている");
+        }
     }
 
     [Fact]

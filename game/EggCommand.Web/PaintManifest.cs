@@ -65,20 +65,38 @@ namespace EggCommand.Web
             }
         }
 
-        private static Dictionary<string, Size> Load()
+        private static Dictionary<string, Size> Load() =>
+            NameSizeManifestIo.Load("PaintManifest.txt", "csproj か sim paint-placeholder", out _loaded);
+    }
+
+    /// <summary>⭐ **「名前 幅 高」1行形式の埋め込み一覧を読む、唯一の出所。**
+    ///
+    /// ⚠️ `PaintManifest`/`IconManifest` は形（読み方・`Exists`/`SizeOf`/`Loaded` の意味）が
+    /// 完全に同じなので、読み込みだけをここへまとめた ── 中身（列挙する対象・埋め込みの
+    /// 作り方）は各クラス側に残す（薄い包みにする程度・丸ごとの作り直しはしない）。
+    /// `SpriteManifest` は「名前だけ」＋参照ベースの引き方で形が違うので、まとめない
+    /// （3つ目まで無理に揃えると壊す危険のほうが大きいと判断した）。</summary>
+    internal static class NameSizeManifestIo
+    {
+        /// <param name="resourceName">埋め込みのリンク名（例 "PaintManifest.txt"）。</param>
+        /// <param name="howToMake">埋め込みが見つからないときの console 案内に添える、
+        /// 「何を走らせれば直るか」の一言。</param>
+        /// <param name="loaded">⭐ 呼び出し側の `_loaded` フィールドへそのまま渡す
+        /// （埋め込みが読めたか。読めなかったときは呼び側が「無いと疑わない」側へ倒す）。</param>
+        public static Dictionary<string, PaintManifest.Size> Load(
+            string resourceName, string howToMake, out bool loaded)
         {
-            var map = new Dictionary<string, Size>(StringComparer.Ordinal);
-            var asm = typeof(PaintManifest).Assembly;
-            string path = asm.GetName().Name + ".PaintManifest.txt";
+            var map = new Dictionary<string, PaintManifest.Size>(StringComparer.Ordinal);
+            var asm = typeof(NameSizeManifestIo).Assembly;
+            string path = asm.GetName().Name + "." + resourceName;
             using var stream = asm.GetManifestResourceStream(path);
             if (stream == null)
             {
-                // ⚠️ 埋め込み手順（csproj の `PaintManifest` ターゲット）が動いていない、
-                //    または `paint-placeholder` を一度も走らせていない。
-                Console.WriteLine("PaintManifest: 埋め込みが見つからない（csproj か sim paint-placeholder を見る）");
+                Console.WriteLine($"{resourceName}: 埋め込みが見つからない（{howToMake} を見る）");
+                loaded = false;
                 return map;
             }
-            _loaded = true;
+            loaded = true;
             using var reader = new StreamReader(stream);
             string? line;
             while ((line = reader.ReadLine()) != null)
@@ -87,7 +105,7 @@ namespace EggCommand.Web
                 var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length != 3) continue;
                 if (int.TryParse(parts[1], out var w) && int.TryParse(parts[2], out var h))
-                    map[parts[0]] = new Size(w, h);
+                    map[parts[0]] = new PaintManifest.Size(w, h);
             }
             return map;
         }

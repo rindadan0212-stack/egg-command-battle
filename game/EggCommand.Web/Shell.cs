@@ -5,8 +5,13 @@ namespace EggCommand.Web;
 /// <summary>いま出ている画面。⚠️ Unity 版 `App.Screen` と同じ並び。</summary>
 public enum Sheet { Home, Nests, Breed, Box, Book, Fight, Raid, Trial }
 
-/// <summary>覆いで前に出る札。⚠️ 画面とは別に数える（後ろの画面は残る）。</summary>
-public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train, Ask, Keep, Grow }
+/// <summary>覆いで前に出る札。⚠️ 画面とは別に数える（後ろの画面は残る）。
+///
+/// ⭐ **`Tree`**（家系図）を追加（2026-08-29・作者の指示「BOXで2世代以降の
+/// キャラクターの家系図を見られるように」）。⚠️ 末尾に足す ── 途中に挿すと
+/// 既存の値の並びが1つずつずれる（値そのものを保存には書いていないが、
+/// 並びに依存した比較を疑う手間を増やさないため）。</summary>
+public enum Panel { None, Party, Species, Skill, Eggs, Fuse, Train, Ask, Keep, Grow, Tree }
 
 /// <summary>すごろくの演出がどこまで進んだか。</summary>
 public enum Roam
@@ -41,8 +46,14 @@ public readonly record struct Spark(
 /// ⚠️ 型の名前を「Fanfare」にしなかった理由: `Sheets.Fanfare` という**同名のメソッド**が
 /// 同じ名前空間に在る（Unity 版に合わせた）── 型とメソッドが同名だと、
 /// このファイルの中で `Fanfare` と書いた瞬間にどちらを指すか揺れる。
-/// ⭐ 演出の秒（`Core.Beats.CheerPop`/`CheerSpin`）と語を合わせて `Cheer` にした。</summary>
-public readonly record struct Cheer(PixelSprite Art, Palette Palette, string Stars, string Line, string Burst)
+/// ⭐ 演出の秒（`Core.Beats.CheerPop`/`CheerSpin`）と語を合わせて `Cheer` にした。
+///
+/// ⭐ **`IsCreature`/`CreatureId`**（2026-08-29 追加・作者の指示「生まれたその場で
+/// 分解とステータス詳細」）── 卵か個体かの手掛かりが無かったので足した。
+/// ⚠️ `Stars` の空/非空を「個体か卵か」に流用しない ── 星の出し分けと釦の出し分けは
+/// 別の判断で、たまたま今は同じ条件でも、片方だけ変えたら黙ってずれる。</summary>
+public readonly record struct Cheer(PixelSprite Art, Palette Palette, string Stars, string Line, string Burst,
+    bool IsCreature, string? CreatureId)
 {
     /// <summary>卵を手に入れた。⭐ Unity 版 `Fanfare.EggGot` と同じ中身
     /// （絵は `EggArt` ── 卵はまだ PNG に焼いていないので SVG のまま出る）。</summary>
@@ -50,7 +61,8 @@ public readonly record struct Cheer(PixelSprite Art, Palette Palette, string Sta
     {
         var species = SpeciesTable.ById(egg.SpeciesId);
         return new Cheer(EggArt.Sprite, EggArt.Shell, Rarities.StarsOf(egg.Rarity),
-            $"{species.Name}のたまごをゲットした！！", BurstOf(egg.Element));
+            $"{species.Name}のたまごをゲットした！！", BurstOf(egg.Element),
+            IsCreature: false, CreatureId: null);
     }
 
     /// <summary>卵が孵った。⭐ Unity 版 `Fanfare.Born` と同じ中身。
@@ -59,7 +71,8 @@ public readonly record struct Cheer(PixelSprite Art, Palette Palette, string Sta
     {
         var species = Creatures.SpeciesOf(creature);
         return new Cheer(species.Sprite, Creatures.PaletteOf(creature), "",
-            $"{species.Name}がうまれた！！", BurstOf(creature.Element));
+            $"{species.Name}がうまれた！！", BurstOf(creature.Element),
+            IsCreature: true, CreatureId: creature.Id);
     }
 
     /// <summary>属性の色を、後ろの光ぶん薄める（Unity 実測 alpha .35）。
@@ -100,7 +113,19 @@ public sealed class Shell
     /// ⚠️ **本番（`/app` の実プレイ）だけ `live: true` を渡す。**Core からは1つも
     /// 読まれない（`Shell` は `EggCommand.Web` だけの型）ので、ここを動く時計に
     /// 変えても Core の計算には影響しない。</summary>
-    public long Now => _live ? DateTimeOffset.UtcNow.ToUnixTimeSeconds() : _frozenAt;
+    public long Now => (long)NowFine;
+
+    /// <summary>🔴 **秒より細かい「いま」**（2026-08-28）。⭐ <see cref="Now"/> はこれを切り捨てた物
+    /// ── **時計の出所は1つのまま**（2026-08-27 に「出所を1つに戻す」と決めた約束を守る）。
+    ///
+    /// ⚠️ 放置の拍は 0.4秒・0.5秒まで細かい（`Core.Idle`）のに、`Now` は**整数秒**なので、
+    /// 1秒に4回覗いても**進むのは1秒に1回・1.0秒ぶんずつ**だった。⭐ 結果、
+    /// 0.5秒ごとのはずの打撃が**同じ瞬間に2発ずつ**出ていた（実測 2026-08-28: 間隔 0.00秒 → 1.08秒 → 0.00秒…）。
+    /// ⚠️ 直すのに `Now` を実数へ変えると、孵化器・巣の期限・保存など**整数秒を前提にした
+    /// 全部**に波及する ── ⭐ だから細かいほうを**足す**（読む側が要るほうを選ぶ）。</summary>
+    public double NowFine => _live
+        ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0
+        : _frozenAt;
 
     private readonly long _frozenAt;
     private readonly bool _live;
@@ -330,7 +355,22 @@ public sealed class Shell
 
             // ── 育てる ──────────────────────────────
             // ⚠️ 分解は**開くだけ**。⭐ 減るのは札の中の「分解する」を押したとき
-            case "fuse": Melts.Clear(); Open = Panel.Fuse; break;
+            // 🔴 **`ClaimBorn()` を先に呼ぶ**（2026-08-29・作者の指示「生まれたその場で
+            //    分解とステータス詳細」）。⚠️ 祝い（`Cheer_`）が生きたままだと開いた札の
+            //    裏で覆いが残る ── 普段（BOX から押したとき）は `Cheer_` が null なので
+            //    ここは何もしない（無害）。
+            // 🔴 祝い経由のときは生まれた本人を分解候補へ**事前選択**する（2026-08-29）。
+            //    ⚠️ `ClaimBorn` が `Picked`=本人 にするため、素の `Deeds.Food` からは
+            //    外れてしまう ──「`Melts` に居る個体は `Food` が外さない」（`Deeds.cs`）と
+            //    対で成り立つ。
+            case "fuse":
+            {
+                string? born = ClaimBorn();
+                Melts.Clear();
+                if (born != null) Melts.Add(born);
+                Open = Panel.Fuse;
+                break;
+            }
             case "melt": Deeds.Melt(this); break;
             case "train": Feeds.Clear(); Slot_ = 0; Open = Panel.Train; break;
             case "row": Slot_ = i; Feeds.Clear(); break;
@@ -339,8 +379,27 @@ public sealed class Shell
             // 🔴 **「育てる」は札を開くだけ**（2026-08-26・ARK式の自由配分）。
             //    ⚠️ 以前はここで直に Lv＋1 していたが、振り先を選ぶ場所が要る。
             //    ⭐ EXP→点（`levelup`）も、点を振る（`spend`）も、その札の中でやる。
+            // ⚠️ 祝いの「くわしく見る」はもうここでない ── detail（下）へ繋ぎ直した
+            //    （2026-08-29・grow は全行が不可逆の EXP 消費で「読む」着地として誤り）。
             case "grow": Open = Panel.Grow; break;
-            case "levelup": Deeds.Grow(this); break;
+            // ⭐ 祝いの「くわしく見る」（`fanfare.txt` の detail ── 2026-08-29）。BOX へ着地する。
+            //    ⚠️ 新しい画面は作らない ── タブで BOX を開いたのと同じ後始末
+            //    （SortOpen / Open / Under）をして、`ClaimBorn` が選んだ本人の詳細札を出す。
+            case "detail": ClaimBorn(); SortOpen = false; Open = Under = Panel.None; Now_Sheet = Sheet.Box; break;
+            // ⭐ 家系図（2026-08-29・作者の指示）。⚠️ 押しどころ自体が
+            //    `Generation < 2` では出ない（`Sheets.Box` の `Tappable` ── 2世代未満は
+            //    墓標を辿っても何も出ないので、そもそも押せなくしてある）。
+            //    ⭐ `Cheer_` からは開けない（`fuse`/`grow` と違い `ClaimBorn()` は呼ばない）。
+            case "tree": Open = Panel.Tree; break;
+            // 🔴 二度手間解消（2026-08-29・作者の指示「点を振る前に点を獲得するのが
+            //    二度手間」）。⚠️ 以前は `levelup`（EXP→点）と `spend`（点→ステ）が
+            //    別の押しどころだった。⭐ 判断はここ1か所だけに置く（`Deeds.cs` は
+            //    担当外）── 既存の Core の口 `Core.Idle.Spend`／`Creatures.Spend` を
+            //    そのまま呼ぶだけで、中身（上限・値段の規則）は1つも書き写さない。
+            //    ⚠️ **既に振れる点が残っている**（`spend` 追加前の古い保存の名残）ときは
+            //    そちらを先に使う ── でないと残りを素通りして EXP だけ余計に減る。
+            // ⭐ EXP→点→ステを1回で。⚠️ 中身は `Deeds.SpendPoint` が唯一の出所
+            //    （ここへ書き写さない ── 2026-08-29 に一度書き写されていた）
             case "spend": Deeds.SpendPoint(this, i); break;
 
             // ── 配合 ────────────────────────────────
@@ -378,9 +437,26 @@ public sealed class Shell
         {
             // ⭐ BOX の札の技（枠0〜2）。⚠️ **いま見ている個体の**技とレベルを出す。
             //    ⚠️ 名前に `detail-` が冠されている（`use=panel` で差した部品なので）
-            case "detail-s0": Peek(0); break;
-            case "detail-s1": Peek(1); break;
-            case "detail-s2": Peek(2); break;
+            case "detail-s0": Show(PickedOne(), 0); break;
+            case "detail-s1": Show(PickedOne(), 1); break;
+            case "detail-s2": Show(PickedOne(), 2); break;
+
+            // ⭐ 戦闘の手札（battle.txt の s0〜s2 ── 2026-08-29 配線）。
+            //    ⚠️ 主は Sheets.Fight と同じ StandingAlly ── 描いている札と同じ技の出所。
+            //    札そのものが when=sN（自分の手番に技がある枠だけ）でしか出ないので、
+            //    敵の番には来ない。⭐ CT 冷却中でも長押しは効く（使えない技ほど読みたい）。
+            case "s0": Show(Hand(), 0); break;
+            case "s1": Show(Hand(), 1); break;
+            case "s2": Show(Hand(), 2); break;
+
+            // ⭐ 配合の親札（panelmini ── pfill=親A・qfill=親B。2026-08-29 配線）。
+            //    ⚠️ 短押し（tap=pa/pb・親を外す）とは tap.js が押下時間で分ける
+            case "pfill-s0": Show(One(ParentA), 0); break;
+            case "pfill-s1": Show(One(ParentA), 1); break;
+            case "pfill-s2": Show(One(ParentA), 2); break;
+            case "qfill-s0": Show(One(ParentB), 0); break;
+            case "qfill-s1": Show(One(ParentB), 1); break;
+            case "qfill-s2": Show(One(ParentB), 2); break;
 
             // ⭐ 種族の札の抽選（枠1〜3）。⚠️ こちらは個体ではないので Lv は 1
             case "skill1": Pool(0, i); break;
@@ -388,16 +464,29 @@ public sealed class Shell
             case "skill3": Pool(2, i); break;
         }
 
-        void Peek(int slot)
+        // ⭐ 戦闘の手札の主。⚠️ 敵の番でも手札は「次に動かす味方」を出したまま
+        //    （Sheets.Fight と同じ読み方）── 長押しの主も同じにする
+        Creature? Hand() => Fight_ == null ? null
+            : EggCommand.Core.Battle.StandingAlly(Fight_)?.Creature;
+
+        Creature? One(string? id)
         {
-            var one = PickedOne();
+            if (id == null) return null;
+            foreach (var c in Game.Storage.Creatures) if (c.Id == id) return c;
+            return null;
+        }
+
+        // ⭐ 旧 Peek の一般化（2026-08-29）── レベルの式は1つ。呼び手は個体を選ぶだけ
+        void Show(Creature? one, int slot)
+        {
             if (one == null) return;
             var skills = Creatures.SkillsOf(one);
             if (slot >= skills.Length || skills[slot] == null) return;
             SkillId = skills[slot]!.Id;
             SkillSlot = slot;
-            // ⚠️ 上限は技ごと（Skills.MaxLevelOf）。skills[slot] は直前の null チェック済み
-            SkillLevel = SkillCosts.LevelOf(one.SkillPoints[slot], Skills.MaxLevelOf(skills[slot]!));
+            // ⭐ レベルの式は Core が唯一の出所（2026-08-29 ── ここに写しを置かない）。
+            //    ⚠️ 上限が技ごとであること（Skills.MaxLevelOf）も向こうが持っている。
+            SkillLevel = Creatures.SkillLevelOf(one, slot);
             Under = Open;
             Open = Panel.Skill;
         }
@@ -443,6 +532,23 @@ public sealed class Shell
         }
         // ⭐ 一覧を押すのは「見る」だけ。押すたびに意味が変わる画面にしない
         Picked = id;
+    }
+
+    /// <summary>祝いの覆いに足した「分解する」「くわしく見る」から呼ばれる
+    /// （2026-08-29・作者の指示「生まれたその場で分解とステータス詳細」）。
+    ///
+    /// ⭐ **生まれた個体を「いま選んでいる個体」にしてから、祝いを閉じる。**
+    /// ⚠️ 順番が逆（先に閉じてから選ぶ）だと、閉じた拍で描き直しが走り、
+    /// 選ぶ前の古い `Picked` のまま札が開く（実際に踏む前に気づいた）。
+    /// ⚠️ 卵を得たとき（`IsCreature` が false）は何もしない ── その釦自体が
+    /// `when=creature` で出ていないので普段は起きないが、呼ばれても
+    /// 個体を差し替えない（万一に備える）。
+    /// ⭐ 戻り値＝生まれた本人の Id（居なければ null）── 分解の事前選択が使う
+    /// （2026-08-29）。</summary>
+    private string? ClaimBorn()
+    {
+        if (Cheer_ is Cheer c && c.IsCreature) { Picked = c.CreatureId; Cheer_ = null; return c.CreatureId; }
+        return null;
     }
 
     /// <summary>⚠️ 入れ子の番号は `2#1`。⭐ ここでは**いちばん外側**を読む。</summary>

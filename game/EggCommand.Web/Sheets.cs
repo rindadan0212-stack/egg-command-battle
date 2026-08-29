@@ -87,7 +87,15 @@ public static class Sheets
                 _ => key.StartsWith("detail-") && face.Shows(key[7..]),
             },
 
-            Tappable = key => key != "grow" || s.Game.Idle.Exp >= Levels.ExpToNext(picked),
+            Tappable = key => key switch
+            {
+                "grow" => s.Game.Idle.Exp >= Levels.ExpToNext(picked),
+                // ⭐ 2世代未満は墓標を辿っても親が居ない ── 押しても「不明」しか出ない
+                //    ので、そもそも押させない（作者の指示「BOXで2世代以降の
+                //    キャラクターの家系図を見られるように」）。
+                "tree" => picked.Generation >= 2,
+                _ => true,
+            },
         });
 
         Face Cell(int at) => cells[at] ??= new Face(sorted[at]);
@@ -184,8 +192,8 @@ public static class Sheets
                 // ⭐ **EXP と書く。**⚠️ 数だけ出していた頃は、丸い印の隣の数が
                 //    何の数なのか画面のどこにも書いていなかった。
                 "count" => $"EXP {Face.Digits(s.Game.Idle.Exp)}",
-                // ⭐ 16進なら8桁に収まり、口で伝えられる長さになる
-                "world" => "#" + s.Game.Seed.ToString("X8"),
+                // ⚠️ 世界番号（bind=world）は保存の控えの札へ移した（2026-08-29 ──
+                //    右端を「控え」釦に譲った。描く側は下の Keep）
                 "trials" => $"試練　{Games.TrialsCleared(s.Game)}/{Core.Trials.All.Count}",
                 _ => "",
             },
@@ -346,8 +354,14 @@ public static class Sheets
             },
 
             // ⭐ CT の丸薬は濃紺・字は白。⚠️ 同じ色を2か所に書かない
+            // ⭐ 技のラベルは手札の主（その個体）の属性の色（作者の指示 2026-08-29）。
+            //    ⚠️ 白い札の上で薄い属性色は読みにくいので `Face.ElementInk`
+            //    （読める濃さ）を使う ── 濃さの計算の出所は Face 側の1つだけ
+            //    （BOX の札 `panel.txt` の s0name/s1name/s2name と同じ関数）。
             Tint = key => key.EndsWith("pill") ? "#2b3350"
-                : key.EndsWith("ct") ? "#ffffff" : null,
+                : key.EndsWith("ct") ? "#ffffff"
+                : key.EndsWith("name") && hand != null ? Face.ElementInk(hand.Creature.Element)
+                : null,
 
             // ⭐ 入っているあいだは主役に立てる（字だけだと遠目に読めない）
             Lead = key => key == "pick" && s.Auto,
@@ -355,9 +369,10 @@ public static class Sheets
             When = key => key switch
             {
                 "done" => done,
-                "s0" => skills[0] != null,
-                "s1" => skills.Length > 1 && skills[1] != null,
-                "s2" => skills.Length > 2 && skills[2] != null,
+                // ⭐ 敵の番は札を出さない（押せない札を出しておくと、押せるのに反応しないように見える）
+                "s0" => mine && skills[0] != null,
+                "s1" => mine && skills.Length > 1 && skills[1] != null,
+                "s2" => mine && skills.Length > 2 && skills[2] != null,
                 _ => false,
             },
 
@@ -404,10 +419,15 @@ public static class Sheets
             // ⭐ 絵の並び用（構造化）。⚠️ 字を返す `ActiveStatuses` は Unity の
             //    `UnitStand` がまだ読むので、そちらは触らない（Battle.cs 参照）。
             var badges = EggCommand.Core.Battle.ActiveStatusBadges(u);
-            // ⚠️ **unit.txt の `sicon`/`snum` の cols= と同じ数にすること。**
+            // ⚠️ 🔴 **unit.txt の `sicon`/`snum` の `cols=`/`max=` と同じ数にすること。**
             //    ⭐ 唯一の出所は骨組みだが、繰り返しの個数はここ（Fill 側）でしか
             //    決められない（`Count` が返す数がそのまま描かれる枚数になる）。
-            const int shown = 5;
+            // ⚠️ **2026-08-29 に 5 → 4。**絵の枠を 24px→64px（16ドット）へ広げたので、
+            //    状態欄（274px）には4個しか並ばない（`4×64 + 隙間3×6 = 274`）。
+            //    🔴 ここを 5 のままにすると、骨組みは4枚しか描かないのに Fill は5件ぶん
+            //    数えるので、**5件目が消え、しかも「+N」の N も1つずれる**。
+            //    ⭐ 噛み合いは `PicFrameSizeTests` が見張っている。
+            const int shown = 4;
             int cur = -1;   // ⭐ 「状態の何番目を描いているか」（At が置く）
             // ⚠️ **側も名前に入れる。**⭐ 番号だけだと味方の1体目と敵の1体目が同じ id になる
             sb.Append(Stands.One(spots[i], (foe ? "f" : "a") + i, new DomFill
@@ -553,7 +573,9 @@ public static class Sheets
             Text = key => key switch
             {
                 "card-level" => game.Encounters[at].Level.ToString(),
-                "card-left" => Left(at) is int n ? Rarities.Clock(n) : "",
+                // ⚠️ 🔴 **判断は `Clocks` に1本化**（1秒ごとの差し替え `AppPage.BeatIdle` と
+                //    出所を分けない ── 分けると2か所目になる）。
+                "card-left" => Clocks.NestText(s, at),
                 // ⭐ 4回盗むと親が道を塞ぐ ＝ 入れば必ず戦闘（巣の寿命）
                 "card-raids" => Steal.IsSealed(raids) ? "戦闘"
                     : raids <= 0 ? "" : new string('●', raids),
@@ -569,31 +591,19 @@ public static class Sheets
                 : key == "bart" ? SpeciesTable.ById("nushi").Palettes[0] : null,
 
             // ⭐ 残りがこの割合を切ったら赤くする（数字を読ませずに急かす）
-            Ratio = key => key == "card-track" ? RatioOf(at) : 0,
+            // ⚠️ 🔴 **`Clocks.NestRatioOf`/`Clocks.NestLeftOf` を読む**（帯・字色・
+            //    `card-left` の字が同じ「残り秒」を見るので、ここで計算し直さない）。
+            Ratio = key => key == "card-track" ? Clocks.NestRatioOf(s, at) : 0,
             Tint = key => key switch
             {
-                "card-track" => RatioOf(at) <= 0.25 ? "#e04f5f" : "#2fa84a",
-                "card-left" => RatioOf(at) <= 0.25 ? "#c0303f" : null,
+                "card-track" => Clocks.NestRatioOf(s, at) <= 0.25 ? "#e04f5f" : "#2fa84a",
+                "card-left" => Clocks.NestTint(s, at),
                 "card-raids" => Steal.IsSealed(raids) ? "#c0303f" : null,
                 _ => null,
             },
 
             Tappable = key => true,
         });
-
-        // ⚠️ **期限を持たない巣がある**（時刻を渡さずに始めた保存）。
-        //    ⭐ 0 を「もう切れた」と読まない ── 読むと即座に消しにかかる。
-        int? Left(int i)
-        {
-            var e = game.Encounters[i];
-            return e.UntilUnix <= 0 ? null : Encounters.LeftOf(e, s.Now);
-        }
-        double RatioOf(int i)
-        {
-            if (Left(i) is not int left) return 0;
-            int whole = Encounters.SecondsFor(game.Encounters[i].Nest.Tier);
-            return whole <= 0 ? 0 : Math.Clamp(left / (double)whole, 0, 1);
-        }
     }
 
     // ── 種族の札 ────────────────────────────────────
@@ -739,6 +749,10 @@ public static class Sheets
                 "gens" => s.SavePast.Length == 0 ? "この端末の控えはまだ在りません"
                     : $"この端末の控え　{s.SavePast.Length}本　"
                         + $"いちばん古いのは {Age(Oldest(s.SavePast))}",
+                // ⭐ この世界の番号（旧 ホーム上帯 ── 2026-08-29 にここへ移した）。
+                //    ⚠️ 端末ごとに違う世界を引くので「この盤面で起きた」と伝える手立てが
+                //    これしか無い。16進なら8桁で口に出せる。
+                "world" => "世界 #" + s.Game.Seed.ToString("X8"),
                 _ => "",
             },
             // ⚠️ **読み込みは押し間違いが怖い。**⭐ 何も無いときは押させない
@@ -833,8 +847,16 @@ public static class Sheets
             Sprite = key => key == "art" && s.Cheer_ is Cheer c ? c.Art : null,
             Palette = key => key == "art" && s.Cheer_ is Cheer c ? c.Palette : null,
             Tint = key => key == "burst" && s.Cheer_ is Cheer c ? c.Burst : null,
-            // ⭐ **★は卵のときだけ**（誕生では `Cheer.Born` が空文字を渡す）
-            When = key => key == "stars" && s.Cheer_ is Cheer c && c.Stars.Length > 0,
+            When = key => key switch
+            {
+                // ⭐ **★は卵のときだけ**（誕生では `Cheer.Born` が空文字を渡す）
+                "stars" => s.Cheer_ is Cheer c && c.Stars.Length > 0,
+                // ⭐ 生まれたその場の「分解」「くわしく見る」（作者の指示 2026-08-29）。
+                //    ⚠️ 卵を得たとき（`Cheer.EggGot`）には出さない ── 分解も詳細も
+                //    生まれた個体にしか意味が無い。`Cheer.IsCreature` が唯一の出所。
+                "creature" => s.Cheer_ is Cheer c && c.IsCreature,
+                _ => false,
+            },
             Tappable = key => true,
         }, crown: crown);
 
@@ -980,11 +1002,17 @@ public static class Sheets
             Text = key => key switch
             {
                 "who" => $"{Creatures.SpeciesOf(one).Name}　Lv {Levels.Of(one)}/{Levels.MaxOf(one)}",
-                // ⭐ 上限に達していたら値段ではなく理由を出す
-                "levelup" => Levels.IsMaxed(one)
-                    ? "これ以上は点が増えない"
-                    : $"EXP {Face.Digits(Levels.ExpToNext(one))} → 1点",
-                "left" => left > 0 ? $"振れる点  {left}" : "振れる点がありません",
+                // 🔴 二度手間解消（2026-08-29・作者の指示「点を振る前に点を獲得するのが
+                //    二度手間」）── `levelup` 釦を無くし、`spend`（ステを押す）だけで
+                //    「EXP → 1点 → そのステへ」が完結する（判断は `Shell.Tap` の
+                //    `case "spend"` に1か所だけ）。⭐ ここは「次の1点にいくら要るか」を
+                //    1行にまとめて見せる案を選んだ（6本それぞれに同じ値を繰り返すより、
+                //    値段は個体ごとに1つ（`Levels.ExpToNext`）なので1か所で言えば足りる）。
+                // ⚠️ 振れる点が残っている（`spend` 追加前の古い保存の名残）ときは、
+                //    それを優先して見せる ── 黙って EXP から2点目を作ろうとしない。
+                "left" => Levels.IsMaxed(one) ? "これ以上は育たない"
+                    : left > 0 ? $"振れる点 {left}　／　EXP {Face.Digits(s.Game.Idle.Exp)}"
+                    : $"EXP {Face.Digits(s.Game.Idle.Exp)}　／　次の1点 {Face.Digits(Levels.ExpToNext(one))}",
                 "gname" => Stats.LabelOf(Stats.Keys[row]),
                 "gnow" => Face.Digits(now[Stats.Keys[row]]),
                 // ⚠️ 0 を「0」と書かない（`panel.txt` の「強化」列と同じ約束）
@@ -994,13 +1022,11 @@ public static class Sheets
                     + "配合すると子は 0 から振り直せます。",
                 _ => "",
             },
-            // ⭐ 点が無いときは押せない（押しても何も起きない釦を出さない）
-            Tappable = key => key switch
-            {
-                "spend" => left > 0,
-                "levelup" => !Levels.IsMaxed(one) && s.Game.Idle.Exp >= Levels.ExpToNext(one),
-                _ => true,
-            },
+            // ⭐ 押しても成功しないなら押させない ── 振れる点が残っているか、
+            //    上限未満で次の1点ぶんの EXP が足りるか、どちらかが要る
+            //    （黙って何も起きない釦を出さない、はここでも守る）。
+            Tappable = key => key != "spend"
+                || left > 0 || (!Levels.IsMaxed(one) && s.Game.Idle.Exp >= Levels.ExpToNext(one)),
             // ⚠️ 🔴 **`crown:` で渡す。**位置引数だと `suffix` に入り、
             //    押しどころの番号が `card#0` になって `Shell.Index` が読めなくなる（実際に踏んだ）。
         }, crown: crown);
@@ -1076,11 +1102,73 @@ public static class Sheets
         }, crown: crown);
     }
 
+    // ── 家系図 ──────────────────────────────────────
+
+    /// <summary>⭐ **何代さかのぼるか。**⚠️ 2＝親と祖父母（3代ぶん）。
+    /// 「BOXで2世代以降のキャラクターの家系図を見られるように」（作者の指示）に
+    /// 足りる分だけ出す ── それより深く辿っても、墓標の上限（<see cref="Tombs.Limit"/>）に
+    /// 先に当たって「不明」ばかりになりやすい。</summary>
+    private const int TreeDepth = 2;
+
+    /// <summary>配合で消えた祖先を、墓標から辿って見せる札。
+    /// ⚠️ **押しどころは「閉じる」だけ**（読む場所であって選ぶ場所ではない ──
+    /// `species.txt` の技の袋と同じ立ち位置）。</summary>
+    public static string Tree(Shell s, string crown = "")
+    {
+        var picked = s.PickedOne();
+        if (picked == null) return "<!-- 手持ちが無い -->";
+        var nodes = Lineage.Of(s.Game, picked, TreeDepth);
+
+        return LayoutDom.Render(LayoutStore.Of("tree"), new DomFill
+        {
+            Text = key => TreeText(nodes, key),
+            Tappable = key => true,
+        }, crown: crown);
+    }
+
+    /// <summary>⭐ 骨組みの節点名は「n0」〜「n6」（<see cref="Lineage.Of"/> と同じ並び）に、
+    /// 「name」「sub」「gen」の3つの差し口を付けたもの。
+    ///
+    /// ⚠️ 7×3＝21個を書き並べるのは冗長に見えるが、この家系図は行ごとに幅が違う
+    /// ピラミッド型（自分1枚・親2枚・祖父母4枚）── `panel.txt`/`cell.txt` のような
+    /// 等間隔グリッド（`repeat=`）に載らないので、骨組み（`tree.txt`）側も
+    /// 節点をそのまま7つ書いている。差し込み口をここで素直に7つぶん並べるほうが、
+    /// 無理に `repeat=` へ押し込めるより読める。</summary>
+    private static string TreeText(Lineage.Node[] nodes, string key)
+    {
+        for (int i = 0; i < nodes.Length; i++)
+        {
+            string prefix = "n" + i;
+            if (key == prefix + "name") return TreeName(nodes[i]);
+            if (key == prefix + "sub") return TreeSub(nodes[i]);
+            if (key == prefix + "gen") return TreeGen(nodes[i]);
+        }
+        return "";
+    }
+
+    private static string TreeName(Lineage.Node node) =>
+        node.Known ? SpeciesTable.ById(node.SpeciesId!).Name : "不明";
+
+    private static string TreeSub(Lineage.Node node) => node.Known
+        ? $"{SpeciesTable.LabelOf(node.Element!.Value)}　素質{Face.Digits(node.WildTotal)}"
+        : "";
+
+    private static string TreeGen(Lineage.Node node) => node.Known ? $"{node.Generation}代目" : "";
+
     // ── 図鑑 ────────────────────────────────────────
 
     /// <summary>⭐ **見たことのある種族だけ名前が出る。**
     /// ⚠️ 伏せた種族も枠は残す ── 何種類いるかは隠さない（集める的が見える）。</summary>
-    public static string Book(Shell s)
+    /// <param name="part">⭐ **後ろに敷かれる側として描くときの出所**（`"book"`）。
+    ///
+    /// 🔴 `Scenes.Draw("ask")` だけが渡す（2026-08-29）。⚠️ 確かめ札（`ask`）は
+    /// 「後ろが押せなくなっているか」を見るために図鑑を敷いて描くが、渡さないと
+    /// book.txt の行番号が `data-line` として盤に出て **ask.txt の行番号と衝突**する
+    /// ── 実測: 木で ask の `panel`（9行目）を選ぶと、輪は book の `cell#0` に付いていた。
+    /// ⭐ 渡すと後ろの図鑑は `data-part="book"` になり、`data-line` は ask のものだけになる。
+    /// ⚠️ 遊ぶ画面（`AppPage`/`AskPage`/`BookPage`）は渡さない ── 既定の空のままで、
+    /// 出る HTML は1バイトも変わらない。</param>
+    public static string Book(Shell s, string part = "")
     {
         var all = SpeciesTable.All;
         int at = 0;
@@ -1108,7 +1196,7 @@ public static class Sheets
 
             Tappable = key => key == "species" && Seen(at),
             When = key => key == "known" && Seen(at),
-        });
+        }, part: part);
     }
 
     // ── 試練 ────────────────────────────────────────

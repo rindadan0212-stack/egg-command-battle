@@ -118,4 +118,75 @@ public class StageCssTests
         Assert.DoesNotContain("ground", Selectors());
         Assert.DoesNotContain("ground", DrawnIds());
     }
+
+    /// <summary>🔴 **流れる背景の「輪」が本当に閉じているか。**（2026-08-29）
+    ///
+    /// ⚠️ 帯は3か所に跨って決まっている ── 絵（`tools/bg-band.mjs` が並べる枚数）・
+    /// 骨組み（`home.txt` の幅）・意匠（`stage.css` の流す距離）。
+    /// ⭐ **1か所でもずれると、輪の継ぎ目で絵がパッと切り替わる**（2026-08-29 まで
+    /// 実際にそうなっていた: 2枚幅で1枚ぶん流していたので、戻る瞬間に左右反転した）。
+    ///
+    /// ⚠️ **静止画では絶対に捕まらない。**⭐ どの1瞬を見ても絵は正しい ── 狂っているのは
+    /// 「終わりと始まりが同じか」だけなので、数で突き合わせるしかない
+    /// （`盤と地面の名前がぶつからない` と同じ理由）。
+    ///
+    /// 決まり（`tools/bg-band.mjs` の doc）:
+    /// <list type="bullet">
+    /// <item>帯は「元・鏡」を <see cref="Panels"/> 枚並べたもの ＝ 幅は1枚幅の <see cref="Panels"/> 倍</item>
+    /// <item>流す距離は**2枚ぶん**（模様の周期が「元＋鏡」だから）</item>
+    /// <item>幅 ≧ 画面幅 ＋ 流す距離（流し終わりに帯が尽きない）</item>
+    /// </list></summary>
+    [Fact]
+    public void 流れる背景は輪が閉じている()
+    {
+        const int Panels = 4;
+        const int Screen = 1080;
+
+        string css = Regex.Replace(File.ReadAllText(Css), @"/\*.*?\*/", " ", RegexOptions.Singleline);
+        var found = new List<string>();
+
+        foreach (var path in Directory.GetFiles(LayoutDir, "*.txt").OrderBy(p => p, StringComparer.Ordinal))
+        {
+            foreach (var line in File.ReadAllLines(path))
+            {
+                string t = line.Trim();
+                if (t.Length == 0 || t[0] == '#') continue;
+                var parts = t.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                var roll = parts.FirstOrDefault(p => p.StartsWith("roll=", StringComparison.Ordinal));
+                if (roll == null || parts.Length < 5 || parts[1] != "paint") continue;
+                string key = roll.Substring("roll=".Length);
+                int width = int.Parse(parts[4]);
+                found.Add(key);
+
+                Assert.True(width % Panels == 0,
+                    $"{Path.GetFileName(path)} の `roll={key}` の幅 {width} が {Panels} で割り切れない"
+                    + $"（帯は元・鏡を {Panels} 枚並べたもの）");
+                int panel = width / Panels;
+                int roll2 = panel * 2;
+
+                var anim = Regex.Match(css, @"\.roll-" + Regex.Escape(key) + @"\s*\{[^}]*animation:\s*([\w-]+)");
+                Assert.True(anim.Success, $"stage.css に `.roll-{key}` の動きが無い");
+                string name = anim.Groups[1].Value;
+
+                // ⚠️ `{ … }` が入れ子（`from { … } to { … }`）なので、まず塊ごと取る
+                //    ── `[^}]*` では最初の `}` で止まり、`to` へ辿り着けない
+                var block = Regex.Match(css,
+                    @"@keyframes\s+" + Regex.Escape(name) + @"\s*\{(?:[^{}]|\{[^{}]*\})*\}");
+                Assert.True(block.Success, $"stage.css に `@keyframes {name}` が無い");
+                var frames = Regex.Match(block.Value, @"to\s*\{[^}]*translateX\(\s*(-?\d+)px");
+                Assert.True(frames.Success, $"`@keyframes {name}` に行き先（to の translateX）が無い");
+                int moved = -int.Parse(frames.Groups[1].Value);
+
+                Assert.True(moved == roll2,
+                    $"`roll={key}`: 意匠は {moved}px 流しているが、絵は1枚 {panel}px なので"
+                    + $" {roll2}px（2枚ぶん）でないと輪が閉じない");
+                Assert.True(width >= Screen + moved,
+                    $"`roll={key}`: 幅 {width}px では、{moved}px 流した時点で帯が尽きる"
+                    + $"（{Screen + moved}px 以上要る）");
+            }
+        }
+
+        // ⚠️ 「1つも見つからなかった」で素通りしない（検査が空回りしていないか）
+        Assert.Equal(new[] { "far", "hill", "sky" }, found.OrderBy(s => s, StringComparer.Ordinal).ToArray());
+    }
 }

@@ -12,6 +12,7 @@
     "why": "node tools/why.mjs",
     "shot": "node tools/shot.mjs",
     "icons": "node tools/gen-status-icons.mjs",
+    "bg": "node tools/bg-band.mjs",
     "goldens": "node tools/goldens.mjs",
     "goldens:check": "node tools/goldens.mjs --check",
     "old:dev": "vite --root old/ts",

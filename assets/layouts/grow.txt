@@ -8,24 +8,29 @@
 #    35〜40 の行で並べると、指では押せない（`panel.txt` の表がその高さなので、
 #    あの表に「＋」を足す形は採れなかった）。
 #
+# 🔴 **`levelup`（EXP を1点に替える釦）は無くした**（2026-08-29・作者の指示
+#    「点を振る前に点を獲得するのが二度手間」）。⭐ 下の6本（`tap=spend`）を押した
+#    拍に「EXP → 1点 → そのステへ」がまとまる（判断は `Shell.Tap` の
+#    `case "spend"` 1か所だけ）。⚠️ 空いた分は詰めた（下の行はすべて 128 上へ）。
+#
 #  名前    種類    左   上    幅   高    付け足し
 dim       veil    0    0     1080 1920
 panel     card    48   200   984  1520
   title   label   24   24    936  56    size=40 anchor=upper-left text=育てる
   who     label   24   86    936  40    size=26 ink=dim anchor=upper-left bind=who
 
-  # ⭐ EXP を1点に替える。⚠️ ここが「点の入口」── 振るのは下の6本
-  levelup button  24   140   936  112   size=30 tap=levelup lead=yes bind=levelup
+  # ⭐ 「次の1点にいくら要るか」はここ1行にまとめる。⚠️ 6本それぞれに出す案も
+  #    あったが、値段（`Levels.ExpToNext`）は個体ごとに1つで6本とも同じ数になる
+  #    ── 繰り返すより1か所で言うほうが読みやすい。
+  left    label   24   140   936  44    size=30 ink=accent anchor=upper-left bind=left
 
-  # ⭐ 残りを大きく出す。⚠️ 0 のときに押しても何も起きない、を避けるため
-  left    label   24   268   936  44    size=30 ink=accent anchor=upper-left bind=left
-
-  # ⭐ 6本。⚠️ 押した瞬間に1点入る（戻せないので、確かめは「残り」の数で見せる）
-  grow    button  24   324   936  112   repeat=stats cols=1 rows=124 max=6 tap=spend bind=grow
+  # ⭐ 6本。⚠️ 押した瞬間に「EXP→1点→そのステ」がまとまって進む（戻せないので、
+  #    確かめは「振った」の数で見せる）。
+  grow    button  24   196   936  112   repeat=stats cols=1 rows=124 max=6 tap=spend bind=grow
     gname label   24   0     360  112   size=30 anchor=left bind=gname
     gnow  label   400  0     260  112   size=30 anchor=center bind=gnow
     gpts  label   680  0     232  112   size=30 ink=accent anchor=right bind=gpts
 
-  hint    label   24   1084  936  120   size=22 ink=faint anchor=upper-left bind=hint
+  hint    label   24   956   936  120   size=22 ink=faint anchor=upper-left bind=hint
 
-  close   button  24   1384  936  112   size=34 tap=close text=閉じる
+  close   button  24   1256  936  112   size=34 tap=close text=閉じる

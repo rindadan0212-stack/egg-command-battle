@@ -72,14 +72,23 @@ namespace EggCommand.Core
             return Clamp(center + shift);
         }
 
-        /// <summary>時間の見せ方。⚠️ 秒をそのまま出さない（3600 は読めない）。</summary>
+        /// <summary>時間の見せ方。⚠️ 秒をそのまま出さない（3600 は読めない）。
+        ///
+        /// ⭐ **〇h〇m〇s。0 の単位は出さない**（作者の指示 2026-08-28）。
+        /// ⚠️ **h があるときは s を省略する**（`2h30m15s` ではなく `2h30m`）
+        /// ── 秒まで出すと、待つ人には無意味な精度（★5は2時間、1秒単位で見せる意味が無い）。
+        /// ⭐ h が無いときだけ s まで出す（`59m59s`／`45s`）── そこは秒が主役の長さ。</summary>
         public static string Clock(int seconds)
         {
             if (seconds < 0) seconds = 0;
             var span = TimeSpan.FromSeconds(seconds);
-            return span.TotalHours >= 1.0
-                ? $"{(int)span.TotalHours}:{span.Minutes:00}:{span.Seconds:00}"
-                : $"{span.Minutes:00}:{span.Seconds:00}";
+            int h = (int)span.TotalHours;
+            int m = span.Minutes;
+            int s = span.Seconds;
+
+            if (h > 0) return m > 0 ? $"{h}h{m}m" : $"{h}h";
+            if (m > 0) return s > 0 ? $"{m}m{s}s" : $"{m}m";
+            return $"{s}s";
         }
     }
 }

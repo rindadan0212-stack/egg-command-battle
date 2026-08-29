@@ -17,3 +17,7 @@ panel     card    96   560   888  800
   out     button  32   344   824  112   size=34 tap=out lead=yes text=書き出す
   in      button  32   472   824  112   size=34 tap=in text=読み込む
   close   button  32   600   824  112   size=34 tap=close text=閉じる
+  # ⭐ この世界の番号（旧 ホーム上帯の bind=world ── 2026-08-29 にここへ移した）。
+  #    ⚠️ 端末ごとに違う世界を引くので「この盤面で起きた」と伝える手立てがこれしか無い。
+  #    ⭐ 16進なら8桁で口に出せる。控えの出し入れの文脈でこそ要る情報なのでこの札に置く。
+  world   label   32   728   824  40    size=24 ink=faint anchor=upper-left bind=world

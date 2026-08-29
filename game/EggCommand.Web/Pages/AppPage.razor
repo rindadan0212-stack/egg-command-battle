@@ -164,7 +164,23 @@
         //    次に開いたときは「前回開いてからの経過」がそのまま計算される）。
         //    ⚠️ 放置の編成（`PartyKind.Idle`）は巣の出撃（`PartyKind.Nest`）と別物 ──
         //    戦闘中・すごろく移動中でも気にせず進めてよい（両者は競合しない）。
-        Core.Idle.Advance(_shell.Game.Idle, Games.PartyOf(_shell.Game, PartyKind.Idle), _shell.Now);
+        // 🔴 **戻り値を捨てず、乱数（`RngIdle`）も渡す**（2026-08-28・前任者からの申し送りで発覚）。
+        //    ⚠️ 戻り値を捨てると、見た目の乱数を渡していても**増えた卵が棚へ入らない**
+        //    （`Games.GainIdleEggs` を誰も呼ばないので、清算した卵はその場で消える ──
+        //    溜めた卵が閉じた瞬間に消えるのは最悪の失い方）。⭐ ここは「見ていない間に
+        //    進んだ分」の一括清算なので、卵は静かに棚へ積むだけでよい（演出は出さない ──
+        //    `eggTap.idle` は毎秒の `BeatIdle` 側の役目）。
+        // 🔴 **種族は `Advance` を呼ぶ「前」に控える**（2026-08-28・仕事5・前任者からの
+        //    申し送り）。⚠️ `Advance` は周期が1つ以上終わると、同じ呼び出しの中で
+        //    次の相手へ引き直す（`Core.Idle.RollFoeFromTable`）── 呼んだ「後」の
+        //    `FoeSpecies` を渡すと、**いま削った相手ではなく次に出る相手の種族**で
+        //    卵が生まれる。⭐ `BeatIdle` 側と同じ形に揃える（判断を2か所に書かない）。
+        int idleFoeSpecies = _shell.Game.Idle.FoeSpecies;
+        // ⚠️ **`Now` ではなく `NowFine`。**⭐ 放置の拍は 0.4秒まで細かいので、整数秒で渡すと
+        //    1秒ぶんまとめて進み、0.5秒ごとのはずの打撃が同じ瞬間に2発出る（実測して直した）。
+        var caughtUp = Core.Idle.Advance(_shell.Game.Idle,
+            Games.PartyOf(_shell.Game, PartyKind.Idle), _shell.NowFine, _shell.Game.RngIdle);
+        Games.GainIdleEggs(_shell.Game, caughtUp, idleFoeSpecies);
 
         // 🔴 **画面を開いた瞬間だけでなく、開いたまま眺めている間も進める**
         //    （2026-08-27 監査で発覚。上の1回きりの `Idle.Advance` は「見ていない間に
@@ -344,11 +360,53 @@
     }
 
     /// <summary>放置の見た目を進める間隔（ミリ秒）。⭐ 戦闘/すごろく用の <see cref="Every"/>（62ms・
-    /// 名乗り→着弾→間の1手を滑らかに見せる）とは**桁が違ってよい**。放置は数値が数秒おきに
-    /// 動けば「止まっていない」と分かるので十分 ── 短くしても見た目は滑らかにならない
-    /// （`Core.Idle.Advance` は 0.25秒刻みで内部計算するだけで、アニメーションではない）。
-    /// ⚠️ 電池と描画の負担を増やしすぎない（作者の指示）ための数字でもある。</summary>
-    private const int IdleEvery = 5000;
+    /// 名乗り→着弾→間の1手を滑らかに見せる）とは**桁が違ってよい**。
+    /// ⚠️ 電池と描画の負担を増やしすぎない（作者の指示）ための数字でもある。
+    ///
+    /// 🔴 **250（1秒に4回）に変えた**（2026-08-28・仕事2）。⚠️ `Core.IdlePhase.Face` が
+    /// 0.5秒・`Finish` が 0.4秒しか無い ── 1秒に1回しか覗かないと、その間に拍を
+    /// まるごと1つ以上またいで見落とす（`Face` を一度も観測できない・`Finish` の一瞬を
+    /// 逃す、が実際に起きる）。⭐ 4倍見に行けば、どの拍も最短のもの（0.4秒）より短い
+    /// 間隔で捕まえられる。
+    /// ⚠️ 🔴 **見に行く回数を上げても、重い処理（時計の字・保存）まで4倍にしない**
+    /// （<see cref="BeatIdle"/> の間引き参照）── 軽い ①`Idle.Advance` ③帯の差し替え
+    /// は毎回、重い ②時計の字 ④保存 は1秒に1回へ間引く。
+    /// ⚠️ 🔴 **画面ぜんたいの組み直しは、もうしない**（2026-08-28・作者の報告で発覚 ──
+    /// 詳しくは <see cref="BeatIdle"/> 参照）。</summary>
+    private const int IdleEvery = 250;
+
+    /// <summary>字（<c>eggTap.words</c>）と保存（<see cref="Keep"/>）を間引く周期
+    /// （<see cref="BeatIdle"/> の呼び出し回数で数える）。⭐ <see cref="IdleEvery"/> が
+    /// 250ms なので、4回に1回＝1秒に1回になる。
+    /// ⚠️ **どちらもこの1つの数を見る**（別々の間引き幅を持たない ── 唯一の出所）。</summary>
+    private const int IdleSlowEveryBeats = 4;
+
+    /// <summary>放置の拍を数えた札。⭐ <see cref="IdleSlowEveryBeats"/> の間引きにだけ使う。
+    ///
+    /// ⚠️ 🔴 **同じ名前の札が前にも在ったが、役目が違う。**旧 `_idleBeats` は「5拍に1回、
+    /// 画面ぜんたいを組み直す」ための札で、2026-08-28 に**その組み直し自体を丸ごとやめた**
+    /// ときに消えている。⭐ ここで戻すのは**間引きの数え**だけ ── 組み直し（`Draw()`）は
+    /// 絶対に戻さない（背景のアニメ（`.roll-sky`/`.roll-hill`）が巻き戻る不具合の原因その
+    /// ものだった。次の担当が「前もこの名前があった」で混同しないよう明記しておく）。</summary>
+    private int _idleBeats;
+
+    /// <summary>1周期ぶんに溜まっている、まだ見せていない EXP。⭐ **唯一の出所**
+    /// （<see cref="BeatIdle"/> だけが足し・出し・0へ戻す）。
+    /// ⚠️ 毎拍 `gain.Exp` を足し込み、周期が終わった拍（`IdleGain.Finished`）でまとめて
+    /// 出す ── 仕事3「余韻に稼ぎを出す」の溜め。</summary>
+    private int _idleRestExp;
+
+    /// <summary>放置の打撃演出に出す上限（1拍あたり）。
+    ///
+    /// ⚠️ 作者の指示には無い、**見た目だけの安全装置**（ゲームの数値には一切影響しない）。
+    /// 🔴 **2026-08-28（本物の手番制への作り直し）で、意味が変わった**。⭐ `IdleGain.Blows` は
+    /// もう「見ていない間の追いつき」では埋まらない ── `Core.Idle.AdvanceApprox`
+    /// （`LiveWindowSeconds`＝2秒を超えた清算）は常に空配列を返す。実際に手が並ぶのは
+    /// `LiveStep`（2秒以内）だけなので、1拍に来る `Blows` はもともと数個止まり ── 旧い
+    /// 「久しぶりに開くと数万回ぶん飛んできて DOM が固まる」心配はもう起きない構造になった。
+    /// ⚠️ それでも**保険として**上限は残す ── EXP・卵の数え上げは `Core.Idle` 側で既に
+    /// 正しく積んである（ここで削るのは**見た目の再生だけ**）ので、削っても数字は減らない。</summary>
+    private const int MaxStrikeFxPerBeat = Core.Idle.StrikeCount;
 
     /// <summary>放置の時計。⭐ **`Wind`/`Beat`（戦闘・すごろく専用）とは別本。**
     ///
@@ -382,22 +440,172 @@
         // ⚠️ 二重に数えない ── `Idle.Advance` が `run.LastUnix` を自分で進めるので、
         //    素直に呼ぶだけでよい（`OnAfterRenderAsync` の最初の1回と、ここでの
         //    繰り返し呼び出しが競合しないことは `Idle.Advance` の実装で確かめた）。
-        Core.Idle.Advance(_shell.Game.Idle, Games.PartyOf(_shell.Game, PartyKind.Idle), _shell.Now);
+        // 🔴 **戻り値を捨てず、乱数（`RngIdle`）も渡す**（`OnAfterRenderAsync` 側の
+        //    最初の1回と同じ申し送り ── 捨てると見た目は動いても卵が1つも棚に入らない）。
+        // 🔴 **種族は `Advance` を呼ぶ「前」に控える**（2026-08-28・仕事5 ──
+        //    `OnAfterRenderAsync` 側と同じ理由・同じ形。判断を2か所に書かない）。
+        //    ⚠️ `Advance` は周期が終わると同じ呼び出しの中で次の相手へ引き直すので、
+        //    呼んだ「後」の `FoeSpecies` を渡すと、いま削った相手ではなく次の相手の
+        //    種族で卵が生まれる。
+        int idleFoeSpecies = _shell.Game.Idle.FoeSpecies;
+        // ⚠️ **`Now` ではなく `NowFine`**（上と同じ理由 ── 拍が秒より細かい）
+        var gain = Core.Idle.Advance(_shell.Game.Idle,
+            Games.PartyOf(_shell.Game, PartyKind.Idle), _shell.NowFine, _shell.Game.RngIdle);
+        Games.GainIdleEggs(_shell.Game, gain, idleFoeSpecies);
 
-        // ⭐ **ホームを、何も覆わずに眺めているときだけ描き直す。**⚠️ カード（育てる・
-        //    分解など）や戦闘・すごろく・演出の最中に割り込んで組み直すと、
-        //    押しどころが作り直されて触れなくなる（`Beat` の Filling/Stopped 分岐と同じ理由）。
-        //    ⭐ 進めた計算そのもの（上の `Idle.Advance`）は画面を問わず毎回行うので、
-        //    見ていない間の分が失われることはない ── ここで絞るのは**再描画だけ**。
-        if (_shell.Now_Sheet == Sheet.Home && _shell.Open == Panel.None && _shell.Under == Panel.None
+        // ⭐ **何も覆わずに眺めているときだけ。**⚠️ カード（育てる・分解など）や
+        //    戦闘・すごろく・演出の最中に割り込んで組み直す／字を差し替えると、
+        //    押しどころが作り直される・出ていない時計を触る（`Beat` の Filling/Stopped
+        //    分岐と同じ理由）。⭐ **唯一の出所**（下の分岐が全部これを絞りに使う ──
+        //    2か所で書き方を変えない）。
+        bool bareScreen = (_shell.Now_Sheet == Sheet.Home || _shell.Now_Sheet == Sheet.Nests)
+            && _shell.Open == Panel.None && _shell.Under == Panel.None
             && _shell.Fight_ == null && _shell.Roam_ == Roam.Still
-            && _shell.Cheer_ == null && _shell.Banner == null)
+            && _shell.Cheer_ == null && _shell.Banner == null;
+
+        // 🔴 **仕事2: 見に行く回数（`IdleEvery`＝250ms）を4倍にしたが、重い処理まで
+        //    4倍にはしない。**⚠️ 字（`Clocks.Words`）は秒しか動かないので1秒に1回で足りる。
+        //    ⭐ 「1秒に1回」の唯一の出所（`IdleSlowEveryBeats` 拍に1回）── 保存の間引きも
+        //    同じ `slowTick` を見る（下記）。
+        _idleBeats++;
+        bool slowTick = _idleBeats % IdleSlowEveryBeats == 0;
+        if (bareScreen && slowTick) await Js.InvokeVoidAsync("eggTap.words", Clocks.Words(_shell));
+
+        // 🔴 **仕事1: 期限切れの巣を消して埋め直す**（2026-08-29・作者の報告 ──
+        //    「巣がタイムオーバーになっても自動で消えない」）。⚠️ `Encounters.Expire` を
+        //    呼んでいたのは検査だけで、遊ぶ道では `Games.NewGame` の開幕1回しか
+        //    `Refill` が呼ばれていなかった ── 残り0秒の巣が並んだまま止まっていた。
+        //    ⭐ **1秒に1回で足りる**（新しい数え札を増やさず、既にある `slowTick` に相乗り）。
+        if (slowTick)
         {
-            Draw();
-            StateHasChanged();
+            int expiredNests = Encounters.Expire(_shell.Game, _shell.Now);
+            if (expiredNests > 0)
+            {
+                Encounters.Refill(_shell.Game, _shell.Now);
+                // ⚠️ 🔴 **毎秒 `Draw()` すると押しどころが壊れる**（`BeatIdle` 全体の約束
+                //    ── `放置は画面を組み直さず毎秒差し替える` の検査参照）。⭐ ここは
+                //    「巣が入れ替わった」ときだけの例外。⚠️ 組み直すのは探索の画面を
+                //    見ているときだけでよい ── 他の画面ならデータ（`game.Encounters`）だけ
+                //    直っていれば、次にその画面を開いたときに正しい札が並ぶ。
+                if (_shell.Now_Sheet == Sheet.Nests) { Draw(); StateHasChanged(); }
+                // ⚠️ 保存はここで書かない。⭐ `slowTick` が真なら、この拍の終わりにある
+                //    `if (slowTick || gain.Eggs > 0) await Keep();` が必ず拾う
+                //    （`Keep()` の呼び出し口を増やさない ── 唯一の経路に乗せる）。
+            }
         }
 
+        // 🔴 **放置の帯（相手・HP・EXP・卵の飛び込み）は間引かず、毎拍じかに差し替える**
+        //    （2026-08-28・作者の報告で発覚）。⚠️ 帯があるのは**ホームだけ**（探索には無い）
+        //    ── `bareScreen` に加えて `Sheet.Home` も見る（探索を見ている間は送らない
+        //    ── 無い id を送っても JS 側で無害だが、無駄な往復を出さない）。
+        //    ⭐ ここは軽い（`id` を書き換えるだけ）ので、字・保存と違って間引かない ──
+        //    帯（仕事4で .3s へ縮めた `idle-drain`）が打撃の間隔（0.5秒）に追従するには、
+        //    毎拍差し替える必要がある。
+        bool onHome = bareScreen && _shell.Now_Sheet == Sheet.Home;
+        if (onHome)
+            // ⚠️ **`_shell.Now` でよい**（`Core.Idle.IsDown` は整数秒で足りる ── 復活は
+            //    3秒単位。`Peek` の doc 参照）。時計をここでもう1つ作らない。
+            await Js.InvokeVoidAsync("eggTap.idle",
+                EggCommand.Web.Idle.Peek(_shell.Game, gain.Eggs, _shell.Now));
+
+        // 🔴 **仕事3: 打ち合いを見せる。**⚠️ この拍の「間に」起きたことは `IdleGain.Blows`
+        //    にしか残っていない ── 覗いた瞬間の拍（`Phase`）を見ても、その値はもう過去の
+        //    ものになっていることがある（詳しくは `StrikeFx` の doc）。
+        if (onHome) await StrikeFx(gain);
+
+        // ⭐ **余韻に稼ぎを出す。**⚠️ ただの空白では「停止」に見える。1周期ぶんに溜まった
+        //    EXP を、周期が終わった拍（`gain.Finished`）でまとめて出す。⚠️ **`Phase` が
+        //    実際に `Rest` に居るかは見ない** ── `Finished` が立つ拍では、着地した位置は
+        //    もう次の周期の `Come` のことがある（`StrikeFx` の doc と同じ理由）。
+        //    ⭐ 出所は1つ ── `_idleRestExp` に毎拍 `gain.Exp` を足し込み、`Finished` で
+        //    まとめて出して 0 に戻す。
+        _idleRestExp += gain.Exp;
+        if (gain.Finished)
+        {
+            if (onHome && _idleRestExp > 0)
+            {
+                await Js.InvokeVoidAsync("eggFx.play", new[]
+                {
+                    new Spark("w0", "say", "+" + Face.Digits(_idleRestExp), "var(--good-ink)", 40, 0),
+                });
+            }
+            _idleRestExp = 0;
+        }
+
+        // ⚠️ 🔴 **放置が増やした分も書く。**⭐ `Beat`（戦闘・すごろく）の
+        //    「オートで勝った育ちが、閉じた瞬間に丸ごと消えていた」と同じ理由 ──
+        //    押していないので `Tapped` は通らない。放置は押さずに卵が増える遊びなので、
+        //    ここで書かないと**溜めた卵が閉じた瞬間に消える**（最悪の失い方）。
+        //    🔴 **仕事2: 1秒に4回は書かせない。**⚠️ `Idle.Advance` はほぼ毎拍なにか
+        //    （`ExpCarry` の端数だけでも）動かすので、`Vault.Keep` の中身比較だけでは
+        //    間引けない ── 呼ぶこと自体を絞る（実測 11KB を1秒に4回 localStorage へ
+        //    書くことになっていた）。⭐ **1秒に1回**（`slowTick`）か、**卵が増えた拍**
+        //    に絞る。⚠️ 絞りすぎない ── 卵が増えた拍だけは間引かずに書く
+        //    （`Keep` が在る理由そのもの。閉じた瞬間に増えた卵だけ消えるのを避ける）。
+        if (slowTick || gain.Eggs > 0) await Keep();
+
         WindIdle();
+    }
+
+    /// <summary>打ち合いの演出を1拍ぶん出す。
+    ///
+    /// 🔴 **`IdleGain.Blows` から作る ── 拍（`Phase`）のその瞬間の値は見ない**
+    /// （2026-08-28・仕事1/3・本物の手番制への作り直しで、旧 `Strikes`/`FirstStriker`
+    /// （「誰から何回、順繰りに殴ったか」しか言えない数え方）は削除された）。⚠️ 手番は
+    /// ゲージの競り合いで決まるので、**誰が動いたかは `IdleBlow.Who`/`Target` にしか
+    /// 残っていない** ── 添字を組み立て直す旧い作りはもう成り立たない。
+    /// ⚠️ `Shell.Now` が秒刻みなので、`IdleEvery`＝250ms で見に行っても、1拍の間に
+    /// 複数の手（味方・敵が入り混じって）が過ぎていることがある。そのときの `run.Phase` は
+    /// 「いま」の値でしかなく、「この拍の間」に何が起きたかは教えてくれない。
+    ///
+    /// ⭐ 演出は既存の戦闘用（`eggFx`）をそのまま使い回す。`fx.js` は `art#<名前>` か
+    /// `artf#<名前>` を引くので、放置の味方（`Idle.Draw` の `#w<i>`）と相手（`#foe`）は
+    /// そのまま当たる（`walker.txt` の `art`/`artf` が `bind=art` で揃えてあるのを確認済み）。
+    ///
+    /// ⭐ **仕事3を兼ねる** ── `Who>=0` なら味方の一撃、`Target>=0` なら敵の一撃
+    /// （<see cref="Core.Idle.IdleBlow"/> の doc の通り、両方 -1 にはならない）。1つの並びを
+    /// 1回だけ辿るほうが、味方用・敵用に分けて2回辿るより「起きた順」を保ちやすい。</summary>
+    private async Task StrikeFx(Core.Idle.IdleGain gain)
+    {
+        if (gain.Blows.Length == 0) return;
+        var party = Games.PartyOf(_shell.Game, PartyKind.Idle);
+        if (party.Count == 0) return;
+
+        // ⚠️ 見た目だけの安全装置（`MaxStrikeFxPerBeat` の doc 参照）── 数値には影響しない。
+        int show = Math.Min(gain.Blows.Length, MaxStrikeFxPerBeat);
+        var sparks = new List<Spark>(show * 4);
+        for (int k = 0; k < show; k++)
+        {
+            var blow = gain.Blows[k];
+            if (blow.Who >= 0)
+            {
+                // ⭐ 味方の一撃。仕事2: **数字は実際に与えたダメージ**（`blow.Damage`）
+                //    そのもの ── 前は「力（Atk+Spd）」という代役の数を出していた。
+                if (blow.Who >= party.Count) continue;   // ⚠️ 保険（本来ずれない添字）
+                string at = "w" + blow.Who;
+                sparks.Add(new Spark(at, "step", "", null, 0, 0));
+                sparks.Add(new Spark("foe", "hit", "", "var(--danger)", 0, 0));
+                sparks.Add(new Spark("foe", "say", Face.Digits(blow.Damage), "var(--danger-ink)", 44, 0));
+                sparks.Add(new Spark("foe", "shock", "", null, 0, 0));
+            }
+            else if (blow.Target >= 0)
+            {
+                // ⭐ 仕事3: 敵の一撃。⚠️ 敵は反転しているので踏み込みは `stepf`（左へ）。
+                //    ⚠️ 割合ダメージなので数字は出さない ── `blow.Damage` は常に 0
+                //    （出すと画面に「0」が飛ぶ）。
+                if (blow.Target >= party.Count) continue;   // ⚠️ 保険（本来ずれない添字）
+                string at = "w" + blow.Target;
+                sparks.Add(new Spark("foe", "stepf", "", null, 0, 0));
+                sparks.Add(new Spark(at, "hit", "", "var(--danger)", 0, 0));
+                sparks.Add(new Spark(at, "shock", "", null, 0, 0));
+                // ⭐ 倒れたら「ダウン」の字、耐えたら小さく「▼」── 稼ぎが落ちる理由を
+                //    画面に出す（仕事4「倒れている間」の見え方と対で、こちらは「倒れた瞬間」）。
+                sparks.Add(blow.Downed
+                    ? new Spark(at, "say", "ダウン", "var(--danger-ink)", 40, 0)
+                    : new Spark(at, "say", "▼", "var(--danger-ink)", 24, 0));
+            }
+        }
+        if (sparks.Count > 0) await Js.InvokeVoidAsync("eggFx.play", sparks);
     }
 
     /// <summary>溜まった演出を盤へ出す。⚠️ **出したら空にする**
@@ -476,6 +684,10 @@
         Panel.Fuse => Sheets.Fuse(_shell, suffix),
         Panel.Train => Sheets.Train(_shell, suffix),
         Panel.Grow => Sheets.Grow(_shell, suffix),
+        // 🔴 **ここを足し忘れると、釦は押せるのに何も出ない**（2026-08-29 に実際そうなった
+        //    ── 札を作った側がこのファイルを触れず、繋ぎが片側だけ残っていた）。
+        //    ⚠️ `Panel` を増やしたら、必ずこの表にも足すこと（`LineageWebTests` が見張る）。
+        Panel.Tree => Sheets.Tree(_shell, suffix),
         Panel.Eggs => Sheets.Eggs(_shell, suffix),
         Panel.Ask => Sheets.Ask(_shell, suffix),
         Panel.Keep => Sheets.Keep(_shell, suffix),

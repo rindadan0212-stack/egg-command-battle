@@ -57,8 +57,24 @@ namespace EggCommand.Web
     {
         /// <summary>⭐ 今どの画面を描いているか。⚠️ 「絵が枠に合わない」警告の出所を言うためだけに使う
         /// （<see cref="Render"/> の呼び出しごとに更新される。Blazor WASM は単一スレッドなので、
-        /// ふつうの static フィールドで足りる）。</summary>
+        /// ふつうの static フィールドで足りる）。
+        ///
+        /// 🔴 **入れ子で上書きしたら必ず戻す**（2026-08-29）。⚠️ `host` の中身を描くとき
+        /// （`Sheets` の `Host` 差し口 → `Incubator`/`Stands`/`Board`/`Idle`）は
+        /// <see cref="Render"/> が**内側からもう一度**呼ばれる ── 戻さないと、内側から
+        /// 帰ったあとの土台の節点まで内側の名前を名乗る。</summary>
         private static string _layoutId = "";
+
+        /// <summary>⭐ 今どの「出所」（別ファイルの骨組み）を描いている最中か
+        /// ── <see cref="Render"/> の `part` と同じ値（土台そのものを描いている間は空）。
+        ///
+        /// 🔴 <see cref="WarnMismatch"/> のためだけに要る（2026-08-29）。⚠️ コードから描く
+        /// 4枚（`slot`/`unit`/`square`/`walker`）の節点は `PartId` を持たない
+        /// （その骨組み自身の節点なので `PartId==null` / `LineNumber>=0`）ので、
+        /// これが無いと「どの部品ファイルの不一致か」を控えに書けず、エディタの
+        /// 木の ⚠ と「絵に合わせる」欄が**一件も出ない**（実測: `of=walker` で
+        /// 下の帯は2件出るのに木は0件）。⚠️ <see cref="_layoutId"/> と同じく入れ子で戻す。</summary>
+        private static string _part = "";
 
         /// <summary>⭐ 「絵が枠に合わない」警告を、同じ組み合わせに1回しか出さないための帳面
         /// （ドット絵化計画 段取り4・第1部「黙って縮めない・黙ってはみ出させない」）。</summary>
@@ -89,13 +105,44 @@ namespace EggCommand.Web
         /// 押しどころの番号（`data-at`）には入らない ── 入れると番号が読めなくなる
         /// （実測 2026-08-22: `-card#0` を番号として読もうとして -1 になった）。
         /// ⚠️ `use=` の冠（`Layouts.Rename`）と同じ役目を、描くときにする。</param>
+        /// <param name="part">⭐ **別ファイルの骨組みを、この画面の中へ描くときの出所**
+        /// （`"slot"` など ── そのファイルの id）。
+        ///
+        /// 🔴 **コードから他所の骨組みを描くときは必ず渡す**（2026-08-29）。
+        /// ⚠️ 渡さないと、その骨組みの行番号が `data-line` として盤に混ざる ──
+        /// エディタは「いま開いている骨組みの行番号」として読むので、
+        /// **押しても選べない**（土台ではその行がコメントや別の節点）か、
+        /// **別の節点を誤って選ぶ**。実測: ホームの巣5つと歩く3体（画面の6割）が
+        /// 丸ごと無反応だった。
+        /// ⭐ 渡すと `use=` で差し込んだ部品とまったく同じ形
+        /// （`data-part` ＋ `data-part-line`）になり、エディタの「部品へ切り替える」
+        /// 道にそのまま乗る。</param>
         public static string Render(EggCommand.Core.Layout layout, DomFill fill,
-            string suffix = "", string crown = "")
+            string suffix = "", string crown = "", string part = "")
         {
             var sb = new StringBuilder();
             if (layout == null) return "<!-- 骨組みが無い -->";
+            // 🔴 **退避して戻す**（2026-08-29）。⚠️ `host` の中身（`Incubator`/`Stands`/
+            //    `Board`/`Idle`）から**この関数が入れ子で呼ばれる** ── 戻さないと、
+            //    内側から帰ったあとの土台の節点まで内側の id / 出所を名乗ってしまい、
+            //    「絵が枠に合わない」の控えが別のファイルの物として積まれる。
+            //    ⚠️ 戻しは `finally`（2026-08-29 監査 C-4）── 途中で投げると、内側の
+            //    id / 出所が居座ったままになる。次の `Render` が先頭で入れ直すので
+            //    大抵は自分で治るが、`EditPage.Refresh` の catch が同じ拍で描き直す間だけ
+            //    **誤った出所で「絵が枠に合わない」を積む**窓が開く。
+            string prevLayoutId = _layoutId;
+            string prevPart = _part;
             _layoutId = layout.Id;
-            foreach (var node in layout.Roots) One(sb, node, fill, node.Top, suffix, crown);
+            _part = part;
+            try
+            {
+                foreach (var node in layout.Roots) One(sb, node, fill, node.Top, suffix, crown, part);
+            }
+            finally
+            {
+                _layoutId = prevLayoutId;
+                _part = prevPart;
+            }
             return sb.ToString();
         }
 
@@ -103,13 +150,13 @@ namespace EggCommand.Web
         /// ⭐ DOM の id は一意でなければならない ── 伝えないと、11枚の札の子が
         /// 全部同じ id になり、検査も指し示しも効かなくなる（2026-08-22 に実測）。</param>
         private static void One(StringBuilder sb, LayoutNode node, DomFill fill,
-            float top, string suffix = "", string crown = "")
+            float top, string suffix = "", string crown = "", string part = "")
         {
             // ⭐ **条件で出さない。**⚠️ 隠すのでなく作らない
             if (!Shows(node, fill)) return;
 
             string repeat = node.Option("repeat");
-            if (repeat == null) { Single(sb, node, fill, node.Left, top, -1, suffix, crown); return; }
+            if (repeat == null) { Single(sb, node, fill, node.Left, top, -1, suffix, crown, part); return; }
 
             int count = fill?.Count != null ? fill.Count(repeat) : 0;
             int cols = Math.Max(1, node.Number("cols", 1));
@@ -122,12 +169,12 @@ namespace EggCommand.Web
                 fill?.At?.Invoke(repeat, i);
                 float left = node.Left + (i % cols) * (node.Width + gap);
                 // ⭐ 外側の番号も引き継ぐ（入れ子で id が衝突する）
-                Single(sb, node, fill, left, top + (i / cols) * step, i, suffix, crown);
+                Single(sb, node, fill, left, top + (i / cols) * step, i, suffix, crown, part);
             }
         }
 
         private static void Single(StringBuilder sb, LayoutNode node, DomFill fill,
-            float left, float top, int index, string suffix, string crown)
+            float left, float top, int index, string suffix, string crown, string part = "")
         {
             // ⚠️ 空白で繋がない（Unity 版と同じ理由 ── 読み戻せなくなる）
             // ⚠️ **外側の番号を捨てない。**⭐ 入れ子の繰り返しでは
@@ -232,19 +279,27 @@ namespace EggCommand.Web
             // ⭐ **繰り返し（`repeat=`）の複製は全部同じ節点 `node` を指すので、
             //    自動的に同じ `data-line` を持つ。**何番目の複製を押しても
             //    「1本の元の行」に行き着く ── `closest('[data-line]')` で終わる。
-            if (node.LineNumber >= 0)
-                sb.Append(" data-line=\"").Append(node.LineNumber).Append('"');
-            // ⭐ **差し込まれた側は、代わりに出所（部品ファイル名・その中の行）を出す。**
-            //
-            // ⚠️ `data-line` は出さない（上と同じ理由 ── 別ファイルの行番号を
-            //    いま編集中の骨組みの行として書き戻すと事故る）。⭐ その代わり、
-            //    どの部品ファイルの何行目から来たかは言える ── これでエディタが
-            //    「その部品ファイルへ切り替える」次の一手を作れる（今回はまだ作らない）。
-            //    ⭐ こうして、画面のどの部品も `data-line` か
-            //    `data-part`＋`data-part-line` の**どちらか一方**を必ず持つ。
-            else if (node.PartId != null)
+            // 🔴 **他所の骨組みをコードから描いているときは、`data-line` を出さない**
+            //    （2026-08-29 ── `part` が渡っている場合）。⚠️ 出すと、その行番号が
+            //    「いま開いている骨組みの行」として読まれて事故る（`part` の説明を見る）。
+            //    ⭐ 代わりに `use=` 組と同じ `data-part`＋`data-part-line` を出す ──
+            //    1文字も変わらない形にして、扱いを1本にする。
+            // 🔴 **`use=` で差し込まれた側（`node.PartId`）を先に見る**（2026-08-29）。
+            //    ⚠️ `part`（コードから描くときの出所）を先に見ると、部品の中で更に
+            //    `use=` を使った瞬間に「一番内側の出所」が `part` に上書きされて消える
+            //    ── `Layouts.Rename`（「一番内側を残す」）の規約と逆向きになる。
+            //    いまは4枚とも `use=` を持たないので実害は無いが、1行足しただけで
+            //    静かに壊れる並びなので、規約に合わせておく。
+            if (node.PartId != null)
                 sb.Append(" data-part=\"").Append(Esc(node.PartId)).Append('"')
                   .Append(" data-part-line=\"").Append(node.PartLine).Append('"');
+            else if (part.Length > 0)
+                sb.Append(" data-part=\"").Append(Esc(part)).Append('"')
+                  .Append(" data-part-line=\"").Append(node.LineNumber).Append('"');
+            else if (node.LineNumber >= 0)
+                sb.Append(" data-line=\"").Append(node.LineNumber).Append('"');
+            // ⭐ こうして、画面のどの節点も `data-line` か `data-part`＋`data-part-line` の
+            //    **どちらか一方**を必ず持つ（`LayoutAssetTests.全ての節点が出所を言える`）。
             // ⭐ **押しどころの名前と番号を、部品そのものに書いておく。**
             //
             // ⚠️ ここは字を組み立てて `MarkupString` で出しているので、Blazor の
@@ -284,7 +339,9 @@ namespace EggCommand.Web
                     // 🔴 **黙って空の四角にしない。**⚠️ 表や骨組みが指す名前でも、
                     //    実体（`Resources/UI/icon/<名前>.png`）が無ければここへ落ちる
                     //    ── 埋め込んだ一覧（`IconManifest`）と突き合わせて分かる。
-                    string iconStyle = FitDotsStyle(node, "icon", IconDots, IconDots);
+                    // ⚠️ 実ドット数を知りようが無い（実体が無い）ので、`paint-missing` と同じく
+                    //    枠なりの大きさを仮に使う（4の倍数の骨組みなら誤差は出ない）。
+                    string iconStyle = FitDotsStyle(node, "icon", DotsOf(node.Width), DotsOf(node.Height));
                     sb.Append("<div class=\"n icon-missing\" style=\"").Append(iconStyle)
                       .Append("\" title=\"絵が無い: ").Append(Esc(pic)).Append(".png\">？</div>");
                 }
@@ -294,7 +351,15 @@ namespace EggCommand.Web
                     //    その形に切った色の2枚が同じ絵を見るので、二重に書かない。
                     // 🔴 **引き伸ばさない**（段取り4・第1部）── 100%/100% で枠いっぱいに
                     //    伸縮させていたのをやめ、実ドット数×4 で中央に置く。
-                    string iconStyle = FitDotsStyle(node, "icon", IconDots, IconDots);
+                    // ⭐ 実ドット数は `IconManifest` から引く（2026-08-29・`IconDots` の
+                    //    決め打ちを廃止）。⚠️ 目録が読めていないときだけ `paint` と同じ
+                    //    安全側（`PaintManifest.Loaded` の扱いを見習う）── 枠なりの大きさで描く。
+                    //    ⚠️ ここに来る時点で `IconManifest.Exists(pic)` は true なので、
+                    //    `SizeOf` が null を返すのは「目録そのものが読めていない」ときだけ。
+                    var size = IconManifest.SizeOf(pic);
+                    int dotsW = size?.Width ?? DotsOf(node.Width);
+                    int dotsH = size?.Height ?? DotsOf(node.Height);
+                    string iconStyle = FitDotsStyle(node, "icon", dotsW, dotsH);
                     sb.Append("<div class=\"n icon-art\" style=\"").Append(iconStyle).Append(";--pic:url(icon/")
                       .Append(Esc(pic)).Append(".png)\"></div>");
                 }
@@ -343,7 +408,7 @@ namespace EggCommand.Web
             var tops = Layouts.TopsOf(node, child => Shows(child, fill),
                 child => fill?.Count != null ? fill.Count(child.Option("repeat")) : 0);
             for (int i = 0; i < node.Children.Count; i++)
-                One(sb, node.Children[i], fill, tops[i], mine, crown);
+                One(sb, node.Children[i], fill, tops[i], mine, crown, part);
             sb.Append("</").Append(tag).Append('>');
         }
 
@@ -456,14 +521,6 @@ namespace EggCommand.Web
               .Append(".png\" alt=\"\" style=\"").Append(ok).Append("\" />");
         }
 
-        /// <summary>⭐ 今ある28枚のアイコンは全部 128×128 実ピクセル（2026-08-25 実測・
-        /// `assets/ui/icon/*.png`）── 1ドット=4px の規則に当てはめると
-        /// 32×32 ドット。⚠️ アイコンをまだ 8/12/16ドットで描き直していない
-        /// （計画 §8-3・未着手）ので、いまはこの実測値を定数で持つ。将来描き直したら、
-        /// `IconManifest` を `PaintManifest` と同じ「大きさ付き一覧」に差し替えて、
-        /// この定数を消すこと。</summary>
-        private const int IconDots = 32;
-
         /// <summary>絵を「ドット数×4px」で節点の中央に置くスタイル文字列を作る。
         /// 🔴 **引き伸ばさない**（段取り4・第1部）── 枠に合わなければ位置だけ中央寄せし、
         /// 大きさはそのまま（縮めない・はみ出しても隠さない）。
@@ -489,6 +546,20 @@ namespace EggCommand.Web
             string place = node.PartId != null ? node.PartId + " " + node.Name : node.Name;
             string key = _layoutId + "/" + place + " " + kind;
 
+            // 🔴 **コードから描く4枚は `PartId` を持たない**（2026-08-29）── `slot`/`unit`/
+            //    `square`/`walker` は `use=` を通らず、その骨組み自身の節点として描かれる
+            //    ので `PartId==null` / `LineNumber>=0`。出所は `Render` に渡された
+            //    <see cref="_part"/> だけが知っている ── 控え（`_drawn`）にこちらを積まないと、
+            //    エディタ側の照合（`PartId==_of && PartLine==line`）に永久に一致せず、
+            //    木の ⚠ と「絵に合わせる」欄が一件も出ない。
+            // ⚠️ 字（`place`・下の `Console.WriteLine`）はこれまでどおり `PartId` のまま
+            //    ── コードから描く組は `_layoutId` が既に出所そのもの（"slot/art"）なので、
+            //    ここに足すと "slot/slot art" と二重になる。
+            string from = node.PartId ?? (_part.Length > 0 ? _part : null);
+            // ⚠️ 出所の中での行番号 ── `use=` 組は `PartLine`（`Rename` が `LineNumber` を
+            //    -1 にするため）、コードから描く組は自分の `LineNumber` がそのまま出所の行。
+            int fromLine = node.PartId != null ? node.PartLine : node.LineNumber;
+
             // ⭐ **描いたときに分かった不一致を、そのまま控える**（2026-08-25）。
             //    🔴 これが無いと、エディタは `pixel`（種族の絵）の不一致を**一件も出せない**
             //    ── `FindPicMismatches` は骨組みだけを見るので、`bind=` で実行時に決まる絵の
@@ -496,7 +567,7 @@ namespace EggCommand.Web
             //    ⭐ 描く側は実物の絵を持っている ── **判定を二重に書かず、ここの結果を配る**。
             //    ⚠️ 溜め込みっぱなしにしない（エディタが描く前に `ClearDrawnMismatches`）。
             if (_drawnKeys.Add(key))
-                _drawn.Add(new PicMismatch(node.LineNumber, node.PartId, node.PartLine,
+                _drawn.Add(new PicMismatch(node.LineNumber, from, fromLine,
                     node.Name, kind, node.Option("pic") ?? "", w, h, node.Width, node.Height));
 
             if (!_mismatchWarned.Add(key)) return;
@@ -527,15 +598,18 @@ namespace EggCommand.Web
 
         /// <summary>その絵の「引き伸ばさない」実寸（設計px）── 分かるときだけ。
         /// ⭐ 骨組みエディタ（E1-4 絵を選んだら枠を自動で合わせる／E1-5 不一致の検出）が
-        /// 使う唯一の出所。⚠️ icon はまだ実物の大きさを持っていない（計画 §8-3・未着手）
-        /// ので <see cref="IconDots"/>（実測32ドット・全アイコン共通）で代用する。paint は
-        /// <see cref="PaintManifest.SizeOf"/> を引く。⚠️ 名前が一覧に無ければ null
+        /// 使う唯一の出所。⚠️ icon は <see cref="IconManifest.SizeOf"/> を引く
+        /// （2026-08-29・全アイコン共通の決め打ちを廃止 ── `paint` と同じ形になった）。
+        /// paint は <see cref="PaintManifest.SizeOf"/> を引く。⚠️ 名前が一覧に無ければ null
         /// （「分からない」を「合っている」と偽らない）。</summary>
         public static (float Width, float Height)? ExpectedPicSize(string kind, string? pic)
         {
             if (string.IsNullOrEmpty(pic)) return null;
             if (kind == "icon")
-                return IconManifest.Exists(pic) ? (IconDots * 4f, IconDots * 4f) : ((float, float)?)null;
+            {
+                var isize = IconManifest.SizeOf(pic);
+                return isize != null ? (isize.Value.Width * 4f, isize.Value.Height * 4f) : ((float, float)?)null;
+            }
             if (kind == "paint")
             {
                 var size = PaintManifest.SizeOf(pic);

@@ -59,6 +59,18 @@ namespace EggCommand.Core
         /// （保管庫へ入れる道が増えたときに、書き忘れを1か所で防ぐ）。</summary>
         public readonly List<string> SpeciesSeen = new List<string>();
 
+        /// <summary>⭐ **配合で消えた個体の墓標**（2世代以降の家系図・作者の指示
+        /// 「BOXで2世代以降のキャラクターの家系図を見られるように」）。
+        ///
+        /// ⚠️ 配合は両親を消す（<see cref="Games.FusePair"/>）ので、消える直前に
+        /// <see cref="Tombs.Bury"/> がここへ小さな控えを積む。⭐ これが無いと、
+        /// 子の <see cref="Creature.ParentA"/>/<see cref="Creature.ParentB"/> は
+        /// 「もう保管庫に居ない ID」を指すだけになり、1代で行き止まる。
+        /// ⚠️ 際限なく増えないよう上限つき（数と理由は <see cref="EggCommand.Core.Tombs"/>
+        /// 側の註に1本化 ── ここに書くと2か所で同じ判断を書くことになる）。
+        /// 古いものから捨てる。</summary>
+        public readonly List<Tomb> Tombs = new List<Tomb>();
+
         /// <summary>通し番号。id を一意にするためだけに使う。</summary>
         public int Serial;
         /// <summary>探索の巣の通し番号。⚠️ <see cref="Serial"/> と分ける。
@@ -100,6 +112,11 @@ namespace EggCommand.Core
         /// ⚠️ 孵化の系統（RngHatch）に混ぜない ── 技のガチャの列がずれる。</summary>
         public readonly Rng RngPalette;
 
+        /// <summary>⭐ **放置で相手の見た目・卵を引く系統**（2026-08-28）。
+        /// ⚠️ 後から足したもの。既にある系統の消費順は1つも変えていない ── 混ぜて引かないこと
+        /// （<see cref="Idle.Advance"/> が唯一の呼び手）。</summary>
+        public readonly Rng RngIdle;
+
         public Game(int seed)
         {
             Seed = seed;
@@ -117,6 +134,7 @@ namespace EggCommand.Core
             RngTrait = root.Stream("trait");
             RngBattle = root.Stream("battle");
             RngPalette = root.Stream("palette");
+            RngIdle = root.Stream("idle");
         }
     }
 
@@ -231,6 +249,51 @@ namespace EggCommand.Core
             return egg;
         }
 
+        /// <summary>放置で落ちた卵を、実際に棚へ足す。⭐ ★は放置側（<see cref="Idle.Advance"/>）が
+        /// 決めたものをそのまま使う（<see cref="Rarities.Roll"/> は通さない）。
+        ///
+        /// ⚠️ 巣は「いま出ていた相手の種族」の巣を引く（<paramref name="foeSpecies"/> ──
+        /// <see cref="SpeciesTable.All"/> の添字）。無ければ表の先頭 ── 実在する巣
+        /// （<see cref="Nests.All"/>）は一部の種族しか持たないので、これはよく起きる
+        /// フォールバックであって異常ではない。⚠️ 卵の種族はここで決まる。</summary>
+        public static void GainIdleEggs(Game game, Idle.IdleGain gain, int foeSpecies)
+        {
+            if (gain.Eggs <= 0) return;
+
+            var allSpecies = SpeciesTable.All;
+            string speciesId = foeSpecies >= 0 && foeSpecies < allSpecies.Count
+                ? allSpecies[foeSpecies].Id
+                : allSpecies[0].Id;
+
+            // 🔴 **倒した相手の巣を、その場で作る。**⚠️ 固定表（`Nests.All`）を引いては駄目
+            //    ── あれは始まりの5つだけで、種族は3つぶん（tamaru / tsunoga / haneru）しか
+            //    無い。放置に出る相手は11種族なので、表から引くと8種族ぶんが
+            //    「浅瀬の巣＝タマル」に落ち、**倒した相手と違う卵**が出る。
+            // ⭐ 遊びの本体（探索の巣）も同じことをしている ── `Encounters` は
+            //    `new Nest($"wild-{serial}", …, speciesId, tier)` と**その場で作って**いる。
+            //    ⚠️ 巣が要るのは「種族」と「技」を決めるためだけで、
+            //    `MakeEggOfRarity` は段階（tier）を見ない（`SkillsOfNest` も見ない）。
+            // ⚠️ **名前（Id）は1個ごとに変える。**⭐ 技は `nest-skills:{Id}` の系統から引くので、
+            //    同じ名前を使い回すと、同じ種族・同じ★の卵が**毎回まったく同じ技**になる。
+            for (int i = 0; i < gain.Star1; i++) MakeIdleEgg(game, speciesId, 1);
+            for (int i = 0; i < gain.Star2; i++) MakeIdleEgg(game, speciesId, 2);
+            for (int i = 0; i < gain.Star3; i++) MakeIdleEgg(game, speciesId, 3);
+        }
+
+        /// <summary>⭐ <see cref="TakeEgg"/> と同じ流儀（<see cref="Nests.MakeEggOfRarity"/>）。
+        /// ⚠️ ★はここでは引かない（<see cref="Rarities.Roll"/> を通さない）── 呼び側が
+        /// 既に決めた★をそのまま渡す。</summary>
+        private static void MakeIdleEgg(Game game, string speciesId, int rarity)
+        {
+            int serial = ++game.Serial;
+            // ⚠️ 段階（tier）は卵作りに使われないが、★なりの数を入れておく
+            //    （後で誰かが読んだときに嘘にならないように）。
+            var nest = new Nest($"idle-{serial}", "放置", speciesId, rarity);
+            var egg = Nests.MakeEggOfRarity(game.RngEgg, nest, EggOrigin.Defeated, serial,
+                rarity, element: SpeciesTable.Roll(game.RngElement));
+            game.Eggs.Add(egg);
+        }
+
         /// <summary>孵す。⚠️ 保管庫が満杯なら孵さない（黙って捨てない）。</summary>
         public static Creature HatchEgg(Game game, string eggId)
         {
@@ -339,6 +402,12 @@ namespace EggCommand.Core
             //    ── 配合で特性を狙うなら、狙うのは**種族**のほう。
             var outcome = Fusion.Fuse(game.RngBreed, a, b, ++game.Serial, element: element);
             game.Eggs.Add(outcome.Egg);
+
+            // 🔴 **消す前に墓標を積む**（2026-08-29・作者の指示「BOXで2世代以降の
+            //    キャラクターの家系図を見られるように」）。⚠️ 卵を作ってから消す、と
+            //    同じ用心 ── 消したあとでは中身がもう読めない。
+            Tombs.Bury(game, a);
+            Tombs.Bury(game, b);
 
             ReleaseCreature(game, aId);
             ReleaseCreature(game, bId);

@@ -93,6 +93,25 @@ public class SaveJsonTests
         Assert.Contains("\"ParentA\":\"\"", File.ReadAllText(Real));
     }
 
+    /// <summary>⚠️ 実物（2026-08-22 取得）は「墓標」（家系図・2026-08-29 追加の機能）
+    /// より前の保存 ── `"Tombs"` を持たない実例として使う。</summary>
+    [Fact]
+    public void 実物の保存にTombsが無い()
+    {
+        Assert.DoesNotContain("\"Tombs\"", File.ReadAllText(Real));
+    }
+
+    /// <summary>🔴 **`Tombs` の無い古い保存でも読める。**⚠️ 落ちない・消さない
+    /// ── 空のリストとして読める（`Snapshots.Load` の互換の裏取り）。</summary>
+    [Fact]
+    public void Tombsの無い古い保存でも読める()
+    {
+        var game = SaveJson.Read(File.ReadAllText(Real));
+
+        Assert.NotNull(game);
+        Assert.Empty(game!.Tombs);
+    }
+
     /// <summary>12系統から1回ずつ引く。⚠️ 引いた**あと**の状態は捨てる（比べるのは値だけ）。</summary>
     private static List<uint> Draw(Game game)
     {

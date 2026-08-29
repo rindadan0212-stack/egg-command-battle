@@ -811,12 +811,24 @@ public static class Deeds
 
     /// <summary>分解の候補（⭐ **見ている本人を外した**並び）。
     /// ⚠️ 出撃中も候補に出す ── 外していた頃は、手持ちが少ない序盤に
-    /// 1体も選べず何もできなかった。⭐ 出撃中は升に印で出す。</summary>
+    /// 1体も選べず何もできなかった。⭐ 出撃中は升に印で出す。
+    /// ⚠️ ただし `Melts` に居る個体は外さない ── 誕生の祝いからの事前選択
+    /// （`Shell.Tap` の fuse ── 2026-08-29）が、本人を見たまま分解する道。</summary>
     public static IReadOnlyList<Creature> Food(Shell s)
     {
         string? mine = s.PickedOne()?.Id;
         var list = new List<Creature>();
-        foreach (var c in s.Sorted()) if (c.Id != mine) list.Add(c);
+        foreach (var c in s.Sorted()) if (c.Id != mine || s.Melts.Contains(c.Id)) list.Add(c);
+        // 🔴 事前選択（誕生→分解）が**絞り込みで隠れない**ように ── `Melts` に居るのに
+        //    一覧に出ていない個体は末尾へ足す。出ないまま「分解する」を押せると、
+        //    見えない個体が消える（最悪の失い方）。通常の流れでは Melts ⊆ 一覧なので何もしない。
+        foreach (var id in s.Melts)
+        {
+            bool shown = false;
+            foreach (var c in list) if (c.Id == id) { shown = true; break; }
+            if (shown) continue;
+            foreach (var c in s.Game.Storage.Creatures) if (c.Id == id) { list.Add(c); break; }
+        }
         return list;
     }
 
@@ -895,26 +907,26 @@ public static class Deeds
         s.Say = got > 0 ? $"技が ＋{got}" : "入らなかった";
     }
 
-    /// <summary>溜めた EXP で Lv を1つ上げる。⭐ **1回で1レベル**
-    /// ── 一気に上限まで入れると、上げ止めどころを選べない。</summary>
-    public static void Grow(Shell s)
-    {
-        var one = s.PickedOne();
-        if (one == null) return;
-        // ⚠️ **黙って何もしないをしない。**⭐ 足りないのか上限なのかを言う
-        if (Core.Idle.Spend(s.Game.Idle, one) > 0) { s.Say = $"Lv {Levels.Of(one)} になった"; return; }
-        s.Say = one.Earned >= Levels.GrowMax ? "これ以上は育たない"
-            : $"EXP が {Face.Digits(Levels.ExpToNext(one))} 要る";
-    }
+    // 🔴 **`Grow`（EXP を1点に替えるだけの口）は 2026-08-29 に消した。**
+    //    ⚠️ 作者の指示「点を振る前に点を獲得するのが二度手間」で釦が無くなり、
+    //    呼び手が居なくなったため。⭐ EXP→点は `SpendPoint` の中へ入っている。
 
     /// <summary>🔴 **点を1つ振る**（2026-08-26・ARK式の自由配分）。
-    /// ⚠️ **戻せない**（作者の決定）ので、黙って何もしないをしない ── 何が足りないか言う。</summary>
+    /// ⚠️ **戻せない**（作者の決定）ので、黙って何もしないをしない ── 何が足りないか言う。
+    ///
+    /// ⭐ **EXP を点に替えるところまで、ここが1回でやる**（2026-08-29・作者の指示
+    /// 「点を振る前に点を獲得するのが二度手間」）。⚠️ 前は `Grow`（EXP→点）と
+    /// ここ（点→ステ）の2つの釦に割れていて、押す手が2回要った。
+    /// 🔴 **合体したぶんを `Shell.Tap` 側へ書き写さないこと** ── 一度そうなりかけた
+    /// （2026-08-29。同じ判断が2か所に在るのが、このリポジトリで一番よく壊れる形）。</summary>
     public static void SpendPoint(Shell s, int at)
     {
         var one = s.PickedOne();
         if (one == null) return;
         if (at < 0 || at >= Stats.Keys.Length) return;
         var key = Stats.Keys[at];
+        // ⭐ 点が無ければ、その場で EXP を1点に替えてから振る（これが「二度手間」の解消）
+        if (Creatures.UnspentOf(one) <= 0) Core.Idle.Spend(s.Game.Idle, one);
         if (Creatures.Spend(one, key, 1) > 0)
         {
             int left = Creatures.UnspentOf(one);

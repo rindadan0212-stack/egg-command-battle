@@ -28,3 +28,24 @@ pop      box     140  420   800  800
   art    pixel   160  120   480  480   bind=art
   stars  label   0    620   800  80    size=56 anchor=center bind=stars when=stars
 line     label   40   1330  1000 200   size=54 anchor=upper-center wrap=yes bind=line
+
+# 🔴 **生まれたその場の「分解」「くわしく見る」**（2026-08-29・作者の指示）。
+# ⚠️ **卵を得たとき（`Cheer.EggGot`）には出さない** ── 分解も詳細も
+#    生まれた個体にしか意味が無い（`when=creature` が `Cheer.IsCreature` を見る）。
+# 🔴 **`dim` より後ろに書くだけでは足りない。**⚠️ `dim` は `tap=cheer` を持つ
+#    ── 押しどころどうしの重なり検査（`Layouts.Faults`）は「地」を持たない
+#    釦（`tap=`/`hold=` の無い箱）とだけは見比べない。だから直下の兄弟に置かず、
+#    ここで押しどころを持たない箱（`choice`）に一段くるむ ── `dim` と比べられるのは
+#    その箱自身（押しどころを持たない）だけになり、実際の釦（`fuse`/`detail`）は
+#    箱の中どうしでしか比べられない。⭐ 押しどころが覆いに食われないことは、
+#    それとは別に「あとに書いた節点が上に乗る」（`LayoutDom`）ので満たされている。
+choice   box     140  1560  800  112
+  # ⭐ 分解＝`tap=fuse` と**同じ流れ**（BOX の「分解」釦と同じ口）。
+  #    ⚠️ 開く前に祝いを閉じ、生まれた個体を選ぶのは `Shell.Tap` の
+  #    `case "fuse"` 側（`ClaimBorn()`）が行う ── ここでは骨組みは判断しない。
+  fuse   button  0    0     380  112   size=30 tap=fuse when=creature text=分解する
+  # ⭐ 詳細＝`tap=detail`（BOX の詳細札へ着地 ── 2026-08-29 付け替え）。
+  #    🔴 grow は6本全部が**不可逆の EXP 消費釦**の札 ──「くわしく見る」の着地として誤り。
+  #    ⚠️ 新しい画面は作らない ── Sheet.Box ＋ 本人選択（ClaimBorn）で、BOX の升を
+  #    押したのと同じ姿（詳細札＋一覧）になる。
+  detail button  420  0     380  112   size=30 tap=detail when=creature text=くわしく見る

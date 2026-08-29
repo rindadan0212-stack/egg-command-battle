@@ -309,6 +309,54 @@ public class SnapshotTests
         Assert.Null(Snapshots.Load(save));
     }
 
+    /// <summary>⭐ **墓標（家系図）も保存に載って戻る。**
+    /// ⚠️ 配合で両親を消してから保存・復元しても、`Game.Tombs` の中身（家系図を
+    /// 辿るための控え）が消えていないことを確かめる。</summary>
+    [Fact]
+    public void 墓標も保存から戻る()
+    {
+        var game = Games.NewGame(2026_08_29);
+        var ids = new List<string>();
+        foreach (var c in game.Storage.Creatures) ids.Add(c.Id);
+        Games.FusePair(game, ids[0], ids[1]);
+        Assert.Equal(2, game.Tombs.Count);
+
+        var back = Snapshots.Load(Snapshots.Save(game))!;
+
+        Assert.Equal(game.Tombs.Count, back.Tombs.Count);
+        foreach (var tomb in game.Tombs)
+        {
+            var found = back.Tombs.Find(t => t.Id == tomb.Id);
+            Assert.NotNull(found);
+            Assert.Equal(tomb.SpeciesId, found!.SpeciesId);
+            Assert.Equal(tomb.Element, found.Element);
+            Assert.Equal(tomb.Generation, found.Generation);
+            Assert.Equal(tomb.WildTotal, found.WildTotal);
+            Assert.Equal(tomb.ParentA, found.ParentA);
+            Assert.Equal(tomb.ParentB, found.ParentB);
+        }
+
+        // ⭐ 往復後も家系図を組み立てられる（値が壊れていないことの裏取り）
+        var child = Games.CreatureById(back, back.Storage.Creatures[^1].Id);
+        var nodes = Lineage.Of(back, child, 1);
+        Assert.True(nodes[0].Known);
+    }
+
+    /// <summary>🔴 **`Tombs` の無い古い保存（この欄が無い頃のもの）でも読める。**
+    /// ⚠️ 落ちない・消さない ── 空のリストとして読める。</summary>
+    [Fact]
+    public void Tombsの無い古い保存でも読める()
+    {
+        var save = Snapshots.Save(Played());
+        // ⭐ 「古い保存」を模す ── この欄がまだ無かった頃と同じ、空のまま
+        Assert.Empty(save.Tombs);
+
+        var back = Snapshots.Load(save);
+
+        Assert.NotNull(back);
+        Assert.Empty(back!.Tombs);
+    }
+
     /// <summary>引っ越し表そのもの。⭐ 仕組みだけ作って一度も通していない状態にしない。</summary>
     [Fact]
     public void 引っ越し表は多段を辿り輪で投げる()

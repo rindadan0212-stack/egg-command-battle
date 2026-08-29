@@ -41,9 +41,25 @@
     <!-- 骨組みエディタ E2「機能（tap=）」の一覧。唯一の出所は Shell.cs の switch ──
          ずれを見張る検査は TapCatalogTests.cs（下の websrc\Shell.cs をテキストとして読む）。 -->
     <Compile Include="..\EggCommand.Web\TapCatalog.cs" Link="TapCatalog.cs" />
+    <!-- `hold=` の候補一覧（P4・2026-08-29）。TapCatalog とまったく同じ理由でここに居る
+         （ずれを見張るのは HoldCatalogTests.cs ── 同じく websrc\Shell.cs を読む）。 -->
+    <Compile Include="..\EggCommand.Web\HoldCatalog.cs" Link="HoldCatalog.cs" />
     <!-- 骨組みエディタ E2「冠の逆算」の純関数。Core にしか依存しない（Scenes/LayoutStore を
          使う Web 側の呼び出し口は EditPage.razor にしか無い）。 -->
     <Compile Include="..\EggCommand.Web\TapCrowns.cs" Link="TapCrowns.cs" />
+    <!-- `when=` の候補を実物から数える純関数（P4・2026-08-29）。TapCrowns と同じ理由でここに居る
+         （決め打ちの一覧を持たないことを、仮の骨組みで直接検査するため）。 -->
+    <Compile Include="..\EggCommand.Web\WhenNames.cs" Link="WhenNames.cs" />
+    <!-- 🔴 構造編集（段階4a ── 入れ物へ落として子として挿す）の純関数。
+         ⚠️ もとは EditPage.razor の private で、`.razor` はこの csproj に載らないため
+         `LayoutStructureEditTests` が**同じ処理の写し**を検査していた ── 本番の側を
+         壊してもテストは緑のまま、という穴だった（2026-08-29 監査 A-5）。
+         ⭐ 出して直接コンパイルし、テストが本番の実体を呼ぶようにする。 -->
+    <Compile Include="..\EggCommand.Web\LayoutSplice.cs" Link="LayoutSplice.cs" />
+    <!-- 技のラベルの色（`Face.ElementCss`/`Face.ElementInk`）の検査（FaceTests）用。
+         Core にしか依存しない（Creature/Species/PixelSprite/Palette は全部 Core）ので、
+         EditAttrs.cs と同じ形でそのまま直接コンパイルできる。 -->
+    <Compile Include="..\EggCommand.Web\Face.cs" Link="Face.cs" />
   </ItemGroup>
 
   <!-- ⭐ E2: `tap=` 一覧のずれ検査（TapCatalogTests）が、`Shell.cs`/`AppPage.razor` を
@@ -65,6 +81,9 @@
          ⭐ `Idle.cs` も同じ理由で読む（描く側が出す生の id を突き合わせる）。 -->
     <None Include="..\EggCommand.Web\wwwroot\stage.css" Link="websrc\stage.css" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\EggCommand.Web\Idle.cs" Link="websrc\Idle.cs" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 🔴 放置の帯の毎秒差し替え（`IdleWebTests`）── `Idle.Draw`/`AppPage.razor` が組み立てた
+         id・級を、`tap.js` が camelCase（`view.foeArt`）で正しく読んでいるか見張る。 -->
+    <None Include="..\EggCommand.Web\wwwroot\tap.js" Link="websrc\tap.js" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\EggCommand.Web\Board.cs" Link="websrc\Board.cs" CopyToOutputDirectory="PreserveNewest" />
     <!-- 🔴 盤に出る字と、演出の順番の見張り（`BattleWordTests`）。⚠️ `Deeds.cs` は
          `Shell`/`Sheets`/`Face` 等 Web 専用の依存が多くコンパイルには持ち込めないので、

@@ -68,6 +68,11 @@ public sealed class Face
     {
         // ⭐ 属性の丸と、技の札の地は**同じ色**（戦闘と同じ約束）
         "elem" or "s0" or "s1" or "s2" => ElementCss(_c.Element),
+        // ⭐ **技のラベルの字**もその個体の属性の色に（作者の指示 2026-08-29）。
+        //    ⚠️ 地（上の s0/s1/s2）が既に生の `ElementCss` で塗られているので、
+        //    字まで同じ薄さだと地と字が同じ色になって沈む ── 読める濃さの
+        //    `ElementInk` を使う（戦闘の手札 `Sheets.Fight` と同じ関数）。
+        "s0name" or "s1name" or "s2name" => ElementInk(_c.Element),
         // ⭐ 得意には緑、不得意には赤。⚠️ どちらでもない行は骨組みの色のまま
         "wild" => RowInk(),
         _ => null,
@@ -124,6 +129,28 @@ public sealed class Face
         Element.Wood => "#a8d86e",
         _ => "#6ea8d8",
     };
+
+    /// <summary>技のラベルの字に使う、属性色を**札の上で読める濃さ**へ直したもの
+    /// （作者の指示 2026-08-29「技のラベルはその個体の属性の色に」）。
+    ///
+    /// 🔴 **出所は必ず <see cref="ElementCss"/>。**新しい色は作らない ──
+    /// ここは3色をそのまま暗くするだけ。⚠️ そのまま字の色に使うと、Wood のような
+    /// 薄い色は白い札（戦闘の手札）の上でコントラスト比が 1.65:1 しか無く読めない
+    /// （実測）。BOX の札（`panel.txt` の s0/s1/s2）は地そのものが `ElementCss` で
+    /// 塗られている（上の `Tint` の "s0"/"s1"/"s2"）ので、字まで同じ薄さのままだと
+    /// 地と字が同じ色になって沈む。
+    /// ⭐ 46% まで暗くすると、白地でも属性色の地でもコントラスト比 3:1 を上回る
+    /// （実測: Fire 3.31:1／Wood 4.04:1／Water 3.47:1・白地はどれも 6.6:1 以上）。</summary>
+    public static string ElementInk(Element element)
+    {
+        string css = ElementCss(element);
+        int r = Convert.ToInt32(css.Substring(1, 2), 16);
+        int g = Convert.ToInt32(css.Substring(3, 2), 16);
+        int b = Convert.ToInt32(css.Substring(5, 2), 16);
+        return $"#{Shade(r):x2}{Shade(g):x2}{Shade(b):x2}";
+
+        static int Shade(int channel) => (int)Math.Round(channel * 0.46);
+    }
 
     public static string Digits(int value) => value.ToString("N0", CultureInfo.InvariantCulture);
 

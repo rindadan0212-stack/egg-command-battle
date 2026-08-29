@@ -28,8 +28,10 @@ namespace EggCommand.Core
 
     public static class Encounters
     {
-        /// <summary>同時に出す数。⚠️ 増やすと「全部見てから決める」になり選択が薄まる。</summary>
-        public const int Shown = 3;
+        /// <summary>同時に出す数。⭐ 6（作者の指示 2026-08-29・3→6）。
+        /// ⚠️ 増やすほど「全部見てから決める」になり選択が薄まる、という前提はあったが、
+        /// ここは作者の指示を優先した。</summary>
+        public const int Shown = 6;
 
         /// <summary>巣に立てる種族（全段階の総和）。⚠️ ヌシは終点なので巣には出さない。
         ///
@@ -271,7 +273,7 @@ namespace EggCommand.Core
             return new Encounter(nest, level, until);
         }
 
-        /// <summary>3件になるまで補充する。⚠️ 並びは変えない（見ていた札が動かないように）。</summary>
+        /// <summary><see cref="Shown"/> 件になるまで補充する。⚠️ 並びは変えない（見ていた札が動かないように）。</summary>
         public static void Refill(Game game, long nowUnix = 0)
         {
             int reach = ReachOf(game);

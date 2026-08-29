@@ -65,8 +65,9 @@ public static class Incubator
                 {
                     // ⭐ 孵ったら「孵った」と出す。⚠️ 残り時間だけだと、
                     //    取り出せるようになったことに気づけない。
-                    "clock" => egg == null ? ""
-                        : Hatchery.IsReady(egg, s.Now) ? "孵った" : Rarities.Clock(Hatchery.LeftOf(egg, s.Now)),
+                    // ⚠️ 🔴 **判断は `Clocks` に1本化**（`AppPage.BeatIdle` の1秒ごとの
+                    //    差し替えと出所を分けない ── 分けると2か所目になる）。
+                    "clock" => Clocks.EggText(s, egg),
                     _ => "",
                 },
                 // ⭐ **たまごの柄は種族ごと。**⚠️ ここが名前を返さないと `slot.txt` の
@@ -75,7 +76,7 @@ public static class Incubator
                     ? EggSkins.NameOf(egg.Egg.SpeciesId) : null,
                 Tint = key => key switch
                 {
-                    "clock" => egg != null && Hatchery.IsReady(egg, s.Now) ? "#8ef06a" : "#ffffff",
+                    "clock" => Clocks.EggTint(s, egg),
                     _ => null,
                 },
                 When = key => key switch
@@ -84,7 +85,10 @@ public static class Incubator
                     _ => false,
                 },
                 Tappable = key => true,
-            }, "#" + i));
+                // ⚠️ 4つ目の引数（`part`）を落とさない ── `slot.txt` の行番号が
+                //    ホームの盤へ `data-line` として漏れ、巣5つが骨組みエディタで
+                //    押しても選べなくなる（2026-08-29 に直した）。
+            }, "#" + i, "", "slot"));
 
             // ⭐ **星はレア度の数だけ。**⚠️ 点けたり消したりではなく**出す数を変える**
             //    （作者の指示 2026-08-27）── 中央揃えなので、奇数と偶数で左端が変わる。

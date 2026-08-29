@@ -105,6 +105,8 @@ public static class Board
           .Append(";width:").Append(Px(CellW)).Append(";height:").Append(Px(CellH))
           .Append("\" data-tap=\"square\" data-at=\"").Append(index).Append("\">");
 
+        // ⚠️ 末尾で `part` に "square" を渡している ── 落とすと `square.txt` の
+        //    行番号がすごろくの盤へ漏れる（`Incubator` と同じ罠）。
         sb.Append(LayoutDom.Render(LayoutStore.Of("square"), new DomFill
         {
             Text = key => key switch
@@ -140,7 +142,7 @@ public static class Board
                 "arrow" or "stat" => !sq.IsGate && gift != null && gift.Kind == GiftKind.Stat,
                 _ => false,
             },
-        }, "#" + index));
+        }, "#" + index, "", "square"));
 
         sb.Append("</div>");
         return sb.ToString();

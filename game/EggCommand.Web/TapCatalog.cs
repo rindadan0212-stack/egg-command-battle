@@ -3,7 +3,7 @@ namespace EggCommand.Web
     /// <summary>`tap=` に選べる名前の一覧（骨組みエディタ E2・計画 §11-8・作者の決定6）。
     ///
     /// 🔴 **唯一の出所は `Shell.cs` の `public void Tap(string what, string at)` の
-    /// `switch (what)`**（45個）。⚠️ ここは「並べただけ」の写し ── 手で写した瞬間に
+    /// `switch (what)`**（46個）。⚠️ ここは「並べただけ」の写し ── 手で写した瞬間に
     /// 2つに割れるので、`EggCommand.Tests` の `TapCatalogTests` が `Shell.cs` の
     /// ソースをテキストとして読み直し、`case "..."` を正規表現で抜き出して
     /// この配列と過不足なく一致するかを検査する（ずれたら test が落ちる ── 計画の
@@ -18,13 +18,14 @@ namespace EggCommand.Web
     {
         public static readonly string[] Names =
         {
-            // ── Shell.cs Tap() の switch（43個・出現順そのまま） ──────
+            // ── Shell.cs Tap() の switch（46個・出現順そのまま・2026-08-29 tree と
+            //    detail〔祝いの「くわしく見る」〕を追加） ──
             "tab", "back", "close", "cheer", "extra", "bar-toggle",
             "chips-filter", "chips-sort", "chips-basis", "one",
             "nest", "boss", "roll", "square", "pay", "skip",
             "s0", "s1", "s2", "pick", "give", "stop", "go",
             "slot", "egg", "fuse", "melt", "train", "row", "chip", "feed", "grow",
-            "levelup", "spend",
+            "detail", "tree", "spend",
             "pa", "pb", "breed",
             "party", "set", "seat", "done",
             "keep",

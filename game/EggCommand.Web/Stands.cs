@@ -57,7 +57,8 @@ public static class Stands
           .Append(";width:340px;height:350px;transform-origin:0 0;transform:scale(")
           .Append(spot.Shrink.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture))
           .Append(")\">")
-          .Append(LayoutDom.Render(LayoutStore.Of("unit"), fill, "#" + at))
+          // ⚠️ `part` を落とさない（`unit.txt` の行番号が戦闘の盤へ漏れる）。
+          .Append(LayoutDom.Render(LayoutStore.Of("unit"), fill, "#" + at, "", "unit"))
           .Append("</div>");
         return sb.ToString();
     }

@@ -47,6 +47,16 @@ namespace EggCommand.Core
         public List<int> SkillPoints = new List<int>();
     }
 
+    /// <summary>⭐ <see cref="Tomb"/> の保存形。⚠️ 古い保存には無い欄 ── 空のリストとして
+    /// 読める（<see cref="GameSave.Tombs"/> の註を参照）。</summary>
+    [Serializable]
+    public sealed class TombSave
+    {
+        public string Id = "", SpeciesId = "";
+        public int Element, Generation, WildTotal;
+        public string? ParentA, ParentB;
+    }
+
     [Serializable]
     public sealed class EggSave
     {
@@ -124,6 +134,10 @@ namespace EggCommand.Core
         /// ⚠️ 空でも版は上げない ── 読む側が保管庫から**継ぎ足す**ので、
         /// 古い保存も「いま持っているぶんは載っている」状態から始まる。</summary>
         public List<string> Seen = new List<string>();
+        /// <summary>⭐ 配合で消えた個体の墓標（家系図）。
+        /// ⚠️ **古い保存（この欄が無い頃のもの）には無い** ── 欄が無いまま読み込むと、
+        /// 初期化子どおり空リストのまま残る（落ちない・消さない・版も上げない）。</summary>
+        public List<TombSave> Tombs = new List<TombSave>();
     }
 
     /// <summary>保存と復元。⭐ **ここが唯一の変換場所**。
@@ -205,6 +219,7 @@ namespace EggCommand.Core
 
             save.Trials.AddRange(game.TrialsBeaten);
             save.Seen.AddRange(game.SpeciesSeen);
+            foreach (var t in game.Tombs) save.Tombs.Add(Of(t));
 
             foreach (var rng in StreamsOf(game)) save.Rng.AddRange(rng.State());
             return save;
@@ -268,6 +283,9 @@ namespace EggCommand.Core
             }
             // ⭐ **図鑑。**⚠️ `Games.See` を通すので、表から消えた種族は落ちる。
             foreach (var id in save.Seen) Games.See(game, id);
+            // ⭐ **墓標（家系図）。**⚠️ `Tombs` の無い古い保存は空のまま ── 落ちない・消さない
+            //    （`GameSave.Tombs` の初期化子が空リストのままなので、この foreach は0回回るだけ）。
+            foreach (var t in save.Tombs) game.Tombs.Add(To(t, notes));
             // ⚠️ **保管庫から継ぎ足す。**⭐ 古い保存（この欄が無い頃のもの）でも、
             //    いま持っている個体ぶんは図鑑に載る ── 手元に居るのに
             //    「まだ見ていない」と出るほうが嘘になる。
@@ -451,6 +469,21 @@ namespace EggCommand.Core
         //    古い保存をそのまま読むと、同じ Lv なのに弱い個体が箱に残り続ける。
         // ⭐ 育てた分は Lv から一意に決まるので、読むたびに作り直せる ── 失うものは無い。
         // ⚠️ 保存の欄そのものは残す（読めなくなる版を作らない）。
+
+        private static TombSave Of(Tomb t) => new TombSave
+        {
+            Id = t.Id, SpeciesId = t.SpeciesId, Element = (int)t.Element,
+            Generation = t.Generation, WildTotal = t.WildTotal,
+            ParentA = t.ParentA, ParentB = t.ParentB,
+        };
+
+        // ⚠️ 属性は常に書いてある（Tomb にこの欄が無かった保存は存在しない ──
+        //    `Tomb` 自体がこの機能と同時に足された型なので、`CreatureSave.Element` の
+        //    ような「-1＝属性を個体に移す前」の互換は要らない）。それでも `Elem` が
+        //    範囲外を返す形（表の並びが変わった等）に備えて既定を炎にしておく。
+        private static Tomb To(TombSave s, List<string>? notes) => new Tomb(
+            s.Id, ResolveSpecies(s.SpeciesId, notes), Elem(s.Element) ?? Element.Fire,
+            s.Generation, s.ParentA, s.ParentB, s.WildTotal);
 
         private static EggSave Of(Egg e) => new EggSave
         {

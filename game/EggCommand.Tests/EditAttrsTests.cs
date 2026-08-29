@@ -167,4 +167,96 @@ public class EditAttrsTests
         foreach (var a in EditAttrs.All.Where(a => a.Kind == AttrKind.Number))
             Assert.True(a.Min < a.Max, $"{a.Key}: Min({a.Min}) が Max({a.Max}) 未満でない");
     }
+
+    // ── ⭐ P4（2026-08-29・案7の三分類）── A/B/C の線引きを固定する ────────
+
+    /// <summary>⭐ A: 繰り返しの**形**（列数・段の高さ・上限）は表に載っていて、
+    /// `repeat=` を持つ節点でだけ出る。⚠️ `gap` と同じ条件（種類ではなく `repeat=` の有無）。</summary>
+    [Theory]
+    [InlineData("cols")]
+    [InlineData("rows")]
+    [InlineData("max")]
+    public void 繰り返しの形はrepeatを持つ節点だけに出る(string key)
+    {
+        var attr = EditAttrs.For(key);
+        Assert.NotNull(attr);
+        Assert.Equal(AttrKind.Number, attr!.Kind);
+        Assert.False(attr.AppliesTo(Node("card")), $"{key}: repeat= の無い節点に出てはいけない");
+        Assert.True(attr.AppliesTo(Node("card", ("repeat", "x"))), $"{key}: repeat= があれば出る");
+    }
+
+    /// <summary>🔴 `cols` の最小は 1 ── 0 を書けてしまうと
+    /// <see cref="FaultKind.InvalidCols"/> の不備を**エディタ自身が作れる**ことになる。</summary>
+    [Fact]
+    public void 列数は1未満にできない()
+    {
+        var attr = EditAttrs.For("cols");
+        Assert.NotNull(attr);
+        Assert.Equal(1f, attr!.Min);
+    }
+
+    /// <summary>⭐ `max` の最小は **0**（2026-08-29 監査 B-3）。
+    ///
+    /// ⚠️ `cols` と違い、`max=` は「書いていない」が正しい状態でもある（巻物の中なら
+    /// 上限は要らない ── 外なら <see cref="FaultKind.RepeatMissingMax"/> が別に言う）。
+    /// 読む側の既定も 0（`Layouts.DeepOf` の `Number("max", 0)`）。
+    /// 🔴 最小を 1 にすると、欄が 0 を見せているのに「−」で 1 に**増え**、
+    /// 無かった `max=` が書かれてしまう（`EditPage.AttrField` は 0 で付け足しごと消す）。</summary>
+    [Fact]
+    public void 上限は0で消せる()
+    {
+        var attr = EditAttrs.For("max");
+        Assert.NotNull(attr);
+        Assert.Equal(0f, attr!.Min);
+    }
+
+    /// <summary>🔴 **開けてはいけないものを開けたら落ちる杭**（案7の B・C）。
+    ///
+    /// ⚠️ B（`bind`/`repeat`/`use`）はコードが読む名前で、綴りを変えても骨組みの検査は
+    /// 何も言わない ── 不備0件のまま遊びだけが黙って壊れる。
+    /// ⚠️ C（`flow`/`dock`/`roll`/`grow`）は1つで周りの意味まで書き換える。
+    /// ⭐ どちらも「見せるだけ」（<see cref="EditAttrs.Chips"/>）に留めるのが P4 の決定。</summary>
+    [Theory]
+    [InlineData("bind")]
+    [InlineData("repeat")]
+    [InlineData("use")]
+    [InlineData("flow")]
+    [InlineData("dock")]
+    [InlineData("roll")]
+    [InlineData("grow")]
+    public void 見せるだけの付け足しは表に載せない(string key)
+    {
+        Assert.Null(EditAttrs.For(key));
+        Assert.Contains(key, EditAttrs.Excluded.Keys);
+        Assert.Contains(key, EditAttrs.Chips.Keys);
+    }
+
+    /// <summary>⚠️ 逆向き ── 札（<see cref="EditAttrs.Chips"/>）の綴りが
+    /// `Layouts.Options` から浮いていないか、表と二重になっていないか。</summary>
+    [Fact]
+    public void 札は除外一覧の中だけにある()
+    {
+        var known = new HashSet<string>(Layouts.Options);
+        var tableKeys = EditAttrs.All.Select(a => a.Key).ToHashSet();
+        foreach (var (key, why) in EditAttrs.Chips)
+        {
+            Assert.Contains(key, known);
+            Assert.Contains(key, EditAttrs.Excluded.Keys);
+            Assert.DoesNotContain(key, tableKeys);
+            Assert.False(string.IsNullOrWhiteSpace(why), $"{key}: 札の一言が空");
+        }
+    }
+
+    /// <summary>⭐ 専用の欄を持つ4つ（A）は、札にも出さない ── 直せるものを
+    /// 「直せません」の灰色の札で見せると嘘になる。</summary>
+    [Theory]
+    [InlineData("tap")]
+    [InlineData("hold")]
+    [InlineData("when")]
+    [InlineData("pic")]
+    public void 専用の欄を持つ付け足しは札にしない(string key)
+    {
+        Assert.Contains(key, EditAttrs.Excluded.Keys);
+        Assert.DoesNotContain(key, EditAttrs.Chips.Keys);
+    }
 }

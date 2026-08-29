@@ -28,17 +28,19 @@ foes      host    540  150   540  1278
 # ⚠️ **3枚をまとめて `when=!done` の中に入れる。**⭐ 「決着」と入れ替わることを
 #    1つの名前で言わないと、検査は**同時に出る2つが重なっている**としか読めない。
 hand      box     0    1440  1080 348   when=!done dock=no
-  s0      card    215  12    650  130   when=s0 bind=s0 tap=s0
+  # ⭐ 長押しで技の詳細（skillinfo）── BOX の札（panel.txt）と同じ道（2026-08-29）。
+  #    ⚠️ 短押し（tap=sN・技を出す）とは tap.js が押下時間で分ける ── 触っただけでは開かない。
+  s0      card    215  12    650  130   when=s0 bind=s0 tap=s0 hold=s0
     s0name  label   8    16    634  44    size=34 anchor=upper-center bind=s0name
     s0pill  card    250  70    150  40    bind=s0pill
       s0ct  label   0    0     150  40    size=22 anchor=center bind=s0ct
     s0lv    label   12   74    120  40    size=24 anchor=left bind=s0lv
-  s1      card    48   158   480  130   when=s1 bind=s1 tap=s1
+  s1      card    48   158   480  130   when=s1 bind=s1 tap=s1 hold=s1
     s1name  label   8    16    464  44    size=28 anchor=upper-center bind=s1name
     s1pill  card    165  70    150  40    bind=s1pill
       s1ct  label   0    0     150  40    size=22 anchor=center bind=s1ct
     s1lv    label   12   74    120  40    size=24 anchor=left bind=s1lv
-  s2      card    552  158   480  130   when=s2 bind=s2 tap=s2
+  s2      card    552  158   480  130   when=s2 bind=s2 tap=s2 hold=s2
     s2name  label   8    16    464  44    size=28 anchor=upper-center bind=s2name
     s2pill  card    165  70    150  40    bind=s2pill
       s2ct  label   0    0     150  40    size=22 anchor=center bind=s2ct

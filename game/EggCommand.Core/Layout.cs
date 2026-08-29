@@ -410,7 +410,8 @@ namespace EggCommand.Core
 
     /// <summary>不備の種類。⭐ **`problems.Add` していた箇所と1対1。**
     /// ⚠️ 増やしたら <see cref="Layouts.Inspect"/> 側で必ず1箇所は使う ──
-    /// `LayoutFaultTests` が `Enum.GetValues` を舐めて「作れていない種類」を落とす。</summary>
+    /// `LayoutFaultTests` が `Enum.GetValues` を舐めて「作れていない種類」を落とす
+    /// （<see cref="DockDip"/> だけは <see cref="Layouts.DockFaults"/> の出）。</summary>
     public enum FaultKind
     {
         /// <summary>骨組みそのものが無い（`layout == null`）。</summary>
@@ -462,6 +463,10 @@ namespace EggCommand.Core
         LabelOverlap,
         /// <summary>押しどころ（`button`/`tap=`/`hold=`）どうしの重なり。</summary>
         TapOverlap,
+        /// <summary>下の帯へ潜っている（`dock=no` を除く）。⚠️ <see cref="Layouts.Inspect"/> からは
+        /// 出ない ── 帯を出す画面かは骨組みから分からないため、<see cref="Layouts.DockFaults"/>
+        /// （テストとエディタが呼ぶ）だけが出す。</summary>
+        DockDip,
     }
 
     /// <summary>骨組みの不備1件。⭐ <see cref="Layouts.Faults"/> の字はここ（<see cref="Text"/>）
@@ -534,6 +539,14 @@ namespace EggCommand.Core
 
         /// <summary>指で押せる最小の高さ。⚠️ View の <c>Ui.Tap</c> と同じ数。</summary>
         public const float TapHeight = 112f;
+
+        /// <summary>上のバー（`frame.txt` の `top` ── 0,0,1080,132）。⚠️ 画面（シート）の骨組みは
+        /// この高さぶん下がった器（`AppPage` の `#app-body` top:132）に描かれるので、
+        /// シートの床は ScreenHeight − TopBarHeight − DockHeight ＝ 1556。</summary>
+        public const float TopBarHeight = 132f;
+        /// <summary>下の帯（`frame.txt` の `dock` ── 0,1688,1080,232）。
+        /// ⭐ 実物との一致は `LayoutAssetTests.外枠の実物と定数が一致する` が固定する。</summary>
+        public const float DockHeight = 232f;
 
         /// <summary>知っている種類。⚠️ **ここに無いものは落とす。**
         /// ⭐ 黙って素通りさせると、綴り違いが「何も出ない」として通ります。</summary>
@@ -1026,6 +1039,36 @@ namespace EggCommand.Core
         /// ⚠️ 🔴 ここで字を作り直さない（<see cref="Fault.Text"/> をそのまま渡す）
         /// ── 出所が2つに割れると、いつか字が食い違う。</summary>
         public static List<string> Faults(Layout layout) => Inspect(layout).ConvertAll(f => f.Text);
+
+        /// <summary>下の帯（<see cref="DockHeight"/>）へ潜っていないか。⭐ 規則の唯一の出所
+        /// ── `LayoutAssetTests.下の帯へ潜っていない` とエディタの不備バンドが両方これを呼ぶ
+        /// （2026-08-29 ── それまではテストだけが知る規則で、エディタで直しても後から落ちた）。
+        /// ⚠️ <see cref="Inspect"/> に混ぜない ── 帯を出す画面かは骨組みから分からない。
+        /// 覆い（veil）を持つ札は帯が関わらないので丸ごと素通し・`dock=no` の節点は潜ってよい・
+        /// 見るのは**根だけ**（子は親はみ出し検査が受け持つ）。</summary>
+        public static List<Fault> DockFaults(Layout layout)
+        {
+            var faults = new List<Fault>();
+            if (layout == null) return faults;
+            foreach (var node in layout.Roots) if (node.Kind == "veil") return faults;
+            float floor = ScreenHeight - TopBarHeight - DockHeight;
+            foreach (var node in layout.Roots)
+            {
+                if (node.Option("dock") == "no") continue;
+                if (node.Top + node.Height <= floor + 0.5f) continue;
+                // ⭐ 「ここが悪い」の形は**節点が実際に在る範囲**だけ（2026-08-29）。
+                //    ⚠️ 床から引くと、節点が丸ごと床より下にあるとき、何も無い
+                //    「床〜節点の上端」まで帯が伸びて押せてしまう。
+                float band = Math.Max(node.Top, floor);
+                faults.Add(new Fault(FaultKind.DockDip, layout.Id,
+                    $"{layout.Id}/{node.Name} が下の帯へ潜っている（下端 {node.Top + node.Height} / 帯の上端 {floor}）",
+                    new[] { node.LineNumber },
+                    new[] { new Box(node.Left, node.Top, node.Width, node.Height) },
+                    new Box(node.Left, band, node.Width, node.Top + node.Height - band),
+                    new[] { node.PartId }, new[] { node.PartLine }));
+            }
+            return faults;
+        }
 
         /// <param name="parentScrolls">**直近の親**が巻物か。⭐ 「親の枠から縦へはみ出し」を
         /// 見逃す唯一の場合。</param>

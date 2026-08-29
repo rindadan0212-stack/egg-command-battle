@@ -16,4 +16,17 @@
     <ProjectReference Include="..\EggCommand.Core\EggCommand.Core.csproj" />
   </ItemGroup>
 
+  <!-- 🔴 **目録の鮮度を見る検査（`EggCommand.Tests`）のための埋め込み。**
+       ⚠️ `EggCommand.Tests.csproj` のコピー設定は今回の作業範囲に入っていないため、
+       `paint` の実物 PNG は Tests から直接読めない（`icon` は既存のコピー設定で読める
+       ので埋め込まない）。⭐ ここ（作業範囲内）にチェックイン済みの実物を埋め込み、
+       `EggCommand.Tests` は既存の `ProjectReference`（`SeriesRecord.cs` 等と同じ経路）
+       越しに `CheckedInAssets` を読む。⚠️ 埋め込みは `EggCommand.Sim` のビルドごとに
+       実物から作り直されるので、内容が古いまま固定される心配は無い。 -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\assets\ui\icon\icon-manifest.txt" Link="CheckedIn\icon-manifest.txt" />
+    <EmbeddedResource Include="..\..\assets\ui\paint\paint-manifest.txt" Link="CheckedIn\paint-manifest.txt" />
+    <EmbeddedResource Include="..\..\assets\ui\paint\*.png" Link="CheckedIn\paint_png\%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

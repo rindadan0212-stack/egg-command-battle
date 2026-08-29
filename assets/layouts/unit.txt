@@ -23,10 +23,18 @@ beats     line    244  258   22   6     bind=beats
 #    実測 743 要る組み合わせが在ったため、絵＋小さな数へ作り替えた
 #    （`Core.Battle.ActiveStatusBadges` が構造化した出所。字を返す
 #    `ActiveStatuses` は Unity の `UnitStand` がまだ読むので残してある）。
-# ⚠️ 12種すべてが同時に起こり得るが、5個までしか並べられない。
+# ⚠️ 16種すべてが同時に起こり得るが、4個までしか並べられない。
 #    ⭐ 残りは「+N」にまとめる（`smore`）。⚠️ 隠れた分の内訳（ターン数など）は
 #    まだ読む場所が無い ── `wiki/開発/課題.md` に送ってある。
-status    box     20   298   320  48
-  sicon   icon    9    0     28   28    repeat=status cols=5 gap=18 max=5 bind=sicon crisp=yes
-  snum    label   0    30    46   16    size=13 anchor=upper-center repeat=status cols=5 gap=0 max=5 bind=snum
-  smore   label   240  9     70   30    size=24 ink=dim anchor=upper-center when=smore bind=smore
+# 🔴 2026-08-29: 枠を 24px→64px（16ドット・`icon-manifest.txt` の実寸）に、
+#    同時に出す数を 5→4 に直した（旧24pxは`icon`の実寸を持たないまま描いていたため、
+#    実物128pxの絵が左右にはみ出し5個が重なっていた ── 実測ずみのバグ）。
+#    ⚠️ `sicon`/`snum` は同じ数（4）・同じ間隔（左23・幅64・隙間6）に揃えてある
+#    （cols/max がずれると絵と数が別の相手を指すため）。
+#    🔴 **`EggCommand.Web/Sheets.cs` の `Column` にある `const int shown = 5;` も
+#    4 に直す必要がある**（`Sheets.cs` は触ってはいけないファイルなので、
+#    ここではなく報告に書いてある）。
+status    box     20   298   320  116
+  sicon   icon    23   0     64   64    repeat=status cols=4 gap=6 max=4 bind=sicon crisp=yes
+  snum    label   23   66    64   16    size=13 anchor=upper-center repeat=status cols=4 gap=6 max=4 bind=snum
+  smore   label   0    86    320  28    size=24 ink=dim anchor=upper-center when=smore bind=smore

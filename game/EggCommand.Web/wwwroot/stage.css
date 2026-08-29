@@ -391,40 +391,91 @@ html, body {
 #line-fan { color: #ffffff; text-shadow: 5px -5px 0 var(--ink); }
 
 /* ── 放置の帯 ────────────────────────────────────────
-   ⭐ 進んでいることは**地面が左へ流れる**ことで見せる。走者は歩幅だけ揺らす。
-   ⚠️ 地面は画面幅の2倍あるので、1枚ぶん流れたら折り返す（`Core.Beats.Scroll`）。 */
-/* 🔴 **級で指す（id で指さない）。**
-   ⚠️ 前は `#ground` だった ── ところが**すごろくの盤の器も `ground`**
-   （`assets/layouts/trail.txt`）。id は画面で唯一でなければならないのに、
-   画面をまたいで同じ名前だったので、この動きが**潜入の盤にも掛かっていた**
-   ── 盤が12秒かけて左へ流れ続け、マスが指の下から逃げる
-   （実測 2026-08-26「画面が動き続けて、進むマスが押せない」の正体）。
-   ⭐ 別の画面の物に触れない書き方（級）に直す。⚠️ 草も同じ動き（一緒に流す
-   ── 地面だけ動くと、生えている物が滑って見える）。 */
-.idle-flow, .idle-tuft { animation: idle-roll 12s linear infinite; }
-@keyframes idle-roll { from { transform: translateX(0); } to { transform: translateX(-1080px); } }
+   🔴 **旧・仮の背景（`.idle-flow`/`.idle-tuft`/`idle-roll`）は 2026-08-28 に削除**
+   （作者の指示）。`home.txt` の作者のドット絵背景（空・山・草木・地面）に
+   置き換わったので、仮の帯を左へ流す動きはもう要らない ── 他に使い手が無いことは
+   確認済み。⚠️ **`Core.Beats.Scroll`（旧・流れる速さ）はもう使っていない**
+   （`Core/Beats.cs` は担当外なので消さず残してある）。 */
 
-/* ⭐ **ホームの背景（空と山）を、ゆっくり左へ流す。**
-   ⚠️ 絵は「元＋左右反転」を横に並べた2枚幅（2160px）。1枚ぶん（1080px）流したら
-   先頭へ戻すので、途切れずに繋がる ── ⭐ 継ぎ目が鏡写しなので線が合って目立たない。
-   ⭐ **空のほうが遅い**（作者の指示 2026-08-27）── 遠いものほどゆっくり動いて見える。
+/* ⭐ **ホームの背景（空・山・遠くの地面）を、左へ流す。**
+   ⚠️ 絵は「元・鏡・元・鏡」の**4枚**を横に並べたもの（`tools/bg-band.mjs` が作る）。
+   ⭐ **2枚ぶん**流したら先頭へ戻す ── 模様の周期が「元＋鏡」＝2枚ぶんなので、
+   流し終わりの画面が流し始めと1画素も違わない（`tools/bg-band.mjs` の doc に理由）。
+   🔴 **2枚幅で1枚ぶん流していた頃（〜2026-08-29）は、戻る瞬間に絵が左右反転して
+   パッと切り替わっていた** ── 「継ぎ目が鏡だから目立たない」のは**帯の中の継ぎ目**の話で、
+   **輪（流し終わり→先頭）は別物**。実測: 旧・山は戻り際に 1080x252 の全画素が入れ替わる。
+   ⭐ **手前ほど速い**（作者の指示 2026-08-29「地面は奥の山より早く動く」）──
+   空12 → 山24 → 遠くの地面40 px/秒。⚠️ 流す幅が層ごとに違うので、動きも層ごとに持つ。
+   ⚠️ 「遠くの地面」の px/秒 は絵を差し替えるたび変わりうる（1周秒数 `secs` は固定、
+   流す距離＝絵の大きさで決まるため）── 数字を見るなら `stage.css` でなく `tools/bg-band.mjs`
+   の出力を信じること。
    ⚠️ 🔴 **級で掛ける。id では掛けない。**別の画面に同じ名前があると両方に効く
    （2026-08-26 に `#ground` でそれを踏み、すごろくが遊べなくなった）。 */
-.roll-sky  { animation: bg-roll 180s linear infinite; }
-.roll-hill { animation: bg-roll  90s linear infinite; }
-@keyframes bg-roll { from { transform: translateX(0); } to { transform: translateX(-1080px); } }
+.roll-sky  { animation: bg-roll-sky  180s linear infinite; }
+.roll-hill { animation: bg-roll-hill  90s linear infinite; }
+.roll-far  { animation: bg-roll-far   32s linear infinite; }
+@keyframes bg-roll-sky  { from { transform: translateX(0); } to { transform: translateX(-2160px); } }
+@keyframes bg-roll-hill { from { transform: translateX(0); } to { transform: translateX(-2160px); } }
+@keyframes bg-roll-far  { from { transform: translateX(0); } to { transform: translateX(-1280px); } }
+
+/* ⭐ 放置の相手の残り。
+   🔴 **.3s に縮めた**（2026-08-28）。⚠️ 旧 .95s は差し替えが1秒に1回だった頃の
+   数（戦闘の帯 `.n.bar-fill` が1秒16回の差し替えに対して .1s なのと同じ考え方で、
+   間隔の半分より少し長く取って階段を消していた）。⭐ いまは打ち合いが
+   `Core.Idle.ActSeconds`（0.5秒）ごとに1段落ちる（`Core.Idle.StrikeCount`＝8段で相手が
+   尽きる）── .95s のままだと次の段が来る前に前の段の途中にしか着かず、帯が「詰まって」
+   見える。.3s なら0.5秒の間隔に十分収まる。
+   ⚠️ **旧 `FightSeconds`（打ち合い一律7.0秒固定）は削除された**（本物の手番制への
+   作り直し・`Core.Idle` の doc 参照）。打ち合いの長さ自体は味方8発ぶんで最短4.0秒
+   （`FightMinSeconds`）── 敵の手が挟まるほど伸びる**可変長**になったが、1段の間隔
+   （0.5秒＝`ActSeconds`）そのものは変わらないので、この帯の縮む速さは直さなくてよい。 */
+.idle-drain { transition: width .3s linear; }
 
 /* ⭐ 歩幅の揺れ。⚠️ 大きいと跳ねて見えて「進んでいる」から離れる（`Core.Beats.Bob`）。
    ⚠️ 一人ずつずらす ── 揃うと行進になり、めいめいが歩いている感じが消える。 */
 .idle-walk { animation: idle-bob .86s ease-in-out infinite; }
 @keyframes idle-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 
-/* ⭐ 相手は**外から転がって来る**。⚠️ 定位置にぽんと現れると「回復した」に見える */
-.idle-come { animation: idle-enter 1.4s ease-out both; }
-@keyframes idle-enter {
-  from { transform: translateX(700px) rotate(-720deg); }
-  to   { transform: translateX(0) rotate(0deg); }
+/* ⭐ 倒れた味方（2026-08-28・仕事4）。⚠️ 出所は `tap.js` の `idle()` が
+   `Idle.Draw` の振った id（`idle-walk<i>`）へ付け外しする級 ── 帯そのものは組み直さない
+   造り（背景のアニメが巻き戻るため）なので、見た目の切り替えは全部この級1つで表す。
+   🔴 **`.idle-walk` の揺れは必ず止める**── 倒れているのに歩幅で上下していると壊れて
+   見える。`.idle-walk.idle-down`（2つ重ねた選び手）で `.idle-walk` 単体より強く
+   掛かるので、`!important` は要らない。
+   ⭐ 横に倒す（`rotate`）＋彩度を落とす＋薄くする、の3つで「動けない」に見せる。 */
+.idle-walk.idle-down {
+  animation: none;
+  transform: rotate(90deg);
+  filter: grayscale(.7);
+  opacity: .55;
+  transition: transform .2s ease-out, filter .2s ease-out, opacity .2s ease-out;
 }
+
+/* ⭐ 相手も卵も、**画面外の右から放物線を描いて飛び込んでくる**
+   （2026-08-28・作者の指示「回転してくる演出から、放射線状に飛び込んでくる演出に（卵も）」）。
+   ⚠️ **回転は入れない**（作者が「回転してくる演出から」離れたいと言っている ── 旧
+   `idle-enter`＝`translateX(700px) rotate(-720deg)` は削除した）。
+   ⚠️ 定位置にぽんと現れると「回復した」に見えるので、瞬間移動にはしない。
+   ⭐ 1本の `@keyframes` で `translate(x, y)` を3段に刻めば弧になる ── 立ち上がりは
+   ゆっくり（`ease-out`）、**落ち際は速く**（`ease-in`。`die3d-roll` と同じ
+   「区間ごとに `animation-timing-function` を切り替える」手）。
+   ⚠️ **相対移動**（`translate`）なので、掛ける相手の元の置き場所（`left`/`top`）は
+   問わない ── 相手（`#foe`、位置固定）にも、卵（`tap.js` が動的に作る、位置いろいろ）
+   にも同じ級をそのまま使い回せる。 */
+.idle-come { animation: idle-enter .74s both; }
+@keyframes idle-enter {
+  0%   { animation-timing-function: ease-out;
+         transform: translate(640px, 60px) scale(.75); opacity: 0; }
+  20%  { opacity: 1; }
+  56%  { animation-timing-function: ease-in;
+         transform: translate(200px, -190px) scale(1.08); }
+  100% { transform: translate(0, 0) scale(1); opacity: 1; }
+}
+
+/* ⭐ **消えている・まだ来ていない**（`Idle.Draw`/`eggTap.idle` が付け外しする）。
+   ⚠️ `display:none` ── 要素そのものは消さない（`tap.js` の `idle()` 参照:
+   組み直さずに毎秒 出す/隠す を切り替えるため、触る対象を常に残しておく）。 */
+.idle-hidden { display: none; }
 
 /* ⚠️ **動きを望まない人には出さない。**⭐ 何が起きたかは字と数で残す
    （動きは読み取りやすさのためであって、情報の出所ではない）。 */
@@ -438,7 +489,11 @@ html, body {
   #dim-roll, #strip-tell { animation: none; }
   #dim-roll { background: rgba(0,0,0,.34); }
   #pop-fan, #burst-fan { animation: none; }
-  .roll-sky, .roll-hill, .idle-flow, .idle-tuft, .idle-walk, .idle-come { animation: none; }
+  .roll-sky, .roll-hill, .roll-far, .idle-walk, .idle-come { animation: none; }
+  /* ⭐ `.idle-down` の見た目（倒れた姿勢）自体は残す ── 情報はここにある。
+     ⚠️ 消すのは**移り変わる動き**（`transition`）だけ ── 級を2つ重ねた選び手で書く
+     （`.idle-walk`（1つ）より強く掛ける必要がある。`.idle-walk.idle-down` の doc 参照）。 */
+  .idle-walk.idle-down { transition: none; }
 }
 
 /* icon ── ⭐ **絵を出して、その上から色を掛ける。**

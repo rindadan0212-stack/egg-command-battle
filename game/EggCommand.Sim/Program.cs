@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.IO;
 using EggCommand.Core;
 
 namespace EggCommand.Sim
@@ -40,10 +41,31 @@ namespace EggCommand.Sim
     ///   dotnet run --project EggCommand.Sim -- egg-try [地 模様] 模様と色の見本を1枚に並べる（shots/）
     ///   dotnet run --project EggCommand.Sim -- paint-placeholder 骨組みが指す `paint` の絵で、
     ///                                          まだ無いものを仮置きで作る（ドット絵化計画 段取り4）
+    ///   dotnet run --project EggCommand.Sim -- icon-manifest      `icon` の実寸目録
+    ///                                          （assets/ui/icon/icon-manifest.txt）を作り直す
     /// </summary>
     public static class Program
     {
         private const int DefaultSeed = 2026_08_16;
+
+        /// <summary>絵や骨組みを書き出す道具のための、この作品の根。
+        ///
+        /// 🔴 **走らせた場所から上へ辿って探す。**⚠️ 決め打ちの `".."` は、`game/` から
+        /// 走らせる約束に頼っていた ── 根から走らせると1つ上（`Desktop/gamedev/`）に
+        /// `assets/ui/` を生やす（2026-08-29 に実際にそうなった。害は出なかったが、
+        /// **黙って親のフォルダへ書く**のが怖い）。
+        /// ⭐ 目印は `assets/layouts`（この作品にしか無く、道具が必ず要る場所）。
+        /// ⚠️ 見つからなければ**止まる**。当てずっぽうで書き出さない。</summary>
+        private static string FindRoot()
+        {
+            var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+            for (int up = 0; dir != null && up < 6; up++, dir = dir.Parent)
+                if (Directory.Exists(Path.Combine(dir.FullName, "assets", "layouts")))
+                    return dir.FullName;
+            throw new DirectoryNotFoundException(
+                $"`assets/layouts` が見つからない（{Directory.GetCurrentDirectory()} から上へ6段まで探した）"
+                + " ── この作品の中で走らせること");
+        }
 
         public static int Main(string[] args)
         {
@@ -65,6 +87,12 @@ namespace EggCommand.Sim
             // ⚠️ 中身が繋がっていない状態で測っても意味が無い。先に数える
             Content.Audit();
 
+            // 🔴 **走らせた場所から根を探す。**⚠️ 以前は `".."` 決め打ちだった ──
+            //    `game/` から走らせる前提で、**根から走らせると1つ上（`gamedev/`）へ
+            //    書き出してしまう**（2026-08-29 に実際にやり、Desktop に `assets/ui/` が
+            //    17ファイル生えた）。⭐ 黙って親を汚すより、見つからないなら止まるほうがよい。
+            string root = FindRoot();
+
             switch (what)
             {
                 case "species": Species(seed); break;
@@ -76,7 +104,7 @@ namespace EggCommand.Sim
                 // ⭐ 技を組み合わせで作り直す（候補を数える）
                 case "brew": Brew.Run(args[1..]); break;
                 // ⭐ 参考作品の技を本作の手ぶんで測る（物差しの検算）
-                case "mamo": MamoValue.Run(".."); break;
+                case "mamo": MamoValue.Run(root); break;
                 case "elements": Elements(seed); break;
                 case "roles": Roles(seed); break;
                 // ⭐ 4対4・弱化ビルドを実際に組んで測る（`roles` の4つの欠陥を直した版）
@@ -123,15 +151,17 @@ namespace EggCommand.Sim
                 case "flight": FlightProbe(seed); break;
                 case "trail": TrailProbe(seed); break;
                 case "dice": DiceProbe.Run(seed); break;
-                case "sprites": SpritePng.Run(".."); break;
+                case "sprites": SpritePng.Run(root); break;
                 // ⭐ 手描きの原稿（art/handmade/sprite/*.png）→ Species.cs に貼れる C#（再実行できる取り込み道具）
-                case "import-sprite": SpriteImport.Run(".."); break;
+                case "import-sprite": SpriteImport.Run(root); break;
                 // ⭐ まだ無い paint の絵を仮置きで作る（ドット絵化計画 段取り4・第3部）
-                case "paint-placeholder": PaintPlaceholder.Run(".."); break;
+                case "paint-placeholder": PaintPlaceholder.Run(root); break;
+                // ⭐ icon の実寸目録を作り直す（ドット絵化計画 段取り4・「1ドット=4px」統一）
+                case "icon-manifest": IconManifestTool.Run(root); break;
                 // ⭐ 種族ごとの卵を焼く（意匠は `Core.EggSkins`）。⚠️ 上書きする道具
-                case "egg-art": EggSkinPng.Run(".."); break;
+                case "egg-art": EggSkinPng.Run(root); break;
                 // ⭐ 模様と色を差し替えて見比べる見本（`shots/` へ・ゲームは読まない）
-                case "egg-try": EggTry.Run("..", args[1..]); break;
+                case "egg-try": EggTry.Run(root, args[1..]); break;
                 // ⭐ pixelizer で起こした画面を、絵と骨組みに落とす
                 //    （wiki/開発/画面をドット絵で組む.md）。⚠️ 既存の骨組みは上書きしない。
                 case "import-screen":
@@ -141,7 +171,7 @@ namespace EggCommand.Sim
                         Console.WriteLine("  例: sim import-screen ../art/screens/home.pixelizer.json");
                         return 1;
                     }
-                    return ImportScreen.Run("..", args[1]);
+                    return ImportScreen.Run(root, args[1]);
                 case "determinism": Console.WriteLine(Determinism.Run()); break;   // ⚠️ 他の出力と同じく cwd 相対（game から打つ）
                 case "strategy":
                     // ⭐ `sim strategy 4` で4対4。⚠️ 既定を変えない（3対3の記録が読めなくなる）

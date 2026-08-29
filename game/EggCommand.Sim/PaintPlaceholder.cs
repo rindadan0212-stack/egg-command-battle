@@ -165,22 +165,33 @@ namespace EggCommand.Sim
 
         private static void WriteManifest(string outDir)
         {
+            var lines = ComputeManifestLines(outDir);
+            File.WriteAllText(Path.Combine(outDir, ManifestFile),
+                string.Join("\n", lines) + (lines.Count > 0 ? "\n" : ""), new UTF8Encoding(false));
+        }
+
+        /// <summary>⭐ **書き込みをしない側**（`WriteManifest` と、目録の鮮度を見る検査
+        /// `EggCommand.Tests` の両方がここを呼ぶ ── 判断を2か所に書かない）。
+        /// フォルダの実物 PNG から「名前 幅 高」の行を組み立てるだけで、ファイルへは書かない。</summary>
+        public static List<string> ComputeManifestLines(string dir)
+        {
             var lines = new List<string>();
-            foreach (var path in Directory.GetFiles(outDir, "*.png").OrderBy(p => p, StringComparer.Ordinal))
+            foreach (var path in Directory.GetFiles(dir, "*.png").OrderBy(p => p, StringComparer.Ordinal))
             {
                 string name = Path.GetFileNameWithoutExtension(path);
                 var bytes = File.ReadAllBytes(path);
                 ReadPngSize(bytes, out int w, out int h);
                 lines.Add($"{name} {w} {h}");
             }
-            File.WriteAllText(Path.Combine(outDir, ManifestFile),
-                string.Join("\n", lines) + (lines.Count > 0 ? "\n" : ""), new UTF8Encoding(false));
+            return lines;
         }
 
         /// <summary>PNG の IHDR から幅・高さだけを読む。⚠️ 色の型（インデックス／RGBA）を
         /// 問わない ── 仮置き（インデックスカラー）も、いつか作者が描く本物（RGBA かもしれない）も、
-        /// 同じ数え方で大きさが読める。</summary>
-        private static void ReadPngSize(byte[] png, out int width, out int height)
+        /// 同じ数え方で大きさが読める。
+        /// ⭐ `internal`（`private` から変更）── `IconManifestTool` も同じ読み方を要るので、
+        /// IHDR パースを2か所に書かない（同じ EggCommand.Sim アセンブリ内）。</summary>
+        internal static void ReadPngSize(byte[] png, out int width, out int height)
         {
             if (png.Length < 24) throw new ArgumentException("PNG が短すぎる（IHDR が読めない）");
             width = (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19];

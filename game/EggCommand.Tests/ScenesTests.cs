@@ -54,4 +54,67 @@ public class ScenesTests
         Assert.True(missingFromDisk.Count == 0,
             "Scenes.All にあるのに実物が無い骨組み: " + string.Join(", ", missingFromDisk));
     }
+
+    /// <summary>⭐ `S(...)` の1行ぶんを、id と付け足しの旗に分けて読む。</summary>
+    private static Dictionary<string, string> SceneFlags()
+    {
+        string text = File.ReadAllText(Path.Combine(WebSrcDir, "Scenes.cs"));
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        // ⚠️ 行末までを見る（`crowned: true` は `byPart: true` の後ろに来る）。
+        foreach (Match m in Regex.Matches(text, "S\\(\"([a-z]+)\"[^\\r\\n]*"))
+            map[m.Groups[1].Value] = m.Value;
+        return map;
+    }
+
+    /// <summary>🔴 **`crowned` は「`use=` で差し込まれる部品」と1対1**（2026-08-29）。
+    ///
+    /// ⚠️ もとは `byPart` 1つが「盤で選ぶときの探し方」と「値に冠が付くか」を兼ねていた。
+    /// コードから描く4枚（`slot`/`unit`/`square`/`walker`）を `byPart: true` にした途端、
+    /// 「機能を選ぶ」の候補が**0件**になった ── この4枚はどの骨組みからも `use=` されて
+    /// いないので冠が逆算できず、`TapCandidates` が空を返していたため。
+    ///
+    /// ⭐ 実物の `use=` を数えて突き合わせるので、部品を増減しても勝手に追随する
+    /// （手で書いた一覧を持たない）。</summary>
+    [Fact]
+    public void 冠が付く部品は実物のuseと1対1()
+    {
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var path in Directory.GetFiles(LayoutsDir, "*.txt"))
+            foreach (Match m in Regex.Matches(File.ReadAllText(path), @"\buse=([a-z]+)"))
+                used.Add(m.Groups[1].Value);
+
+        var flags = SceneFlags();
+        var crowned = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var pair in flags)
+            if (pair.Value.Contains("crowned: true", StringComparison.Ordinal)) crowned.Add(pair.Key);
+
+        var missing = new List<string>();
+        foreach (var id in used) if (!crowned.Contains(id)) missing.Add(id);
+        Assert.True(missing.Count == 0,
+            "`use=` で差されているのに crowned: true が無い（機能を選ぶで冠が逆算されない）: "
+            + string.Join(", ", missing));
+
+        var extra = new List<string>();
+        foreach (var id in crowned) if (!used.Contains(id)) extra.Add(id);
+        Assert.True(extra.Count == 0,
+            "crowned: true なのに `use=` されていない（機能を選ぶの候補が0件になる）: "
+            + string.Join(", ", extra));
+    }
+
+    /// <summary>⭐ コードから描く4枚は `byPart`（探し方）は true・`crowned`（冠）は false。
+    /// ⚠️ この2つを再び1つに戻さないための杭 ── 兼ねると候補0件の不具合が再発する。</summary>
+    [Fact]
+    public void コードから描く4枚は探し方だけがdata_part()
+    {
+        var flags = SceneFlags();
+        foreach (var id in new[] { "slot", "unit", "square", "walker" })
+        {
+            Assert.True(flags.ContainsKey(id), $"Scenes.All に {id} が無い");
+            string line = flags[id];
+            Assert.True(line.Contains("byPart: true", StringComparison.Ordinal),
+                $"{id}: コードから描く4枚は data-part で選ぶので byPart: true が要る");
+            Assert.False(line.Contains("crowned: true", StringComparison.Ordinal),
+                $"{id}: `use=` されないので冠は無い ── crowned: true にすると候補が0件になる");
+        }
+    }
 }
