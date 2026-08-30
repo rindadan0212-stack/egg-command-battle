@@ -101,6 +101,25 @@ namespace EggCommand.Core
         public double Spawn;
         public long LastUnix;
         public double EnemyHp, Charge;
+        /// <summary>放置の拍。⚠️ この欄が無い v1 保存は既定の Come として読む。</summary>
+        public IdlePhase Phase = IdlePhase.Come;
+        /// <summary>いまの拍（Fight なら次の手番）までの残り秒。</summary>
+        public double PhaseLeft = Idle.ComeSeconds;
+        /// <summary>いまの相手へ当てた回数と累計ダメージ。</summary>
+        public int Struck, Damage;
+        /// <summary>敵の行動ゲージ。</summary>
+        public int FoeGauge;
+        /// <summary>EXP の端数と、最後に清算した時刻の秒未満の端数。
+        /// ⭐ これも戻さないと、保存直後の続行で報酬／拍の進み方がずれる。</summary>
+        public double ExpCarry, Fine;
+        /// <summary>いま出ている相手の見た目。⚠️ v1 保存には無いので 0/通常色として読む。</summary>
+        public int FoeSpecies, FoePalette;
+        /// <summary>味方ごとの行動ゲージ。Unity の JsonUtility は辞書を書けないため、添字で対にする。</summary>
+        public List<string> GaugeIds = new List<string>();
+        public List<int> GaugeValues = new List<int>();
+        /// <summary>味方ごとの残りHP割合。Unity の JsonUtility は辞書を書けないため、添字で対にする。</summary>
+        public List<string> HealthIds = new List<string>();
+        public List<double> HealthValues = new List<double>();
         public List<string> DownIds = new List<string>();
         public List<long> DownUntil = new List<long>();
     }
@@ -109,7 +128,7 @@ namespace EggCommand.Core
     public sealed class GameSave
     {
         /// <summary>保存の版。⚠️ 形を変えたら上げる。合わなければ読まずに作り直す。</summary>
-        public int Version = 1;
+        public int Version = Snapshots.Version;
         public int Seed, Serial, EncounterSerial, Slots;
         public List<CreatureSave> Creatures = new List<CreatureSave>();
         public List<EggSave> Eggs = new List<EggSave>();
@@ -147,7 +166,7 @@ namespace EggCommand.Core
     /// </summary>
     public static class Snapshots
     {
-        public const int Version = 1;
+        public const int Version = 2;
 
         /// <summary>乱数の並び。⚠️ **順番を変えない**（保存した列と対応が崩れる）。
         /// ⭐ 足すのは末尾だけ。古い保存は短いので、読む側は届いたぶんだけ戻す。</summary>
@@ -161,6 +180,7 @@ namespace EggCommand.Core
             //    末尾に足すかぎり**古い保存もそのまま読める**。
             game.RngBattle,
             game.RngPalette,
+            game.RngIdle,
         };
 
         public static GameSave Save(Game game)
@@ -205,6 +225,25 @@ namespace EggCommand.Core
             save.Idle.LastUnix = game.Idle.LastUnix;
             save.Idle.EnemyHp = game.Idle.EnemyHp;
             save.Idle.Charge = game.Idle.Charge;
+            save.Idle.Phase = game.Idle.Phase;
+            save.Idle.PhaseLeft = game.Idle.PhaseLeft;
+            save.Idle.Struck = game.Idle.Struck;
+            save.Idle.Damage = game.Idle.Damage;
+            save.Idle.FoeGauge = game.Idle.FoeGauge;
+            save.Idle.ExpCarry = game.Idle.ExpCarry;
+            save.Idle.Fine = game.Idle.Fine;
+            save.Idle.FoeSpecies = game.Idle.FoeSpecies;
+            save.Idle.FoePalette = game.Idle.FoePalette;
+            foreach (var pair in game.Idle.Gauge)
+            {
+                save.Idle.GaugeIds.Add(pair.Key);
+                save.Idle.GaugeValues.Add(pair.Value);
+            }
+            foreach (var pair in game.Idle.Health)
+            {
+                save.Idle.HealthIds.Add(pair.Key);
+                save.Idle.HealthValues.Add(pair.Value);
+            }
             foreach (var pair in game.Idle.DownUntil)
             {
                 save.Idle.DownIds.Add(pair.Key);
@@ -318,6 +357,25 @@ namespace EggCommand.Core
             game.Idle.LastUnix = save.Idle.LastUnix;
             game.Idle.EnemyHp = save.Idle.EnemyHp;
             game.Idle.Charge = save.Idle.Charge;
+            game.Idle.Phase = save.Idle.Phase;
+            game.Idle.PhaseLeft = save.Idle.PhaseLeft;
+            game.Idle.Struck = save.Idle.Struck;
+            game.Idle.Damage = save.Idle.Damage;
+            game.Idle.FoeGauge = save.Idle.FoeGauge;
+            game.Idle.ExpCarry = save.Idle.ExpCarry;
+            game.Idle.Fine = save.Idle.Fine;
+            game.Idle.FoeSpecies = save.Idle.FoeSpecies;
+            game.Idle.FoePalette = save.Idle.FoePalette;
+            int gaugePairs = Math.Min(save.Idle.GaugeIds.Count, save.Idle.GaugeValues.Count);
+            for (int i = 0; i < gaugePairs; i++)
+            {
+                game.Idle.Gauge[save.Idle.GaugeIds[i]] = save.Idle.GaugeValues[i];
+            }
+            int healthPairs = Math.Min(save.Idle.HealthIds.Count, save.Idle.HealthValues.Count);
+            for (int i = 0; i < healthPairs; i++)
+            {
+                game.Idle.Health[save.Idle.HealthIds[i]] = save.Idle.HealthValues[i];
+            }
             int pairs = Math.Min(save.Idle.DownIds.Count, save.Idle.DownUntil.Count);
             for (int i = 0; i < pairs; i++)
             {

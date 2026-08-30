@@ -49,20 +49,24 @@ namespace EggCommand.Core
     /// 表示する文字列はここで一度だけ決める ── View 側（Unity / Web）に
     /// 「この種類なら％を付ける」のような分岐を持たせない。
     ///
-    /// ⚠️ **持続の残りターン（毒の `(4)` にあたる部分）はここに無い。**
-    /// 絵の並びは数を1つしか置けないので、削ってある（`wiki/開発/課題.md` に送った）。</summary>
+    /// ⭐ <see cref="Turns"/> は右上へ重ねる残り回数。<see cref="Text"/> は従来の
+    /// 詳細（％・スタックなど）で、絵の下には置かない。View 側が種類ごとの残り方を
+    /// 推測しないよう、ここで両方を決める。</summary>
     public readonly struct StatusBadge
     {
         public readonly StatusKind Kind;
         /// <summary>添える数。⚠️ 種類によって％だったり×スタックだったりする。</summary>
         public readonly string Text;
+        /// <summary>右上へ重ねる残り回数。切れない修正は ∞。</summary>
+        public readonly string Turns;
         /// <summary>良い側か。⭐ 色分け（好悪）にだけ使う。</summary>
         public readonly bool Good;
 
-        public StatusBadge(StatusKind kind, string text, bool good)
+        public StatusBadge(StatusKind kind, string text, bool good, string? turns = null)
         {
             Kind = kind;
             Text = text;
+            Turns = turns ?? text;
             Good = good;
         }
     }
@@ -2348,11 +2352,11 @@ namespace EggCommand.Core
             var s = unit.Status;
             var output = new List<StatusBadge>();
             if (IsOn(s.Atk)) output.Add(new StatusBadge(StatusKind.Atk,
-                Sign(s.Atk.Percent) + "%" + Ever(s.Atk), s.Atk.Percent > 0));
+                Sign(s.Atk.Percent) + "%" + Ever(s.Atk), s.Atk.Percent > 0, Remaining(s.Atk)));
             if (IsOn(s.Def)) output.Add(new StatusBadge(StatusKind.Def,
-                Sign(s.Def.Percent) + "%" + Ever(s.Def), s.Def.Percent > 0));
+                Sign(s.Def.Percent) + "%" + Ever(s.Def), s.Def.Percent > 0, Remaining(s.Def)));
             if (IsOn(s.Spd)) output.Add(new StatusBadge(StatusKind.Spd,
-                Sign(s.Spd.Percent) + "%" + Ever(s.Spd), s.Spd.Percent > 0));
+                Sign(s.Spd.Percent) + "%" + Ever(s.Spd), s.Spd.Percent > 0, Remaining(s.Spd)));
             // ⚠️ 良い/悪いは「**この札を持っている個体にとって**」で判じる。
             //    ⭐ 掛けた側の得失ではない ── 敵に付けた弱化は、敵の列に**悪い側の色**で出る。
             //    🔴 挑発を良い側にしていた（2026-08-23 修正）。挑発は**相手に付ける弱化**
@@ -2360,8 +2364,8 @@ namespace EggCommand.Core
             //       ⚠️ 緑で出ると「相手が強くなった」と読めてしまう ── 狙い先を選ぶ、
             //       まさにその瞬間に逆の意味を出していた。
             //    ⭐ ブロックも悪い側（外からの回復・強化を弾かれてしまう）。
-            if (s.Poison.Turns > 0) output.Add(new StatusBadge(StatusKind.Poison, "×" + s.Poison.Stacks, false));
-            if (s.Regen.Turns > 0) output.Add(new StatusBadge(StatusKind.Regen, "×" + s.Regen.Stacks, true));
+            if (s.Poison.Turns > 0) output.Add(new StatusBadge(StatusKind.Poison, "×" + s.Poison.Stacks, false, s.Poison.Turns.ToString()));
+            if (s.Regen.Turns > 0) output.Add(new StatusBadge(StatusKind.Regen, "×" + s.Regen.Stacks, true, s.Regen.Turns.ToString()));
             if (s.Shield > 0) output.Add(new StatusBadge(StatusKind.Shield, s.Shield.ToString(), true));
             if (s.Stun > 0) output.Add(new StatusBadge(StatusKind.Stun, s.Stun.ToString(), false));
             if (s.Taunt > 0) output.Add(new StatusBadge(StatusKind.Taunt, s.Taunt.ToString(), false));
@@ -2379,6 +2383,8 @@ namespace EggCommand.Core
         }
 
         private static string Sign(int n) => n > 0 ? $"+{n}" : n.ToString();
+
+        private static string Remaining(Modifier mod) => mod.Turns < 0 ? "∞" : mod.Turns.ToString();
 
         /// <summary>⭐ 切れない持続には印を付ける。⚠️ 残り回数を出せないので、
         /// 付けないと「あと1回」と見分けが付かない。</summary>

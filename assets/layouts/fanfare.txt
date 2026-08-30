@@ -30,6 +30,11 @@ pop      box     140  420   800  800
   #    居ないので、隣と見比べて「大きい種族だ」と誤解される心配が無い。
   # ⭐ 512 は 64x8 ── 64ドットの種族は 8px/ドット、16ドットの種族は 32px/ドット。
   #    ⚠️ 以前は 480 の枠に 256px（64ドット）／64px（16ドット）しか出ていなかった。
+  # ⭐ **絵の下の影**（2026-08-30・作者の指示「キャラクターが映っている画面ではすべて同様に」）。
+  #    ⚠️ 絵より前に書く（下に敷くため）。⭐ 裾（600）に 40 食い込ませてある。
+  #    ⚠️ 濃さは `Face.ShadowCss` の1つだけ ── `unit.txt` の影と同じ物。
+  # ⚠️ 種類は `bar`（`round` は正方形で描かれるので平たい影にならない ── `unit.txt` 参照）。
+  shade  bar     280  560   240  60    bind=shade
   art    pixel   144  88    512  512   bind=art
   stars  label   0    620   800  80    size=56 anchor=center bind=stars when=stars
 line     label   40   1330  1000 200   size=54 anchor=upper-center wrap=yes bind=line
@@ -54,3 +59,17 @@ choice   box     140  1560  800  112
   #    ⚠️ 新しい画面は作らない ── Sheet.Box ＋ 本人選択（ClaimBorn）で、BOX の升を
   #    押したのと同じ姿（詳細札＋一覧）になる。
   detail button  420  0     380  112   size=30 tap=detail when=creature text=くわしく見る
+
+# 🔴 **その場で重ねて見せる詳細**（2026-08-30・作者の指示「BOXに飛ぶのではなく
+#    BOXで表示する詳細と同じものを見れるだけに」）。
+# ⭐ **中身は BOX とまったく同じ部品**（`use=panel`）── 画面ごとに組み立てを書くと、
+#    同じ個体が場所によって違う顔になる（`panel.txt` の冒頭に書いてある通り）。
+# ⚠️ `panel.txt` には押しどころが1つも無い（強化も分解も `box.txt` 側の釦）ので、
+#    差し込むだけで「読むだけ」になる ── 見せないための細工は要らない。
+# ⚠️ **`choice`（分解／くわしく見る）は同時に出さない** ── 出すと詳細の上に釦が
+#    重なる。`Sheets.Fanfare` の `when=creature` が `!BornLook` を見て消す。
+# ⚠️ 閉じる釦は**押しどころを持たない箱の中**に置く（`choice` と同じ理由 ──
+#    `dim` が `tap=cheer` を持つので、直下の兄弟に釦を置くと重なり検査に掛かる）。
+look     box     0    0     1080 1920  when=look
+  sheetp card    48   340   984  760   use=panel
+  lookx  button  280  1160  520  112   size=34 tap=detail text=閉じる

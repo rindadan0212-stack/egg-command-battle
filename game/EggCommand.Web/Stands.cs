@@ -15,9 +15,19 @@ namespace EggCommand.Web;
 public static class Stands
 {
     /// <summary>1体ぶんの器（`unit.txt` の大きさ）。</summary>
-    public const float High = 350f;
-    /// <summary>詰めないときの間隔。⚠️ 高さより少し広い（触れる隙間を残す）。</summary>
-    public const float Step = 380f;
+    public const float High = 360f;
+    /// <summary>詰めないときの間隔。⚠️ 高さより少し広い（触れる隙間を残す）。
+    ///
+    /// 🔴 **380 → 360**（2026-08-30・作者の指示「戦闘中のキャラすべてを大きく」）。
+    /// ⚠️ 縮め率は `step / Step` なので、**間隔の基準を詰めると縮め率が 1 に届く**
+    /// ── 4体・列の丈 1440 のとき `step` は 360 で頭打ちになり、縮め率がちょうど 1。
+    /// ⭐ これが効くのは**大きさだけの話ではない**: 縮め率が半端（0.933）だと
+    /// `transform: scale()` が絵に掛かり、`LayoutDom.FitArtStyle` がせっかく
+    /// 「64升あたり3画素」の整数で置いた絵が **2.8 画素/升** に崩れて濁っていた
+    /// （実測 2026-08-30: 192px の枠の絵が 179px で描かれていた）。
+    /// 縮め率 1 なら 192px そのまま＝**3画素/升の整数**に戻る。
+    /// ⚠️ 隙間は 30 → 10 に狭まる（`High` 350 との差）。触れてはいない。</summary>
+    public const float Step = 360f;
 
     /// <summary>並べたときの、i 番目の上端と縮め率。</summary>
     public readonly record struct Spot(float Left, float Top, float Shrink);
@@ -54,7 +64,7 @@ public static class Stands
         var sb = new StringBuilder();
         sb.Append("<div class=\"n\" style=\"left:").Append(Px(spot.Left))
           .Append(";top:").Append(Px(spot.Top))
-          .Append(";width:340px;height:350px;transform-origin:0 0;transform:scale(")
+          .Append(";width:340px;height:360px;transform-origin:0 0;transform:scale(")
           .Append(spot.Shrink.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture))
           .Append(")\">")
           // ⚠️ `part` を落とさない（`unit.txt` の行番号が戦闘の盤へ漏れる）。

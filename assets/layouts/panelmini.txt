@@ -14,10 +14,13 @@ elem      round   8     8     42   42    bind=elem
 #    ⭐ 128 は 64x2。⚠️ 元の 172 の真ん中（108,164）に載るよう 44,100 に置いてある。
 art       pixel   44    100   128  128   bind=art
 name      label   212   26    226  36    size=23 anchor=left bind=name
-lv        label   212   62    226  24    size=15 ink=dim anchor=right bind=lv
-sub       label   212   86    226  22    size=13 ink=faint anchor=left bind=sub
+# 🔴 **Lv を大きく**（2026-08-30・作者の指示「大きく表示」）。15 → 22。
+#    ⚠️ `panel.txt` と同じ直し ── 器が小さいぶん数だけ控えめにしてある。
+lv        label   212   62    226  30    size=22 anchor=right bind=lv
+# 🔴 **`sub`（`c174　2代　変異0`）は消した**（2026-08-30・作者の指示。`panel.txt` と対）。
 
-table     box     212   118   226  184
+# ⭐ `sub` を外したぶん 118 → 100 へ上げた（2026-08-30）。
+table     box     212   100   226  184
   hwild   label   108   0     44   22    size=13 ink=faint anchor=right text=素質
   hgain   label   158   0     62   22    size=13 ink=faint anchor=right text=強化
   hline   line    0     20    226  2

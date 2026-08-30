@@ -236,6 +236,9 @@ public sealed class Shell
     public Unit? CastAim;
     /// <summary>盤へ出す演出。⭐ **描いた側が空にする**（一度出したら消える）。</summary>
     public readonly List<Spark> Sparks = new();
+    /// <summary>倒れた拍だけ伏せておく墓。砂煙の終わりで JS が見せ、次の Draw では外す。
+    /// ⚠️ 生死の出所ではない ── 生死は Core の HP だけで判じる。</summary>
+    public readonly HashSet<string> PendingGraves = new();
 
     /// <summary>いま出ている告知（「WIN」など）。⚠️ 無ければ null。
     /// ⭐ ボタンは置かない ── 結果であって、選択ではない。</summary>
@@ -244,6 +247,12 @@ public sealed class Shell
     /// <summary>いま出ている祝い（卵を得た・生まれた）。⚠️ 無ければ null（出さない）。
     /// ⭐ Banner と違って**自分では消えない** ── 覆いを押す（`case "cheer"`）まで出しっぱなし。</summary>
     public Cheer? Cheer_;
+
+    /// <summary>⭐ 祝いの上に**詳細を重ねて見せているか**（2026-08-30・作者の指示
+    /// 「BOXに飛ぶのではなくBOXで表示する詳細と同じものを見れるだけに」）。
+    /// ⚠️ 祝いを閉じる（`case "cheer"`）ときに必ず下ろす ── 上げたまま残すと、
+    /// 次に生まれた子の祝いが**いきなり詳細付きで開く**。</summary>
+    public bool BornLook;
 
     // ── すごろくの拍 ──────────────────────────────────
     /// <summary>さいころ・駒がどこまで進んだか。</summary>
@@ -325,17 +334,28 @@ public sealed class Shell
     /// <param name="at">繰り返しの番号（入れ子なら `2#1`）。⚠️ 無ければ空。</param>
     public void Tap(string what, string at)
     {
-        int i = Index(at);
-        switch (what)
+        if (UiCommands.TryParseTap(what, at, out var command)) Tap(command);
+    }
+
+    /// <summary>解析済みの短押しを実行する。外部文字列はここより前で検証済み。</summary>
+    public void Tap(UiCommand command)
+    {
+        if (!UiCommands.IsValidTap(command) || !HasValidTapIndex(command)) return;
+        int i = command.Index;
+        string at = command.At;
+        switch (command.Kind)
         {
-            case "tab":
+            case UiActionKind.Tab:
                 // ⚠️ 画面を移るときに並べ替えを畳む（Unity 版と同じ ── 一覧へ戻るたびに
                 //    開いていると、見たいのは一覧なのに毎回畳む操作が要る）
                 SortOpen = false;
                 Open = Under = Panel.None;
                 Now_Sheet = i switch
                 {
-                    1 => Sheet.Nests, 2 => Sheet.Breed, 3 => Sheet.Box, _ => Sheet.Home,
+                    1 => Sheet.Nests, 2 => Sheet.Breed, 3 => Sheet.Box,
+                    // ⭐ 5つ目（2026-08-30）。⚠️ 旧 `trials` の受けはここへ畳んだ
+                    //    ── 同じ行き先へ2つの道を残すと、片方だけ直す事故が起きる。
+                    4 => Sheet.Trial, _ => Sheet.Home,
                 };
                 break;
 
@@ -345,54 +365,68 @@ public sealed class Shell
             //    ⭐ `extra` の行き先はここに来た（ホームの図鑑 → `menu`／探索の編成 → `party`）。
             // ⚠️ **閉じたら選びかけも捨てる。**⭐ 残すと、次に開いたとき
             //    身に覚えのない個体が選ばれていて、そのまま分解できてしまう
-            case "close": Open = Under; Under = Panel.None; Melts.Clear(); Feeds.Clear(); break;
+            case UiActionKind.Close: Open = Under; Under = Panel.None; Melts.Clear(); Feeds.Clear(); break;
 
             // ⭐ 祝い（Fanfare）を閉じる。⚠️ Unity 版も覆い全体が close ボタン
             //    （`Fanfare.prefab` の `Dim` が Image と Button を兼ねている）── 同じ形。
-            case "cheer": Cheer_ = null; break;
+            case UiActionKind.Cheer: Cheer_ = null; BornLook = false; break;
 
             // ⭐ **輪の外のものを1つにまとめた入口**（2026-08-29・作者の指示
             //    「図鑑や保存などのボタンにしか使わないものを一か所にまとめ、右上に」）。
             //    ⚠️ ホームの右上にしか置いていない ── 遊びの輪（探索→潜入→戦闘→帰還）は
             //    下の帯が持つので、そこへ混ぜない。
-            case "menu": Open = Panel.Menu; break;
+            case UiActionKind.Menu: Open = Panel.Menu; break;
             // ⭐ メニューの4つ。⚠️ どれも**先にメニューを閉じてから**行き先を決める
             //    （閉じないと、行った先の上にメニューが残って被る）。
-            case "book": Open = Under = Panel.None; Now_Sheet = Sheet.Book; SortOpen = false; break;
+            case UiActionKind.Book: Open = Under = Panel.None; Now_Sheet = Sheet.Book; SortOpen = false; break;
 
-            case "bar-toggle": SortOpen = !SortOpen; break;
-            case "chips-filter": Filter = Filters.Keys[i]; break;
-            case "chips-sort": Sort = Storages.SortKeys[i]; break;
-            case "chips-basis": Basis = Storages.Bases[i]; break;
+            case UiActionKind.BarToggle: SortOpen = !SortOpen; break;
+            case UiActionKind.ChipsFilter: Filter = Filters.Keys[i]; break;
+            case UiActionKind.ChipsSort: Sort = Storages.SortKeys[i]; break;
+            case UiActionKind.ChipsBasis: Basis = Storages.Bases[i]; break;
 
-            case "one": Choose(i); break;
+            case UiActionKind.One: Choose(i); break;
 
             // ── 遊びを動かす ────────────────────────
-            case "nest": Deeds.Dive(this, i); break;
-            case "boss": Deeds.Boss(this); break;
-            case "roll": Deeds.Roll(this); break;
-            case "square": Deeds.Step(this, i); break;
-            case "pay": Deeds.Pay(this); break;
-            case "skip": Deeds.Pass(this); break;
-            case "s0": Deeds.Strike(this, 0); break;
-            case "s1": Deeds.Strike(this, 1); break;
-            case "s2": Deeds.Strike(this, 2); break;
+            case UiActionKind.Nest: Deeds.Dive(this, i); break;
+            case UiActionKind.Boss: Deeds.Boss(this); break;
+            case UiActionKind.Roll: Deeds.Roll(this); break;
+            case UiActionKind.Square: Deeds.Step(this, i); break;
+            case UiActionKind.Pay: Deeds.Pay(this); break;
+            case UiActionKind.Skip: Deeds.Pass(this); break;
+            case UiActionKind.S0: Deeds.Strike(this, 0); break;
+            case UiActionKind.S1: Deeds.Strike(this, 1); break;
+            case UiActionKind.S2: Deeds.Strike(this, 2); break;
             // ⭐ 体を押して狙い先にする（敵味方とも）。もう一度押すと外れる。
             //    ⚠️ 番号ではなく `a0`/`f2` の形で来るので `at` をそのまま渡す。
-            case "aim": Deeds.Aim(this, at); break;
-            case "pick": Auto = !Auto; break;
+            case UiActionKind.Aim: Deeds.Aim(this, at); break;
+            case UiActionKind.Pick: Auto = !Auto; break;
             // ⭐ **取り返しがつかないので一度だけ確かめる**（押し間違いで負けにしない）
-            case "give": if (Fight_ != null) Open = Panel.Ask; break;
-            case "stop": Open = Panel.None; break;
-            case "go": Deeds.Concede(this); break;
+            case UiActionKind.Give: if (Fight_ != null) Open = Panel.Ask; break;
+            // ⭐ **いま手番の体の特性を読む**（2026-08-30・作者の指示「特性を確認できる
+            //    ボタン追加」）。⚠️ 特性は勝ち負けを分けるのに、戦闘の盤には名前すら
+            //    出ていなかった（BOX の札を開く道も戦闘中は無い）。
+            // ⭐ 覆いでなく一言（`Say`）で出す ── 覆いを開くと `Deeds.Beat` が
+            //    `Open != None` で時を止め、戦いの流れが切れる。
+            // ⚠️ 読む相手は**手札の主**（`StandingAlly`）── `Standing` は敵の番なら
+            //    敵を返すので、押した人の意図（自分の特性を確かめる）とずれる。
+            case UiActionKind.Feat:
+                if (Fight_ is BattleState fight
+                    && EggCommand.Core.Battle.StandingAlly(fight) is Unit who)
+                    Say = Creatures.TraitOf(who.Creature) is Trait trait
+                        ? $"特性　{trait.Name} — {trait.Gist}"
+                        : "この子に特性は無い";
+                break;
+            case UiActionKind.Stop: Open = Panel.None; break;
+            case UiActionKind.Go: Deeds.Concede(this); break;
 
             // ⭐ 空き枠を押したら、そのとき初めて卵の在庫が開く（棚を常に出しておかない）
-            case "slot": Deeds.Slot(this, i); break;
-            case "egg": Deeds.Warm(this, i); break;
+            case UiActionKind.Slot: Deeds.Slot(this, i); break;
+            case UiActionKind.Egg: Deeds.Warm(this, i); break;
             // ⭐ 棚の並べ替え（2026-08-29・作者の指示「星、入手順」）。
             //    ⚠️ 押しどころは2つに分けてある ── 繰り返しでない節点は添字を持たない。
-            case "eggstar": EggSort = "star"; break;
-            case "eggnew": EggSort = "new"; break;
+            case UiActionKind.EggStar: EggSort = "star"; break;
+            case UiActionKind.EggNew: EggSort = "new"; break;
 
             // ── 育てる ──────────────────────────────
             // ⚠️ 分解は**開くだけ**。⭐ 減るのは札の中の「分解する」を押したとき
@@ -404,7 +438,7 @@ public sealed class Shell
             //    ⚠️ `ClaimBorn` が `Picked`=本人 にするため、素の `Deeds.Food` からは
             //    外れてしまう ──「`Melts` に居る個体は `Food` が外さない」（`Deeds.cs`）と
             //    対で成り立つ。
-            case "fuse":
+            case UiActionKind.Fuse:
             {
                 string? born = ClaimBorn();
                 Melts.Clear();
@@ -412,26 +446,34 @@ public sealed class Shell
                 Open = Panel.Fuse;
                 break;
             }
-            case "melt": Deeds.Melt(this); break;
-            case "train": Feeds.Clear(); Slot_ = 0; Open = Panel.Train; break;
-            case "row": Slot_ = i; Feeds.Clear(); break;
-            case "chip": Deeds.Feed_(this, i); break;
-            case "feed": Deeds.Feed(this); break;
+            case UiActionKind.Melt: Deeds.Melt(this); break;
+            case UiActionKind.Train: Feeds.Clear(); Slot_ = 0; Open = Panel.Train; break;
+            case UiActionKind.Row:
+                if (i >= 0 && i < (PickedOne()?.SkillPoints.Length ?? 0)) { Slot_ = i; Feeds.Clear(); }
+                break;
+            case UiActionKind.Chip: Deeds.Feed_(this, i); break;
+            case UiActionKind.Feed: Deeds.Feed(this); break;
             // 🔴 **「育てる」は札を開くだけ**（2026-08-26・ARK式の自由配分）。
             //    ⚠️ 以前はここで直に Lv＋1 していたが、振り先を選ぶ場所が要る。
             //    ⭐ EXP→点（`levelup`）も、点を振る（`spend`）も、その札の中でやる。
             // ⚠️ 祝いの「くわしく見る」はもうここでない ── detail（下）へ繋ぎ直した
             //    （2026-08-29・grow は全行が不可逆の EXP 消費で「読む」着地として誤り）。
-            case "grow": Open = Panel.Grow; break;
-            // ⭐ 祝いの「くわしく見る」（`fanfare.txt` の detail ── 2026-08-29）。BOX へ着地する。
-            //    ⚠️ 新しい画面は作らない ── タブで BOX を開いたのと同じ後始末
-            //    （SortOpen / Open / Under）をして、`ClaimBorn` が選んだ本人の詳細札を出す。
-            case "detail": ClaimBorn(); SortOpen = false; Open = Under = Panel.None; Now_Sheet = Sheet.Box; break;
+            case UiActionKind.Grow: Open = Panel.Grow; break;
+            // ⭐ 祝いの「くわしく見る」。🔴 **BOX へ飛ばさず、その場で重ねて見せる**
+            //    （2026-08-30・作者の指示「BOXに飛ぶのではなくBOXで表示する詳細と
+            //    同じものを見れるだけに」）。⚠️ 前は画面ごと BOX へ移していたので、
+            //    **祝いが終わってしまい**、続けて「分解する」を選べなかった。
+            // ⭐ 同じ `detail` が開くと閉じるを兼ねる（札の「閉じる」も `tap=detail`）
+            //    ── 名前を増やさないため。⚠️ `TapCatalog` は増えない。
+            // 🔴 **`ClaimBorn()` を呼ばない。**あれは `Cheer_` を null にする＝祝いを
+            //    閉じてしまう ── 重ねて見せるには祝いが生きていなければならない。
+            //    ⭐ 見せる相手は `Cheer_.CreatureId` から引く（`Sheets.Fanfare`）。
+            case UiActionKind.Detail: BornLook = !BornLook; break;
             // ⭐ 家系図（2026-08-29・作者の指示）。⚠️ 押しどころ自体が
             //    `Generation < 2` では出ない（`Sheets.Box` の `Tappable` ── 2世代未満は
             //    墓標を辿っても何も出ないので、そもそも押せなくしてある）。
             //    ⭐ `Cheer_` からは開けない（`fuse`/`grow` と違い `ClaimBorn()` は呼ばない）。
-            case "tree": Open = Panel.Tree; break;
+            case UiActionKind.Tree: Open = Panel.Tree; break;
             // 🔴 二度手間解消（2026-08-29・作者の指示「点を振る前に点を獲得するのが
             //    二度手間」）。⚠️ 以前は `levelup`（EXP→点）と `spend`（点→ステ）が
             //    別の押しどころだった。⭐ 判断はここ1か所だけに置く（`Deeds.cs` は
@@ -441,12 +483,12 @@ public sealed class Shell
             //    そちらを先に使う ── でないと残りを素通りして EXP だけ余計に減る。
             // ⭐ EXP→点→ステを1回で。⚠️ 中身は `Deeds.SpendPoint` が唯一の出所
             //    （ここへ書き写さない ── 2026-08-29 に一度書き写されていた）
-            case "spend": Deeds.SpendPoint(this, i); break;
+            case UiActionKind.Spend: Deeds.SpendPoint(this, i); break;
 
             // ── 配合 ────────────────────────────────
-            case "pa": ParentA = null; break;
-            case "pb": ParentB = null; break;
-            case "breed": Deeds.Breed(this); break;
+            case UiActionKind.Pa: ParentA = null; break;
+            case UiActionKind.Pb: ParentB = null; break;
+            case UiActionKind.Breed: Deeds.Breed(this); break;
 
             // ── 編成 ────────────────────────────────
             // ⭐ **どちらの編成かは、押した画面が決める。**探索から押したときだけ巣の編成、
@@ -454,21 +496,23 @@ public sealed class Shell
             //    ⚠️ 2026-08-29 まで探索は右肩の `extra` から入っていたが、上のバーを
             //    外したので `nests.txt` の下端の釦から同じ `party` に入る ── 行き先が
             //    2つに割れないよう、`IdleParty` の決め方をここ1か所に集めた。
-            case "party": IdleParty = Now_Sheet != Sheet.Nests; Open = Panel.Party; break;
-            case "set": Deeds.Team(this, i); break;
-            case "seat": Deeds.Drop(this, i); break;
-            case "done": Open = Under = Panel.None; break;
+            case UiActionKind.Party: IdleParty = Now_Sheet != Sheet.Nests; Open = Panel.Party; break;
+            case UiActionKind.Set: Deeds.Team(this, i); break;
+            case UiActionKind.Seat: Deeds.Drop(this, i); break;
+            case UiActionKind.Done: Open = Under = Panel.None; break;
 
             // ── 保存の控え ──────────────────────────
             // ⚠️ **出し入れそのものは画面の外**（ブラウザに聞く）ので、
             //    ここは開くだけ。⭐ 実際の読み書きは `AppPage` が持つ。
-            case "keep": Open = Panel.Keep; break;
+            case UiActionKind.Keep: Open = Panel.Keep; break;
 
             // ── 図鑑・試練 ──────────────────────────
-            // ⚠️ 画面を移るので、開いているメニューを畳んでから行く
-            case "trials": Open = Under = Panel.None; Now_Sheet = Sheet.Trial; SortOpen = false; break;
-            case "trial": Deeds.Trial(this, i); break;
-            case "species": SpeciesAt = i; Open = Panel.Species; break;
+            // 🔴 **`trials`（試練の画面へ行く）は消した**（2026-08-30・作者の指示で
+            //    試練が下の帯の5つ目の釦になったため）。⚠️ 行き先は `case "tab"` の
+            //    `4 => Sheet.Trial` ── 同じ場所へ2つの道を残すと、片方だけ直す事故が起きる
+            //    （`TapEntranceTests` も「骨組みに入口の無い tap」として落とす）。
+            case UiActionKind.Trial: Deeds.Trial(this, i); break;
+            case UiActionKind.Species: SpeciesAt = i; Open = Panel.Species; break;
         }
     }
 
@@ -478,36 +522,51 @@ public sealed class Shell
     /// ── 技の札は押しどころではないので、触っただけで開くと選ぶ指が誤爆する。</summary>
     public void Hold(string what, string at)
     {
-        int i = Index(at);
-        switch (what)
+        if (UiCommands.TryParseHold(what, at, out var command)) Hold(command);
+    }
+
+    /// <summary>解析済みの長押しを実行する。外部文字列はここより前で検証済み。</summary>
+    public void Hold(UiCommand command)
+    {
+        if (!UiCommands.IsValidHold(command) || !HasValidHoldIndex(command)) return;
+        int i = command.Index;
+        switch (command.Kind)
         {
             // ⭐ BOX の札の技（枠0〜2）。⚠️ **いま見ている個体の**技とレベルを出す。
             //    ⚠️ 名前に `detail-` が冠されている（`use=panel` で差した部品なので）
-            case "detail-s0": Show(PickedOne(), 0); break;
-            case "detail-s1": Show(PickedOne(), 1); break;
-            case "detail-s2": Show(PickedOne(), 2); break;
+            case UiActionKind.DetailS0: Show(PickedOne(), 0); break;
+            case UiActionKind.DetailS1: Show(PickedOne(), 1); break;
+            case UiActionKind.DetailS2: Show(PickedOne(), 2); break;
 
             // ⭐ 戦闘の手札（battle.txt の s0〜s2 ── 2026-08-29 配線）。
             //    ⚠️ 主は Sheets.Fight と同じ StandingAlly ── 描いている札と同じ技の出所。
             //    札そのものが when=sN（自分の手番に技がある枠だけ）でしか出ないので、
             //    敵の番には来ない。⭐ CT 冷却中でも長押しは効く（使えない技ほど読みたい）。
-            case "s0": Show(Hand(), 0); break;
-            case "s1": Show(Hand(), 1); break;
-            case "s2": Show(Hand(), 2); break;
+            case UiActionKind.S0: Show(Hand(), 0); break;
+            case UiActionKind.S1: Show(Hand(), 1); break;
+            case UiActionKind.S2: Show(Hand(), 2); break;
 
             // ⭐ 配合の親札（panelmini ── pfill=親A・qfill=親B。2026-08-29 配線）。
             //    ⚠️ 短押し（tap=pa/pb・親を外す）とは tap.js が押下時間で分ける
-            case "pfill-s0": Show(One(ParentA), 0); break;
-            case "pfill-s1": Show(One(ParentA), 1); break;
-            case "pfill-s2": Show(One(ParentA), 2); break;
-            case "qfill-s0": Show(One(ParentB), 0); break;
-            case "qfill-s1": Show(One(ParentB), 1); break;
-            case "qfill-s2": Show(One(ParentB), 2); break;
+            case UiActionKind.PfillS0: Show(One(ParentA), 0); break;
+            case UiActionKind.PfillS1: Show(One(ParentA), 1); break;
+            case UiActionKind.PfillS2: Show(One(ParentA), 2); break;
+            case UiActionKind.QfillS0: Show(One(ParentB), 0); break;
+            case UiActionKind.QfillS1: Show(One(ParentB), 1); break;
+            case UiActionKind.QfillS2: Show(One(ParentB), 2); break;
+
+            // ⭐ 祝いに重ねた詳細の技（`fanfare.txt` の `sheetp` ── 2026-08-30）。
+            //    ⚠️ **`PickedOne()` では引けない** ── くわしく見るは `ClaimBorn()` を
+            //    呼ばない（祝いを閉じてしまうため）ので、`Picked` は前に見ていた個体のまま。
+            //    ⭐ 生まれた本人は `Cheer_.CreatureId` からしか辿れない。
+            case UiActionKind.SheetpS0: Show(Born(), 0); break;
+            case UiActionKind.SheetpS1: Show(Born(), 1); break;
+            case UiActionKind.SheetpS2: Show(Born(), 2); break;
 
             // ⭐ 種族の札の抽選（枠1〜3）。⚠️ こちらは個体ではないので Lv は 1
-            case "skill1": Pool(0, i); break;
-            case "skill2": Pool(1, i); break;
-            case "skill3": Pool(2, i); break;
+            case UiActionKind.Skill1: Pool(0, i); break;
+            case UiActionKind.Skill2: Pool(1, i); break;
+            case UiActionKind.Skill3: Pool(2, i); break;
         }
 
         // ⭐ 戦闘の手札の主。⚠️ 敵の番でも手札は「次に動かす味方」を出したまま
@@ -521,6 +580,9 @@ public sealed class Shell
             foreach (var c in Game.Storage.Creatures) if (c.Id == id) return c;
             return null;
         }
+
+        // ⭐ 祝いで生まれた本人（重ねた詳細の主）。⚠️ 卵の祝いなら居ない。
+        Creature? Born() => Cheer_ is Cheer c && c.IsCreature ? One(c.CreatureId) : null;
 
         // ⭐ 旧 Peek の一般化（2026-08-29）── レベルの式は1つ。呼び手は個体を選ぶだけ
         void Show(Creature? one, int slot)
@@ -548,6 +610,42 @@ public sealed class Shell
             Under = Open;
             Open = Panel.Skill;
         }
+    }
+
+    /// <summary>registry が非負までを保証する動的一覧の範囲。値が古い／改ざんされた場合も無操作にする。</summary>
+    private bool HasValidTapIndex(UiCommand command) => command.Kind switch
+    {
+          UiActionKind.One => UiCommands.IsWithinRange(command, Open == Panel.Fuse ? Deeds.Food(this).Count : Sorted().Count),
+          UiActionKind.Nest => UiCommands.IsWithinRange(command, Game.Encounters.Count),
+          UiActionKind.Square => HasOpenSquare(command.Index),
+          UiActionKind.Egg => UiCommands.IsWithinRange(command, SortedEggs().Count),
+          UiActionKind.Row => UiCommands.IsWithinRange(command, PickedOne()?.SkillPoints.Length ?? 0),
+          UiActionKind.Chip => UiCommands.IsWithinRange(command, Game.Eggs.Count),
+          UiActionKind.Seat => UiCommands.IsWithinRange(command, Games.RosterOf(Game, IdleParty ? PartyKind.Idle : PartyKind.Nest).Count),
+          UiActionKind.Trial => UiCommands.IsWithinRange(command, Trials.All.Count),
+        _ => true,
+    };
+
+    private bool HasOpenSquare(int goal)
+    {
+        if (Open_ == null) return false;
+        foreach (var path in Open_) if (path.Count > 0 && path[path.Count - 1] == goal) return true;
+        return false;
+    }
+
+    private bool HasValidHoldIndex(UiCommand command)
+    {
+        int slot = command.Kind switch
+        {
+            UiActionKind.Skill1 => 0,
+            UiActionKind.Skill2 => 1,
+            UiActionKind.Skill3 => 2,
+            _ => -1,
+        };
+        if (slot < 0) return true;
+        var all = SpeciesTable.All;
+        var pool = Sheets.PoolOf(all[Math.Clamp(SpeciesAt, 0, all.Count - 1)], slot);
+          return UiCommands.IsWithinRange(command, pool.Count);
     }
 
     /// <summary>一覧の升を押した。
@@ -597,14 +695,6 @@ public sealed class Shell
         return null;
     }
 
-    /// <summary>⚠️ 入れ子の番号は `2#1`。⭐ ここでは**いちばん外側**を読む。</summary>
-    private static int Index(string at)
-    {
-        if (string.IsNullOrEmpty(at)) return -1;
-        int cut = at.IndexOf('#');
-        return int.TryParse(cut < 0 ? at : at.Substring(0, cut), out int n) ? n : -1;
-    }
-
     // ── 外枠 ────────────────────────────────────────
 
     /// <summary>上のバーと下の帯。⚠️ 画面より**後**に描く（帯の下に潜らせない）。</summary>
@@ -618,11 +708,17 @@ public sealed class Shell
             $"{Game.Encounters.Count}",
             $"{Game.Storage.Creatures.Count}体",
             $"{Game.Storage.Creatures.Count}/{Game.Storage.Slots}",
+            // ⭐ 試練は「どこまで勝ったか」。⚠️ 0/5 は出す ── ここだけは 0 に意味がある
+            //    （まだ1段も勝っていない、が「段が5つある」と対で読める）。
+            $"{Games.TrialsCleared(Game)}/{Core.Trials.All.Count}",
         };
-        var names = new[] { "ホーム", "探索", "配合", "BOX" };
+        // 🔴 **5つ目に試練**（2026-08-30・作者の指示）。⚠️ 右上のメニューからは外した ──
+        //    入口が2つあると、どちらが本道か言えなくなる。
+        var names = new[] { "ホーム", "探索", "配合", "BOX", "試練" };
         int here = Now_Sheet switch
         {
-            Sheet.Nests => 1, Sheet.Breed => 2, Sheet.Box => 3, Sheet.Home => 0, _ => -1,
+            Sheet.Nests => 1, Sheet.Breed => 2, Sheet.Box => 3, Sheet.Trial => 4,
+            Sheet.Home => 0, _ => -1,
         };
 
         return LayoutDom.Render(LayoutStore.Of("frame"), new DomFill
@@ -637,6 +733,9 @@ public sealed class Shell
             },
             // ⭐ いま居るタブだけ塗る
             Tint = key => key == "tab" && tab == here ? "#f59e0b" : null,
+            // 絵は不透明なので背景色だけでは見えない。級でも現在地を渡し、
+            // stage.css が位置と下線で確実に区別する。
+            Lead = key => key == "tab" && tab == here,
             When = key => key switch
             {
                 // ⚠️ **戦闘中と潜入中は戻れない** ── 抜けられると、

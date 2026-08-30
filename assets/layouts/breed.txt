@@ -26,6 +26,6 @@ gridA     scroll  48   818    984  738   when=!open
 gridB     scroll  48   1250   984  306   when=open
   cellB   card    26   0      224  200   repeat=box cols=4 gap=12 rows=212 tap=one use=cell
 
-# ⭐ **持っている EXP**（2026-08-29・上のバーの右肩から降りてきた ── `box.txt` と同じ理由）。
-#    ⚠️ 上のバーを外して本体が 1556 → 1688 に伸びたぶんへ置く。
-exp       label   48   1580   984  80    size=30 ink=faint anchor=right bind=exp
+# 🔴 **持っている EXP はここから外した**（2026-08-30・作者の指示「配合画面には不要」）。
+#    ⚠️ 配合は2体を見比べて還す場所で、EXP は使わない（使うのは BOX の「強化」）。
+#    ⭐ `box.txt` には残っている ── あちらは「Lv ＋1 に足りるか」を読む場所。

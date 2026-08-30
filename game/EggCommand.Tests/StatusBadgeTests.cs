@@ -112,6 +112,18 @@ public class StatusBadgeTests
         }
     }
 
+    [Fact]
+    public void 攻防速の弱体は下向き矢印の別絵になる()
+    {
+        foreach (var kind in new[] { StatusKind.Atk, StatusKind.Def, StatusKind.Spd })
+        {
+            Assert.EndsWith("-up", Art.StatusIcon(kind, true));
+            Assert.EndsWith("-down", Art.StatusIcon(kind, false));
+            Assert.NotEqual(Art.StatusIcon(kind, true), Art.StatusIcon(kind, false));
+        }
+        Assert.Equal(Art.StatusIcon(StatusKind.Poison), Art.StatusIcon(StatusKind.Poison, false));
+    }
+
     /// <summary>⭐ 絵の並びと字の並びは**同じ順**（`ActiveStatuses` と揃えてある）。
     /// ⚠️ Unity 側はまだ字を読むので、片方だけ並べ替えると2つの画面がずれる。</summary>
     [Fact]
@@ -136,7 +148,7 @@ public class StatusBadgeTests
         Assert.Equal(order, badges.ConvertAll(b => b.Kind));
     }
 
-    /// <summary>⚠️ 数が空だと絵の下に何も出ず「1回だけ」と見分けが付かない。</summary>
+    /// <summary>⚠️ 残り回数が空だと、右上の数から「いつ切れるか」を読めない。</summary>
     [Fact]
     public void どの札にも数が添う()
     {
@@ -146,6 +158,14 @@ public class StatusBadgeTests
         u.Status.Regen = new Stacking { Stacks = 2, Turns = 3 };
         u.Status.Guts = 5;
         foreach (var b in Battle.ActiveStatusBadges(u))
-            Assert.False(string.IsNullOrWhiteSpace(b.Text), $"{b.Kind} に数が無い");
+            Assert.False(string.IsNullOrWhiteSpace(b.Turns), $"{b.Kind} に残り回数が無い");
+    }
+
+    [Fact]
+    public void 残り回数は効果量とは別に出す()
+    {
+        var badge = Only(st => st.Poison = new Stacking { Stacks = 2, Turns = 3 });
+        Assert.Equal("×2", badge.Text);
+        Assert.Equal("3", badge.Turns);
     }
 }

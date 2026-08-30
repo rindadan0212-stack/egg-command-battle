@@ -616,6 +616,8 @@ namespace EggCommand.Core
             "pic",      // ⭐ 絵の名前（`Resources/UI/icon/<名前>.png`）
             "turn",     // ⭐ 絵を回す度数（矢印を ±90 するのに使う）
             "crisp",    // ⭐ icon を補間しない（自作の仮ドット絵など・`crisp=yes`）
+            "natural",  // ⭐ full-color icon に単色 mask を重ねない（`natural=yes`）
+            "fit",      // ⭐ 原画の解像度に依らず paint を枠内へ収める（`fit=yes`）
             // 🔴 **器の高さで中身を切らない**（`grow=yes`・`host` だけ）。
             // ⚠️ `host` は既定で切る（`.n.host{overflow:hidden}`）── 中身の高さを
             //    骨組みが知らないので、はみ出しを黙って外へ流さないための備え。

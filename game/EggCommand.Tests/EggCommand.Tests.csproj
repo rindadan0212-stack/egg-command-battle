@@ -38,11 +38,11 @@
     <Compile Include="..\EggCommand.Web\EditAlign.cs" Link="EditAlign.cs" />
     <!-- 骨組みエディタ E2「層」の判定。Core にしか依存しない純関数。 -->
     <Compile Include="..\EggCommand.Web\EditLayers.cs" Link="EditLayers.cs" />
-    <!-- 骨組みエディタ E2「機能（tap=）」の一覧。唯一の出所は Shell.cs の switch ──
-         ずれを見張る検査は TapCatalogTests.cs（下の websrc\Shell.cs をテキストとして読む）。 -->
+    <!-- 骨組みエディタ E2「機能（tap=）」の一覧。唯一の出所は UiCommands.cs の登録表。
+         TapCatalogTests は同じ型を直接コンパイルして検査する。 -->
     <Compile Include="..\EggCommand.Web\TapCatalog.cs" Link="TapCatalog.cs" />
-    <!-- `hold=` の候補一覧（P4・2026-08-29）。TapCatalog とまったく同じ理由でここに居る
-         （ずれを見張るのは HoldCatalogTests.cs ── 同じく websrc\Shell.cs を読む）。 -->
+    <Compile Include="..\EggCommand.Web\UiCommands.cs" Link="UiCommands.cs" />
+    <!-- `hold=` の候補一覧（P4・2026-08-29）。TapCatalog と同じ登録表を参照する。 -->
     <Compile Include="..\EggCommand.Web\HoldCatalog.cs" Link="HoldCatalog.cs" />
     <!-- 骨組みエディタ E2「冠の逆算」の純関数。Core にしか依存しない（Scenes/LayoutStore を
          使う Web 側の呼び出し口は EditPage.razor にしか無い）。 -->
@@ -62,13 +62,13 @@
     <Compile Include="..\EggCommand.Web\Face.cs" Link="Face.cs" />
   </ItemGroup>
 
-  <!-- ⭐ E2: `tap=` 一覧のずれ検査（TapCatalogTests）が、`Shell.cs`/`AppPage.razor` を
-       **コンパイルせずテキストとして**読み直す（`LayoutRuleTests` の `view\*.cs` と同じ
-       「読むだけ」の型）。⚠️ Shell.cs は Web 専用の依存（LayoutDom/Deeds/Filters 等）を
-       多く持つのでコンパイルには持ち込めない ── ソースの文字列だけを検査する。 -->
+  <!-- Shell.cs/AppPage.razor は、Web 専用依存のため直接コンパイルできない既存の配線検査が
+       テキストとして読む。tap/hold 候補の検査には用いず、UiCommands.cs を直接コンパイルする。 -->
   <ItemGroup>
     <None Include="..\EggCommand.Web\Shell.cs" Link="websrc\Shell.cs" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\EggCommand.Web\Pages\AppPage.razor" Link="websrc\AppPage.razor" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\EggCommand.Web\Pages\BattlePage.razor" Link="websrc\BattlePage.razor" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\EggCommand.Web\Pages\RaidPage.razor" Link="websrc\RaidPage.razor" CopyToOutputDirectory="PreserveNewest" />
     <!-- 🔴 `Scenes.All`（`/edit` が触れる骨組みの唯一の出所）が実物の `assets/layouts/*.txt`
          と過不足なく1対1か見張る（`ScenesTests`）。⚠️ `Scenes.cs` は `Shell`/`Sheets`/`Demo`
          等 Web 専用の依存が多くコンパイルには持ち込めないので、`Shell.cs` と同じ
@@ -84,6 +84,7 @@
     <!-- 🔴 放置の帯の毎秒差し替え（`IdleWebTests`）── `Idle.Draw`/`AppPage.razor` が組み立てた
          id・級を、`tap.js` が camelCase（`view.foeArt`）で正しく読んでいるか見張る。 -->
     <None Include="..\EggCommand.Web\wwwroot\tap.js" Link="websrc\tap.js" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\EggCommand.Web\wwwroot\save.js" Link="websrc\save.js" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\EggCommand.Web\Board.cs" Link="websrc\Board.cs" CopyToOutputDirectory="PreserveNewest" />
     <!-- 🔴 盤に出る字と、演出の順番の見張り（`BattleWordTests`）。⚠️ `Deeds.cs` は
          `Shell`/`Sheets`/`Face` 等 Web 専用の依存が多くコンパイルには持ち込めないので、

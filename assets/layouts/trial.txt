@@ -13,5 +13,10 @@ list      scroll  48   80   984  1376
     won   label   730  20   230  40    size=28 ink=good anchor=right bind=won when=beaten
     # 🔴 **枠は 64 の倍数**（2026-08-29）── 顔ぶれ4体を横に並べて見比べる。⭐ 128 は 64x2。
     #    ⚠️ 4体ぶんの幅は 4x128 + 3x16 = 560（`go` 釦の 680 に届かない）。
-    face  pixel   24   118  128  128   repeat=party cols=4 gap=16 rows=128 max=4 foe=yes bind=face
+    # ⭐ **BOX の升と同じ「見せどころ」で切る**（`crop=256`・2026-08-30・作者の指示
+    #    「キャラ絵をBOXで使うキャラアイコンに変更」）。⚠️ 全身を小さく並べると、
+    #    どれも同じ黒い塊にしか見えない ── 顔まわりを大きく覗かせて見分けられるようにする。
+    #    ⚠️ 数（256）は `cell.txt` と同じ ── 同じ「アイコン」と呼ぶものが画面ごとに
+    #    違う寄り方をすると、同じ種族だと気づけない。
+    face  pixel   24   118  128  128   repeat=party cols=4 gap=16 rows=128 max=4 foe=yes bind=face crop=256
     go    button  680  164  280  112   bind=go

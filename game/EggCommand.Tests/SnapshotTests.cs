@@ -119,17 +119,40 @@ public class SnapshotTests
         Assert.Equal(a.Idle.Exp, b.Idle.Exp);
         Assert.Equal(a.Idle.Defeated, b.Idle.Defeated);
         Assert.Equal(a.Idle.LastUnix, b.Idle.LastUnix);
+        Assert.Equal(a.Idle.ExpCarry, b.Idle.ExpCarry);
+        Assert.Equal(a.Idle.Fine, b.Idle.Fine);
         Assert.Equal(a.Idle.EnemyHp, b.Idle.EnemyHp);
         Assert.Equal(a.Idle.Charge, b.Idle.Charge);
+        Assert.Equal(a.Idle.Phase, b.Idle.Phase);
+        Assert.Equal(a.Idle.PhaseLeft, b.Idle.PhaseLeft);
+        Assert.Equal(a.Idle.Struck, b.Idle.Struck);
+        Assert.Equal(a.Idle.Damage, b.Idle.Damage);
+        Assert.Equal(a.Idle.FoeGauge, b.Idle.FoeGauge);
+        Assert.Equal(a.Idle.FoeSpecies, b.Idle.FoeSpecies);
+        Assert.Equal(a.Idle.FoePalette, b.Idle.FoePalette);
+        Same(a.Idle.Gauge, b.Idle.Gauge);
+        Same(a.Idle.Health, b.Idle.Health);
         Assert.Equal(a.Idle.DownUntil.Count, b.Idle.DownUntil.Count);
 
-        // ⚠️ **乱数は10系統ぜんぶ見る。**1本だけ見ていた頃は、StreamsOf から
+        // ⚠️ **乱数は全系統ぜんぶ見る。**1本だけ見ていた頃は、StreamsOf から
         //    落ちた系統が読み込みで無音に巻き戻っても検査を通っていた
         var left = Snapshots.Save(a).Rng;
         var right = Snapshots.Save(b).Rng;
         Assert.Equal(left.Count, right.Count);
         for (int i = 0; i < left.Count; i++) Assert.Equal(left[i], right[i]);
     }
+
+    private static void Same<T>(IReadOnlyDictionary<string, T> a, IReadOnlyDictionary<string, T> b)
+    {
+        Assert.Equal(a.Count, b.Count);
+        foreach (var pair in a)
+        {
+            Assert.True(b.TryGetValue(pair.Key, out var value), $"{pair.Key} が戻っていない");
+            Assert.Equal(pair.Value, value);
+        }
+    }
+
+    private static void AdvanceIdle(Game game, double now) => Games.AdvanceIdle(game, now);
 
     [Fact]
     public void 遊んだ状態がそのまま戻る()
@@ -151,6 +174,30 @@ public class SnapshotTests
     }
 
     [Fact]
+    public void 放置の実行中状態が漏れなく戻る()
+    {
+        var game = Games.NewGame(2026_08_30);
+        string id = game.Storage.Creatures[0].Id;
+        game.Idle.Phase = IdlePhase.Fight;
+        game.Idle.PhaseLeft = 0.25;
+        game.Idle.Struck = 4;
+        game.Idle.Damage = 123;
+        game.Idle.FoeGauge = 456;
+        game.Idle.ExpCarry = 0.75;
+        game.Idle.Fine = 0.5;
+        game.Idle.FoeSpecies = 1;
+        game.Idle.FoePalette = 1;
+        game.Idle.Gauge[id] = 789;
+        game.Idle.Health[id] = 0.5;
+        game.Idle.DownUntil[id] = T0 + 3;
+
+        var back = Snapshots.Load(Snapshots.Save(game))!;
+
+        Same(game, back);
+        Same(game.Idle.DownUntil, back.Idle.DownUntil);
+    }
+
+    [Fact]
     public void 乱数の続きから引ける()
     {
         // ⚠️ ここを保存しないと、遊び直すたびに同じ卵と同じ巣が出る
@@ -165,6 +212,42 @@ public class SnapshotTests
             b.Add(back.RngEgg.U32Value());
         }
         Assert.Equal(a, b);
+    }
+
+    /// <summary>短い進行では本物の手番を回す。保存直前の秒未満時刻・ゲージ・HP・敵の見た目を
+    /// 全部戻さないと、次の一撃か次の乱数が食い違う。</summary>
+    [Fact]
+    public void 短い放置を保存して再開しても手番と次の乱数が一致する()
+    {
+        const double start = T0;
+        var uninterrupted = Games.NewGame(2026_08_30);
+        AdvanceIdle(uninterrupted, start);
+        AdvanceIdle(uninterrupted, start + 2.75);
+
+        var resumed = Snapshots.Load(Snapshots.Save(uninterrupted))!;
+        AdvanceIdle(uninterrupted, start + 3.75);
+        AdvanceIdle(resumed, start + 3.75);
+
+        Same(uninterrupted, resumed);
+        Assert.Equal(uninterrupted.RngIdle.U32Value(), resumed.RngIdle.U32Value());
+    }
+
+    /// <summary>追いつき後は近似の拍に着地する。保存後に本物の手番へ戻っても、
+    /// 拍・相手・乱数列が連続実行と同じであること。</summary>
+    [Fact]
+    public void 追いつき後に保存して再開しても拍と次の乱数が一致する()
+    {
+        const double start = T0;
+        var uninterrupted = Games.NewGame(2026_08_30);
+        AdvanceIdle(uninterrupted, start);
+        AdvanceIdle(uninterrupted, start + 123.25);
+
+        var resumed = Snapshots.Load(Snapshots.Save(uninterrupted))!;
+        AdvanceIdle(uninterrupted, start + 124.75);
+        AdvanceIdle(resumed, start + 124.75);
+
+        Same(uninterrupted, resumed);
+        Assert.Equal(uninterrupted.RngIdle.U32Value(), resumed.RngIdle.U32Value());
     }
 
     /// <summary>⚠️ **乱数の系統を足しても、古い保存が読めるか。**

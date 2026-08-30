@@ -565,7 +565,13 @@ public static class Deeds
                 case BattleEventKind.Skipped: Say(at, "✖", Accent, 50, up); break;
                 case BattleEventKind.GutsSaved: Say(at, "1", Accent, 56, up); break;
                 case BattleEventKind.Blocked: Say(at, "◇", Dim, 44, up); break;
-                case BattleEventKind.Down: Say(at, "…", Faint, 48, up); break;
+                case BattleEventKind.Down:
+                    // ⭐ Core が HP=0 を出した同じ拍で墓だけ伏せる。座標は持たず、
+                    //    `fx.js` がこの `at` の墓枠から砂煙を出す。
+                    s.PendingGraves.Add(at);
+                    s.Sparks.Add(new Spark(at, "down", "", null, 0, 0));
+                    Say(at, "…", Faint, 48, up);
+                    break;
 
                 // ⚠️ 以下が出ないと「効いたのか外れたのか」が読めず、
                 //    弱化を持つ技が「何も起きない技」に見える。

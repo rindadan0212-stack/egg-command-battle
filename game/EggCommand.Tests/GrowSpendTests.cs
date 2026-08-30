@@ -106,8 +106,8 @@ public class GrowSpendTests
         Assert.Contains("Creatures.Spend(", body);      // ⭐ 1点 → ステ
 
         // ⚠️ 押す側は「呼ぶだけ」── 中身を持たないこと
-        int at = ShellSource.IndexOf("case \"spend\":", StringComparison.Ordinal);
-        Assert.True(at >= 0, "Shell.cs: case \"spend\": が見つからない");
+        int at = ShellSource.IndexOf("case UiActionKind.Spend:", StringComparison.Ordinal);
+        Assert.True(at >= 0, "Shell.cs: case UiActionKind.Spend が見つからない");
         string tap = ShellSource.Substring(at, Math.Min(200, ShellSource.Length - at));
         Assert.Contains("Deeds.SpendPoint(", tap);
         Assert.DoesNotContain("Creatures.Spend(", tap);
@@ -120,7 +120,7 @@ public class GrowSpendTests
     [Fact]
     public void levelupの残骸がどこにも無い()
     {
-        Assert.DoesNotContain("case \"levelup\"", ShellSource);
+        Assert.DoesNotContain("UiActionKind.Levelup", ShellSource);
         Assert.DoesNotContain("Deeds.Grow(", ShellSource);
     }
 }

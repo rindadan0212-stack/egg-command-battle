@@ -46,8 +46,11 @@ public class FanfareChoiceTests
         Assert.Equal("creature", detail.Option("when"));
     }
 
-    /// <summary>⚠️ 分解は既にある口（fuse）へ。くわしく見るは **BOX の詳細札へ着地**
+    /// <summary>⚠️ 分解は既にある口（fuse）へ。くわしく見るは **その場に重ねて見せる**
     /// ── grow（全行が不可逆の EXP 消費）へは繋がない（2026-08-29 付け替え）。
+    /// 🔴 **BOX へ画面ごと移してもいけない**（2026-08-30・作者の指示「BOXに飛ぶのではなく
+    /// BOXで表示する詳細と同じものを見れるだけに」）── 移すと祝いが終わってしまい、
+    /// 続けて「分解する」を選べない。
     /// ⭐ tap 名の存在だけでなく**意味的な着地先**まで見る ── 前の版はここが
     /// 「grow へ繋がっていること」を固定して、誤着地のバグを保護していた。</summary>
     [Fact]
@@ -56,9 +59,25 @@ public class FanfareChoiceTests
         var choice = Fanfare().Roots.First(n => n.Name == "choice");
         Assert.Equal("fuse", choice.Children.First(n => n.Name == "fuse").Option("tap"));
         Assert.Equal("detail", choice.Children.First(n => n.Name == "detail").Option("tap"));
-        string block = Block(ShellSource, "case \"detail\":");
-        Assert.Contains("Now_Sheet = Sheet.Box", block);
+        string block = Block(ShellSource, "case UiActionKind.Detail:");
+        Assert.Contains("BornLook", block);
+        Assert.DoesNotContain("Sheet.Box", block);
         Assert.DoesNotContain("Panel.Grow", block);
+    }
+
+    /// <summary>🔴 **重ねて見せる詳細は、祝いを生かしたまま出す。**
+    /// ⚠️ `ClaimBorn()` は `Cheer_` を null にする＝祝いを閉じる ── くわしく見るが
+    /// これを呼ぶと、札を出す相手（`Cheer_.CreatureId`）ごと消える。
+    /// ⭐ 骨組み側も、詳細（`look`）と選択肢（`choice`）が同時に出ないこと。</summary>
+    [Fact]
+    public void くわしく見るは祝いを閉じずに重ねる()
+    {
+        Assert.DoesNotContain("ClaimBorn()", Block(ShellSource, "case UiActionKind.Detail:"));
+        // ⚠️ 祝いを閉じたら必ず下ろす（上げたままだと次の子がいきなり詳細付きで開く）
+        Assert.Contains("BornLook = false", Block(ShellSource, "case UiActionKind.Cheer:"));
+        var look = Fanfare().Roots.First(n => n.Name == "look");
+        Assert.Equal("look", look.Option("when"));
+        Assert.Contains(look.Children, n => n.Option("use") == "panel");
     }
 
     /// <summary>`Cheer.EggGot`（卵を得た）は個体でない・`Cheer.Born`（生まれた）は
@@ -86,10 +105,11 @@ public class FanfareChoiceTests
     [Fact]
     public void fuseとdetailはClaimBornを呼びfuseは本人を事前選択する()
     {
-        string fuse = Block(ShellSource, "case \"fuse\":");
+        string fuse = Block(ShellSource, "case UiActionKind.Fuse:");
         Assert.Contains("ClaimBorn()", fuse);
         Assert.Contains("Melts.Add", fuse);
-        Assert.Contains("ClaimBorn()", Block(ShellSource, "case \"detail\":"));
+        // 🔴 **detail は呼ばない**（2026-08-30）── `ClaimBorn()` は祝いを閉じるので、
+        //    その場に重ねて見せる道とは両立しない（`くわしく見るは祝いを閉じずに重ねる`）。
     }
 
     /// <summary>🔴 事前選択された本人が候補一覧から消えないこと（`Deeds.Food` の除外緩和

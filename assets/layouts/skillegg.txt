@@ -10,17 +10,24 @@
 #  名前    種類    左   上    幅   高    付け足し
 dim       veil    0    0     1080 1920
 panel     card    48   200   984  1520
-  title   label   24   24    936  56    size=40 anchor=upper-left text=技を鍛える
+  title   label   24   24    936  56    size=40 anchor=upper-left text=強化
   who     label   24   86    936  40    size=26 ink=dim anchor=upper-left bind=who
+  # 🔴 **札の中でタブに分けた**（2026-08-30・作者の指示「強化ボタン内でタブ分け」）。
+  #    ⚠️ `grow.txt` と**同じ2本・同じ場所**（開き直さずに行き来できるようにするため）。
+  #    ⚠️ 字は `bind` から出す ── 塗り分け（`Tint`）は `bind=` を持つ節点にしか
+  #    掛からない決まりなので、`text=` と併せると「字の出所が2つ」の不備になる
+  #    （`eggpicker.txt` の並べ替えの2択と同じ形）。
+  tgrow   button  24   140   456  112   size=30 tap=grow bind=tgrow
+  ttrain  button  504  140   456  112   size=30 tap=train bind=ttrain
 
   # ⭐ 注ぐ先の3枠。⚠️ 「あと少し」と書かない ── 要る数を出せば足りる
-  row     button  24   148   936  112   repeat=slots cols=1 rows=124 max=3 tap=row bind=row
+  row     button  24   276   936  112   repeat=slots cols=1 rows=124 max=3 tap=row bind=row
     rname label   24   0     420  112   size=30 anchor=left bind=rname
     rlv   label   460  0     160  112   size=30 anchor=center bind=rlv
     rneed label   652  0     260  112   size=26 anchor=right bind=rneed
 
-  head    label   24   532   936  36    size=26 ink=dim anchor=upper-left bind=head
-  eggs    scroll  24   580   936  656
+  head    label   24   660   936  36    size=26 ink=dim anchor=upper-left bind=head
+  eggs    scroll  24   708   936  528
     chip  card    6    6     216  156   repeat=eggs cols=4 gap=12 rows=168 tap=chip use=eggchip
 
   go      button  24   1260  936  112   size=34 tap=feed lead=yes bind=go

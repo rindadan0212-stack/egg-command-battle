@@ -23,39 +23,39 @@ nobiru
   2 変異2 #773bfe #e38afc #000000 #b673d2 #312c2a #814bfd #8d5dfd #b44dfc #b588d3 #a337fa #814df1 #4e299f #673cbc #9d38f0 #7548db #f2ebea #632c96 #483850 #030406 #9b4edd #80648d #fcf9c1 #987da8 #ddcbe3 #ffffff
 
 hirabe
-  0 ふつう #182a2e #6eb4c9 #a8dcea #101a1c
-  1 変異1 #2e2818 #c9b06e #eadaa8 #1a1810
-  2 変異2 #241c2e #9a6ec9 #c8a8ea #141018
+  0 ふつう #2ab5be #221a2a #22162a #7fe0d0 #efd58e
+  1 変異1 #be2a84 #2a271a #2a2916 #e07fd0 #8ee9ef
+  2 変異2 #6bbe2a #1a2a2a #16282a #bfe07f #ef8ed9
 
 togeru
-  0 ふつう #2e1818 #c96e6e #eaa8a8 #1a1010
-  1 変異1 #18182e #6e6ec9 #a8a8ea #10101a
-  2 変異2 #1c2e18 #7ec96e #b4eaa8 #101a10
+  0 ふつう #fe5b3f #f23a42 #231a2a #22162a #fed983
+  1 変異1 #3ffe9b #3af26f #2a281a #2a2916 #83fafe
+  2 変異2 #bb3ffe #8e3af2 #1a292a #16282a #fe83e5
 
 marumi
-  0 ふつう #2e2a20 #e0d0a8 #f4ecd0 #1a1810
-  1 変異1 #202a2e #a8d0e0 #d0ecf4 #10181a
-  2 変異2 #2e2028 #e0a8c4 #f4d0e4 #1a1014
+  0 ふつう #deeae2 #231b2b #9bcac2 #22162a #fcf2c3
+  1 変異1 #e6deea #2b281b #ca9bc2 #2a2916 #c3f3fc
+  2 変異2 #eae8de #1b2b2b #bbca9b #16282a #fcc3ea
 
 kibane
-  0 ふつう #241a2e #9a7ec9 #c6b0ea #140f1a
-  1 変異1 #1c2436 #6e9ec9 #a8cbea #101418
-  2 変異2 #361c22 #c96e7f #eaa8b4 #181012
-  3 変異3 #2e2a18 #c9bd6e #eae0a8 #1a1810
+  0 ふつう #4a32b1 #221a2a #9458dc #221a26 #cbabf5 #fac159
+  1 変異1 #b17432 #2a271a #dcc058 #26261a #f5e4ab #59faf7
+  2 変異2 #32b189 #1a2a2a #58dcd6 #1a2426 #abf5f0 #fa59e2
+  3 変異3 #b032b1 #2a1a25 #dc58ba #261a20 #f5abe4 #b2fa59
 
 iwao
-  0 ふつう #22201c #8f8a7e #c2bdb0 #141310
-  1 変異1 #1c2436 #6e9ec9 #a8cbea #101418
-  2 変異2 #361c22 #c96e7f #eaa8b4 #181012
-  3 変異3 #2e2a18 #c9bd6e #eae0a8 #1a1810
+  0 ふつう #7b7a76 #221a2a #56565d #22162a #ada58a #e7cd76
+  1 変異1 #7b7a76 #2a271a #56565d #2a2916 #8aa9ad #76dbe7
+  2 変異2 #7b7a76 #1a2a2a #56565d #16282a #ad8aa4 #e776c8
+  3 変異3 #7b7a76 #2a1a25 #56565d #2a1622 #99ad8a #a7e776
 
 homura
-  0 ふつう #2e1a14 #e08a4e #f5c48c #1a0f0a
-  1 変異1 #1c2436 #6e9ec9 #a8cbea #101418
-  2 変異2 #361c22 #c96e7f #eaa8b4 #181012
-  3 変異3 #2e2a18 #c9bd6e #eae0a8 #1a1810
+  0 ふつう #fd360e #231a2a #fe9005 #22162a #fede3c
+  1 変異1 #0efd86 #2a281a #05fee3 #2a2916 #3cddfe
+  2 変異2 #ae0efd #1a292a #fe05f0 #16282a #fe3cbd
+  3 変異3 #fdf50e #2a1a24 #a5fe05 #2a1622 #83fe3c
 
 nushi
-  0 ふつう #14100c #6b5a3e #9c8759 #e8d48a
-  1 変異1 #0c1014 #3e556b #59839c #8ac8e8
+  0 ふつう #241b2b #b54575 #7e2e66 #e5931e #221629 #eeddbb #fc4a46
+  1 変異1 #2b291b #50b545 #4b7e2e #1ee5d5 #292816 #bbeeee #46fc87
 

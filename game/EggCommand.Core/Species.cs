@@ -807,7 +807,7 @@ namespace EggCommand.Core
             // ⚠️ 最初は枠1を防御スケールにしていたら、総合勝率 81.1% で突出した。
             //    防御寄りの配分と防御スケールが重なって**防御を二重に得**にしていた。
             new Species("hirabe", "ヒラベ", "attack", Traits.Stubborn, // 攻撃スケール。硬いが攻めは細い
-                new StatBlock(130, 70, 130, 70, 14, 26), HirabeSprite, HirabePalettes,
+                new StatBlock(130, 70, 130, 70, 14, 26), ProvisionalSpeciesArt.HirabeSprite, ProvisionalSpeciesArt.HirabePalettes,
                 // 壁 ── 立て直して、耐える。⭐ invincible（Invincible・2026-08-27）を追加
                 //    ── guts-deep・immune-long と並ぶ「耐える」の頂点として据えた。
                 // 🔴 **atk-up・immune も追加**（2026-08-27・★→格の監査で発覚）。
@@ -819,14 +819,14 @@ namespace EggCommand.Core
                 new SkillPool("shield-wall", "guts-deep", "immune-long", "invincible", "immune")),
 
             new Species("togeru", "トゲル", "attack", Traits.Surge, // 削って待つ
-                new StatBlock(100, 120, 100, 80, 26, 14), TogeruSprite, TogeruPalettes,
+                new StatBlock(100, 120, 100, 80, 26, 14), ProvisionalSpeciesArt.TogeruSprite, ProvisionalSpeciesArt.TogeruPalettes,
                 // 毒 ── 弱らせて、抜く。⭐ extend-strike（Extend・2026-08-27）を追加
                 //    ── 弱化を撒く枠2 の技（毒・大／呪詛／麻痺 大 等）を長引かせる回収先。
                 new SkillPool("venom-heavy", "curse", "sleep", "stun-heavy", "gauge-drain"),
                 new SkillPool("attack-twice", "crush", "venom-fang", "extend-strike")),
 
             new Species("marumi", "マルミ", "attack", Traits.Opener, // 素直。支える側
-                new StatBlock(120, 80, 90, 110, 16, 24), MarumiSprite, MarumiPalettes,
+                new StatBlock(120, 80, 90, 110, 16, 24), ProvisionalSpeciesArt.MarumiSprite, ProvisionalSpeciesArt.MarumiPalettes,
                 // 支え ── 癒して、剥がす
                 new SkillPool("heal-ratio", "heal-miracle", "regen"),
                 new SkillPool("slow-all", "dispel", "block", "ct-lock", "buff-steal")),
@@ -838,21 +838,21 @@ namespace EggCommand.Core
             //    キバネ＝止める（不意打ち）/ イワオ＝崩れてから（遺志）/ ホムラ＝速さを配る
 
             new Species("kibane", "キバネ", "attack-twice", Traits.Ambush, // 手数で通す
-                new StatBlock(90, 110, 80, 120, 26, 14), KibaneSprite, KibanePalettes,
+                new StatBlock(90, 110, 80, 120, 26, 14), ProvisionalSpeciesArt.KibaneSprite, ProvisionalSpeciesArt.KibanePalettes,
                 // 止める ── 眠らせ、痺れさせ、縛る。⭐ seal-strike（Seal・2026-08-27）を追加
                 //    ── 「止める」役の総仕上げ。眠り・スタンで動きを止め、封印で選択肢も削る。
                 new SkillPool("stun-strike", "taunt-long", "poison-all", "stun", "sleep"),
                 new SkillPool("strip-strike", "pierce-strike", "stagnate", "seal-strike")),
 
             new Species("iwao", "イワオ", "attack-def", Traits.Legacy, // 硬さがそのまま火力
-                new StatBlock(140, 85, 115, 60, 18, 22), IwaoSprite, IwaoPalettes,
+                new StatBlock(140, 85, 115, 60, 18, 22), ProvisionalSpeciesArt.IwaoSprite, ProvisionalSpeciesArt.IwaoPalettes,
                 // 重い ── 一撃が遠く、代わりに深い。⭐ bare-strike（Effect.Bare・2026-08-27）を追加
                 //    ── pierce-strike-heavy（防御無視）と対になる「守りの買い物を無視する」一撃。
                 new SkillPool("pierce-strike-heavy", "attack-all-twice", "attack-heavy", "crush", "bare-strike"),
                 new SkillPool("guts", "harden", "def-up", "shield")),
 
             new Species("homura", "ホムラ", "attack", Traits.Parting, // 素直に速い
-                new StatBlock(110, 95, 80, 115, 19, 21), HomuraSprite, HomuraPalettes,
+                new StatBlock(110, 95, 80, 115, 19, 21), ProvisionalSpeciesArt.HomuraSprite, ProvisionalSpeciesArt.HomuraPalettes,
                 // 配る ── 速さとゲージを味方へ
                 new SkillPool("tailwind", "gauge-boost-heavy", "def-up"),
                 new SkillPool("regen-heavy", "revive-heavy", "heal-ratio")),
@@ -861,7 +861,7 @@ namespace EggCommand.Core
             // ⚠️ 枠1は CT が無いので、大技を置くと毎回撃ててしまう。
             //    震撼（CT7 の全体大技）は枠2へ回し、ここは中程度に留める。
             new Species("nushi", "ヌシ", "attack-def", Traits.Desperation,
-                new StatBlock(130, 100, 120, 50, 20, 20), NushiSprite, NushiPalettes,
+                new StatBlock(130, 100, 120, 50, 20, 20), ProvisionalSpeciesArt.NushiSprite, ProvisionalSpeciesArt.NushiPalettes,
                 new SkillPool("attack-all-heavy"),
                 new SkillPool("spd-down", "taunt")),
         };

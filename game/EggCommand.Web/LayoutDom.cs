@@ -252,6 +252,9 @@ namespace EggCommand.Web
             // ⭐ 自作の仮ドット絵など、補間せず出したい icon だけに効く
             //    （既存の Kenney 絵は滑らかな見た目のまま ── stage.css 参照）。
             if (node.Kind == "icon" && node.Option("crisp") == "yes") cls.Append(" crisp");
+            // ⭐ full-color の状態アイコンは mask の単色を重ねない。
+            //    既存の単色アイコンは今までどおり `color` で染められる。
+            if (node.Kind == "icon" && node.Option("natural") == "yes") cls.Append(" natural");
             // 🔴 **巻物の中の `host` は切らない**（`grow=yes`）。⚠️ 切ると、巻ける高さが
             //    器の高さで止まり、下は**見えないうえ押せない**（`Layouts.Options` の注記）。
             if (node.Kind == "host" && node.Option("grow") == "yes") cls.Append(" grow");
@@ -342,7 +345,9 @@ namespace EggCommand.Web
                     // ⚠️ **「引き伸ばさない」規則の対象外**（骨組みエディタのプレビュー専用）。
                     //    アップロードした絵の実ドット数を知らない（任意サイズの data URL）ので、
                     //    ここだけは今までどおり枠いっぱいに出す。
-                    sb.Append("<div class=\"n icon-art\" style=\"left:0;top:0;width:100%;height:100%;--pic:url(")
+                    sb.Append("<div class=\"n icon-art")
+                      .Append(node.Option("natural") == "yes" ? " natural" : "")
+                      .Append("\" style=\"left:0;top:0;width:100%;height:100%;--pic:url(")
                       .Append(Esc(overridePic)).Append(")\"></div>");
                 }
                 else if (pic != null && !IconManifest.Exists(pic))
@@ -371,7 +376,9 @@ namespace EggCommand.Web
                     int dotsW = size?.Width ?? DotsOf(node.Width);
                     int dotsH = size?.Height ?? DotsOf(node.Height);
                     string iconStyle = FitDotsStyle(node, "icon", dotsW, dotsH);
-                    sb.Append("<div class=\"n icon-art\" style=\"").Append(iconStyle).Append(";--pic:url(icon/")
+                    sb.Append("<div class=\"n icon-art")
+                      .Append(node.Option("natural") == "yes" ? " natural" : "")
+                      .Append("\" style=\"").Append(iconStyle).Append(";--pic:url(icon/")
                       .Append(Esc(pic)).Append(".png)\"></div>");
                 }
             }
@@ -533,6 +540,17 @@ namespace EggCommand.Web
                 string style = FitDotsStyle(node, "paint", DotsOf(node.Width), DotsOf(node.Height));
                 sb.Append("<div class=\"n paint-missing\" style=\"").Append(style)
                   .Append("\" title=\"絵が無い: paint/").Append(Esc(pic)).Append(".png\">？</div>");
+                return;
+            }
+
+            // ⭐ 透過済みの完成原画など、PNGの物理画素数と作品内のドット数が
+            //    一致しない絵は、骨組み側が `fit=yes` を明示したときだけ枠に収める。
+            //    ⚠️ 既定の「実ドット数×4px」は変えない。例外を名前のない自動縮小にしない。
+            //    一覧に絵があることを上で確かめてから通す（欠品を壊れた img で黙らせない）。
+            if (node.Option("fit") == "yes")
+            {
+                sb.Append("<img class=\"n paint\" src=\"paint/").Append(Esc(pic))
+                  .Append(".png\" alt=\"\" style=\"left:0;top:0;width:100%;height:100%;object-fit:contain\" />");
                 return;
             }
 
@@ -751,7 +769,7 @@ namespace EggCommand.Web
 
         private static void WalkPicMismatch(LayoutNode node, List<PicMismatch> into)
         {
-            if (node.Kind == "icon" || node.Kind == "paint")
+            if ((node.Kind == "icon" || node.Kind == "paint") && node.Option("fit") != "yes")
             {
                 string? pic = node.Option("pic");
                 var expect = ExpectedPicSize(node.Kind, pic);

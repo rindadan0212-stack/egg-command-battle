@@ -14,13 +14,15 @@
 #    （`eggpicker` と同じ約束。閉じ方が画面のどこにも書いていない状態を作らない）。
 #
 #  名前   種類    左   上    幅    高    付け足し
+# 🔴 **試練をここから外した**（2026-08-30・作者の指示「ボタンを５つにし、試練を
+#    ５つ目に入れる」）。⭐ 行き先は**下の帯の5つ目の釦**（`frame.txt`）。
+#    ⚠️ 両方に置くと入口が2つになり、どちらが本道か言えなくなる。
 dim      veil    0    0     1080  1920
-panel    card    96   560   888   800
+panel    card    96   624   888   672
   title  label   32   32    824   56    size=40 anchor=upper-left text=そのほか
-  # ⭐ 縦に4つ並べる ── 横に割ると1つ 200px で「パーティ編成」(6字)が入らない。
-  #    ⚠️ 押しどころの下限は 112。隙間 16 で 4本＝112×4+16×3=496。
+  # ⭐ 縦に3つ並べる ── 横に割ると1つ 200px で「パーティ編成」(6字)が入らない。
+  #    ⚠️ 押しどころの下限は 112。隙間 16 で 3本＝112×3+16×2=368。
   book   button  32   112   824   112   size=34 tap=book text=図鑑
-  trials button  32   240   824   112   size=34 tap=trials text=試練
-  party  button  32   368   824   112   size=34 tap=party text=パーティ編成
-  keep   button  32   496   824   112   size=34 tap=keep text=保存の控え
-  close  button  32   640   824   112   size=34 tap=close text=閉じる
+  party  button  32   240   824   112   size=34 tap=party text=パーティ編成
+  keep   button  32   368   824   112   size=34 tap=keep text=保存の控え
+  close  button  32   512   824   112   size=34 tap=close text=閉じる

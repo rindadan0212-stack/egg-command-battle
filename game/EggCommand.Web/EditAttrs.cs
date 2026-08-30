@@ -101,6 +101,7 @@ namespace EggCommand.Web
         /// <summary>`crisp`: `if (node.Kind == "icon" && node.Option("crisp") == "yes")`
         /// の1行そのもの。</summary>
         private static bool IconOnly(LayoutNode n) => n.Kind == "icon";
+        private static bool PaintOnly(LayoutNode n) => n.Kind == "paint";
 
         /// <summary>`turn`: `ink`/`lead` と同じ else 分岐（label 以外）で
         /// `transform:rotate(...)` に使われる。⚠️ 元は矢印（icon）の ±90 用に足された
@@ -136,6 +137,8 @@ namespace EggCommand.Web
             new Attr("lead", "主役にする", AttrKind.Toggle, AnyKind),
             new Attr("foe", "左右反転", AttrKind.Toggle, PixelOnly),
             new Attr("crisp", "縁をにじませない", AttrKind.Toggle, IconOnly),
+            new Attr("natural", "絵の色をそのまま使う", AttrKind.Toggle, IconOnly),
+            new Attr("fit", "枠に収める", AttrKind.Toggle, PaintOnly),
             new Attr("turn", "回す角度", AttrKind.Number, NotLabel, min: -360f, max: 360f),
             // ⚠️ ①②③（2026-08-24・§11-2）で既に実装済み。挙動は変えない ──
             //    表に載せて Inspector の自動生成に乗せ替えるだけ（専用の Field 呼び出しを畳む）。

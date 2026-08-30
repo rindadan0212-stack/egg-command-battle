@@ -359,10 +359,10 @@ public static class Scenes
     }
 
     /// <summary>戦闘・すごろくは下の帯を跨がない画面 ── `BattlePage`/`RaidPage` と同じ
-    /// `top:132 / height:1788` の枠を掛けてから描く。⚠️ 見た目を実物に揃えるだけの飾り
+    /// `top:0 / height:1920` の枠を掛けてから描く。⚠️ 見た目を実物に揃えるだけの飾り
     /// ── `Layouts.Faults` は骨組み自身の絶対座標（0起点）を見るので、この枠の有無に
     /// 影響されない（`battle.txt`/`trail.txt` 側も 1788 を前提に書かれている）。</summary>
     private static string Wrap132(string inner) =>
-        "<div id=\"body\" class=\"n\" style=\"left:0;top:132px;width:1080px;height:1788px;overflow:hidden\">"
+        "<div id=\"body\" class=\"n\" style=\"left:0;top:0;width:1080px;height:1920px;overflow:hidden\">"
         + inner + "</div>";
 }

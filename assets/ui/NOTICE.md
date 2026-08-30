@@ -81,47 +81,48 @@ CC0 の範囲で太枠を持つセットは見つからなかったため、
 
 ---
 
-## 自作の仮（状態異常アイコン・2026-08-23）
+## 作者支給の状態アイコン・墓（2026-08-30取り込み）
 
 | | |
 |---|---|
-| 出所 | **自作**（このリポジトリ内で生成。外部素材ではない）|
-| ライセンス | 気にしなくてよい（自作・仮） |
-| 作る道具 | `tools/gen-status-icons.mjs`（Node、外部ライブラリ無し）|
+| 出所 | 作者がこのプロジェクト用に支給した生成画像3枚 |
+| ライセンス | 作者支給素材として扱う |
+| 作る道具 | `tools/prepare-user-art.mjs` + `tools/draw/` の Pixelizer |
 
-⚠️ **応急対応**（作者の指示 2026-08-23）: 戦闘の状態欄が字だと枠 320 に対し
-実測 743 要る組み合わせがあり、字では入らないと分かったため、
-**仮のドット絵アイコン**へ作り替えた。⭐ **いずれ本物の絵に差し替える前提。**
+4×4の状態絵を1枚ずつ中央正方形で切り、Pixelizer の OKLab 減色・平均縮小・
+孤立点除去・輪郭補正を通した。ゲーム用は16×16、確認・再利用用は
+`art/status-pixel/` に32×32を残す。墓2枚は元から透過済みの完成ドット絵なので、
+再減色・再透過せず原画PNGをそのまま使う（表示時だけ `image-rendering: pixelated`）。
 
 ### 使っているもの（`Resources/UI/icon/status-*.png`）
 
 | ファイル | 絵 | 対応する状態（`Core.StatusKind`） |
 |---|---|---|
-| `status-atk.png` | 剣 | 攻撃 の増減 |
-| `status-def.png` | 盾（先が尖る） | 防御 の増減 |
-| `status-spd.png` | 山形2段（矢羽根） | 速度 の増減 |
+| `status-atk-up/down.png` | 剣＋上下矢印 | 攻撃 の増減 |
+| `status-def-up/down.png` | 盾＋上下矢印 | 防御 の増減 |
+| `status-spd-up/down.png` | 靴＋上下矢印 | 速度 の増減 |
 | `status-poison.png` | 雫 | 毒 |
 | `status-regen.png` | 十字 | リジェネ |
-| `status-shield.png` | 六角（先は尖らない） | シールド（盾＝防御と絵で見分ける）|
-| `status-stun.png` | 星（火花） | スタン |
-| `status-taunt.png` | ▲（警告） | 挑発 |
-| `status-guts.png` | ハート | ガッツ |
-| `status-immune.png` | 菱形 | 免疫（六角の障壁と、角の立ち方で見分ける）|
+| `status-shield.png` | 光の障壁 | シールド |
+| `status-stun.png` | 回る星 | スタン |
+| `status-taunt.png` | 怒り印 | 挑発 |
+| `status-guts.png` | 火 | ガッツ |
+| `status-immune.png` | 力こぶ | 免疫 |
 | `status-sleep.png` | Z | 睡眠 |
-| `status-block.png` | × | ブロック |
+| `status-block.png` | 白い× | ブロック |
+| `status-seal.png` | 目に× | 封印 |
+| `status-anchor/invincible/counter.png` | 錨・星盾・往復矢印 | 固定・無敵・反撃（コード生成の仮絵）|
 
-⭐ 攻撃・防御・速度は**同じ絵を良い/悪いの色だけで出し分ける**
-（一律 ±30% ── `wiki/効果の種類.md`）。色そのものは Web の `stage.css`
-（`--good-ink` / `--danger-ink`）と Unity の `Ui.cs` の12定数のまま、新しく作っていない。
+攻撃・防御・速度は強化と弱体を別絵にした。全色を絵自身が持つため、Web は
+`natural=yes` のアイコンへ単色 mask を重ねない。残りターン数だけ良悪の文字色を使う。
 
-⭐ 16×16 で描いて、既存の Kenney 絵と同じ **128×128** の PNG（整数8倍）に出してある。
-**白の抜き（透過）** ── 色は掛け算（Unity `Image.color` / Web `.n.icon` の `currentColor` 抱き合わせ）
-で乗せるので、絵自身は白の1色しか持たない。
+`grave-ally.png` と `grave-foe.png` は戦闘と放置帯で倒れた体と置き換える。
+味方は丸い正面碑、敵は割れた暗い碑で、色だけに頼らず区別する。
 
 ### ⚠️ 差し替え方
 
-1. `tools/gen-status-icons.mjs` の中の該当する16行（`#`＝白・`.`＝透明）を描き直す
-2. `node tools/gen-status-icons.mjs` を走らせる（同じ場所に上書きされる）
-3. **本物の絵に差し替えたら**、`game/EggCommand.Core/Art.cs` の
-   `Placeholder` からその名前を外し、この節からも該当行を消す
+1. 原画は `art/source/user-2026-08-29/` の3枚（SHA-256を生成器が検証する）
+2. Pixelizer を localhost で開き、`node tools/prepare-user-art.mjs` を走らせる
+3. 固定・無敵・反撃を作者絵へ差し替えたら、`game/EggCommand.Core/Art.cs` の
+   `Placeholder` からその名前を外す
    （`EggCommand.Tests/ArtTests.cs` が `Placeholder` の残り枚数を検査で数えている）

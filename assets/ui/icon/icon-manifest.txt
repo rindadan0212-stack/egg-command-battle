@@ -17,10 +17,12 @@ stat-atk 13 13
 stat-def 13 13
 stat-hp 13 13
 status-anchor 16 16
-status-atk 16 16
+status-atk-down 16 16
+status-atk-up 16 16
 status-block 16 16
 status-counter 16 16
-status-def 16 16
+status-def-down 16 16
+status-def-up 16 16
 status-guts 16 16
 status-immune 16 16
 status-invincible 16 16
@@ -29,6 +31,7 @@ status-regen 16 16
 status-seal 16 16
 status-shield 16 16
 status-sleep 16 16
-status-spd 16 16
+status-spd-down 16 16
+status-spd-up 16 16
 status-stun 16 16
 status-taunt 16 16

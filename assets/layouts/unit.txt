@@ -1,4 +1,4 @@
-# 戦闘に立つ1体 ── ⭐ **部品**（器は 340x350）
+# 戦闘に立つ1体 ── ⭐ **部品**（器は 340x360）
 #
 # ⚠️ 数は `Resources/Prefabs/UnitStand.prefab` の実測。
 # ⚠️ **全体を 20 ずらしてある。**実物は光の輪が -20,-20 から始まるが、
@@ -13,11 +13,31 @@
 #
 #  名前    種類    左   上    幅   高    付け足し
 glow      round   0    0     240  240   when=actor bind=glow
+# ⭐ **絵の下の影**（2026-08-30・作者の指示「イラストの下に影を描写。キャラクターが
+#    映っている画面ではすべて同様に。イラストに多少被る感じで」）。
+# ⚠️ **絵より前に書く**（下に敷くため）── あとに書いた節点が上に乗る（`LayoutDom`）。
+# ⚠️ **`round` では作れない。**⭐ `round` は「正方形で描かれる」（`NotSquare` の検査 ──
+#    横長に書いても短い辺の丸になる）ので、平たい影にならない。
+# ⭐ 代わりに `bar` を使う ── `.n.bar` は `border-radius: 9999px` の**丸薬型**で、
+#    伸びた分（`bar-fill`）に色を掛けられる。⚠️ 割合は 1（＝全部塗る）。
+#    絵の裾（216）に 26 だけ食い込ませてある ── 離すと「浮いている」ままになる。
+# ⚠️ 色は `Face.ShadowCss` の1つだけ（`bind=shade`）── 画面ごとに濃さが違うと、
+#    同じ影に見えない。
+shade     bar     60   190   120  32    bind=shade
 # 🔴 **枠は 64 の倍数**（2026-08-29・`walker.txt` と同じ理由）── 200 のままだと
 #    64ドットの種族と 16ドットの種族が 256px と 64px で並ぶ。⭐ 192 は 64x3。
 # ⚠️ 光の輪（`glow` 240）の真ん中に載るよう 24,24 に置いてある（(240-192)/2）。
-art       pixel   24   24    192  192   when=!foe bind=art
-artf      pixel   24   24    192  192   when=foe foe=yes bind=art
+art       pixel   24   24    192  192   when=allyalive bind=art
+artf      pixel   24   24    192  192   when=foealive foe=yes bind=art
+# ⭐ Down の拍だけ、消える途中の体を残す。墓は同時に置くが `bind=grave` で伏せ、
+#    砂煙の後に現す（生死そのものは Core の HP が唯一の出所）。
+deadarta  pixel   24   24    192  192   when=allydying bind=art roll=death-body
+deadartf  pixel   24   24    192  192   when=foedying foe=yes bind=art roll=death-body
+# ⭐ 倒れた体は同じ場所・同じ大きさの墓へ替える。墓は64×64の完成ドット絵を
+#    8倍した原画（512×512）を無加工で使い、ここで192px表示する。
+#    味方と敵を別絵にし、戦場の左右を文字なしでも見分けられるようにする。
+gravea    paint   24   24    192  192   when=allydead pic=grave-ally bind=grave fit=yes
+gravef    paint   24   24    192  192   when=foedead pic=grave-foe bind=grave fit=yes
 # ⭐ **狙い先の印**（`when=aim`）── 絵の枠（24,24〜216,216）の四隅を、
 #    長さ44・太さ6 の棒2本ずつで囲む。⚠️ 色は `bind=aim`（味方は緑・敵は赤 ──
 #    `Sheets.Column` が HP 帯と**同じ2色**を渡す。新しい色を作らない）。
@@ -31,31 +51,40 @@ aimbl     line    24   210   44   6     when=aim bind=aim
 aimblv    line    24   172   6    44    when=aim bind=aim
 aimbr     line    172  210   44   6     when=aim bind=aim
 aimbrv    line    210  172   6    44    when=aim bind=aim
-hp        card    20   226   260  46
-  hpfill  bar     52   9     198  28    bind=hp
-gauge     bar     72   278   208  12    bind=gauge
-elem      round   244  232   22   22    bind=elem
-# ⭐ 有利を取る相手の色を、細い帯で下に添える（矢印の代わり）
-beats     line    244  258   22   6     bind=beats
+# 🔴 **属性の玉は HP 帯の「左の端」へ、中にレベルを書く**（2026-08-30・作者の指示
+#    「ここに属性の玉を表示。その中にレベルを記載」「HPバー右端にいまある属性表示は削除」）。
+# ⚠️ 前は右端（244）に 22 の玉と有利の帯を積んでいたが、**レベルは戦闘中どこにも
+#    出ていなかった** ── 強さを見比べる手掛かりが HP の長さしか無かった。
+# ⭐ 丈を 46→52 に広げた（玉 44 ＋ 有利の帯 4 を積むため）。上端も 226→222 へ
+#    ずらして、絵の裾（216）とぶつからないようにしてある。
+hp        card    20   222   260  52
+  # ⭐ 玉と数は**親子**（`elv` は `elem` の中）── 玉が動けば数も一緒に動く。
+  elem    round   4    4     44   44    bind=elem
+    elv   label   0    0     44   44    size=24 anchor=center bind=elv
+  # ⭐ 有利を取る相手の色を、細い帯で玉の下に添える（矢印の代わり）
+  #    ⚠️ 玉と一緒に左へ移した ── 右に置き去りにすると「何の色か」が読めなくなる。
+  beats   line    4    48    44   4     bind=beats
+  hpfill  bar     56   12    196  28    bind=hp
+gauge     bar     72   280   208  12    bind=gauge
 # ⭐ 状態は絵の並び（応急・仮のドット絵。2026-08-23）。⚠️ 字だと枠 320 に対し
 #    実測 743 要る組み合わせが在ったため、絵＋小さな数へ作り替えた
 #    （`Core.Battle.ActiveStatusBadges` が構造化した出所。字を返す
 #    `ActiveStatuses` は Unity の `UnitStand` がまだ読むので残してある）。
-# ⚠️ 16種すべてが同時に起こり得るが、4個までしか並べられない。
-#    ⭐ 残りは「+N」にまとめる（`smore`）。⚠️ 隠れた分の内訳（ターン数など）は
-#    まだ読む場所が無い ── `wiki/開発/課題.md` に送ってある。
+# ⚠️ 16種すべてが同時に起こり得るが、4枠までしか並べられない。
+#    ⭐ 5個以上なら実絵は3枚にして、4枠目を「+N」の要約札にする。
 # 🔴 2026-08-29: 枠を 24px→64px（16ドット・`icon-manifest.txt` の実寸）に、
 #    同時に出す数を 5→4 に直した（旧24pxは`icon`の実寸を持たないまま描いていたため、
 #    実物128pxの絵が左右にはみ出し5個が重なっていた ── 実測ずみのバグ）。
-#    ⚠️ `sicon`/`snum` は同じ数（4）・同じ間隔（左23・幅64・隙間6）に揃えてある
-#    （cols/max がずれると絵と数が別の相手を指すため）。
-#    🔴 **`EggCommand.Web/Sheets.cs` の `Column` にある `const int shown = 5;` も
-#    4 に直す必要がある**（`Sheets.cs` は触ってはいけないファイルなので、
-#    ここではなく報告に書いてある）。
-status    box     20   298   320  116
-  sicon   icon    23   0     64   64    repeat=status cols=4 gap=6 max=4 bind=sicon crisp=yes
-  snum    label   23   66    64   16    size=13 anchor=upper-center repeat=status cols=4 gap=6 max=4 bind=snum
-  smore   label   0    86    320  28    size=24 ink=dim anchor=upper-center when=smore bind=smore
+#    ⚠️ `sicon`/`scount` は同じ数（通常4・要約時3）・同じ間隔（70px）に揃えてある
+#    （cols/max がずれると絵と数が別の相手を指すため）。数字は絵の右上へ重ね、
+#    絵の下の説明字は置かない。
+#    ⭐ 実際に繰り返す数は `Sheets.Column` が、通常4／要約時3として返す。
+status    box     20   296   320  64
+  sicon   icon    23   0     64   64    repeat=status cols=4 gap=6 max=4 bind=sicon crisp=yes natural=yes
+  scount  round   65   0     22   22    repeat=status cols=4 gap=48 max=4 bind=sback
+    snum  label   0    0     22   22    size=16 anchor=center bind=snum
+  smore   round   233  0     64   64    when=smore bind=smoreback
+    smoret label   0    0     64   64    size=24 anchor=center bind=smoret
 
 # ⭐ **体そのものが押しどころ**（2026-08-29・作者の指示「ターゲットしていることが
 #    わかるように（敵味方両方）」）。押すと狙い先になり、もう一度押すと外れる。
@@ -64,4 +93,4 @@ status    box     20   298   320  116
 #    祖先へ遡るが、絵と印は**兄弟**なので、被せないと拾えない）。
 # ⚠️ 中に押しどころが増えたらこの被せを外すこと（上に載っているので下は押せない）。
 # ⭐ `data-at` は `a0`/`f2`（`Stands.One` が渡す冠）── `Deeds.Aim` がここから体を引く。
-hit       box     0    0     340  350   tap=aim
+hit       box     0    0     340  360   tap=aim

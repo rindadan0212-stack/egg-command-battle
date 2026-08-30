@@ -38,14 +38,13 @@ namespace EggCommand.Core
 
         // ── 状態異常 ──────────────────────────────────
         //
-        // ⭐ 応急のドット絵（自作・仮）。⚠️ 差し替え予定は
-        //    `Resources/UI/NOTICE.md` の「自作の仮」節と `Placeholder` に載せてある。
-        //    作り直す道具は `tools/gen-status-icons.mjs`。
+        // ⭐ 2026-08-30: 作者支給の16枚を Pixelizer で分割・ドット化した実絵。
+        //    Atk/Def/Spd だけは強化・弱体で矢印の向きまで変わるので、側も名前に含める。
         private static readonly Dictionary<StatusKind, string> StatusIcons = new Dictionary<StatusKind, string>
         {
-            [StatusKind.Atk] = "status-atk",
-            [StatusKind.Def] = "status-def",
-            [StatusKind.Spd] = "status-spd",
+            [StatusKind.Atk] = "status-atk-up",
+            [StatusKind.Def] = "status-def-up",
+            [StatusKind.Spd] = "status-spd-up",
             [StatusKind.Poison] = "status-poison",
             [StatusKind.Regen] = "status-regen",
             [StatusKind.Shield] = "status-shield",
@@ -62,6 +61,13 @@ namespace EggCommand.Core
             [StatusKind.Counter] = "status-counter",
         };
 
+        private static readonly Dictionary<StatusKind, string> NegativeStatusIcons = new Dictionary<StatusKind, string>
+        {
+            [StatusKind.Atk] = "status-atk-down",
+            [StatusKind.Def] = "status-def-down",
+            [StatusKind.Spd] = "status-spd-down",
+        };
+
         /// <summary>状態異常 → `Resources/UI/icon/<名前>.png`。</summary>
         public static string StatusIcon(StatusKind kind)
         {
@@ -69,9 +75,19 @@ namespace EggCommand.Core
             throw new ArgumentOutOfRangeException(nameof(kind), kind, "Art.StatusIcon に無い種類");
         }
 
+        /// <summary>状態の種類と良悪 → 絵。攻防速の弱体だけ下向き矢印へ分ける。</summary>
+        public static string StatusIcon(StatusKind kind, bool good)
+        {
+            if (!good && NegativeStatusIcons.TryGetValue(kind, out var negative)) return negative;
+            return StatusIcon(kind);
+        }
+
         /// <summary>⭐ **まだ仮絵**（自作のドット絵）である名前。⚠️ 作者が差し替えたら、
         /// その名前をここから外す ── `NOTICE.md` の「残り枚数」と `ArtTests` はここを数える。</summary>
-        public static readonly IReadOnlyList<string> Placeholder = new List<string>(StatusIcons.Values);
+        public static readonly IReadOnlyList<string> Placeholder = new List<string>
+        {
+            "status-anchor", "status-invincible", "status-counter",
+        };
 
         /// <summary>⭐ **この表が指す絵、全部。**⚠️ 検査（実体があるか／死蔵か）の唯一の出所。
         ///
@@ -81,6 +97,8 @@ namespace EggCommand.Core
         {
             foreach (var pair in StatusIcons)
                 yield return new Ref($"状態異常 {pair.Key}", "icon", pair.Value);
+            foreach (var pair in NegativeStatusIcons)
+                yield return new Ref($"状態異常 {pair.Key}（弱体）", "icon", pair.Value);
         }
     }
 }

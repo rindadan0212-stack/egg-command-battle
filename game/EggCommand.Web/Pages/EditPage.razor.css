@@ -257,8 +257,8 @@
   flex: 0 0 auto;
   /* ⭐ 初期値（edit.js の fit() が上書き）。#edstage の初期 scale(.3) と揃えておく。
      ⚠️ 2026-08-29 から fit() は盤の周り（`eggEdit._pad`＝設計256px）ぶん大きく取り、
-     盤の層を同じだけ translate する ── 負の座標に置かれた節点（`home` の `idle` は
-     左 -72）を、拡大してもスクロールで見に行けるようにするため。 */
+     盤の層を同じだけ translate する ── 編集中に負の座標へ仮置きした節点も、
+     拡大してスクロールで見に行けるようにするため。 */
   width: 324px;
   height: 576px;
 }
@@ -1028,3 +1028,108 @@
 .edchipkey { color: #6d7390; }
 .edchipval { color: #9aa1b8; }
 .edchipwhy { color: #6d7390; margin-left: auto; text-align: right; }
+
+/* ── V2: 文書コンテキストを保った、盤中心の編集机 ───────────── */
+.edtop {
+  min-height: 42px;
+  gap: 6px;
+  padding: 5px 12px;
+  flex-wrap: wrap;
+}
+.eddoc { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.eddoc .edwho { min-width: 0; }
+.eddoc select { min-width: 0; max-width: min(36vw, 360px); }
+.edtoplabel, .eddoctype, .eddirty, .edcrumb { font-size: 12px; }
+.eddoctype, .eddirty {
+  padding: 2px 6px;
+  color: #9aa1b8;
+  background: #12151f;
+  border: 1px solid rgba(255, 255, 255, .10);
+}
+.eddirty.is-dirty { color: #ffd18a; border-color: rgba(245, 158, 11, .55); }
+.edcrumb { display: flex; align-items: center; gap: 6px; color: #9aa1b8; min-width: 0; }
+.edcrumb strong { color: #d7dae6; font-weight: 600; }
+.edtop .edtextbtn {
+  padding: 3px 6px;
+  background: transparent;
+  color: #b9d4f5;
+  border-color: transparent;
+}
+.edtop .edfolder { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.edtop .edsave:not(:disabled) { background: #b45309; border-color: #b45309; color: #fff; }
+.edtop .edsave:not(:disabled):hover { background: #c96613; }
+.edtop button:last-of-type:not(:disabled) { background: inherit; border-color: inherit; color: inherit; }
+.edtop .edsave:last-of-type:not(:disabled) { background: #b45309; border-color: #b45309; color: #fff; }
+
+/* ツールバーは盤の直上へ視覚的に寄せる。脇の列は情報専用にして、盤の高さを奪わない。 */
+.edtools {
+  margin: 0;
+  min-height: 34px;
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  overflow: visible;
+  background: #12151f;
+}
+.edtoolbar-group { display: flex; align-items: center; gap: 8px; flex: 1 1 420px; min-width: 0; flex-wrap: wrap; }
+.edtools .edstructrow { flex: 0 0 auto; }
+.edtools .edalign-btn { flex: 0 0 auto; padding: 5px 8px; }
+.edtools .edzoom button { padding: 4px 8px; font-size: 12px; }
+.edtools .edzoomval { min-width: 78px; }
+.edtools select { max-width: 96px; }
+
+.edmain { min-width: 0; }
+.edtree { flex-basis: 192px; }
+.edinspector { flex-basis: 252px; }
+.edtreebody, .edinspectorbody { overflow-x: hidden; }
+.edinspectorbody { padding: 12px 14px 18px; }
+.edinspectorbody :is(input, select, textarea) { max-width: 100%; box-sizing: border-box; }
+.edfieldrow { min-width: 0; }
+.edpicpreview { min-width: 0; flex-wrap: wrap; }
+.edpicpreview .edname, .edchipval { overflow-wrap: anywhere; }
+
+.edtreebody { scroll-padding-block: 8px; }
+.edrow { outline: none; }
+.edrow:focus-visible { outline: 2px solid #b9d4f5; outline-offset: -2px; background: rgba(185, 212, 245, .10); }
+.edmismark { font-size: 10px; }
+.edpaneltoggle { min-width: 22px; writing-mode: vertical-rl; letter-spacing: .08em; }
+
+.edbottom { padding: 0; background: #191d2b; }
+.edissues { width: 100%; }
+.edissues > summary {
+  cursor: pointer;
+  padding: 7px 12px;
+  color: #9aa1b8;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+  user-select: none;
+}
+.edissues[open] > summary { border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.edissues .edbottomrow { padding: 7px 12px 0; }
+.edissues .edbottomrow:last-child { padding-bottom: 7px; }
+
+@media (max-width: 920px) {
+  .edtools { overflow: visible; }
+  .edtree { flex-basis: 160px; }
+  .edinspector { flex-basis: 220px; }
+  .edtop .edstatus { order: 5; flex-basis: 100%; margin-left: 0; }
+}
+
+@media (max-width: 700px) {
+  /* body はゲーム側の約束で overflow:hidden。道具自身をスクロール面にして、
+     横持ちでも下の検査結果まで到達できるようにする。 */
+  .edroot { overflow-y: auto; }
+  .edtop { align-items: flex-start; }
+  .eddoc { flex: 1 1 100%; }
+  .eddoc select { max-width: calc(100vw - 160px); }
+  .edmain { min-height: 560px; }
+  .edtree { flex-basis: 132px; }
+  .edinspector { flex-basis: 176px; }
+  .edtreebody, .edinspectorbody { font-size: 12px; }
+  .edinspectorbody { padding: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edroot *, .edroot *::before, .edroot *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

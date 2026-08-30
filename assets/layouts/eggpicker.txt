@@ -11,9 +11,11 @@
 #    覆いは画面いっぱい（1920）に出るので、上下へ広げる余地があった。
 dim       veil    0    0     1080 1920
 panel     card    48   160   984  1620
-  title   label   24   24    936  56    size=40 anchor=upper-left text=どの卵を温めるか
+  # 🔴 **見出し「どの卵を温めるか」は消した**（2026-08-30・作者の指示「削除」）。
+  #    ⚠️ 空き枠を押して開く札なので、何を選ぶ場面かは開いた流れで分かる。
+  #    ⭐ 空いた 56px ぶん、下をすべて上へ詰めた。
   # ⚠️ 「卵がありません」と書かない。⭐ 数を言えば足りる
-  count   label   24   86    936  40    size=26 ink=dim anchor=upper-left bind=count
+  count   label   24   24    936  40    size=26 ink=dim anchor=upper-left bind=count
   # ⭐ **並べ替えは2択**（2026-08-29・作者の指示「星、入手順」）。
   #    ⚠️ BOX の `sortbar`/`sortchips` は流用しない ── あちらは
   #    「絞る・並べる・何の数で」の3段の仕掛けで、2択のためには重すぎる
@@ -23,8 +25,9 @@ panel     card    48   160   984  1620
   #    同じ `tap=` にすると押した側が区別できない。
   # ⚠️ 塗り分け（`Tint`）は **`bind=` を持つ節点にしか掛からない**（`LayoutDom` の決まり）
   #    ── だから字も `bind` から出す（`text=` と併せると字の出所が2つになる）。
-  sstar   button  24   136   456  112   size=30 tap=eggstar bind=sstar
-  snew    button  504  136   456  112   size=30 tap=eggnew bind=snew
-  eggs    scroll  24   260   936  1220
-    egg   card    0    0     228  396   repeat=eggs cols=4 gap=4 rows=416 tap=egg use=eggcard
-  close   button  24   1492  936  112   size=34 tap=close text=やめる
+  sstar   button  24   76    456  112   size=30 tap=eggstar bind=sstar
+  snew    button  504  76    456  112   size=30 tap=eggnew bind=snew
+  # ⭐ 札から素質合計を外したぶん（`eggcard.txt`）、1枚が 396 → 348 に縮んだ。
+  eggs    scroll  24   200   936  1288
+    egg   card    0    0     228  348   repeat=eggs cols=4 gap=4 rows=368 tap=egg use=eggcard
+  close   button  24   1500  936  112   size=34 tap=close text=やめる

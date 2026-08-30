@@ -14,9 +14,16 @@
 #
 #  名前    種類    左   上    幅   高    付け足し
 dim       veil    0    0     1080 1920
-card      card    72   714   936  492
+# ⭐ **間を空ける**（2026-08-30・作者の指示「間隔狭く見づらい」）。
+# ⚠️ 名前・数値・説明・伸び方は**別の種類の話**なので、同じ間隔で並べると
+#    ひと続きの文章に見える。⭐ 名前↔数値は詰め（同じ見出しの一部）、
+#    数値↔説明と説明↔伸び方は広く取る。
+# ⚠️ 高さ（説明112・伸び方40）は実測値なので**変えない**（`measure.mjs` の結果）。
+#    ⭐ 動かすのは上端だけ ── 札の丈も 492→540 へ伸ばして収める
+#    （下端 714+540=1254 で、画面 1920 に対しまだ 666 余る）。
+card      card    72   690   936  540
   name    label   32   32    872  56    size=40 anchor=upper-left bind=name
-  meta    label   32   88    872  44    size=26 ink=dim anchor=upper-left bind=meta
-  body    label   32   148   872  112   size=30 anchor=upper-left wrap=yes bind=body
-  steps   label   32   276   872  40    size=24 ink=faint anchor=upper-left wrap=yes bind=steps
-  close   button  208  348   520  112   size=34 tap=close text=閉じる
+  meta    label   32   92    872  44    size=26 ink=dim anchor=upper-left bind=meta
+  body    label   32   176   872  112   size=30 anchor=upper-left wrap=yes bind=body
+  steps   label   32   320   872  40    size=24 ink=faint anchor=upper-left wrap=yes bind=steps
+  close   button  208  396   520  112   size=34 tap=close text=閉じる

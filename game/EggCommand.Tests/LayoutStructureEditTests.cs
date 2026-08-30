@@ -752,8 +752,10 @@ public class LayoutStructureEditTests
         string original = System.IO.File.ReadAllText(path);
         var layout = Layouts.Parse("box", original);
 
-        // ⭐ btree（`detail` の子）を、同じ親の中で bfuse の手前へ。
-        string moved = MoveInto(layout, "btree", "bfuse", "before");
+        // ⭐ btree（`detail` の子）を、同じ親の中で bgrow の手前へ。
+        // ⚠️ 2026-08-30 に相手を `bfuse` から `bgrow` へ替えた ── 作者の指示で
+        //    「分解」が札の外（`melt`）へ出て、`detail` の子は bgrow と btree の2つになった。
+        string moved = MoveInto(layout, "btree", "bgrow", "before");
         var before = original.Replace("\r\n", "\n").Split('\n');
         var after = moved.Replace("\r\n", "\n").Split('\n');
 
@@ -761,17 +763,26 @@ public class LayoutStructureEditTests
         Assert.Equal(before[0], after[0]);
         Assert.StartsWith("#", after[0]);
 
-        // 🔴 btree の直上にあった**同じ字下げの説明3行**が、そのまま付いてきている。
+        // 🔴 btree の直上にあった**同じ字下げの説明**が、そのまま付いてきている。
+        //    ⚠️ 行数は実物に合わせる（いまは2行）── 見ているのは数そのものではなく
+        //    「同じ字下げの連続コメントが節点と一緒に動く」こと。
         int at = Array.FindIndex(after, s => s.TrimStart().StartsWith("btree", StringComparison.Ordinal));
         Assert.True(at >= 3, "btree が見つからない（実物の書き方が変わった？）");
         Assert.StartsWith("  #", after[at - 1]);
         Assert.StartsWith("  #", after[at - 2]);
-        Assert.StartsWith("  #", after[at - 3]);
-        // ⚠️ そのすぐ後ろが bfuse ＝「手前へ」が効いている。
-        Assert.StartsWith("  bfuse", after[at + 1]);
+        // ⚠️ btree の次に来る**節点**が bgrow ＝「手前へ」が効いている。
+        //    ⭐ 間に挟まるのは bgrow 自身の説明（同じ字下げのコメント）── そちらは
+        //    bgrow に付いたまま動かないのが正しい（説明は節点ごとに付く）。
+        int next = at + 1;
+        while (next < after.Length && after[next].TrimStart().StartsWith("#", StringComparison.Ordinal))
+            next++;
+        Assert.True(after[next].StartsWith("  bgrow", StringComparison.Ordinal),
+            "btree の次の節点は bgrow のはず。実際:\n" + string.Join("\n", after[(at)..(next + 1)]));
         // ⚠️ 説明の上は親の detail ── btree は「最初の子」へ来たので、間に何も挟まらない
         //    （説明が元の位置に置き去りになっていない）。
-        Assert.StartsWith("detail", after[at - 4]);
+        Assert.True(after[at - 3].StartsWith("detail", StringComparison.Ordinal),
+            "btree の上は detail のはず。実際の並び:\n"
+            + string.Join("\n", after[(at - 4)..(at + 2)]));
 
         // 🔴 行の集合そのものは変わらない（並びが変わっただけ・1行も欠けない）。
         var sortedBefore = new List<string>(before);

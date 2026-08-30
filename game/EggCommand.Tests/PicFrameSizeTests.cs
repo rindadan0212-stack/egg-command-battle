@@ -109,7 +109,7 @@ public class PicFrameSizeTests
     {
         foreach (var node in nodes)
         {
-            if (node.Kind == "icon" || node.Kind == "paint")
+            if ((node.Kind == "icon" || node.Kind == "paint") && node.Option("fit") != "yes")
             {
                 string pic = node.Option("pic");
                 var sizes = node.Kind == "icon" ? iconSizes : paintSizes;
@@ -162,23 +162,45 @@ public class PicFrameSizeTests
         Assert.True(bad.Count == 0, "sicon の枠と合わない状態異常: " + string.Join(", ", bad));
     }
 
-    /// <summary>🔴 **`sicon` と `snum` が別の相手を指さない。**⚠️ `cols=`/`max=` がずれると、
+    /// <summary>🔴 **`sicon` と `scount` が別の相手を指さない。**⚠️ `cols=`/`max=` がずれると、
     /// N番目の絵と N番目の数が食い違う（`unit.txt` の注記参照）。</summary>
     [Fact]
-    public void siconとsnumは同じ数と同じ間隔()
+    public void siconとscountは同じ数と同じ間隔()
     {
         var roots = Read("unit").Roots;
         var sicon = Find(roots, "sicon");
-        var snum = Find(roots, "snum");
+        var scount = Find(roots, "scount");
         Assert.NotNull(sicon);
-        Assert.NotNull(snum);
+        Assert.NotNull(scount);
 
-        Assert.Equal(sicon.Option("cols"), snum.Option("cols"));
-        Assert.Equal(sicon.Option("max"), snum.Option("max"));
+        Assert.Equal(sicon.Option("cols"), scount.Option("cols"));
+        Assert.Equal(sicon.Option("max"), scount.Option("max"));
         // ⭐ 同じ間隔＝同じ歩幅（幅＋隙間）で列が並ぶこと（中身が icon/label で
         //   幅・隙間の値そのものが違っても、歩幅が揃っていれば列は一致する）。
         float siconStep = sicon.Width + sicon.Number("gap", 0);
-        float snumStep = snum.Width + snum.Number("gap", 0);
-        Assert.Equal(siconStep, snumStep);
+        float scountStep = scount.Width + scount.Number("gap", 0);
+        Assert.Equal(siconStep, scountStep);
+    }
+
+    /// <summary>墓は512pxの透過済み原画を保ったまま、192pxの体枠へ意図的に収める。
+    /// ⚠️ `fit=yes` が消えると「512ドット×4px」と誤認され、2048pxまではみ出す。</summary>
+    [Fact]
+    public void 墓の原画は無加工のまま体枠に収める()
+    {
+        var roots = Read("unit").Roots;
+        var sizes = PaintSizes();
+        foreach (var (nodeName, pic) in new[]
+                 {
+                     ("gravea", "grave-ally"),
+                     ("gravef", "grave-foe"),
+                 })
+        {
+            var grave = Find(roots, nodeName);
+            Assert.NotNull(grave);
+            Assert.Equal("yes", grave.Option("fit"));
+            Assert.Equal(192, grave.Width);
+            Assert.Equal(192, grave.Height);
+            Assert.Equal((512, 512), sizes[pic]);
+        }
     }
 }

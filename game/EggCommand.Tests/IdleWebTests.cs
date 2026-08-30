@@ -63,7 +63,7 @@ public class IdleWebTests
         Assert.Contains("FoePalette", src);
     }
 
-    /// <summary>🔴 `Core.Idle.Advance` の戻り値は、どちらの呼び出し口でも捨てない。
+    /// <summary>🔴 放置の進行は <c>Games.AdvanceIdle</c> を通し、どちらの呼び出し口でも清算を捨てない。
     /// ⚠️ 捨てると、乱数（`RngIdle`）を渡して見た目が動いていても、
     /// `Games.GainIdleEggs` を誰も呼ばないので**増えた卵が棚に一切入らない**
     /// （前任者からの申し送りで発覚した2件のうちの片方）。</summary>
@@ -71,18 +71,9 @@ public class IdleWebTests
     public void AppPageは放置の戻り値を捨てずに卵を棚へ入れる()
     {
         string src = Code(AppPage());
-        int advanceCalls = Regex.Matches(src, @"Core\.Idle\.Advance\(").Count;
-        Assert.True(advanceCalls >= 2,
-            $"Core.Idle.Advance の呼び出しが {advanceCalls} 箇所 ── OnAfterRenderAsync と BeatIdle の両方にあるはず");
-
-        int gainCalls = Regex.Matches(src, @"Games\.GainIdleEggs\(").Count;
-        Assert.True(gainCalls >= advanceCalls,
-            $"Games.GainIdleEggs の呼び出しが {gainCalls} 箇所 ── Advance と同じ回数だけ要る（清算のたびに棚へ入れる）");
-
-        // ⚠️ 「戻り値を捨てて呼ぶ」旧い壊れた形が、直った後にまた紛れ込んでいないか直に確かめる
-        Assert.DoesNotContain(
-            "Core.Idle.Advance(_shell.Game.Idle, Games.PartyOf(_shell.Game, PartyKind.Idle), _shell.Now);",
-            src);
+        Assert.Equal(2, Regex.Matches(src, @"Games\.AdvanceIdle\(_shell\.Game, _shell\.NowFine\)").Count);
+        Assert.DoesNotContain("Core.Idle.Advance(", src);
+        Assert.DoesNotContain("Games.GainIdleEggs(", src);
     }
 
     /// <summary>指定したメソッドの本体（`{` から対応する `}` まで、入れ子ごと数えて）だけを取り出す。</summary>
@@ -112,15 +103,13 @@ public class IdleWebTests
         Assert.Contains("Keep()", body);
     }
 
-    /// <summary>⚠️ `Core.Idle.Advance` は `rng` を渡さないと、見た目の引き直しと卵の抽選を
-    /// 行わない（`Core.Idle` の doc 参照）。⭐ 遊びの中からは必ず `RngIdle` を渡す。</summary>
+    /// <summary>⚠️ 放置の乱数と清算は <c>Games.AdvanceIdle</c> の単一出口へ閉じる。</summary>
     [Fact]
     public void 放置の進行に乱数を渡す()
     {
         string src = Code(AppPage());
-        int rngUses = Regex.Matches(src, @"RngIdle\b").Count;
-        Assert.True(rngUses >= 2,
-            $"_shell.Game.RngIdle への言及が {rngUses} 箇所 ── Advance の2つの呼び出し口それぞれで渡すはず");
+        Assert.DoesNotContain("RngIdle", src);
+        Assert.Contains("Games.AdvanceIdle", src);
     }
 
     /// <summary>🔴 5拍に1回の全面組み直しはやめた（背景のアニメが巻き戻るため）。
@@ -305,6 +294,26 @@ public class IdleWebTests
         Assert.Contains("animation: none", block);
     }
 
+    /// <summary>倒れた味方と敵は、枠を消さず同じ場所で砂煙→墓に替わる。</summary>
+    [Fact]
+    public void 放置帯は敵味方とも倒れたら墓を残す()
+    {
+        string idle = IdleCs();
+        string tap = TapJs();
+        string css = StageCss();
+
+        Assert.Contains("DeathOverlay(\"grave-ally\")", idle);
+        Assert.Contains("DeathOverlay(\"grave-foe\")", idle);
+        Assert.Contains("foe.classList.add('idle-down')", tap);
+        Assert.Contains(".idle-down .idle-grave", css);
+        Assert.Contains(".idle-down .idle-death-dust", css);
+
+        var reduced = Regex.Match(css, @"prefers-reduced-motion[\s\S]*", RegexOptions.Singleline);
+        Assert.True(reduced.Success);
+        Assert.Contains(".idle-down .idle-death-dust { display: none; }", reduced.Value);
+        Assert.Contains(".idle-down .idle-grave { animation: none; opacity: 1; }", reduced.Value);
+    }
+
     /// <summary>🔴 仕事4: 放置の帯（`.idle-drain`）は0.3秒で縮む。⚠️ 打撃は0.5秒ごとに来るので、
     /// 旧 .95s のままだと次の段が来る前に前の段の途中にしか着かない。</summary>
     [Fact]
@@ -313,8 +322,8 @@ public class IdleWebTests
         Assert.Contains(".idle-drain { transition: width .3s linear; }", StageCss());
     }
 
-    /// <summary>🔴 仕事5: 卵の種族は `Core.Idle.Advance` を呼ぶ「前」に控えたものを
-    /// `Games.GainIdleEggs` へ渡す。⚠️ `Advance` は周期が終わると同じ呼び出しの中で
+    /// <summary>🔴 仕事5: 卵の種族は単一出口で `Core.Idle.Advance` を呼ぶ「前」に控える。
+    /// ⚠️ `Advance` は周期が終わると同じ呼び出しの中で
     /// 次の相手へ引き直すので、呼んだ「後」の `FoeSpecies` を渡すと**次に出る相手**の
     /// 種族で卵が生まれてしまう（前任者からの申し送り）。</summary>
     [Fact]
@@ -322,17 +331,7 @@ public class IdleWebTests
     {
         string src = Code(AppPage());
 
-        // 🔴 旧い壊れた形（Advance の「後」に FoeSpecies を読む）が戻っていないか直に確かめる
-        Assert.DoesNotContain("Games.GainIdleEggs(_shell.Game, caughtUp, _shell.Game.Idle.FoeSpecies)", src);
-        Assert.DoesNotContain("Games.GainIdleEggs(_shell.Game, gain, _shell.Game.Idle.FoeSpecies)", src);
-
-        int advanceCalls = Regex.Matches(src, @"Core\.Idle\.Advance\(").Count;
-        int capturedBeforeAdvance = Regex.Matches(src,
-            @"int idleFoeSpecies = _shell\.Game\.Idle\.FoeSpecies;\s+var \w+ = Core\.Idle\.Advance\(").Count;
-        Assert.True(advanceCalls >= 2, $"Core.Idle.Advance の呼び出しが {advanceCalls} 箇所");
-        Assert.Equal(advanceCalls, capturedBeforeAdvance);
-
-        Assert.Contains("Games.GainIdleEggs(_shell.Game, caughtUp, idleFoeSpecies)", src);
-        Assert.Contains("Games.GainIdleEggs(_shell.Game, gain, idleFoeSpecies)", src);
+        Assert.DoesNotContain("Idle.FoeSpecies", src);
+        Assert.Contains("Games.AdvanceIdle", src);
     }
 }

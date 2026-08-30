@@ -3,6 +3,7 @@
 # ⚠️ 実物の Prefab は 268 だが、種族名（240 から 34）が**枠から 6px はみ出していた**
 #    ── Unity は枠の外へ字を描くので気づけない形。⭐ 器のほうを 280 にした。
 # 🔴 **2026-08-29 に 280 → 396。**⚠️ 卵の絵を種族ごとの焼いた絵（176x220）にしたため。
+# 🔴 **2026-08-30 に 396 → 348。**⚠️ 素質合計の行（48px）を外したぶん（作者の指示）。
 #
 # ⭐ **何の卵か**を必ず出す（作者の指示 2026-08-22）。
 #    ⚠️ ★も素質も時計も「どれくらい」しか言わず、「何が」を言う字が1つも無かった。
@@ -23,7 +24,10 @@ art      paint   26   8     176  220   bind=art pic=nest-egg
 #    属性は生まれてからの相性の話なので、この札では使わない（`Sheets.Eggs` の
 #    `egg-elem` の色付けも一緒に外した ── 出所を残すと死んだ枝になる）。
 stars    label   0    232   228  34    size=22 ink=accent anchor=upper-center bind=stars
-# ⭐ 素質は伏せない。手元にある卵なので、どれを先に温めるかの材料になる
-wild     label   0    266   228  48    size=34 anchor=upper-center bind=wild
-wait     label   0    318   228  34    size=22 ink=faint anchor=upper-center bind=wait
-who      label   0    356   228  34    size=24 anchor=center bind=who
+# 🔴 **素質合計（`wild`）は消した**（2026-08-30・作者の指示「素質合計は書かない」）。
+#    ⚠️ 一覧の升（`cell.txt`）が同じ判断で 2026-08-18 に外しているので、これで揃った
+#    ── 卵と個体で「合計を出す／出さない」が食い違っていた。
+#    ⭐ 残る材料は ★・待ち時間・種族名。並べ替え（★順／入手順）が順で語る。
+#    ⚠️ 空いた 48px ぶん下を詰めた（札は 396 → 348）。
+wait     label   0    270   228  34    size=22 ink=faint anchor=upper-center bind=wait
+who      label   0    308   228  34    size=24 anchor=center bind=who

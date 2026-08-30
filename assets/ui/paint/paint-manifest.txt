@@ -11,7 +11,10 @@ egg-togeru 44 55
 egg-tsunoga 44 55
 frame-dock 270 58
 frame-tab 59 37
+grave-ally 512 512
+grave-foe 512 512
 home-box 46 42
+home-btn1 46 42
 home-btn2 50 20
 home-btn3 66 20
 home-btn4 90 20
@@ -21,6 +24,7 @@ home-frame1 66 20
 home-frame2 95 20
 home-grass 270 122
 home-ground 270 403
+home-ground2 2160 3840
 home-hill 1080 63
 home-idle-frame 262 115
 home-keep 79 28

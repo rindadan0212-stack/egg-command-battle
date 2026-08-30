@@ -62,8 +62,8 @@ public class SaveJsonTests
         var left = Draw(a!);
         var right = Draw(b!);
         Assert.Equal(left, right);
-        // ⭐ 12系統。⚠️ 減っていたら、どこかで並びが落ちている
-        Assert.Equal(12, left.Count);
+        // ⭐ 13系統。⚠️ 減っていたら、どこかで並びが落ちている
+        Assert.Equal(13, left.Count);
     }
 
     /// <summary>⭐ 書いて読んで書いたら、同じ字になる（余計な揺れが無い）。</summary>
@@ -112,7 +112,7 @@ public class SaveJsonTests
         Assert.Empty(game!.Tombs);
     }
 
-    /// <summary>12系統から1回ずつ引く。⚠️ 引いた**あと**の状態は捨てる（比べるのは値だけ）。</summary>
+    /// <summary>13系統から1回ずつ引く。⚠️ 引いた**あと**の状態は捨てる（比べるのは値だけ）。</summary>
     private static List<uint> Draw(Game game)
     {
         var save = Snapshots.Save(game);
@@ -123,7 +123,7 @@ public class SaveJsonTests
         {
             game.RngNest, game.RngEgg, game.RngHatch, game.RngSteal,
             game.RngBreed, game.RngRarity, game.RngEncounter, game.RngSlant,
-            game.RngElement, game.RngTrait, game.RngBattle, game.RngPalette,
+            game.RngElement, game.RngTrait, game.RngBattle, game.RngPalette, game.RngIdle,
         };
         Assert.Equal(each.Length, streams);
         foreach (var rng in each) got.Add(rng.U32Value());

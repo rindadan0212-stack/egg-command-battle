@@ -24,9 +24,10 @@
 *@
 
 <div class="edroot">
-  <div class="edtop">
+  <header class="edtop">
+    <div class="eddoc">
     <label class="edwho">
-      骨組み
+      <span class="edtoplabel">文書</span>
       @* ⭐ 32枚を1つの select に並べると読めないので、画面／部品で分ける
          （`Scenes.All` が唯一の出所 ── 増えたらここも自動で増える）。 *@
       <select id="edof" value="@_of" @onchange="OnOfChange">
@@ -46,69 +47,51 @@
         </optgroup>
       </select>
     </label>
+      <span class="eddoctype">@(Scenes.Of(_of).IsPart ? "部品" : "画面")</span>
+      <span class="eddirty @(IsDirty ? "is-dirty" : "")" aria-live="polite">@(IsDirty ? "未保存" : "保存済み")</span>
+    </div>
+
+    @if (Scenes.Of(_of).IsPart)
+    {
+      <nav class="edcrumb" aria-label="編集中の場所">
+        @if (Scenes.Of(_of).HostId != _of)
+        {
+          <span>土台: @Scenes.Of(_of).HostId</span>
+          <span aria-hidden="true">/</span>
+          <strong>部品: @_of</strong>
+          <button type="button" class="edtextbtn" @onclick="ReturnToHost">土台へ戻る</button>
+        }
+        else
+        {
+          <strong>独立部品: @_of</strong>
+        }
+      </nav>
+    }
 
     @if (_needsConfirm)
     {
-      <button type="button" @onclick="ReconnectFolder" disabled="@(!_supported)" title="前回選んだフォルダをもう一度使う（1クリック・選び直しではない）">
-        🔄 前回のフォルダを使う
+      <button type="button" class="edfolder" @onclick="ReconnectFolder" disabled="@(!_supported)" title="前回選んだフォルダをもう一度使う（1クリック・選び直しではない）">
+        前回のフォルダを使う
       </button>
     }
     else
     {
-      <button type="button" @onclick="PickFolder" disabled="@(!_supported || _reconnecting)">
-        📂 フォルダを選ぶ@(string.IsNullOrEmpty(_folder) ? "" : $"（{_folder}）")
+      <button type="button" class="edfolder" @onclick="PickFolder" disabled="@(!_supported || _reconnecting)">
+        @(string.IsNullOrEmpty(_folder) ? "フォルダを選ぶ" : $"フォルダ: {_folder}")
       </button>
     }
 
     @* ⭐ 見える押しどころ＋ Ctrl+Z / Ctrl+Shift+Z の両方（作者の指示）。
        ⭐ 数は「あと何回戻せるか」── 0件のときは字を出さず、押せないことも示す。 *@
     <button type="button" @onclick="Undo" disabled="@(_undo.Count == 0)" title="取り消し（Ctrl+Z）">
-      ⟲@(_undo.Count > 0 ? _undo.Count.ToString(CultureInfo.InvariantCulture) : "")
+      Undo@(_undo.Count > 0 ? $" {_undo.Count.ToString(CultureInfo.InvariantCulture)}" : "")
     </button>
     <button type="button" @onclick="Redo" disabled="@(_redo.Count == 0)" title="やり直し（Ctrl+Shift+Z）">
-      ⟳@(_redo.Count > 0 ? _redo.Count.ToString(CultureInfo.InvariantCulture) : "")
+      Redo@(_redo.Count > 0 ? $" {_redo.Count.ToString(CultureInfo.InvariantCulture)}" : "")
     </button>
 
     @* ⚠️ demo モードでは保存を封じる（ディスクに書く相手が無い ── フォルダを選んでいない）。 *@
-    <button type="button" @onclick="Save" disabled="@(_raw is null || _demo)">💾 保存</button>
-
-    @* ⭐ Pass B: 盤の拡大（ズーム）＋格子。⚠️ まだ何も読んでいない（<see cref="_raw"/> が
-       null）ときは盤そのものが無いので出さない。 *@
-    @if (_raw is not null)
-    {
-      <div class="edzoom">
-        <button type="button" @onclick="ZoomOut" disabled="@(_dotPx <= DotPxSteps[0])" title="縮小">−</button>
-        <button type="button" class="edzoomval" @onclick="ZoomReset" title="器に収まる大きさに戻す">
-          1ドット=@(_dotPx)px
-        </button>
-        <button type="button" @onclick="ZoomIn" disabled="@(_dotPx >= DotPxSteps[DotPxSteps.Length - 1])" title="拡大">＋</button>
-      </div>
-      @* ⭐ 2026-08-29: 数の単位。⚠️ **見せ方だけ**を切り替える ── 骨組みに書く値も、
-         取り消しの控えも、保存する字も設計px のまま1バイトも変わらない。
-         ⭐ 作者は絵を「ドット」で作る（pixelizer も manifest もドット）のに、欄と不備の
-         字は設計px（×4）で、頭の中で常に1段換算していた ── その1段を消す。 *@
-      <label class="edwho edunit">
-        単位
-        <select value="@(_unitDots ? "dot" : "px")" @onchange="OnUnitChange">
-          <option value="dot">ド</option>
-          <option value="px">px</option>
-        </select>
-      </label>
-      <label class="edtoggle edgridtoggle">
-        <input type="checkbox" checked="@_grid" @onchange="OnGridToggle" />
-        <span>格子</span>
-      </label>
-      @* ⭐ E2: 名札（節点の名前）── なし / 選んだものだけ / 全部 の3段階
-         （計画 §11-3・Tiled の `ObjectLabelVisibility`）。既定は「なし」。 *@
-      <label class="edwho edlabelmode">
-        名札
-        <select value="@_labelMode" @onchange="OnLabelModeChange">
-          <option value="none">なし</option>
-          <option value="selected">選んだものだけ</option>
-          <option value="all">全部</option>
-        </select>
-      </label>
-    }
+    <button type="button" class="edsave" @onclick="Save" disabled="@(_raw is null || _demo)">保存</button>
 
     @if (!_checkedSupport)
     {
@@ -123,9 +106,9 @@
 
     @if (!string.IsNullOrEmpty(_status))
     {
-      <span class="edstatus">@_status</span>
+      <span class="edstatus" role="status" aria-live="polite">@_status</span>
     }
-  </div>
+  </header>
 
   @* ⭐ **道具箱は上の帯に置く**（2026-08-24・実測で分かった作り直し）。
      ⚠️ もともと Inspector の中に入れていたが、D-1 で Inspector を畳めるようにした結果
@@ -135,7 +118,22 @@
      ⚠️ 出所は1つ（ここだけ）── Inspector 側には複製を作らない。 *@
   @if (_raw is not null)
   {
-    <div class="edtools">
+    <section class="edtools" aria-label="キャンバスツール">
+      <div class="edtoolbar-group">
+        <span class="edstructlabel">表示</span>
+        <div class="edzoom">
+          <button type="button" @onclick="ZoomOut" disabled="@(_dotPx <= DotPxSteps[0])" title="縮小">縮小</button>
+          <button type="button" class="edzoomval" @onclick="ZoomReset" title="器に収まる大きさに戻す">@(_dotPx)px/ドット</button>
+          <button type="button" @onclick="ZoomIn" disabled="@(_dotPx >= DotPxSteps[DotPxSteps.Length - 1])" title="拡大">拡大</button>
+        </div>
+        <label class="edwho edunit">単位
+          <select value="@(_unitDots ? "dot" : "px")" @onchange="OnUnitChange"><option value="dot">ドット</option><option value="px">px</option></select>
+        </label>
+        <label class="edtoggle edgridtoggle"><input type="checkbox" checked="@_grid" @onchange="OnGridToggle" /><span>格子</span></label>
+        <label class="edwho edlabelmode">名札
+          <select value="@_labelMode" @onchange="OnLabelModeChange"><option value="none">なし</option><option value="selected">選択のみ</option><option value="all">すべて</option></select>
+        </label>
+      </div>
       @* ⭐ E2: 層（レイヤ）の切替（計画 §11-2・§11-9「道具箱: 層の切替」）。
          ⚠️ **層を選ぶ＝道具・カタログ・見え方が全部決まる**（LDtk の借用） ──
          下の「足す」・木の並び・盤の薄くする／触れなくするが、全部ここ1つに従う。 *@
@@ -152,9 +150,13 @@
       </div>
       <div class="edstructrow">
         <button type="button" class="edalign-btn eddel-btn" disabled="@(_selected.Count == 0)"
-                title="消す（Delete キーでも）" @onclick="DeleteSelected">🗑 消す</button>
+                title="消す（Delete キーでも）" @onclick="DeleteSelected">消す</button>
         <button type="button" class="edalign-btn eddup-btn" disabled="@(_selected.Count != 1)"
                 title="複製" @onclick="DuplicateSelected">複製</button>
+        <button type="button" class="edalign-btn" disabled="@(!CanMoveSelectedSibling(-1))"
+                title="同じ親の中で1つ前へ" @onclick="() => MoveSelectedSibling(-1)">上へ</button>
+        <button type="button" class="edalign-btn" disabled="@(!CanMoveSelectedSibling(1))"
+                title="同じ親の中で1つ後ろへ" @onclick="() => MoveSelectedSibling(1)">下へ</button>
       </div>
       @* ⭐ D-2: この行の札は掴んで盤へドラッグできる（`eggEdit.paletteListen` が id で見つける）。
          ⚠️ 押しただけ（動かさず離した）は今までどおりネイティブ click →`@onclick`（`AddKind`）。
@@ -180,7 +182,7 @@
           }
         }
       </div>
-    </div>
+    </section>
   }
 
   @* ⭐ Pass B 段階制: まだ何も読んでいない（<see cref="_raw"/> が null。demo は
@@ -203,14 +205,14 @@
         else if (_needsConfirm)
         {
           <button type="button" class="edstartbtn" @onclick="ReconnectFolder" disabled="@(!_supported)">
-            🔄 前回のフォルダを使う
+            前回のフォルダを使う
           </button>
           <span class="edstarthint">前回選んだフォルダを覚えています。1クリックで繋ぎ直します（選び直しではありません）。</span>
         }
         else
         {
           <button type="button" class="edstartbtn" @onclick="PickFolder" disabled="@(!_supported)">
-            📂 フォルダを選ぶ
+            フォルダを選ぶ
           </button>
           @if (!_checkedSupport)
           {
@@ -243,7 +245,7 @@
         @* ⭐ 段階4b: 行を掴んでいる間だけ、中の字（`.edname` 等）の指の受け止めを切る
            ── 切らないと `OffsetY` が字の小さな箱を基準に来て、行のどのへんを指して
            いるか（上端＝手前／真ん中＝中へ／下端＝後ろ）を数えられない。 *@
-        <div class="edtreebody @(_dragLine >= 0 ? "edtdragging" : "")">
+        <div class="edtreebody @(_dragLine >= 0 ? "edtdragging" : "")" role="tree" aria-label="骨組みのアウトライン" aria-multiselectable="true">
           @if (_raw is null)
           {
             <div class="edhint">フォルダを選ぶと、原文の行の順で並びます。</div>
@@ -273,12 +275,20 @@
             }
             else
             {
+              var keyboardLine = rows.Any(r => r.Node.LineNumber == _treeFocusLine)
+                ? _treeFocusLine
+                : rows.Any(r => r.Node.LineNumber == _selectedLine)
+                  ? _selectedLine
+                  : rows[0].Node.LineNumber;
               @foreach (var row in rows)
               {
                 <div class="edrow @(row.Node.LineNumber == _selectedLine ? "on" : _selected.Contains(row.Node.LineNumber) ? "sel" : "") @(row.Node.LineNumber == _hoverLine ? "hover" : "") @DropClass(row.Node.LineNumber)"
                      style="padding-left:@(8 + row.Depth * 14)px"
+                     role="treeitem" data-tree-line="@row.Node.LineNumber" aria-level="@(row.Depth + 1)" aria-selected="@(_selected.Contains(row.Node.LineNumber) ? "true" : "false")"
+                     tabindex="@(row.Node.LineNumber == keyboardLine ? 0 : -1)"
                      draggable="true"
                      @onclick="e => SelectLine(e, row.Node.LineNumber)"
+                     @onkeydown="e => TreeKeyDown(e, row.Node.LineNumber)"
                      @onmouseover="() => TreeHoverOn(row.Node.LineNumber)"
                      @onmouseout="TreeHoverOff"
                      @ondragstart="() => TreeDragStart(row.Node.LineNumber)"
@@ -308,7 +318,7 @@
                   <span class="edkind">@row.Node.Kind</span>
                   @if (IsPicMismatch(row.Node.LineNumber))
                   {
-                    <span class="edmismark" title="絵の実寸と枠が合っていません">⚠</span>
+                    <span class="edmismark" title="絵の実寸と枠が合っていません">不整合</span>
                   }
                 </div>
               }
@@ -317,7 +327,7 @@
         </div>
       }
       <button type="button" class="edpaneltoggle" @onclick="ToggleTree"
-              title="@(_treeCollapsed ? "木を開く" : "木を畳む")">@(_treeCollapsed ? "▶" : "◀")</button>
+              title="@(_treeCollapsed ? "アウトラインを開く" : "アウトラインを畳む")">@(_treeCollapsed ? "開く" : "畳む")</button>
     </div>
 
     @* ── 盤 ─────────────────────────────────────── *@
@@ -422,7 +432,7 @@
        `.edinspectorbody` の外に置くので、畳んでも常に見える。 *@
     <div class="edinspector @(_inspectorCollapsed ? "edinspector-collapsed" : "")">
       <button type="button" class="edpaneltoggle" @onclick="ToggleInspector"
-              title="@(_inspectorCollapsed ? "Inspector を開く" : "Inspector を畳む")">@(_inspectorCollapsed ? "◀" : "▶")</button>
+              title="@(_inspectorCollapsed ? "Inspector を開く" : "Inspector を畳む")">@(_inspectorCollapsed ? "開く" : "畳む")</button>
       @if (!_inspectorCollapsed)
       {
         <div class="edinspectorbody">
@@ -665,20 +675,22 @@
 
   @* ── 不備 ───────────────────────────────────────── *@
   <div class="edbottom">
+    <details class="edissues" open>
+      <summary>検査結果@(_raw is null ? "（未実行）" : _faults.Count == 0 && _picMismatches.Count == 0 ? "（問題なし）" : $"（要確認: {_faults.Count + _picMismatches.Count}件）")</summary>
     <div class="edbottomrow">
       @if (_raw is null)
       {
-        <span class="edmuted">● フォルダを選ぶと検査が動きます</span>
+        <span class="edmuted">フォルダを選ぶと検査が動きます</span>
       }
       else if (_faults.Count == 0)
       {
         @* ⚠️ 0件のときは一覧の器（`edfaultlist`）ごと出さない
            （作者の pixelizer の教訓「空の欄を先に見せない」）。 *@
-        <span class="edok">● 不備 0件</span>
+        <span class="edok">不備 0件</span>
       }
       else
       {
-        <span class="edbad">● @(_faults.Count)件</span>
+        <span class="edbad">不備 @(_faults.Count)件</span>
         @* ⭐ 一覧にして押せるようにした。⚠️ 横並びのまま溢れたら**下へ畳む**
            （`flex-wrap`）── この頁の作法「溢れたら畳み方を間違えている合図」を
            守りつつ、この帯だけは中身の件数が読めないので、唯一
@@ -705,7 +717,7 @@
     @if (_raw is not null && _picMismatches.Count > 0)
     {
       <div class="edbottomrow">
-        <span class="edbad">⚠ この画面に枠と絵が合わない部品が @(_picMismatches.Count)個あります</span>
+        <span class="edbad">枠と絵が合わない部品: @(_picMismatches.Count)個</span>
         <div class="edfaultlist">
           @for (var i = 0; i < _picMismatches.Count; i++)
           {
@@ -719,6 +731,7 @@
         </div>
       </div>
     }
+    </details>
   </div>
 
   @* ⭐ D-2: 道具箱から掴んだ「作ろうとしている四角」の輪郭（ゴースト）。
@@ -900,6 +913,7 @@
 
     private bool _treeCollapsed;
     private bool _inspectorCollapsed;
+    private int _treeFocusLine = -1;
 
     // ── ⭐ D-4: 左/上/幅/高＋きざみ の畳み（既定で畳む・微調整のときだけ開く） ──
 
@@ -1197,6 +1211,16 @@
         {
             _visibleDirty = false;
             await RefreshVisibleSet();
+        }
+        if (_ready)
+            await Js.InvokeVoidAsync("eggEdit.setDirty", IsDirty);
+        // キーボードで移った先へ焦点も追従させる。再描画後に行わないと、並び替えで
+        // 旧DOMの同じ位置へ焦点が残るため、次の矢印操作が別の節点に当たってしまう。
+        if (_treeFocusLine >= 0 && _ready)
+        {
+            int line = _treeFocusLine;
+            _treeFocusLine = -1;
+            await Js.InvokeVoidAsync("eggEdit.focusTreeLine", line);
         }
         // ⭐ 盤の DOM が確定したこの拍で、溜まっていれば選択の輪を1回だけ流す
         //    （<see cref="_ringDirty"/> の註 ── ここが唯一の `reselect` 呼び出し口。
@@ -1915,6 +1939,7 @@
     /// トグル（複数選択）、そうでなければ今までどおり単独選択。</summary>
     private void SelectLine(MouseEventArgs e, int line)
     {
+        _treeFocusLine = line;
         if (e.ShiftKey || e.CtrlKey || e.MetaKey) ToggleSelect(line);
         else SelectOnly(line);
     }
@@ -2061,6 +2086,74 @@
         _inspectorCollapsed = !_inspectorCollapsed;
         RingRefresh();
         StateHasChanged();
+    }
+
+    /// <summary>部品編集から、その部品を描いている土台へ戻る。文書の切替は必ず既存の
+    /// 確認・切替経路を通すため、未保存の編集や undo 履歴を黙って捨てない。</summary>
+    private async Task ReturnToHost()
+    {
+        var scene = Scenes.Of(_of);
+        if (!scene.IsPart || scene.HostId == _of) return;
+        if (!await ConfirmSwitchIfDirty()) return;
+        await SwitchDocument(scene.HostId, -1);
+    }
+
+    /// <summary>アウトラインのキーボード選択。矢印は表示中の行をたどり、Alt+上下は
+    /// DnD と同じ <see cref="MoveNode"/> を通して同じ親の中だけを並べ替える。</summary>
+    private void TreeKeyDown(KeyboardEventArgs e, int line)
+    {
+        if (e.Key is "Enter" or " " or "Spacebar")
+        {
+            SelectOnly(line);
+            _treeFocusLine = line;
+            return;
+        }
+        if (e.AltKey && e.Key is "ArrowUp" or "ArrowDown")
+        {
+            // 修飾クリックで選択を外した直後でも、見えているフォーカス行を対象にする。
+            if (_selected.Count != 1 || _selectedLine != line) SelectOnly(line);
+            MoveSelectedSibling(e.Key == "ArrowUp" ? -1 : 1);
+            return;
+        }
+
+        var rows = FilteredRows();
+        int at = rows.FindIndex(r => r.Node.LineNumber == line);
+        if (at < 0) return;
+        int next = e.Key switch
+        {
+            "ArrowUp" => Math.Max(0, at - 1),
+            "ArrowDown" => Math.Min(rows.Count - 1, at + 1),
+            "Home" => 0,
+            "End" => rows.Count - 1,
+            _ => at,
+        };
+        if (next != at)
+        {
+            int nextLine = rows[next].Node.LineNumber;
+            SelectOnly(nextLine);
+            _treeFocusLine = nextLine;
+        }
+    }
+
+    /// <summary>選択中の1節点を、同じ親の兄弟とだけ入れ替えられるか。</summary>
+    private bool CanMoveSelectedSibling(int direction)
+    {
+        if (_raw is null || _selected.Count != 1 || _selectedLine < 0) return false;
+        var (_, siblings) = Locate(_selectedLine);
+        int at = siblings.ToList().FindIndex(n => n.LineNumber == _selectedLine);
+        return at >= 0 && at + direction >= 0 && at + direction < siblings.Count;
+    }
+
+    /// <summary>DnD を使えない環境の代替。実際の書き換えは <see cref="MoveNode"/> の
+    /// LayoutSplice と往復検査をそのまま通す。</summary>
+    private void MoveSelectedSibling(int direction)
+    {
+        if (!CanMoveSelectedSibling(direction)) return;
+        var (_, siblings) = Locate(_selectedLine);
+        int at = siblings.ToList().FindIndex(n => n.LineNumber == _selectedLine);
+        var target = siblings[at + direction];
+        MoveNode(_selectedLine, target.LineNumber, direction < 0 ? DropSpot.Before : DropSpot.After);
+        _treeFocusLine = _selectedLine;
     }
 
     // ── ⭐ D-4: 左/上/幅/高＋きざみ の畳み ─────────────────
@@ -4589,11 +4682,15 @@
 
     protected override void OnInitialized()
     {
-        _leaving = Nav.RegisterLocationChangingHandler(_ =>
+        _leaving = Nav.RegisterLocationChangingHandler(async context =>
         {
+            if (!await ConfirmSwitchIfDirty())
+            {
+                context.PreventNavigation();
+                return;
+            }
             ClearOverrides();
             ClearArt();   // ⭐ E-3: 絵の上書きは「頁を離れるとき」だけ解く（画面の切替では保つ）
-            return ValueTask.CompletedTask;
         });
     }
 

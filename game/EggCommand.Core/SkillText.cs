@@ -95,6 +95,27 @@ namespace EggCommand.Core
             return "";
         }
 
+        /// <summary>威力の**呼び名だけ**（倍率を出さない版）。⭐ 「（中）」「（特大）×2発」。
+        ///
+        /// 🔴 <see cref="PowerOf"/> を書き換えずに足した（2026-08-30・作者の指示「倍率非表示」）。
+        /// ⚠️ 倍率を消したいのは**長押しで開く詳細**だけで、図鑑の書き出し（`Sim/Book.cs`）と
+        /// wiki（`Sim/WikiPages.cs`）は数を出したまま ── そちらは表なので、
+        /// 技どうしを数で見比べる場所だから。⭐ 片方だけ変えるために口を2つに分ける。
+        ///
+        /// ⚠️ 出す条件（ダメージのある技だけ・連発の書き方）は
+        /// <see cref="PowerOf"/> と**同じ規則**で揃える ── ずれると
+        /// 「表には威力があるのに詳細には無い技」が生まれる。</summary>
+        public static string PowerLabelOf(Skill skill)
+        {
+            foreach (var effect in skill.Effects)
+            {
+                if (effect.Kind != EffectKind.Damage) continue;
+                string shots = effect.Repeat > 1 ? $" ×{effect.Repeat}発" : "";
+                return $"（{Skills.LabelOf(effect.Power)}）{shots}";
+            }
+            return "";
+        }
+
         /// <summary>レベルごとの上昇量。⭐ Lv2→Lv5 の4段を「→」で並べる。</summary>
         public static string GrowthOf(Skill skill)
         {

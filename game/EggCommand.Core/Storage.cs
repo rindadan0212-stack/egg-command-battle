@@ -114,6 +114,13 @@ namespace EggCommand.Core
         public static string LabelOf(SortBasis basis) =>
             basis == SortBasis.Born ? "素質だけ" : "合計";
 
+        /// <summary>いまの並べ替えがその個体に見ている数。⭐ **一覧の升へ出すための口**
+        /// （2026-08-30・作者の指示「枠内下に並び替え中の数字か星を表示」）。
+        /// ⚠️ <see cref="SortKey.Caught"/> は数で並べていない（入った順そのまま）ので
+        /// **数を持たない** ── 呼び側は★を出す（<see cref="Sorted"/> の註と対）。</summary>
+        public static int? ShownValue(Creature creature, SortKey key, SortBasis basis) =>
+            key == SortKey.Caught ? null : SortValue(creature, key, basis);
+
         private static int SortValue(Creature creature, SortKey key, SortBasis basis)
         {
             switch (key)

@@ -56,8 +56,8 @@ public class LineageWebTests
     [Fact]
     public void tapのtreeはPanelTreeを開く()
     {
-        int at = ShellSource.IndexOf("case \"tree\":", StringComparison.Ordinal);
-        Assert.True(at >= 0, "Shell.cs: case \"tree\": が見つからない");
+        int at = ShellSource.IndexOf("case UiActionKind.Tree:", StringComparison.Ordinal);
+        Assert.True(at >= 0, "Shell.cs: case UiActionKind.Tree が見つからない");
         string tap = ShellSource.Substring(at, Math.Min(120, ShellSource.Length - at));
         Assert.Contains("Open = Panel.Tree", tap);
     }
@@ -96,15 +96,19 @@ public class LineageWebTests
         Assert.Contains("text=家系図", BoxLayout);
     }
 
-    /// <summary>⚠️ 3本 → 4本に割り直した後も、はみ出し・重なりは無い
-    /// （`LayoutAssetTests.不備がない` が実物で見るので、ここは「4本ある」ことだけ見る）。</summary>
+    /// <summary>⚠️ 札の中の押しどころの本数。⭐ はみ出し・重なりは
+    /// `LayoutAssetTests.不備がない` が実物で見るので、ここは本数だけ見る。
+    /// 🔴 **2026-08-30 に 4本 → 2本**（作者の指示）── 「Lv ＋1」と「技を鍛える」を
+    /// 1つの「強化」にまとめ（それは `paint` の押しどころなので `button` では数えない）、
+    /// 「分解」は札の外の「まとめて分解」へ出した。⭐ 画面に残る `button` の押しどころは
+    /// 「家系図」と「まとめて分解」の2本。</summary>
     [Fact]
-    public void boxtxtの詳細札は釦4本()
+    public void boxtxtの釦は2本()
     {
         int count = 0;
         foreach (var line in BoxLayout.Split('\n'))
             if (line.Contains(" button ") && line.Contains("tap=")) count++;
-        Assert.Equal(4, count);
+        Assert.Equal(2, count);
     }
 
     // ── tree.txt ── 骨組みの形そのもの ─────────────────────

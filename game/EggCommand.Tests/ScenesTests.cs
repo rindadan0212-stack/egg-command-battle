@@ -55,6 +55,20 @@ public class ScenesTests
             "Scenes.All にあるのに実物が無い骨組み: " + string.Join(", ", missingFromDisk));
     }
 
+    [Fact]
+    public void 戦闘と潜入の舞台は画面上端を正典にする()
+    {
+        string scenes = File.ReadAllText(Path.Combine(WebSrcDir, "Scenes.cs"));
+        Assert.Contains("top:0;width:1080px;height:1920px", scenes);
+        Assert.DoesNotContain("top:132px", scenes);
+        foreach (var page in new[] { "BattlePage.razor", "RaidPage.razor" })
+        {
+            string source = File.ReadAllText(Path.Combine(WebSrcDir, page));
+            Assert.Contains("top:0;width:1080px;height:1920px", source);
+            Assert.DoesNotContain("top:132px", source);
+        }
+    }
+
     /// <summary>⭐ `S(...)` の1行ぶんを、id と付け足しの旗に分けて読む。</summary>
     private static Dictionary<string, string> SceneFlags()
     {

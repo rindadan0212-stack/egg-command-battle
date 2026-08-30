@@ -39,7 +39,14 @@ farband  paint   0    420   2560 260   pic=home-far roll=far
 # ⚠️ 地面は**下の帯の裏まで敷く**背景なので、潜っていてよい（`dock=no`）。
 ground   paint   0    228   1080 1612  pic=home-ground dock=no
 
-mats     paint   0    0     1080  80    pic=home-mats
+# 🔴 **上の帯の絵（`home-mats`）を外した**（2026-08-30・作者の指示「帯を消して上に詰める
+#    背景に被せるように」）。⭐ `box` は**何も描かない入れ物** ── 中身（EXP の丸と数）の
+#    置き場所だけを保ったまま、地の板だけを消せる。
+#    ⚠️ 絵そのもの（`assets/ui/paint/home-mats.png`）は消していない（`idleframe`・`plate` と
+#    同じ扱い ── 戻したくなるかもしれない）。
+# ⚠️ これで EXP は**空の絵の上に直に**乗る。字は既定の濃い色なので、明るい空の上で読める
+#    （実測で確認）。
+mats     box     0    0     1080  80
   icon   round   48   20    40    40    bind=icon
   # ⭐ **EXP と書く。**⚠️ 数だけ出していた頃は、丸い印の隣の数が
   #    何の数なのか画面のどこにも書いていなかった。
@@ -58,7 +65,7 @@ mats     paint   0    0     1080  80    pic=home-mats
 #    見た目は ink=clear で字だけ ── 上の帯の絵を隠さないため。
 menu     button  832  0     200   112   size=32 tap=menu ink=clear text=そのほか
 
-idle     host    -72  196   1080  472
+idle     host    0    196   1080  472
 # 🔴 **放置帯を囲む手書きの枠は非表示にした**（作者の指示 2026-08-28）。
 #    ⚠️ 絵そのもの（`assets/ui/paint/home-idle-frame.png`）は消していない ── 戻したくなる
 #    かもしれない。⭐ 消したのは節点だけ（`idleframe paint 16 108 1048 460
@@ -68,7 +75,7 @@ idle     host    -72  196   1080  472
 #    「ホーム画面」の実測）、格子ではないので `repeat=` の桁と段では書けない
 #    ── 置き場所は `Incubator.cs` が持つ（`Board` のマスと同じ理由）。
 # ⚠️ 中の1つぶんは `slot.txt`（304x376）。ここは枠だけ。
-nests    host    -8   716   1080  880
+nests    host    0    716   1080  880
 
 # 🔴 **試練と編成の釦をここから外した**（2026-08-29・作者の指示「輪の外のものを
 #    一か所にまとめて右上に」）。⭐ 行き先は右上の `menu`（`menu.txt`）。

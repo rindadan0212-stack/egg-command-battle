@@ -2,7 +2,7 @@
 @using EggCommand.Core
 @using EggCommand.Web
 @using Microsoft.JSInterop
-@implements IDisposable
+@implements IAsyncDisposable
 @inject IJSRuntime Js
 
 <div id="stage-wrap">
@@ -178,12 +178,9 @@
         //    次の相手へ引き直す（`Core.Idle.RollFoeFromTable`）── 呼んだ「後」の
         //    `FoeSpecies` を渡すと、**いま削った相手ではなく次に出る相手の種族**で
         //    卵が生まれる。⭐ `BeatIdle` 側と同じ形に揃える（判断を2か所に書かない）。
-        int idleFoeSpecies = _shell.Game.Idle.FoeSpecies;
         // ⚠️ **`Now` ではなく `NowFine`。**⭐ 放置の拍は 0.4秒まで細かいので、整数秒で渡すと
         //    1秒ぶんまとめて進み、0.5秒ごとのはずの打撃が同じ瞬間に2発出る（実測して直した）。
-        var caughtUp = Core.Idle.Advance(_shell.Game.Idle,
-            Games.PartyOf(_shell.Game, PartyKind.Idle), _shell.NowFine, _shell.Game.RngIdle);
-        Games.GainIdleEggs(_shell.Game, caughtUp, idleFoeSpecies);
+        var caughtUp = Games.AdvanceIdle(_shell.Game, _shell.NowFine);
 
         // 🔴 **画面を開いた瞬間だけでなく、開いたまま眺めている間も進める**
         //    （2026-08-27 監査で発覚。上の1回きりの `Idle.Advance` は「見ていない間に
@@ -219,9 +216,10 @@
     [JSInvokable]
     public async Task Tapped(string what, string at)
     {
+        if (!UiCommands.TryParseTap(what, at, out var command)) return;
         // ⚠️ **保存の出し入れは画面の外**（ブラウザに聞く）ので、ここで受ける。
         //    ⭐ `Shell` は遊びの状態しか持たない。
-        if (what is "out" or "in") { await Trade(what); return; }
+        if (command.Kind is UiActionKind.Out or UiActionKind.In) { await Trade(command.Name); return; }
 
         // 🔴 **押したら、居座っている帯を消す。**⚠️ `_say` を空へ戻す経路が初期化以外に
         //    無かったので、レベルアップ・分解・潜入の失敗・試練の勝敗などで頻繁に立つ
@@ -229,7 +227,7 @@
         //    ⭐ この手番で新しく `Shell.Say` が立てば、下の `Draw()` がすぐ埋め直すので
         //    「本当は伝えたい今回のお知らせまで消える」ことにはならない。
         _say = "";
-        _shell.Tap(what, at);
+        _shell.Tap(command);
         Draw();
         StateHasChanged();
         Wind();
@@ -288,9 +286,10 @@
     [JSInvokable]
     public void Held(string what, string at)
     {
+        if (!UiCommands.TryParseHold(what, at, out var command)) return;
         // ⭐ 長押しも「押しどころ」の一つ ── `Tapped` と同じ理由で居座りを消す
         _say = "";
-        _shell.Hold(what, at);
+        _shell.Hold(command);
         Draw();
         StateHasChanged();
         // ⚠️ 札が開いているあいだ時計は止まる（`Deeds.Beat`）ので、ここで畳む
@@ -450,11 +449,8 @@
         //    ⚠️ `Advance` は周期が終わると同じ呼び出しの中で次の相手へ引き直すので、
         //    呼んだ「後」の `FoeSpecies` を渡すと、いま削った相手ではなく次の相手の
         //    種族で卵が生まれる。
-        int idleFoeSpecies = _shell.Game.Idle.FoeSpecies;
         // ⚠️ **`Now` ではなく `NowFine`**（上と同じ理由 ── 拍が秒より細かい）
-        var gain = Core.Idle.Advance(_shell.Game.Idle,
-            Games.PartyOf(_shell.Game, PartyKind.Idle), _shell.NowFine, _shell.Game.RngIdle);
-        Games.GainIdleEggs(_shell.Game, gain, idleFoeSpecies);
+        var gain = Games.AdvanceIdle(_shell.Game, _shell.NowFine);
 
         // ⭐ **何も覆わずに眺めているときだけ。**⚠️ カード（育てる・分解など）や
         //    戦闘・すごろく・演出の最中に割り込んで組み直す／字を差し替えると、
@@ -620,6 +616,7 @@
         if (_shell.Fight_ == null)
         {
             _shell.Sparks.Clear();
+            _shell.PendingGraves.Clear();
             if (!_lit) return;
             _lit = false;
             await Js.InvokeVoidAsync("eggFx.clear");
@@ -629,8 +626,17 @@
         var sparks = _shell.Sparks.ToArray();
         _shell.Sparks.Clear();
         _lit = true;
-        await Js.InvokeVoidAsync("eggTap.bars", Deeds.Bars(_shell));
-        await Js.InvokeVoidAsync("eggFx.play", sparks);
+        try
+        {
+            await Js.InvokeVoidAsync("eggTap.bars", Deeds.Bars(_shell));
+            await Js.InvokeVoidAsync("eggFx.play", sparks);
+        }
+        finally
+        {
+            // `play` は砂煙の予約だけをしてすぐ戻る。今描かれている墓は JS が直接
+            // 現すので、次の Draw で再び伏せないよう、この拍の札だけ外す。
+            _shell.PendingGraves.Clear();
+        }
     }
 
     /// <summary>盤に演出が出ているか。⚠️ 毎回片付けを呼ばないための札。</summary>
@@ -644,11 +650,14 @@
 
     private void Draw()
     {
-        // ⚠️ 戦闘と潜入は下の帯を出さない ── そのぶん本体が縦に伸びる
-        // 🔴 上のバーを外したので両方 132px 伸びた（2026-08-29）。
-        //    ⭐ 帯あり 1920−232=1688 ／ 帯なし 1920 いっぱい。
-        bool wide = _shell.Now_Sheet is Sheet.Fight or Sheet.Raid;
-        _tall = wide ? 1920 : 1688;
+        // 🔴 **器はどの画面も 1920 いっぱい**（2026-08-30・作者の指示「帯不要。ボタン直置き」）。
+        //    ⚠️ 前は帯のある画面を 1688 で切っていたので、帯の裏に**舞台の地**（`--sky-nest`）が
+        //    出て、それ自体が1本の帯に見えていた ── 板（`plate`）を外したのに帯が消えなかった
+        //    のはこれが理由。⭐ 器を伸ばすと、ホームの地面の絵（`ground`・1840 まで）が
+        //    釦の後ろに続き、釦が**背景の上に直に**乗る。
+        // ⚠️ 「本体の中身は 1688 より下へ置かない」という決まりは変えていない
+        //    （`Layouts.DockFaults` が見張る）── ここで伸びるのは**背景が見える範囲**だけ。
+        _tall = 1920;
         _body = _shell.Now_Sheet switch
         {
             Sheet.Home => Sheets.Home(_shell),
@@ -702,7 +711,7 @@
         _ => "",
     };
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         // ⚠️ `eggTap.listen` は document に直接 pointerdown 等を付けている（捕捉段階）。
         //    DOM がこの頁のものでなくなっても listener 自体は自然には外れない ── 外さないと
@@ -711,5 +720,6 @@
         //    流儀（`Dispose` は同期メソッドなので `IAsyncDisposable` にはせず、投げ捨てる）。
         _ = Js.InvokeVoidAsync("eggTap.stop");
         _me?.Dispose(); _clock?.Dispose(); _idleClock?.Dispose();
+        await _vault.ReleaseAsync();
     }
 }

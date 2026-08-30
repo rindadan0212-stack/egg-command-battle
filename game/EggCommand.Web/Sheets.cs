@@ -26,6 +26,21 @@ public static class Sheets
         _ => "",
     };
 
+    /// <summary>一覧の升の下に出す「いま何順か」の数。⭐ 作者の指示（2026-08-30
+    /// 「枠内下に並び替え中の数字か星を表示」）── 並べ替えの基準が数で語るものなら
+    /// その数を出す。⚠️ **入手順だけは数を持たない**ので空を返す（★が升の上に在る）。
+    /// ⭐ 数の出所は `Storages.ShownValue` ひとつ ── 並べ替えと同じ式で出す
+    /// （ここで数え直すと、並び順と表示が食い違いうる）。</summary>
+    private static string SortShown(Shell s, Creature creature)
+    {
+        int? value = Storages.ShownValue(creature, s.Sort, s.Basis);
+        // ⚠️ **数だけ**を出す。⭐ 何の数かはすぐ上の並べ替えの帯が言っている
+        //    （「素質合計 順（素質だけ）」）── 升ごとに繰り返すと、絵の上に長い字が乗って
+        //    かえって読めなくなる（実測 2026-08-30: 「素質合計 726」は 208px の枠に対して
+        //    ほぼ幅いっぱいで、絵に埋もれた）。
+        return value is int v ? Face.Digits(v) : "";
+    }
+
     private static int SortCount(string key) => key switch
     {
         "chips-filters" => Filters.Keys.Length,
@@ -65,8 +80,12 @@ public static class Sheets
                 "grow" => $"Lv ＋1　EXP {Face.Digits(Levels.ExpToNext(picked))}",
                 // ⭐ **持っている EXP**（旧 上のバーの右肩 ── 2026-08-29 に画面の中へ）。
                 //    ⚠️ すぐ上の "grow" は**要る量**、こちらは**持っている量**。両方要る。
-                "exp" => $"持っている EXP {Face.Digits(s.Game.Idle.Exp)}",
+                // 🔴 **「持っている」の字は消した**（2026-08-30・作者の指示）── 枠の絵
+                //    （`home-frame1`）の中に数だけを出す。⚠️ 枠が「これは持ち物だ」と言う。
+                "exp" => Face.Digits(s.Game.Idle.Exp),
                 "cellA-star" or "cellB-star" => Face.Star(sorted[one]),
+                // ⭐ 並び替え中の数（入手順なら数が無いので空 ── ★は上に出ている）
+                "cellA-note" or "cellB-note" => SortShown(s, sorted[one]),
                 _ => key.StartsWith("detail-") ? face.Text(key[7..], face.Row)
                     : SortText(s, key, chip),
             },
@@ -87,8 +106,9 @@ public static class Sheets
                 "open" => s.SortOpen,
                 // ⭐ 印を付けるのは「いま見ている個体」だけ
                 "cellA-picked" or "cellB-picked" => sorted[one].Id == picked.Id,
-                // ⚠️ BOX の升に一言は出さない（合成の「＋14」・編成の「Lv 44」だけ）
-                "cellA-note" or "cellB-note" => false,
+                // 🔴 **升の下に並び替え中の数を出す**（2026-08-30・作者の指示）。
+                //    ⚠️ 入手順は数で並べていないので、そのときだけ出さない（★が上に在る）。
+                "cellA-note" or "cellB-note" => SortShown(s, sorted[one]).Length > 0,
                 _ => key.StartsWith("detail-") && face.Shows(key[7..]),
             },
 
@@ -135,8 +155,10 @@ public static class Sheets
 
             Text = key => Which(key) is (Face f, string what) ? f.Text(what, f.Row)
                 : key is "cellA-star" or "cellB-star" ? Face.Star(sorted[one])
-                // ⭐ **持っている EXP**（旧 上のバーの右肩 ── 2026-08-29 に画面の中へ）
-                : key == "exp" ? $"持っている EXP {Face.Digits(s.Game.Idle.Exp)}"
+                // ⭐ 並び替え中の数（BOX と同じ ── 一覧の読み方を画面で変えない）
+                : key is "cellA-note" or "cellB-note" ? SortShown(s, sorted[one])
+                // 🔴 **持っている EXP は配合から外した**（2026-08-30・作者の指示
+                //    「配合画面には不要」）── ここは2体を見比べる場所で、EXP は使わない。
                 : SortText(s, key, chip),
 
             Sprite = key => key is "cellA-art" or "cellB-art" ? Cell(one).Sprite
@@ -157,7 +179,7 @@ public static class Sheets
                 "pb" => b != null,
                 "cellA-picked" or "cellB-picked" =>
                     sorted[one].Id == a?.Id || sorted[one].Id == b?.Id,
-                "cellA-note" or "cellB-note" => false,
+                "cellA-note" or "cellB-note" => SortShown(s, sorted[one]).Length > 0,
                 _ => Which(key) is (Face f, string what) && f.Shows(what),
             },
 
@@ -343,12 +365,20 @@ public static class Sheets
         var skills = hand != null ? Creatures.SkillsOf(hand.Creature) : new Skill?[3];
         bool done = state.Result != null;
 
-        return LayoutDom.Render(LayoutStore.Of("battle"), new DomFill
+        var sheet = LayoutStore.Of("battle");
+        // 🔴 **立ち位置の高さは骨組みから読む**（2026-08-30）。⚠️ 前はここに `1278` と
+        //    **写しが埋め込んであった**ので、`battle.txt` の `allies`/`foes` を広げても
+        //    実物は動かなかった（骨組みが座標を持つ、というこの作品の約束が片側だけ破れていた）。
+        //    ⭐ `Stands.Lay` はこの高さから体の大きさを逆算するので、ここがずれると
+        //    「骨組みでは届いているのに、実物は技の札に潜る」が起きる。
+        float room = HostHigh(sheet, "allies");
+
+        return LayoutDom.Render(sheet, new DomFill
         {
             Inside = key => key switch
             {
-                "allies" => Column(s, allies, 540, 1278, false, actor),
-                "foes" => Column(s, foes, 540, 1278, true, actor),
+                "allies" => Column(s, allies, 540, room, false, actor),
+                "foes" => Column(s, foes, 540, HostHigh(sheet, "foes"), true, actor),
                 _ => "",
             },
 
@@ -404,6 +434,14 @@ public static class Sheets
         static bool Ready(Unit? actor, int slot) =>
             actor != null && slot < actor.Cooldowns.Length && actor.Cooldowns[slot] <= 0;
 
+        /// <summary>その `host` の丈。⚠️ 骨組みに無ければ、これまでの数（1278）へ落とす
+        /// ── 名前を打ち間違えて**画面が消える**より、少し狭いほうがまだ直せる。</summary>
+        static float HostHigh(Layout sheet, string name)
+        {
+            foreach (var node in sheet.Roots) if (node.Name == name) return node.Height;
+            return 1278f;
+        }
+
         static string SkillWord(Skill?[] skills, Unit? actor, int slot, string what)
         {
             if (slot >= skills.Length || skills[slot] is not Skill skill) return "";
@@ -436,31 +474,36 @@ public static class Sheets
             // ⭐ 絵の並び用（構造化）。⚠️ 字を返す `ActiveStatuses` は Unity の
             //    `UnitStand` がまだ読むので、そちらは触らない（Battle.cs 参照）。
             var badges = EggCommand.Core.Battle.ActiveStatusBadges(u);
-            // ⚠️ 🔴 **unit.txt の `sicon`/`snum` の `cols=`/`max=` と同じ数にすること。**
+            // ⚠️ 🔴 **unit.txt の `sicon`/`scount` の `cols=`/`max=` と同じ数にすること。**
             //    ⭐ 唯一の出所は骨組みだが、繰り返しの個数はここ（Fill 側）でしか
             //    決められない（`Count` が返す数がそのまま描かれる枚数になる）。
-            // ⚠️ **2026-08-29 に 5 → 4。**絵の枠を 24px→64px（16ドット）へ広げたので、
-            //    状態欄（274px）には4個しか並ばない（`4×64 + 隙間3×6 = 274`）。
-            //    🔴 ここを 5 のままにすると、骨組みは4枚しか描かないのに Fill は5件ぶん
-            //    数えるので、**5件目が消え、しかも「+N」の N も1つずれる**。
-            //    ⭐ 噛み合いは `PicFrameSizeTests` が見張っている。
-            const int shown = 4;
+            // ⭐ 64px の4枠。5個以上は実絵を3枚にして最後の1枠を +N に譲る。
+            //    ⚠️ ここは `unit.txt` の sicon/scount の cols=4、smore の4枠目と対になる。
+            const int slots = 4;
+            int shown = badges.Count > slots ? slots - 1 : slots;
             int cur = -1;   // ⭐ 「状態の何番目を描いているか」（At が置く）
             // ⚠️ **側も名前に入れる。**⭐ 番号だけだと味方の1体目と敵の1体目が同じ id になる
             sb.Append(Stands.One(spots[i], (foe ? "f" : "a") + i, new DomFill
             {
                 Text = key => key switch
                 {
-                    "snum" => cur >= 0 && cur < badges.Count ? badges[cur].Text : "",
-                    "smore" => badges.Count > shown ? "+" + (badges.Count - shown) : "",
+                    // ⭐ 数は右上の小丸へ。％やスタック数（Text）は絵の下へは出さない。
+                    "snum" => cur >= 0 && cur < badges.Count ? badges[cur].Turns : "",
+                    "smoret" => badges.Count > slots ? "+" + (badges.Count - shown) : "",
+                    // ⭐ **属性の玉の中にレベル**（2026-08-30・作者の指示）。⚠️ 「Lv」は書かない
+                    //    ── 44px の玉に入る字は2桁が精一杯で、冠を付けると数が読めなくなる。
+                    //    ⭐ 玉が属性、数がレベル ── 位置で意味が決まるので冠は要らない。
+                    "elv" => Levels.Of(u.Creature).ToString(),
                     _ => "",
                 },
                 Sprite = key => key == "art" ? Creatures.SpeciesOf(u.Creature).Sprite : null,
                 Palette = key => key == "art" ? Creatures.PaletteOf(u.Creature) : null,
                 Pic = key => key == "sicon" && cur >= 0 && cur < badges.Count
-                    ? EggCommand.Core.Art.StatusIcon(badges[cur].Kind) : null,
+                    ? EggCommand.Core.Art.StatusIcon(badges[cur].Kind, badges[cur].Good) : null,
                 Ratio = key => key switch
                 {
+                    // ⭐ 影は「全部塗った帯」（`bar` を丸薬型の面として使う ── `unit.txt` 参照）
+                    "shade" => 1,
                     "hp" => u.MaxHp > 0 ? Math.Clamp(u.Hp / (double)u.MaxHp, 0, 1) : 0,
                     // ⭐ 刻みの端数まで出す（`Deeds.Bars` と同じ式 ── 出所を2つにしない）
                     "gauge" => Deeds.GaugeAt(s, u),
@@ -473,14 +516,21 @@ public static class Sheets
                     "elem" => Face.ElementCss(u.Creature.Element),
                     "beats" => Face.ElementCss(SpeciesTable.Beats(u.Creature.Element)),
                     "glow" => "rgba(255,217,77,.55)",
+                    // ⭐ 絵の下の影（`unit.txt` の `shade`）── 濃さの出所は Face の1つだけ
+                    "shade" => Face.ShadowCss,
                     // ⭐ 狙い先の棒は HP 帯と**同じ2色**（味方は緑・敵は赤）。
                     //    ⚠️ 新しい色を作らない ── 増やすと「この色は何の色か」が増える
                     "aim" => foe ? "#e04f5f" : "#2fa84a",
-                    // ⚠️ 新しい色を作らない ── 既存の良い側／悪い側の字色（Ui.cs の12定数）そのまま
-                    "sicon" or "snum" => cur >= 0 && cur < badges.Count
+                    // ⭐ 既存の良い側／悪い側の色を小丸へ移す。字はどちらも白にして読ませる。
+                    "sback" => cur >= 0 && cur < badges.Count
                         ? (badges[cur].Good ? "#1e7a38" : "#c0303f") : null,
+                    "snum" => cur >= 0 && cur < badges.Count ? "#fff" : null,
+                    "smoreback" => "#636980",
                     _ => null,
                 },
+                // ⭐ Down の拍だけ墓を伏せる。`fx.js` が砂煙の後に直接現し、次の Draw
+                //    では Spill が札を外すので通常の墓へ戻る。
+                Fade = key => key == "grave" && s.PendingGraves.Contains((foe ? "f" : "a") + i) ? 0 : null,
                 Count = key => key == "status" ? Math.Min(badges.Count, shown) : 0,
                 At = (key, idx) => { if (key == "status") cur = idx; },
                 // 🔴 **これが無いと `tap=` は `data-tap` にならない**（`LayoutDom` の
@@ -491,11 +541,17 @@ public static class Sheets
                 When = key => key switch
                 {
                     "foe" => foe,
+                    "allyalive" => !foe && alive,
+                    "foealive" => foe && alive,
+                    "allydying" => !foe && !alive && s.PendingGraves.Contains("a" + i),
+                    "foedying" => foe && !alive && s.PendingGraves.Contains("f" + i),
+                    "allydead" => !foe && !alive,
+                    "foedead" => foe && !alive,
                     // ⭐ いま手番が回っている体を光らせる
                     "actor" => actor != null && actor.Key == u.Key,
                     // ⭐ 狙い先の印（棒8本）── 出す・出さないはここ1か所で決める
                     "aim" => aimed,
-                    "smore" => badges.Count > shown,
+                    "smore" => badges.Count > slots,
                     _ => false,
                 },
             }));
@@ -734,7 +790,9 @@ public static class Sheets
     {
         if (!Skills.Has(s.SkillId)) return "";
         var skill = Skills.ById(s.SkillId!);
-        var power = SkillText.PowerOf(skill);
+        // 🔴 **倍率は出さない**（2026-08-30・作者の指示「倍率非表示」）。⭐ 呼び名だけの
+        //    `PowerLabelOf` を使う ── 図鑑と wiki の表は `PowerOf`（数つき）のまま。
+        var power = SkillText.PowerLabelOf(skill);
         int slot = s.SkillSlot;
         int level = Math.Max(1, s.SkillLevel);
 
@@ -746,9 +804,14 @@ public static class Sheets
                 // ⭐ Lv・CT・威力を1行に。⚠️ 3行に割ると札より縦に長い覆いになる
                 // ⚠️ 上限は技ごと（Skills.MaxLevelOf）。グローバルな Skills.MaxLevel は
                 //    「どの技もこれを超えない」全体の天井であって、個々の技の上限ではない
+                // ⭐ **区切りは全角2つ**（2026-08-30・作者の指示「間隔狭く見づらい」）。
+                //    ⚠️ 1つだと「Lv 1 / 5　CT 0　威力（中）」が一続きの字に見え、
+                //    どこまでが1項目なのか読み取れない。⭐ 威力の前に空白を入れない
+                //    ── `PowerLabelOf` は「（中）」と括弧から始まるので、
+                //    空けると括弧が宙に浮く。
                 "meta" => $"Lv {level} / {Skills.MaxLevelOf(skill)}"
-                    + $"　CT {(slot == 0 ? 0 : skill.Ct)}"
-                    + (power.Length > 0 ? $"　威力 {power}" : ""),
+                    + $"　　CT {(slot == 0 ? 0 : skill.Ct)}"
+                    + (power.Length > 0 ? $"　　威力{power}" : ""),
                 "body" => SkillText.Describe(skill),
                 // ⚠️ 「上げると強くなる」と書かない。⭐ Lv2→Lv5 の実数を並べる
                 "steps" => SkillText.StepsOf(skill, slot),
@@ -870,18 +933,48 @@ public static class Sheets
     /// <summary>手に入れた瞬間・生まれた瞬間の全画面演出。⭐ Unity にあって web に無かった
     /// 最後の演出（`View/Fanfare.cs`）。⚠️ Banner と違って**閉じるまで出しっぱなし**
     /// ── 覆い（`veil`）が押しどころを兼ねる（`tap=cheer`）ので、どこを押しても閉じる。</summary>
-    public static string Fanfare(Shell s, string crown = "") =>
-        LayoutDom.Render(LayoutStore.Of("fanfare"), new DomFill
+    public static string Fanfare(Shell s, string crown = "")
+    {
+        // ⭐ **重ねて見せる詳細のための顔**（2026-08-30）。⚠️ `Cheer_` は絵と字しか
+        //    持たないので、札に出す中身は個体そのものから作る（`CreatureId` で引く）。
+        //    ⚠️ 卵の祝い（`IsCreature` が false）では null のまま ── 札を出さない。
+        Face? born = null;
+        int row = 0;
+        if (s.BornLook && s.Cheer_ is Cheer look && look.IsCreature)
         {
-            Text = key => s.Cheer_ is not Cheer c ? "" : key switch
+            foreach (var one in s.Game.Storage.Creatures)
+                if (one.Id == look.CreatureId) { born = new Face(one); break; }
+        }
+
+        return LayoutDom.Render(LayoutStore.Of("fanfare"), new DomFill
+        {
+            // ⚠️ 繰り返し（ステの表）は `sheetp-` の冠で来る ── `use=panel` の約束。
+            Count = key => born == null ? 0 : key switch
             {
-                "line" => c.Line,
-                "stars" => c.Stars,
-                _ => "",
+                "sheetp-stats" => Stats.Keys.Length,
+                "sheetp-lines" => Stats.Keys.Length - 1,
+                _ => 0,
             },
-            Sprite = key => key == "art" && s.Cheer_ is Cheer c ? c.Art : null,
-            Palette = key => key == "art" && s.Cheer_ is Cheer c ? c.Palette : null,
-            Tint = key => key == "burst" && s.Cheer_ is Cheer c ? c.Burst : null,
+            At = (key, i) => { if (key == "sheetp-stats") row = i; },
+
+            Text = key => key.StartsWith("sheetp-")
+                ? (born == null ? "" : born.Text(key[7..], row))
+                : s.Cheer_ is not Cheer c ? "" : key switch
+                {
+                    "line" => c.Line,
+                    "stars" => c.Stars,
+                    _ => "",
+                },
+            Sprite = key => key == "sheetp-art" ? born?.Sprite
+                : key == "art" && s.Cheer_ is Cheer c ? c.Art : null,
+            Palette = key => key == "sheetp-art" ? born?.Palette
+                : key == "art" && s.Cheer_ is Cheer c ? c.Palette : null,
+            Tint = key => key.StartsWith("sheetp-") ? born?.Tint(key[7..])
+                : key == "burst" && s.Cheer_ is Cheer c ? c.Burst
+                // ⭐ 絵の下の影（`fanfare.txt` の `shade`）── 濃さの出所は Face の1つだけ
+                : key == "shade" ? Face.ShadowCss : null,
+            // ⭐ 影は「全部塗った帯」（`bar` を丸薬型の面として使う ── `unit.txt` 参照）
+            Ratio = key => key == "shade" ? 1 : 0,
             When = key => key switch
             {
                 // ⭐ **★は卵のときだけ**（誕生では `Cheer.Born` が空文字を渡す）
@@ -889,11 +982,16 @@ public static class Sheets
                 // ⭐ 生まれたその場の「分解」「くわしく見る」（作者の指示 2026-08-29）。
                 //    ⚠️ 卵を得たとき（`Cheer.EggGot`）には出さない ── 分解も詳細も
                 //    生まれた個体にしか意味が無い。`Cheer.IsCreature` が唯一の出所。
-                "creature" => s.Cheer_ is Cheer c && c.IsCreature,
-                _ => false,
+                // ⚠️ **詳細を重ねている間は引っ込める**（2026-08-30）── 出したままだと
+                //    札の上に釦が重なる。
+                "creature" => s.Cheer_ is Cheer c && c.IsCreature && !s.BornLook,
+                // ⭐ 重ねて見せる詳細（`look`）── 個体が引けたときだけ出す
+                "look" => born != null,
+                _ => key.StartsWith("sheetp-") && born != null && born.Shows(key[7..]),
             },
             Tappable = key => true,
         }, crown: crown);
+    }
 
     // ── 確かめる ────────────────────────────────────
 
@@ -942,8 +1040,9 @@ public static class Sheets
                 "sstar" => "★の多い順",
                 "snew" => "入手順",
                 "egg-stars" => Rarities.StarsOf(eggs[at].Rarity),
-                // ⭐ 素質は伏せない。手元にある卵なので、どれを先に温めるかの材料になる
-                "egg-wild" => Stats.TotalOf(eggs[at].Wild).ToString(),
+                // 🔴 **素質合計（`egg-wild`）は消した**（2026-08-30・作者の指示
+                //    「素質合計は書かない」）。⚠️ `eggcard.txt` の節点も同時に外した
+                //    ── 片方だけ残すと誰も読まない枝になる。
                 "egg-wait" => Rarities.Clock(Math.Max(1, Rarities.SecondsOf(eggs[at].Rarity))),
                 "egg-who" => SpeciesTable.ById(eggs[at].SpeciesId).Name,
                 _ => "",
@@ -1054,6 +1153,10 @@ public static class Sheets
             Text = key => key switch
             {
                 "who" => $"{Creatures.SpeciesOf(one).Name}　Lv {Levels.Of(one)}/{Levels.MaxOf(one)}",
+                // ⭐ 「強化」の中のタブ（2026-08-30）。⚠️ 字は `bind` から出す
+                //    ── 塗り分けが `bind` 持ちにしか掛からないため（骨組みの註と対）。
+                "tgrow" => "レベル上げ",
+                "ttrain" => "技を鍛える",
                 // 🔴 二度手間解消（2026-08-29・作者の指示「点を振る前に点を獲得するのが
                 //    二度手間」）── `levelup` 釦を無くし、`spend`（ステを押す）だけで
                 //    「EXP → 1点 → そのステへ」が完結する（判断は `Shell.Tap` の
@@ -1077,6 +1180,9 @@ public static class Sheets
             // ⭐ 押しても成功しないなら押させない ── 振れる点が残っているか、
             //    上限未満で次の1点ぶんの EXP が足りるか、どちらかが要る
             //    （黙って何も起きない釦を出さない、はここでも守る）。
+            // ⭐ 開いている側のタブだけ塗る（2026-08-30・「強化」の中のタブ分け）。
+            //    ⚠️ 色は下の帯のタブと同じ ── 「いま居る所」の示し方を画面で変えない。
+            Tint = key => key == "tgrow" ? "#f59e0b" : null,
             Tappable = key => key != "spend"
                 || left > 0 || (!Levels.IsMaxed(one) && s.Game.Idle.Exp >= Levels.ExpToNext(one)),
             // ⚠️ 🔴 **`crown:` で渡す。**位置引数だと `suffix` に入り、
@@ -1111,6 +1217,9 @@ public static class Sheets
             Text = key => key switch
             {
                 "who" => one == null ? "" : Creatures.SpeciesOf(one).Name,
+                // ⭐ 「強化」の中のタブ（2026-08-30・`Sheets.Grow` と同じ字・同じ場所）。
+                "tgrow" => "レベル上げ",
+                "ttrain" => "技を鍛える",
                 "rname" => skills[row]?.Name ?? "—",
                 // ⚠️ 上限は技ごと（Skills.MaxLevelOf）。空き枠（skills[row]==null）は
                 //    今までどおり全体の天井のまま（points は常に 0 なので Lv1 のまま出る）
@@ -1139,7 +1248,10 @@ public static class Sheets
             Palette = key => key == "chip-art" ? EggArt.Shell : null,
 
             // ⭐ 選んでいる枠だけ塗る。⚠️ 鍛えられない枠は沈める
-            Tint = key => key == "row" && row == slot && usable ? "#f59e0b" : null,
+            // ⭐ 開いている側のタブ（`ttrain`）と、注ぐ先に選んでいる枠（`row`）を塗る
+            //    （2026-08-30・「強化」の中のタブ分け ── `Sheets.Grow` と対）。
+            Tint = key => key == "ttrain" || (key == "row" && row == slot && usable)
+                ? "#f59e0b" : null,
 
             When = key => key == "chip-picked" && s.Feeds.Contains(eggs[at].Id),
 
@@ -1290,6 +1402,14 @@ public static class Sheets
                 ? SpeciesTable.ById(Party()[who].SpeciesId).Sprite : null,
             Palette = key => key == "face"
                 ? SpeciesTable.ById(Party()[who].SpeciesId).Palettes[0] : null,
+            // ⭐ **BOX の升と同じ「見せどころ」**（`trial.txt` の `crop=256`・2026-08-30）。
+            //    ⚠️ 出所は `SpeciesArt` の1つだけ ── ここで別に決めると、同じ種族が
+            //    BOX と試練で違う寄り方をする。
+            Focus = key => key == "face"
+                ? SpeciesArt.FocusOf(
+                    SpeciesTable.ById(Party()[who].SpeciesId).Id,
+                    SpeciesTable.ById(Party()[who].SpeciesId).Sprite)
+                : null,
 
             When = key => key == "beaten" && Beaten(),
             Tappable = key => key == "trial",

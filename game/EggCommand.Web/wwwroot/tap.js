@@ -115,7 +115,7 @@ window.eggTap = {
     const foe = document.getElementById('foe')
     if (foe) {
       if (view.foeArt) {
-        foe.classList.remove('idle-hidden')
+        foe.classList.remove('idle-hidden', 'idle-down')
         // ⚠️ id を持つのは `walker.txt` が描く「絵の器」（`artf#foe`）であって、
         //   中の `<img>` 自身は id を持たない（`LayoutDom.Dots` は器にだけ id を振る）
         //   ── だから一段くぐって探す。
@@ -137,9 +137,10 @@ window.eggTap = {
         }
         this._foeKey = view.foeKey
       } else {
-        // ⭐ これが「倒れた」の見え方。⚠️ 消さない ── 次に出るときも同じ枠を使い回す
-        //   （`_foeKey` もここでは更新しない。上のコメント参照）。
-        foe.classList.add('idle-hidden')
+        // ⭐ 倒れた相手は消すのでなく、同じ枠の中で砂煙→墓へ替える。
+        //   `_foeKey` はここでは更新しない（次の相手の飛び込み判定に使う）。
+        foe.classList.remove('idle-hidden', 'idle-come')
+        foe.classList.add('idle-down')
       }
     }
     for (const id of ['hptrack', 'hpfill']) {
@@ -147,18 +148,18 @@ window.eggTap = {
       if (el) el.classList.toggle('idle-hidden', !view.foeArt)
     }
     const hpfill = document.getElementById('hpfill')
-    // ⚠️ 帯の地（`hptrack`）と同じ 280px を最大に、実数のまま px で伸ばす
-    //   （`Idle.Draw` が最初に置く幅の作り方と同じ ── ％ではない）。
-    if (hpfill) hpfill.style.width = (view.foeLeft * 280) + 'px'
+    const hptrack = document.getElementById('hptrack')
+    // ⭐ 最大幅は地の実DOMから読む。絵の大きさを変えても毎拍の更新だけ旧幅へ戻らない。
+    // `offsetWidth` は舞台の設計px（外枠のscale前）なので、そのまま style.width に使える。
+    if (hpfill) hpfill.style.width = (view.foeLeft * (hptrack?.offsetWidth || 192)) + 'px'
 
     const exp = document.getElementById('count')
     if (exp && exp.textContent !== view.exp) exp.textContent = view.exp
 
     if (view.eggs > 0) this._eggHop(view.eggs)
 
-    // ⭐ 仕事4: 倒れた味方。⚠️ 帯は組み直さないので、`idle-walk<i>`（`Idle.Draw` が振った
-    //   id）の級（`.idle-down`）を付け外しするだけ ── 消す・作り直すことはしない
-    //   （`#foe` の `idle-hidden` と同じ流儀）。
+    // ⭐ 倒れた味方。帯は組み直さず、`idle-walk<i>` の `.idle-down` だけを替える。
+    //   CSSが同じ枠の中で砂煙→墓の順を担うので、敵味方で別の演出時計を持たない。
     if (view.down) {
       for (let i = 0; i < view.down.length; i++) {
         const walker = document.getElementById('idle-walk' + i)
@@ -176,13 +177,25 @@ window.eggTap = {
    *   組み直しで消えない」）。`#idle` は放置の帯そのものが `Draw()` で丸ごと
    *   組み直されうる（タップ・画面遷移のたび）ので、そちらへ差すと消える恐れがある。
    * ⚠️ `#fx` は `#stage` 直下（座標系 0〜1080×0〜1920）── 放置の帯（`#idle`、
-   *   0〜1080×0〜472）とは基準が違うので、帯の上端ぶん（`#app-body` の 132px ＋
-   *   `#idle` の 88px ＝ 220px）を足して合わせる。⚠️ 「画面の外」は `#stage` 自身の
+   *   0〜1080×0〜472）とは基準が違うので、`#idle` の実DOM位置を基準にして
+   *   合わせる。⚠️ 固定の頁上端オフセットには依存しない。「画面の外」は `#stage` 自身の
    *   `overflow:hidden`（1080px 幅）がちょうど隠す ── 相手の飛び込みと同じ切れ方になる。
    * @param {number} many */
   _eggHop(many) {
     const yard = document.getElementById('fx')
     if (!yard) return
+    const yardRect = yard.getBoundingClientRect()
+    const idle = document.getElementById('idle')
+    const stage = document.getElementById('stage')
+    // getBoundingClientRect() は transform 後の実ピクセル。style.top は #stage の
+    // 設計CSS pxなので、舞台のscaleで割り戻してから同じ座標系へ置く。
+    const scale = stage && stage.offsetWidth > 0
+      ? stage.getBoundingClientRect().width / stage.offsetWidth
+      : 1
+    if (!Number.isFinite(scale) || scale <= 0) return
+    // idle 内の演出アンカー（idle 上端から392px）を fx の座標系へ変換する。
+    const hopTop = idle ? (idle.getBoundingClientRect().top - yardRect.top) / scale + 392 : 480
+    if (!Number.isFinite(hopTop)) return
     for (let i = 0; i < many; i++) {
       const el = document.createElement('img')
       el.src = 'paint/nest-egg.png'
@@ -191,7 +204,7 @@ window.eggTap = {
       // ⭐ 複数まとめて出るとき（久しぶりに開いた清算など）は少しずつ間を空ける
       //   ── 重なって出ると1個に見える。
       const wait = i * 0.14
-      el.style.cssText = `left:780px;top:480px;width:100px;height:125px;`
+      el.style.cssText = `left:780px;top:${hopTop}px;width:100px;height:125px;`
         + (wait > 0 ? `animation-delay:${wait}s` : '')
       yard.appendChild(el)
       // ⚠️ `animationend` を待たない ── `idle-come` は着地して止まったままなので発火しない。

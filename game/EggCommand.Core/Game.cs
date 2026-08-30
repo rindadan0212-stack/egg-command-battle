@@ -280,6 +280,16 @@ namespace EggCommand.Core
             for (int i = 0; i < gain.Star3; i++) MakeIdleEgg(game, speciesId, 3);
         }
 
+        /// <summary>放置戦闘を1回進め、得た卵を同じ相手の種族で棚へ清算する唯一の入口。
+        /// <see cref="Idle.Advance"/> は周期の終わりに次の敵を引くため、種族は必ず進行前に退避する。</summary>
+        public static Idle.IdleGain AdvanceIdle(Game game, double now)
+        {
+            int foeSpecies = game.Idle.FoeSpecies;
+            var gain = Idle.Advance(game.Idle, PartyOf(game, PartyKind.Idle), now, game.RngIdle);
+            GainIdleEggs(game, gain, foeSpecies);
+            return gain;
+        }
+
         /// <summary>⭐ <see cref="TakeEgg"/> と同じ流儀（<see cref="Nests.MakeEggOfRarity"/>）。
         /// ⚠️ ★はここでは引かない（<see cref="Rarities.Roll"/> を通さない）── 呼び側が
         /// 既に決めた★をそのまま渡す。</summary>

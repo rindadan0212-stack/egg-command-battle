@@ -29,6 +29,15 @@ public sealed class Vault
 
     public Vault(IJSRuntime js) { _js = js; }
 
+    /// <summary>頁の寿命が終わるときに書き手のleaseを返す。</summary>
+    public async ValueTask ReleaseAsync()
+    {
+        if (!CanWrite) return;
+        CanWrite = false;
+        try { await _js.InvokeVoidAsync("eggSave.release"); }
+        catch (JSDisconnectedException) { }
+    }
+
     /// <summary>開く。⭐ 書き手の権利を取り、消されにくくしてもらってから読む。</summary>
     public async Task<Game?> Open()
     {

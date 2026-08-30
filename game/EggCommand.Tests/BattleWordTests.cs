@@ -68,7 +68,9 @@ public class BattleWordTests
     public void 出す間はcssTextより後に書く()
     {
         string fx = Fx();
-        int css = fx.LastIndexOf("style.cssText", StringComparison.Ordinal);
+        // ⚠️ 死亡砂煙の `bit.style.cssText` も後半にある。ここが見張るのは
+        //    順番に出す本体 `el` なので、対象をその変数へ絞る。
+        int css = fx.LastIndexOf("el.style.cssText", StringComparison.Ordinal);
         int delay = fx.IndexOf("animationDelay", StringComparison.Ordinal);
         Assert.True(css >= 0, "cssText への差し替えが見つからない（検査が空回り）");
         Assert.True(delay >= 0, "animationDelay の書き込みが見つからない");

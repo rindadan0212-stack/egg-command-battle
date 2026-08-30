@@ -32,9 +32,19 @@
 #    という1行だった。`home` の `idleframe` を外したときと同じ扱い）。
 #    ⚠️ 板が無くなったぶん、タブの後ろには**舞台の地**（`stage.css` の `--sky-nest`）が出る
 #    ── 本体（`#app-body`）は 1556 で切ってあるので、画面の絵はここまで伸びてこない。
+# 🔴 **釦を5つにし、5つ目を試練にした**（2026-08-30・作者の指示「ボタンを５つにし、
+#    試練を５つ目に入れる」）。⚠️ 試練は右上のメニュー（`menu.txt`）から外した ──
+#    入口を2つ持つと「どちらが本道か」が言えなくなる。
+# ⭐ **絵は作者の `assets/ui/home-src/24_ボタン１.png`**（作者の指示）。
+#    ⚠️ `paint` は引き伸ばさないので、枠は絵の実寸 46x42 ドット ＝ **184x168** でなければ
+#    ならない（`PicFrameSizeTests` が見張る）。⭐ 5本の並びはそこから逆算:
+#    左右の余白 48 ずつ・5x184=920・残り 64 を 4つの隙間へ ＝ **gap 16**。
+# ⚠️ 帯（`plate`）はもう無いので、釦は**ホームの地面の絵の上に直に**乗る
+#    （作者の指示「帯不要。ボタン直置き」── `AppPage` の器を 1920 まで伸ばしてある）。
 dock      box     0    1688  1080 232   when=dock dock=no
-  tab     paint   48   44    236  148   repeat=tabs cols=4 gap=16 rows=148 max=4 tap=tab bind=tab pic=frame-tab
-    tname  label  0    28    236  44    size=40 anchor=upper-center bind=tname
+  # ⚠️ 上 24 ＝ 下端 1880。⭐ `index.html` の `CUT_BOT`（下から切ってよい 36px）は
+  #    「タブ下端 1880」を根拠にしている ── ここを下げると小さい窓で釦の足が切れる。
+  tab     paint   48   24    184  168   repeat=tabs cols=5 gap=16 rows=168 max=5 tap=tab bind=tab pic=home-btn1
+    tname  label  0    44    184  48    size=36 anchor=upper-center bind=tname
     # ⚠️ 0 を出さない。⭐ 数が無いことは**書かない**ことで伝わる
-    # ⚠️ 字が24→40pxになったので、高さを36→48に広げた（1行に収める余地を作る）。
-    tcount label  0    84    236  48    size=40 anchor=upper-center bind=tcount
+    tcount label  0    96    184  44    size=32 anchor=upper-center bind=tcount

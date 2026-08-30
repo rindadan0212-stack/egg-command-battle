@@ -114,28 +114,37 @@ public class LayoutAssetTests
     /// 出所の付け方（`Rename`）のどこかが二重に数えたか、取りこぼしている。
     /// ⚠️ 自前が 11→12 になったのは 2026-08-29「家系図」釦（`btree`）を足したため
     /// （差し込みは変わらない ── `btree` は `use=panel` の中身ではなく box.txt 自前の行）。
-    /// ⚠️ 同日 12→13 ── 上のバーを外したので、右肩に出ていた EXP を画面の中（`exp`）へ移した。</summary>
+    /// ⚠️ 同日 12→13 ── 上のバーを外したので、右肩に出ていた EXP を画面の中（`exp`）へ移した。
+    /// ⚠️ 2026-08-30 に 13→14 ── 作者の指示で釦を組み直した。「Lv ＋1」と「技を鍛える」を
+    /// 1つの「強化」（`bgrow`＋中の字 `glab`）にまとめて **−1**、「分解」を札の外の
+    /// 「まとめて分解」（`melt`）へ出して **±0**、EXP を枠の絵（`expbox`＋`exp`）に入れて **+1**、
+    /// あわせて +1。⚠️ 差し込みは 47→50 ── `panel` が `sub`（id・世代・変異）を外して 28→27、
+    /// `cell` が ★と一言の下地（`starback`/`noteback`）を足して 5→7（×2枚）。</summary>
     [Fact]
     public void boxの自前と差し込みの数()
     {
         int own = 0, part = 0;
         foreach (var root in Read("box").Roots) CountOrigins(root, ref own, ref part);
-        Assert.Equal(13, own);
-        Assert.Equal(47, part);
+        Assert.Equal(14, own);
+        Assert.Equal(50, part);
     }
 
     /// <summary>⭐ breed は自前16行・差し込み75行 ──
     /// `panelmini`(28)×2（`pfill`/`qfill`）+ `sortbar`(3) + `sortchips`(6)
     /// + `cell`(5)×2（`cellA`/`cellB`）= 75。
     /// ⚠️ 自前が 15→16 になったのは 2026-08-29 ── 上のバーを外したので、
-    /// 右肩に出ていた EXP を画面の中（`exp`）へ移した（`box.txt` と同じ）。</summary>
+    /// 右肩に出ていた EXP を画面の中（`exp`）へ移した（`box.txt` と同じ）。
+    /// ⚠️ 2026-08-30 に 16→15 ── 作者の指示「配合画面には不要」で EXP を外した
+    /// （BOX には残る ── あちらは「Lv ＋1 に足りるか」を読む場所）。
+    /// ⚠️ 差し込みは 75→77 ── `panelmini` が `sub` を外して 28→27（×2枚）、
+    /// `cell` が下地2つを足して 5→7（×2枚）。</summary>
     [Fact]
     public void breedの自前と差し込みの数()
     {
         int own = 0, part = 0;
         foreach (var root in Read("breed").Roots) CountOrigins(root, ref own, ref part);
-        Assert.Equal(16, own);
-        Assert.Equal(75, part);
+        Assert.Equal(15, own);
+        Assert.Equal(77, part);
     }
 
     private static void CountOrigins(LayoutNode node, ref int own, ref int part)

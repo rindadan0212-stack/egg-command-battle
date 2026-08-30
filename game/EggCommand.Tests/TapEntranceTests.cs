@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.RegularExpressions;
 using EggCommand.Core;
 using EggCommand.Web;
 using Xunit;
@@ -19,7 +18,6 @@ namespace EggCommand.Tests;
 public class TapEntranceTests
 {
     private static readonly string Dir = Path.Combine(AppContext.BaseDirectory, "layouts");
-    private static readonly string WebSrc = Path.Combine(AppContext.BaseDirectory, "websrc");
 
     /// <summary>⚠️ `use=` を差し替えてから読む（`LayoutAssetTests.Read` と同じ）──
     /// 差し込まれた側の `tap=`/`hold=` は冠付きの名前（`bar-toggle` 等）に変わるのが実物で、
@@ -98,27 +96,12 @@ public class TapEntranceTests
 
     // ── hold も同じ守り ──────────────────────────────
 
-    /// <summary>`Shell.Hold` の case を実物から抜き出す（`TapCatalogTests` と同じ読み方
-    /// ── Web はコンパイルに持ち込めないので `websrc\Shell.cs` をテキストで読む）。</summary>
-    private static List<string> HoldCases()
-    {
-        string src = File.ReadAllText(Path.Combine(WebSrc, "Shell.cs"));
-        int start = src.IndexOf("public void Hold(string what, string at)", StringComparison.Ordinal);
-        Assert.True(start >= 0, "Shell.cs: Hold が見つからない");
-        int end = src.IndexOf("private void Choose(int i)", start, StringComparison.Ordinal);
-        Assert.True(end > start, "Shell.cs: Choose が見つからない（Hold の終端が決められない）");
-        var found = new List<string>();
-        foreach (Match m in Regex.Matches(src.Substring(start, end - start), "case \"([^\"]+)\":"))
-            found.Add(m.Groups[1].Value);
-        return found;
-    }
-
     [Fact]
     public void 全てのholdに入口がある()
     {
         var (_, holds) = Entrances();
         var lost = new List<string>();
-        foreach (var name in HoldCases()) if (!holds.Contains(name)) lost.Add(name);
+        foreach (var name in HoldCatalog.Names) if (!holds.Contains(name)) lost.Add(name);
         Assert.True(lost.Count == 0, "受け側は生きているのに、どの骨組みからも長押しできない hold: "
             + string.Join(", ", lost));
     }
@@ -127,7 +110,7 @@ public class TapEntranceTests
     public void 骨組みのholdは全て受け手が居る()
     {
         var (_, holds) = Entrances();
-        var cases = new HashSet<string>(HoldCases(), StringComparer.Ordinal);
+        var cases = new HashSet<string>(HoldCatalog.Names, StringComparer.Ordinal);
         var ghost = new List<string>();
         foreach (var h in holds) if (!cases.Contains(h)) ghost.Add(h);
         Assert.True(ghost.Count == 0, "骨組みに在るが誰も受けない hold: " + string.Join(", ", ghost));
