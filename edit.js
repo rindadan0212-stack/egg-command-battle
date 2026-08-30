@@ -22,6 +22,26 @@ window.eggEdit = {
     this._partId = partId || null
   },
 
+  /** アウトラインのキーボード移動後、再描画された選択行へ焦点を戻す。
+   *  行番号は C# 側の現在文書だけから渡され、見つからない（検索で隠れた等）場合は何もしない。 */
+  focusTreeLine(line) {
+    const row = document.querySelector('[data-tree-line="' + String(line) + '"]')
+    if (row && typeof row.focus === 'function') row.focus()
+  },
+
+  /** 未保存状態をブラウザ離脱警告へ同期する。内部の文書切替は C# 側の確認を使い、
+   *  こちらはタブを閉じる・再読み込み・外部URLへ移る経路だけを守る。 */
+  setDirty(dirty) {
+    this._dirty = !!dirty
+    if (this._beforeUnloadBound) return
+    this._beforeUnloadBound = (e) => {
+      if (!this._dirty) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', this._beforeUnloadBound)
+  },
+
   /** ⭐ **C# を呼ぶ唯一の出所**（2026-08-29 監査 E-1）。
    *
    * 🔴 **頁を離れた後に届く呼び出しを、静かに捨てる。**⚠️ `EditPage.Dispose` は
@@ -73,7 +93,7 @@ window.eggEdit = {
    * @param {string} wrapId 器の id @param {string} stageId 盤（1080x1920）の id */
   /** ⭐ 盤の周りに敷く余白（設計px・2026-08-29）。
    *
-   * 🔴 **負の座標に置かれた節点を見るために要る。**⚠️ `home` の `idle` は 左 -72 ──
+   * 🔴 **負の座標へ動かした節点を見るために要る。**⚠️ 編集中は盤外へ仮置きできるため、
    * 余白が無いと、拡大したときに `#edscroll` が左上より手前へスクロールできず、
    * **いちばん見たい不備（画面の外へ出た節点）ほど画面に出せなかった**。
    * ⭐ 設計px で持つ（画面px でなく）ので、どの倍率でも「盤の外側64ドットぶん」という
@@ -980,6 +1000,10 @@ window.eggEdit = {
       //    （矢印・Delete は既に素通し済みだった ── ここだけ判定の位置を先頭へ揃える）。
       const tag = document.activeElement && document.activeElement.tagName
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+      // V2 のアウトラインは矢印・Space を自分で扱う。ここでも受けると、行を移るだけで
+      // 選択中の節点までナッジされ、Alt+矢印では並べ替えと移動が同時に起きる。
+      const inTree = !!(document.activeElement && document.activeElement.getAttribute
+        && document.activeElement.getAttribute('role') === 'treeitem')
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         if (typing) return
         e.preventDefault()
@@ -1002,12 +1026,19 @@ window.eggEdit = {
         this._call(owner, 'DuplicateSelected')
         return
       }
+      // ツリー自身が扱うキーはページスクロール等の既定動作だけ止める。
+      // 伝播は止めず、Blazor 側の TreeKeyDown にはそのまま届ける。
+      if (inTree && (e.key === ' ' || e.key === 'Spacebar' || e.key === 'ArrowUp'
+        || e.key === 'ArrowDown' || e.key === 'Home' || e.key === 'End')) {
+        e.preventDefault()
+        return
+      }
       // ⭐ **Space を押している間はパン**（2026-08-29・`listen` の `down` が見る）。
       //    ⚠️ 字を打っている最中と、釦に焦点があるときは素通しする ── 欄に空白を
       //    打てなくなる／Space で釦を押せなくなるのを避ける（矢印・Delete と同じ配慮）。
       //    ⚠️ `preventDefault` が要る ── 付けないと頁が1画面ぶん飛ぶ（ブラウザ既定）。
       if (e.key === ' ' || e.code === 'Space') {
-        if (typing || tag === 'BUTTON') return
+        if (typing || tag === 'BUTTON' || inTree) return
         e.preventDefault()
         this._setSpace(true)
         return
@@ -1024,7 +1055,7 @@ window.eggEdit = {
       }
       const dir = ARROWS[e.key]
       if (!dir) return
-      if (typing) return
+      if (typing || inTree) return
       e.preventDefault()
       // ⭐ Shift+矢印は粗いナッジ（きざみの4倍＝既定で4ドット）。⚠️ 倍率の掛け算は
       //    C# 側（`EditPage.Nudge`）が持つ ── ここは向きと「粗いか」だけを渡す
@@ -1131,6 +1162,11 @@ window.eggEdit = {
     //    基準に位置を戻そうとして盤が飛ぶ（`_lastK` の註）。
     this._centered = false
     this._lastK = 0
+    this._dirty = false
+    if (this._beforeUnloadBound) {
+      window.removeEventListener('beforeunload', this._beforeUnloadBound)
+      this._beforeUnloadBound = null
+    }
   },
 
   /** 選んでいる行の輪を描き直す（木から選んだとき・数を直して盤を組み直したときに使う

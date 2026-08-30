@@ -91,6 +91,17 @@
       const CUT_TOP = 0;                  // 上のバーを外したので、てっぺんは画面の中身
       const CUT_BOT = 36;                 // frame.txt: タブ下端 1880（40 空くが 4 残す）
       const CUT_Y = CUT_TOP + CUT_BOT;    // = 36
+      //
+      // 🔴 **縦は窓にべた付き。横は余ってよい**（2026-08-29・作者の指示）。
+      // ⚠️ **整数倍だけでは、この要望は原理的に満たせない。**実測: 作者の窓は中身の高さ
+      //    が約 915px で、P=2 に必要な 936px（＝(1920-CUT_Y)/2）に **21px 届かない**。
+      //    届かせるには 90 設計px 切る必要があるが、切ってよいのは下の 36px だけ
+      //    （上は EXP の字が y=0 から始まる）── だから P=1 に落ちて縦半分になっていた。
+      // ⭐ そこで **整数倍を第一候補、届かないときだけ窓に合わせた倍率** に切り替える。
+      //    ⚠️ 半端倍率では絵のドットの太さが 1px ぶん不揃いになる（2px と 3px が混じる）
+      //    ── 2026-08-25 の「二度と使わない」を**作者の判断で緩めた**。
+      //    ⭐ `image-rendering: pixelated`（stage.css）は効いたままなので**ボケはしない**。
+      //    にじまず、太さだけが揃わない。
       function fit() {
         const s = document.getElementById('stage');
         if (!s) return;
@@ -103,13 +114,22 @@
         //    ⭐ 0.1% 以内のズレは「実は整数」とみなす ── 逆に本当に 3.999 なら
         //    4 にしても実ピクセルで 0.1% 溢れるだけで、目には見えない。
         const nearInt = (v) => Math.abs(v - Math.round(v)) < 1e-3 ? Math.round(v) : Math.floor(v);
+        // ⭐ **窓にちょうど収まる倍率**（縦べた付き。横は 1080*kFit < 窓幅 なら余る）。
+        const kFit = Math.min(innerWidth / 1080, innerHeight / 1920);
         // ⚠️ 270 = 1080/4・480 = 1920/4。⭐ 縦だけ「切ってよい量」を引いた丈で割る。
         const p = Math.max(1, nearInt(Math.min(
           innerWidth  * dpr * 4 / 1080,
           innerHeight * dpr * 4 / (1920 - CUT_Y))));
-        const k = p / (4 * dpr);
-        // はみ出す設計px（0〜CUT_Y）。⚠️ 横で決まったときは負になるので 0 で止める。
-        const overY = Math.max(0, (1920 * p / 4 - innerHeight * dpr) * 4 / p);
+        const kInt = p / (4 * dpr);
+        // 整数倍にしたとき縦に何設計px 余るか（負なら切り落とし）。
+        const restY = 1920 - innerHeight / kInt;
+        // 🔴 **整数倍で縦が埋まるなら整数倍を採る**（ドットの太さが揃うほうが良いので）。
+        //    ⚠️ 「埋まる」＝ 余りが1ドット（4設計px）未満か、切り落としが CUT_BOT 以内。
+        //    それ以外は窓に合わせた倍率へ落とす ── 作者の「縦はべた付き」が優先。
+        const useInt = restY >= -CUT_BOT && restY <= 4;
+        const k = useInt ? kInt : kFit;
+        // はみ出す設計px（0〜CUT_Y）。⚠️ 窓に合わせたときは 0（ぴったり収まっている）。
+        const overY = useInt ? Math.max(0, -restY) : 0;
         // 🔴 **切るのは下だけ**（`CUT_TOP` が 0 になったため）。⚠️ 真ん中に置くと上下へ
         //    等分に食い込むので、盤を `overY/2` ぶん下げて食い込みを全部下へ寄せる。
         //    ⚠️ ずらし量は4の倍数（＝整数ドット）に丸める ── 半端だと実ピクセルの

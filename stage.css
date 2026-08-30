@@ -15,6 +15,11 @@
   --good:       #2fa84a;
   --good-ink:   #1e7a38;
   --danger-ink: #c0303f;
+  /* 死亡の砂煙と墓は、戦闘と放置で同じ時計を使う。 */
+  --death-body-duration: .22s;
+  /* CSS animation の開始は次の描画フレーム。20msの余白を残し、Down後420ms以内に消す。 */
+  --death-dust-duration: .4s;
+  --death-grave-delay: .26s;
 
   /* 空。⚠️ Ui.SkyOf と同じ数 */
   --sky-home:   #8fd8f7;
@@ -165,6 +170,31 @@ html, body {
 }
 
 .n.round { border-radius: 50%; }
+
+/* ⭐ 倒れた瞬間は、灰色の角張った粒だけを足元から上げる。ぼかすと砂ではなく
+   霧に見えるので、正方形・steps のままにする。戦闘と放置で同じ時計を使う。 */
+.fx-down { pointer-events: none; }
+.fx-dust {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #777d87;
+  image-rendering: pixelated;
+  animation: death-dust var(--death-dust-duration) steps(4, end) both;
+}
+.fx-dust:nth-child(3n) { background: #a4a9ae; }
+@keyframes death-dust {
+  0% { transform: translateY(0); opacity: 0; }
+  20% { opacity: .9; }
+  100% { transform: translateY(-38px); opacity: 0; }
+}
+/* ⭐ 死ぬ体は砂煙が上がる間だけ残し、その後に消す。`unit.txt` の `deadart*`
+   は PendingGraves の拍だけ描かれるので、次の Draw で再生し直さない。 */
+.n.pixel.roll-death-body { animation: death-body var(--death-body-duration) linear both; }
+@keyframes death-body {
+  0%, 54% { opacity: 1; }
+  100% { opacity: 0; }
+}
 
 /* line ── ⭐ **区切りの1本。**⚠️ 一辺だけ。面（明度差）と二重に使わない。
    色は Prefab の実測（`#2e261c` α.34 / 行の間は α.14）。 */
@@ -443,20 +473,52 @@ html, body {
 .idle-walk { animation: idle-bob .86s ease-in-out infinite; }
 @keyframes idle-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 
-/* ⭐ 倒れた味方（2026-08-28・仕事4）。⚠️ 出所は `tap.js` の `idle()` が
-   `Idle.Draw` の振った id（`idle-walk<i>`）へ付け外しする級 ── 帯そのものは組み直さない
-   造り（背景のアニメが巻き戻るため）なので、見た目の切り替えは全部この級1つで表す。
-   🔴 **`.idle-walk` の揺れは必ず止める**── 倒れているのに歩幅で上下していると壊れて
-   見える。`.idle-walk.idle-down`（2つ重ねた選び手）で `.idle-walk` 単体より強く
-   掛かるので、`!important` は要らない。
-   ⭐ 横に倒す（`rotate`）＋彩度を落とす＋薄くする、の3つで「動けない」に見せる。 */
+/* ⭐ 倒れた味方は、体を回さず砂煙→墓へ替える。`idle-down` は敵にも付くので、
+   容器でなく中の絵だけ隠す。これで重ねた墓まで回転する事故を防ぐ。 */
 .idle-walk.idle-down {
   animation: none;
-  transform: rotate(90deg);
-  filter: grayscale(.7);
-  opacity: .55;
-  transition: transform .2s ease-out, filter .2s ease-out, opacity .2s ease-out;
+  transform: none;
+  filter: none;
+  opacity: 1;
+  transition: none;
 }
+.idle-down .n.pixel { animation: death-body var(--death-body-duration) linear both; }
+.idle-death-dust,
+.idle-grave {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0;
+}
+.idle-death-dust i {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #777d87;
+  image-rendering: pixelated;
+}
+.idle-death-dust i:nth-child(1) { left: 19%; top: 66%; }
+.idle-death-dust i:nth-child(2) { left: 34%; top: 58%; }
+.idle-death-dust i:nth-child(3) { left: 49%; top: 70%; background: #a4a9ae; }
+.idle-death-dust i:nth-child(4) { left: 64%; top: 60%; }
+.idle-death-dust i:nth-child(5) { left: 77%; top: 68%; }
+.idle-down .idle-death-dust { opacity: 1; }
+.idle-down .idle-death-dust i {
+  animation: death-dust var(--death-dust-duration) steps(4, end) both;
+}
+/* ⚠️ ずらしは共通の砂煙時計の中で行う。delay の分だけ duration を短くし、
+   開始描画の余白も含めて最後の粒が Down から420ms以内に消えるようにする。 */
+.idle-down .idle-death-dust i:nth-child(2) { animation-delay: .04s; animation-duration: calc(var(--death-dust-duration) - .04s); }
+.idle-down .idle-death-dust i:nth-child(3) { animation-delay: .08s; animation-duration: calc(var(--death-dust-duration) - .08s); }
+.idle-down .idle-death-dust i:nth-child(4) { animation-delay: .03s; animation-duration: calc(var(--death-dust-duration) - .03s); }
+.idle-down .idle-death-dust i:nth-child(5) { animation-delay: .1s; animation-duration: calc(var(--death-dust-duration) - .1s); }
+.idle-down .idle-grave {
+  object-fit: contain;
+  animation: death-grave 1ms linear var(--death-grave-delay) both;
+}
+@keyframes death-grave { to { opacity: 1; } }
 
 /* ⭐ 相手も卵も、**画面外の右から放物線を描いて飛び込んでくる**
    （2026-08-28・作者の指示「回転してくる演出から、放射線状に飛び込んでくる演出に（卵も）」）。
@@ -488,7 +550,7 @@ html, body {
    （動きは読み取りやすさのためであって、情報の出所ではない）。 */
 @media (prefers-reduced-motion: reduce) {
   .fx-say, .fx-shout { animation: fx-hold .9s linear both; }
-  .fx-ring, .fx-hit { display: none; }
+  .fx-ring, .fx-hit, .fx-down { display: none; }
   .fx-step, .fx-stepf, .fx-shock { animation: none; }
   /* ⭐ 動きを望まない人には転がさない ── ⚠️ ただし**正面は出す**
      （`.die3d` の動きを消すと `transform` が素になり、出た目の面がそのまま正面に来る）。 */
@@ -501,6 +563,10 @@ html, body {
      ⚠️ 消すのは**移り変わる動き**（`transition`）だけ ── 級を2つ重ねた選び手で書く
      （`.idle-walk`（1つ）より強く掛ける必要がある。`.idle-walk.idle-down` の doc 参照）。 */
   .idle-walk.idle-down { transition: none; }
+  .n.pixel.roll-death-body { display: none; }
+  .idle-down .n.pixel { animation: none; opacity: 0; }
+  .idle-down .idle-death-dust { display: none; }
+  .idle-down .idle-grave { animation: none; opacity: 1; }
 }
 
 /* icon ── ⭐ **絵を出して、その上から色を掛ける。**
@@ -537,6 +603,9 @@ html, body {
   -webkit-mask-position: center;
   mask-position: center;
   image-rendering: pixelated;
+}
+.n.icon-art.natural::after {
+  display: none;
 }
 
 /* ⭐ **絵が無いときの印。**⚠️ 空の四角と混同しない ── `IconManifest`/`PaintManifest` が
@@ -589,4 +658,28 @@ html, body {
 .n.paint {
   image-rendering: pixelated;
   display: block;
+}
+
+/* 下タブの現在地。絵が不透明なので親の background だけでは色が見えない。
+   8px持ち上げ、字と重ならない下端へ短いアンバー線を置く。 */
+.n.paint.lead {
+  transform: translateY(-8px);
+}
+.n.paint.lead::after {
+  content: "";
+  position: absolute;
+  left: 32px;
+  right: 32px;
+  bottom: 12px;
+  height: 8px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+/* 強化の絵は原寸80px高を保つ一方、指で拾う面だけ112pxへ広げる。
+   隣の家系図とは20px空くので、押しどころ同士は重ならない。 */
+.n.paint[data-tap="grow"]::before {
+  content: "";
+  position: absolute;
+  inset: -16px -20px;
 }

@@ -1,2 +1,8 @@
-# ⚠️ ビルド出力。改行を1バイトも変換しない
-* -text
+# ⚠️ .gitattributes は「後に書いた行が勝つ」。
+#    一般規則を先に、個別の上書きを後に置く。逆にすると個別指定が黙って死ぬ。
+#    確認は記述を読まずに `git check-attr -a <file>` で訊く。
+
+* text=auto eol=lf
+
+# .bat は CRLF でないと cmd.exe が誤動作することがある
+*.bat text eol=crlf

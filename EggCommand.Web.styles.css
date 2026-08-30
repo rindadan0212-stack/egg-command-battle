@@ -258,8 +258,8 @@
   flex: 0 0 auto;
   /* ⭐ 初期値（edit.js の fit() が上書き）。#edstage の初期 scale(.3) と揃えておく。
      ⚠️ 2026-08-29 から fit() は盤の周り（`eggEdit._pad`＝設計256px）ぶん大きく取り、
-     盤の層を同じだけ translate する ── 負の座標に置かれた節点（`home` の `idle` は
-     左 -72）を、拡大してもスクロールで見に行けるようにするため。 */
+     盤の層を同じだけ translate する ── 編集中に負の座標へ仮置きした節点も、
+     拡大してスクロールで見に行けるようにするため。 */
   width: 324px;
   height: 576px;
 }
@@ -1029,3 +1029,108 @@
 .edchipkey[b-lc27aevk28] { color: #6d7390; }
 .edchipval[b-lc27aevk28] { color: #9aa1b8; }
 .edchipwhy[b-lc27aevk28] { color: #6d7390; margin-left: auto; text-align: right; }
+
+/* ── V2: 文書コンテキストを保った、盤中心の編集机 ───────────── */
+.edtop[b-lc27aevk28] {
+  min-height: 42px;
+  gap: 6px;
+  padding: 5px 12px;
+  flex-wrap: wrap;
+}
+.eddoc[b-lc27aevk28] { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.eddoc .edwho[b-lc27aevk28] { min-width: 0; }
+.eddoc select[b-lc27aevk28] { min-width: 0; max-width: min(36vw, 360px); }
+.edtoplabel[b-lc27aevk28], .eddoctype[b-lc27aevk28], .eddirty[b-lc27aevk28], .edcrumb[b-lc27aevk28] { font-size: 12px; }
+.eddoctype[b-lc27aevk28], .eddirty[b-lc27aevk28] {
+  padding: 2px 6px;
+  color: #9aa1b8;
+  background: #12151f;
+  border: 1px solid rgba(255, 255, 255, .10);
+}
+.eddirty.is-dirty[b-lc27aevk28] { color: #ffd18a; border-color: rgba(245, 158, 11, .55); }
+.edcrumb[b-lc27aevk28] { display: flex; align-items: center; gap: 6px; color: #9aa1b8; min-width: 0; }
+.edcrumb strong[b-lc27aevk28] { color: #d7dae6; font-weight: 600; }
+.edtop .edtextbtn[b-lc27aevk28] {
+  padding: 3px 6px;
+  background: transparent;
+  color: #b9d4f5;
+  border-color: transparent;
+}
+.edtop .edfolder[b-lc27aevk28] { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.edtop .edsave:not(:disabled)[b-lc27aevk28] { background: #b45309; border-color: #b45309; color: #fff; }
+.edtop .edsave:not(:disabled):hover[b-lc27aevk28] { background: #c96613; }
+.edtop button:last-of-type:not(:disabled)[b-lc27aevk28] { background: inherit; border-color: inherit; color: inherit; }
+.edtop .edsave:last-of-type:not(:disabled)[b-lc27aevk28] { background: #b45309; border-color: #b45309; color: #fff; }
+
+/* ツールバーは盤の直上へ視覚的に寄せる。脇の列は情報専用にして、盤の高さを奪わない。 */
+.edtools[b-lc27aevk28] {
+  margin: 0;
+  min-height: 34px;
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  overflow: visible;
+  background: #12151f;
+}
+.edtoolbar-group[b-lc27aevk28] { display: flex; align-items: center; gap: 8px; flex: 1 1 420px; min-width: 0; flex-wrap: wrap; }
+.edtools .edstructrow[b-lc27aevk28] { flex: 0 0 auto; }
+.edtools .edalign-btn[b-lc27aevk28] { flex: 0 0 auto; padding: 5px 8px; }
+.edtools .edzoom button[b-lc27aevk28] { padding: 4px 8px; font-size: 12px; }
+.edtools .edzoomval[b-lc27aevk28] { min-width: 78px; }
+.edtools select[b-lc27aevk28] { max-width: 96px; }
+
+.edmain[b-lc27aevk28] { min-width: 0; }
+.edtree[b-lc27aevk28] { flex-basis: 192px; }
+.edinspector[b-lc27aevk28] { flex-basis: 252px; }
+.edtreebody[b-lc27aevk28], .edinspectorbody[b-lc27aevk28] { overflow-x: hidden; }
+.edinspectorbody[b-lc27aevk28] { padding: 12px 14px 18px; }
+.edinspectorbody :is(input, select, textarea)[b-lc27aevk28] { max-width: 100%; box-sizing: border-box; }
+.edfieldrow[b-lc27aevk28] { min-width: 0; }
+.edpicpreview[b-lc27aevk28] { min-width: 0; flex-wrap: wrap; }
+.edpicpreview .edname[b-lc27aevk28], .edchipval[b-lc27aevk28] { overflow-wrap: anywhere; }
+
+.edtreebody[b-lc27aevk28] { scroll-padding-block: 8px; }
+.edrow[b-lc27aevk28] { outline: none; }
+.edrow:focus-visible[b-lc27aevk28] { outline: 2px solid #b9d4f5; outline-offset: -2px; background: rgba(185, 212, 245, .10); }
+.edmismark[b-lc27aevk28] { font-size: 10px; }
+.edpaneltoggle[b-lc27aevk28] { min-width: 22px; writing-mode: vertical-rl; letter-spacing: .08em; }
+
+.edbottom[b-lc27aevk28] { padding: 0; background: #191d2b; }
+.edissues[b-lc27aevk28] { width: 100%; }
+.edissues > summary[b-lc27aevk28] {
+  cursor: pointer;
+  padding: 7px 12px;
+  color: #9aa1b8;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+  user-select: none;
+}
+.edissues[open] > summary[b-lc27aevk28] { border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.edissues .edbottomrow[b-lc27aevk28] { padding: 7px 12px 0; }
+.edissues .edbottomrow:last-child[b-lc27aevk28] { padding-bottom: 7px; }
+
+@media (max-width: 920px) {
+  .edtools[b-lc27aevk28] { overflow: visible; }
+  .edtree[b-lc27aevk28] { flex-basis: 160px; }
+  .edinspector[b-lc27aevk28] { flex-basis: 220px; }
+  .edtop .edstatus[b-lc27aevk28] { order: 5; flex-basis: 100%; margin-left: 0; }
+}
+
+@media (max-width: 700px) {
+  /* body はゲーム側の約束で overflow:hidden。道具自身をスクロール面にして、
+     横持ちでも下の検査結果まで到達できるようにする。 */
+  .edroot[b-lc27aevk28] { overflow-y: auto; }
+  .edtop[b-lc27aevk28] { align-items: flex-start; }
+  .eddoc[b-lc27aevk28] { flex: 1 1 100%; }
+  .eddoc select[b-lc27aevk28] { max-width: calc(100vw - 160px); }
+  .edmain[b-lc27aevk28] { min-height: 560px; }
+  .edtree[b-lc27aevk28] { flex-basis: 132px; }
+  .edinspector[b-lc27aevk28] { flex-basis: 176px; }
+  .edtreebody[b-lc27aevk28], .edinspectorbody[b-lc27aevk28] { font-size: 12px; }
+  .edinspectorbody[b-lc27aevk28] { padding: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edroot *[b-lc27aevk28], .edroot *[b-lc27aevk28]::before, .edroot *[b-lc27aevk28]::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

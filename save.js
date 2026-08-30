@@ -23,10 +23,21 @@ window.eggSave = {
     return await new Promise((resolve) => {
       navigator.locks.request('egg-save', { mode: 'exclusive', ifAvailable: true }, (lock) => {
         resolve(!!lock)
-        // ⚠️ 解放しない（このタブが生きている間ずっと持つ）
-        return lock ? new Promise(() => {}) : undefined
+        if (!lock) return undefined
+        // ⭐ lease は release() が呼ばれるまで保持する。頁の破棄時に解放できる
+        // （Promiseを永遠に保留すると、同じタブの再入場もロックを再取得できない）。
+        return new Promise((release) => { this._releaseLock = release })
       }).catch(() => resolve(false))
     })
+  },
+
+  /** 現在の頁が保持するleaseを解放する。未取得・旧ブラウザでは安全に無操作。 */
+  release() {
+    if (!this._releaseLock) return false
+    const release = this._releaseLock
+    this._releaseLock = null
+    release()
+    return true
   },
 
   /** ⭐ 消されにくくしてもらう。⚠️ 断られても遊びは続く（保証ではない）。 */
